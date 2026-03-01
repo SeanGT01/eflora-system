@@ -1,0 +1,1845 @@
+{% extends "layout.html" %}
+
+{% block title %}Products - E-FLOWERS{% endblock %}
+{% block page_title %}Products{% endblock %}
+
+{% block content %}
+<!-- Header Section -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem;">
+    <div>
+        <div class="section-eyebrow">Manage Your Store</div>
+        <h2 class="section-title">Products & Inventory</h2>
+        <p style="color: var(--muted); margin-top: 0.5rem;">Add, edit, and organize your floral collection</p>
+    </div>
+    <button class="btn btn-rose" onclick="showAddProductModal()">
+        <i class="ri-add-line"></i>
+        Add New Product
+    </button>
+</div>
+
+<!-- Filters Section -->
+<div class="card" style="padding: 1.5rem; margin-bottom: 2rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+        <!-- Category Filter -->
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Category</label>
+            <div style="position: relative;">
+                <i class="ri-filter-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted); z-index: 1;"></i>
+                <select id="categoryFilter" class="form-control" style="padding-left: 2.5rem;" onchange="filterProducts()">
+                    <option value="">All Categories</option>
+                    <option value="flowers">Fresh Flowers</option>
+                    <option value="plants">Potted Plants</option>
+                    <option value="bouquets">Bouquets</option>
+                    <option value="succulents">Succulents</option>
+                    <option value="seasonal">Seasonal</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Status Filter -->
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Status</label>
+            <div style="position: relative;">
+                <i class="ri-flag-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted); z-index: 1;"></i>
+                <select id="statusFilter" class="form-control" style="padding-left: 2.5rem;" onchange="filterProducts()">
+                    <option value="">All Status</option>
+                    <option value="in_stock">In Stock (>10)</option>
+                    <option value="low_stock">Low Stock (1-10)</option>
+                    <option value="out_of_stock">Out of Stock (0)</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Sort Filter -->
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Sort By</label>
+            <div style="position: relative;">
+                <i class="ri-arrow-up-down-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted); z-index: 1;"></i>
+                <select id="sortFilter" class="form-control" style="padding-left: 2.5rem;" onchange="filterProducts()">
+                    <option value="newest">Newest First</option>
+                    <option value="price_low">Price: Low to High</option>
+                    <option value="price_high">Price: High to Low</option>
+                    <option value="name">Name A-Z</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Search -->
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Search</label>
+            <div style="display: flex; gap: 0.5rem;">
+                <div style="position: relative; flex: 1;">
+                    <i class="ri-search-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted); z-index: 1;"></i>
+                    <input type="text" id="searchInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Search products..." onkeyup="filterProducts()">
+                </div>
+                <button class="btn btn-primary" onclick="filterProducts()" style="padding: 0 1.5rem;">
+                    <i class="ri-search-line"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Products Grid -->
+<div id="productsGrid" class="products-grid">
+    {% for product in products %}
+    <div class="product-card" data-product-id="{{ product.id }}" data-category="{{ product.category }}" data-stock="{{ product.stock_quantity }}" data-price="{{ product.price }}" data-name="{{ product.name }}">
+    
+        <!-- Product Image -->
+        <div class="product-img-wrap" style="position: relative;">
+            {% if product.images and product.images|length > 0 %}
+                {% set primary_image = product.images|selectattr('is_primary', 'equalto', true)|first %}
+                {% if not primary_image %}
+                    {% set primary_image = product.images|first %}
+                {% endif %}
+                <img src="{{ primary_image.image_url }}" alt="{{ product.name }}">
+            {% else %}
+            <div class="product-img-placeholder">
+                <i class="ri-leaf-line"></i>
+                <span style="display: block; font-size: 12px; margin-top: 0.5rem;">No image</span>
+            </div>
+            {% endif %}
+            
+            <!-- Category Badge -->
+            <span class="product-cat-badge">
+                {{ product.category|capitalize if product.category else 'General' }}
+            </span>
+            
+            <!-- Stock Badge -->
+            <div class="product-stock-badge">
+                {% if product.stock_quantity > 10 %}
+                <span class="status-badge badge-available">In Stock</span>
+                {% elif product.stock_quantity > 0 %}
+                <span class="status-badge badge-low">Low Stock</span>
+                {% else %}
+                <span class="status-badge badge-out">Out of Stock</span>
+                {% endif %}
+            </div>
+            
+            <!-- Price Tag -->
+            <div class="price-tag">
+                ₱{{ "%.2f"|format(product.price) }}
+            </div>
+        </div>
+        
+        <!-- Product Info -->
+        <div class="product-card-body">
+            <div class="product-name">{{ product.name }}</div>
+            <div class="product-desc">
+                {% if product.description %}
+                    {{ product.description[:80] }}{% if product.description|length > 80 %}...{% endif %}
+                {% else %}
+                    <span style="color: var(--muted); font-style: italic;">No description</span>
+                {% endif %}
+            </div>
+            
+            <!-- Stock Info -->
+            <div class="stock-info">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="ri-stack-line" style="color: var(--muted);"></i>
+                    <span>{{ product.stock_quantity }} units</span>
+                </div>
+                
+                <!-- Availability Toggle -->
+                <label class="toggle-wrap" title="Toggle availability">
+                    <input type="checkbox" class="toggle-input availability-toggle"
+                           data-product-id="{{ product.id }}"
+                           {{ 'checked' if product.is_available else '' }}>
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button class="btn btn-outline btn-sm" onclick="editProduct({{ product.id }})">
+                    <i class="ri-pencil-line"></i> Edit
+                </button>
+                <button class="btn btn-danger-outline btn-sm btn-icon" onclick="deleteProduct({{ product.id }})" title="Delete">
+                    <i class="ri-delete-bin-line"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state" style="grid-column: 1 / -1; background: var(--warm-white); border-radius: var(--radius-xl); border: 1px solid var(--border);">
+        <i class="ri-leaf-line empty-state-icon"></i>
+        <div class="empty-state-title">No Products Yet</div>
+        <p class="empty-state-sub">Start by adding your first floral product to the store</p>
+        <button class="btn btn-rose" onclick="showAddProductModal()">
+            <i class="ri-add-line"></i>
+            Add First Product
+        </button>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Bulk Actions Bar (visible when products exist) -->
+{% if products %}
+<div class="bulk-bar">
+    <div class="bulk-bar-label">Bulk Actions</div>
+    <div class="bulk-bar-actions">
+        <button class="btn btn-outline btn-sm" id="selectAllBtn">
+            <i class="ri-checkbox-multiple-line"></i> Select All
+        </button>
+        <button class="btn btn-outline btn-sm" id="bulkAvailableBtn" disabled>
+            <i class="ri-eye-line"></i> Mark Available
+        </button>
+        <button class="btn btn-outline btn-sm" id="bulkUnavailableBtn" disabled>
+            <i class="ri-eye-off-line"></i> Mark Unavailable
+        </button>
+        <button class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
+            <i class="ri-delete-bin-line"></i> Delete Selected
+        </button>
+    </div>
+</div>
+{% endif %}
+
+<!-- Add/Edit Product Modal -->
+<div class="modal-overlay" id="productModal" style="display: none;">
+    <div class="modal modal-lg" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3 id="modalTitle" class="modal-title">Add New Product</h3>
+            <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>
+        </div>
+        
+        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <form id="productForm" enctype="multipart/form-data">
+                <input type="hidden" id="productId" name="product_id">
+                
+                <!-- Multi-Image Upload Section -->
+                <div class="form-group">
+                    <label class="form-label">Product Images <span class="required-star">*</span> <span style="font-weight: normal; color: var(--muted); font-size: 11px;">(Upload up to 5 images, at least 1 required)</span></label>
+                    
+                    <div id="imagePreviewsContainer" class="image-previews-container">
+                        <!-- Image slots will be dynamically added here -->
+                    </div>
+                    
+                    <div style="display: flex; justify-content: flex-start; margin-top: 0.5rem;">
+                        <button type="button" id="addImageSlotBtn" class="btn btn-outline btn-sm" style="display: none;">
+                            <i class="ri-add-line"></i> Add Another Image
+                        </button>
+                    </div>
+                    <p class="form-hint">First image will be used as the main product thumbnail. Click on each slot to upload.</p>
+                </div>
+                
+                <div class="modal-form-grid" style="margin-top: 1.5rem;">
+                    <!-- Left Column -->
+                    <div class="modal-form-left">
+                        <div class="form-group">
+                            <label class="form-label">Product Name <span class="required-star">*</span></label>
+                            <input type="text" id="productName" name="name" class="form-control" placeholder="e.g., Red Rose Bouquet" required>
+                        </div>
+                        
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label class="form-label">Price (₱) <span class="required-star">*</span></label>
+                                <input type="number" id="productPrice" name="price" class="form-control" placeholder="0.00" step="0.01" min="0.01" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Stock Qty <span class="required-star">*</span></label>
+                                <input type="number" id="productStock" name="stock_quantity" class="form-control" placeholder="0" min="0" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column -->
+                    <div class="modal-form-right">
+                        <div class="form-group">
+                            <label class="form-label">Category <span class="required-star">*</span></label>
+                            <select id="productCategory" name="category" class="form-select" required>
+                                <option value="">Select Category</option>
+                                <option value="flowers">Fresh Flowers</option>
+                                <option value="plants">Potted Plants</option>
+                                <option value="bouquets">Bouquets</option>
+                                <option value="succulents">Succulents</option>
+                                <option value="seasonal">Seasonal</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea id="productDescription" name="description" class="form-control" rows="3" placeholder="Describe your product..."></textarea>
+                        </div>
+                        
+                        <label class="toggle-wrap">
+                            <input type="checkbox" class="toggle-input" name="is_available" checked>
+                            <span class="toggle-track"></span>
+                            <span class="toggle-label">Available for sale immediately</span>
+                        </label>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button type="button" id="submitBtn" class="btn btn-rose" onclick="submitProductForm()">
+                <i class="ri-save-line"></i> Add Product
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Products Grid */
+    .products-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 1.25rem;
+    }
+    
+    .product-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        transition: var(--transition);
+        display: flex;
+        flex-direction: column;
+        height: fit-content;
+    }
+    
+    .product-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-sm);
+        border-color: var(--border-strong);
+    }
+    
+    /* UPDATED: Better image display for flowers */
+    .product-img-wrap {
+        position: relative;
+        height: 180px;
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .product-img-wrap img {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .product-card:hover .product-img-wrap img {
+        transform: scale(1.04);
+    }
+    
+    .product-img-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: rgba(107, 76, 59, 0.12);
+        font-size: 40px;
+    }
+    
+    .product-img-placeholder i {
+        font-size: 40px;
+    }
+    
+    .product-img-placeholder span {
+        font-size: 11px;
+        margin-top: 0.25rem;
+    }
+    
+    .product-cat-badge {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+        z-index: 2;
+        background: rgba(42, 35, 30, 0.58);
+        color: rgba(250, 246, 240, 0.92);
+        backdrop-filter: blur(8px);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border-radius: var(--radius-pill);
+    }
+    
+    .product-stock-badge {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 2;
+    }
+    
+    .product-stock-badge .status-badge {
+        font-size: 9px;
+        padding: 3px 7px;
+    }
+    
+    .price-tag {
+        position: absolute;
+        bottom: 0.75rem;
+        left: 0.75rem;
+        background: var(--warm-white);
+        padding: 0.3rem 0.75rem;
+        border-radius: var(--radius-pill);
+        font-weight: 600;
+        color: var(--deep-rose);
+        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--border);
+        font-size: 14px;
+    }
+    
+    .product-card-body {
+        padding: 1rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+    
+    .product-name {
+        font-family: var(--font-display);
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--charcoal);
+        margin-bottom: 0.25rem;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    .product-desc {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+        margin-bottom: 0.5rem;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        flex: 1;
+    }
+    
+    .stock-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.4rem 0;
+        border-top: 1px solid var(--border);
+        margin-top: 0.25rem;
+        font-size: 12px;
+    }
+    
+    .stock-info i {
+        font-size: 14px;
+    }
+    
+    .stock-info span {
+        font-size: 12px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.4rem;
+        margin-top: 0.5rem;
+    }
+    
+    .action-buttons .btn-sm {
+        padding: 0.4rem 0.75rem;
+        font-size: 11px;
+        flex: 1;
+        white-space: nowrap;
+    }
+    
+    .action-buttons .btn-icon {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        font-size: 14px;
+        flex: 0 0 auto;
+    }
+    
+    /* Required star */
+    .required-star {
+        color: var(--deep-rose);
+    }
+    
+    /* Modal Form Grid */
+    .modal-form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .modal-form-left,
+    .modal-form-right {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    /* Image Preview Container */
+    .image-previews-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* Image Preview Slot */
+    .image-slot {
+        aspect-ratio: 1;
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: var(--transition);
+        border: 2px dashed var(--border-strong);
+        position: relative;
+    }
+    
+    .image-slot:hover {
+        border-color: var(--deep-rose);
+        background: rgba(181,68,90,0.02);
+    }
+    
+    .image-slot.has-image {
+        border: 2px solid var(--deep-rose);
+    }
+    
+    .image-slot img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background-color: var(--cream);
+        border-radius: calc(var(--radius-md) - 2px);
+    }
+    
+    .image-slot .slot-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--muted);
+        font-size: 11px;
+        text-align: center;
+        padding: 0.5rem;
+    }
+    
+    .image-slot .slot-placeholder i {
+        font-size: 24px;
+        opacity: 0.3;
+    }
+    
+    .image-slot .remove-image-btn {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--deep-rose);
+        color: white;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 12px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        z-index: 3;
+    }
+    
+    .image-slot:hover .remove-image-btn {
+        opacity: 1;
+    }
+    
+    .image-slot .remove-image-btn:hover {
+        background: #c0392b;
+        transform: scale(1.1);
+    }
+    
+    .image-slot .main-badge {
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+        background: var(--deep-rose);
+        color: white;
+        font-size: 9px;
+        padding: 2px 5px;
+        border-radius: 8px;
+        z-index: 3;
+    }
+    
+    /* Transparent Badge */
+    .transparent-badge {
+        position: absolute;
+        bottom: 4px;
+        right: 4px;
+        background: var(--deep-rose);
+        color: white;
+        font-size: 9px;
+        padding: 2px 5px;
+        border-radius: 8px;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        opacity: 0.9;
+        transition: var(--transition);
+    }
+    
+    .transparent-badge:hover {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+    
+    /* Bulk Bar */
+    .bulk-bar {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-top: 2rem;
+    }
+    
+    .bulk-bar-label {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 500;
+    }
+    
+    .bulk-bar-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .bulk-bar-actions .btn-sm {
+        padding: 0.4rem 0.75rem;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    
+    /* Grid 2 helper */
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+    
+    /* Status Badges */
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+    }
+    
+    .badge-available {
+        background: rgba(122, 158, 126, 0.1);
+        color: var(--deep-sage);
+    }
+    
+    .badge-low {
+        background: rgba(196, 113, 75, 0.1);
+        color: var(--terracotta);
+    }
+    
+    .badge-out {
+        background: rgba(192, 57, 43, 0.1);
+        color: #c0392b;
+    }
+    
+    /* Toggle Switch */
+    .toggle-wrap {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+    }
+    
+    .toggle-input {
+        display: none;
+    }
+    
+    .toggle-track {
+        width: 36px;
+        height: 20px;
+        border-radius: var(--radius-pill);
+        background: var(--border-strong);
+        position: relative;
+        transition: var(--transition);
+        flex-shrink: 0;
+    }
+    
+    .toggle-input:checked + .toggle-track {
+        background: var(--sage);
+    }
+    
+    .toggle-track::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: white;
+        transition: var(--transition);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+    
+    .toggle-input:checked + .toggle-track::after {
+        left: 18px;
+    }
+    
+    /* Responsive Breakpoints */
+    @media (max-width: 1200px) {
+        .products-grid {
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+        
+        .product-img-wrap {
+            height: 160px;
+        }
+    }
+    
+    @media (max-width: 992px) {
+        .products-grid {
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+        
+        .product-img-wrap {
+            height: 150px;
+        }
+        
+        .product-name {
+            font-size: 15px;
+        }
+        
+        .product-card-body {
+            padding: 0.875rem;
+        }
+        
+        .price-tag {
+            font-size: 13px;
+            padding: 0.25rem 0.6rem;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .modal-form-grid {
+            grid-template-columns: 1fr;
+        }
+        .modal-form-right {
+            order: -1;
+        }
+        .bulk-bar {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        .bulk-bar-actions {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .bulk-bar-actions .btn-sm {
+            flex: 1 1 auto;
+            min-width: 120px;
+        }
+        
+        .products-grid {
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.875rem;
+        }
+        
+        .product-img-wrap {
+            height: 140px;
+        }
+        
+        .product-name {
+            font-size: 14px;
+        }
+        
+        .product-desc {
+            font-size: 11px;
+        }
+        
+        .action-buttons {
+            gap: 0.35rem;
+        }
+        
+        .action-buttons .btn-sm {
+            padding: 0.35rem 0.4rem;
+            font-size: 10px;
+        }
+        
+        .action-buttons .btn-icon {
+            width: 28px;
+            height: 28px;
+            font-size: 12px;
+        }
+        
+        .price-tag {
+            font-size: 12px;
+            padding: 0.25rem 0.6rem;
+        }
+        
+        .product-cat-badge {
+            font-size: 8px;
+            padding: 2px 6px;
+        }
+        
+        .product-stock-badge .status-badge {
+            font-size: 8px;
+            padding: 2px 6px;
+        }
+        
+        .stock-info span {
+            font-size: 11px;
+        }
+    }
+    
+    @media (max-width: 576px) {
+        .products-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+        
+        .product-img-wrap {
+            height: 130px;
+        }
+        
+        .product-card-body {
+            padding: 0.75rem;
+        }
+        
+        .product-name {
+            font-size: 13px;
+            margin-bottom: 0.15rem;
+            min-height: 2.5rem;
+        }
+        
+        .product-desc {
+            display: none; /* Hide description on very small screens */
+        }
+        
+        .stock-info {
+            padding: 0.3rem 0;
+            font-size: 11px;
+        }
+        
+        .stock-info i {
+            font-size: 12px;
+        }
+        
+        .stock-info span {
+            font-size: 11px;
+        }
+        
+        /* KEEP BUTTONS SIDE BY SIDE - NOT STACKED */
+        .action-buttons {
+            flex-direction: row;
+            gap: 0.3rem;
+        }
+        
+        .action-buttons .btn-sm {
+            flex: 1;
+            padding: 0.3rem 0.25rem;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+        
+        .action-buttons .btn-icon {
+            width: 28px;
+            height: 28px;
+            flex: 0 0 auto;
+        }
+        
+        .price-tag {
+            bottom: 0.5rem;
+            left: 0.5rem;
+            font-size: 11px;
+            padding: 0.2rem 0.5rem;
+        }
+        
+        .bulk-bar-actions {
+            flex-direction: column;
+            width: 100%;
+        }
+        
+        .bulk-bar-actions .btn-sm {
+            width: 100%;
+            min-width: auto;
+        }
+        
+        .image-previews-container {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .product-name {
+            font-size: 12px;
+            min-height: 2.2rem;
+        }
+        
+        .action-buttons .btn-sm {
+            font-size: 9px;
+            padding: 0.25rem 0.2rem;
+        }
+        
+        .action-buttons .btn-icon {
+            width: 26px;
+            height: 26px;
+        }
+        
+        .stock-info span {
+            font-size: 10px;
+        }
+        
+        .stock-info i {
+            font-size: 11px;
+        }
+    }
+    
+    @media (max-width: 400px) {
+        .products-grid {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+        }
+        
+        .product-img-wrap {
+            height: 180px; /* Slightly larger when single column */
+        }
+        
+        .product-desc {
+            display: -webkit-box; /* Show description again */
+        }
+        
+        .action-buttons {
+            flex-direction: row; /* Keep buttons side by side */
+            gap: 0.5rem;
+        }
+        
+        .action-buttons .btn-sm {
+            padding: 0.4rem 0.5rem;
+            font-size: 11px;
+        }
+        
+        .action-buttons .btn-icon {
+            width: 36px;
+        }
+        
+        .image-previews-container {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let selectedProducts = new Set();
+    let editingProductId = null;
+    let imageSlots = [];
+    const MAX_IMAGES = 5;
+
+    // Initialize image slots
+    function initializeImageSlots(existingImages = []) {
+        const container = document.getElementById('imagePreviewsContainer');
+        container.innerHTML = '';
+        imageSlots = [];
+        
+        // Determine how many slots to create initially
+        const initialSlotCount = Math.min(3, MAX_IMAGES);
+        
+        // Create slots based on existing images or initial slots
+        if (existingImages.length > 0) {
+            // Create slots for all existing images (up to MAX_IMAGES)
+            for (let i = 0; i < Math.min(existingImages.length, MAX_IMAGES); i++) {
+                createImageSlot(i, existingImages[i] || null);
+            }
+            
+            // If we have less than MAX_IMAGES images, create empty slots up to 3 or until MAX_IMAGES
+            if (existingImages.length < 3) {
+                for (let i = existingImages.length; i < Math.min(3, MAX_IMAGES); i++) {
+                    createImageSlot(i, null);
+                }
+            }
+        } else {
+            // No existing images - create initial 3 empty slots
+            for (let i = 0; i < initialSlotCount; i++) {
+                createImageSlot(i, null);
+            }
+        }
+        
+        // Show add button if we have less than MAX_IMAGES
+        updateAddButtonVisibility();
+    }
+
+    // Create a single image slot
+    function createImageSlot(index, imageData = null) {
+        const container = document.getElementById('imagePreviewsContainer');
+        const slot = document.createElement('div');
+        slot.className = 'image-slot';
+        slot.dataset.index = index;
+        
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/png,image/jpeg,image/jpg,image/gif';
+        fileInput.style.display = 'none';
+        fileInput.dataset.index = index;
+        fileInput.onchange = (e) => handleImageSelect(e, index);
+        
+        const img = document.createElement('img');
+        img.style.display = 'none';
+        img.style.objectFit = 'contain';
+        img.style.backgroundColor = 'var(--cream)';
+        
+        const placeholder = document.createElement('div');
+        placeholder.className = 'slot-placeholder';
+        placeholder.innerHTML = `
+            <i class="ri-image-add-line"></i>
+            <span>Click to upload</span>
+        `;
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove-image-btn';
+        removeBtn.innerHTML = '<i class="ri-close-line"></i>';
+        removeBtn.onclick = (e) => removeImage(e, index);
+        removeBtn.style.display = 'none';
+        
+        const mainBadge = document.createElement('div');
+        mainBadge.className = 'main-badge';
+        mainBadge.textContent = 'Main';
+        mainBadge.style.display = 'none';
+        
+        slot.appendChild(fileInput);
+        slot.appendChild(img);
+        slot.appendChild(placeholder);
+        slot.appendChild(removeBtn);
+        slot.appendChild(mainBadge);
+        
+        slot.onclick = () => fileInput.click();
+        
+        container.appendChild(slot);
+        
+        // Store slot data with image ID if available
+        let imageId = null;
+        if (imageData && typeof imageData === 'object' && imageData.id) {
+            imageId = imageData.id;
+        }
+        
+        imageSlots[index] = {
+            slot,
+            fileInput,
+            img,
+            placeholder,
+            removeBtn,
+            mainBadge,
+            file: null,
+            hasImage: false,
+            imageId: imageId
+        };
+        
+        // If there's existing image data
+        if (imageData) {
+            if (typeof imageData === 'string') {
+                // If it's just a URL (for backward compatibility)
+                img.src = imageData;
+                img.style.display = 'block';
+                img.style.objectFit = 'contain';
+                img.style.backgroundColor = 'var(--cream)';
+                placeholder.style.display = 'none';
+                slot.classList.add('has-image');
+                removeBtn.style.display = 'flex';
+                imageSlots[index].hasImage = true;
+                
+                // Mark first image as main
+                if (index === 0) {
+                    mainBadge.style.display = 'block';
+                }
+            } else if (typeof imageData === 'object' && imageData.image_url) {
+                // If it's an image object with id and url
+                img.src = imageData.image_url;
+                img.style.display = 'block';
+                img.style.objectFit = 'contain';
+                img.style.backgroundColor = 'var(--cream)';
+                placeholder.style.display = 'none';
+                slot.classList.add('has-image');
+                removeBtn.style.display = 'flex';
+                imageSlots[index].hasImage = true;
+                imageSlots[index].imageId = imageData.id;
+                
+                // Check if image is PNG (likely transparent) and add badge
+                if (imageData.image_url.toLowerCase().includes('.png') || 
+                    imageData.image_url.includes('no-bg') ||
+                    imageData.image_url.includes('processed')) {
+                    const transparentBadge = document.createElement('div');
+                    transparentBadge.className = 'transparent-badge';
+                    transparentBadge.innerHTML = '<i class="ri-artboard-line"></i>';
+                    transparentBadge.title = 'Transparent background';
+                    slot.appendChild(transparentBadge);
+                }
+                
+                // Mark first image as main
+                if (index === 0) {
+                    mainBadge.style.display = 'block';
+                }
+            }
+        }
+        
+        return slot;
+    }
+
+    // Add new image slot
+    function addImageSlot() {
+        if (imageSlots.length >= MAX_IMAGES) return;
+        
+        const newIndex = imageSlots.length;
+        createImageSlot(newIndex, null);
+        updateAddButtonVisibility();
+    }
+
+    // Handle image selection with optional background removal
+    async function handleImageSelect(event, index) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const slotData = imageSlots[index];
+        
+        // Show processing options modal or ask directly
+        const wantsBgRemoval = confirm('✨ Would you like to remove the background from this image?\n\n• Click OK to remove background (creates transparent PNG)\n• Click Cancel to keep original image');
+        
+        if (wantsBgRemoval) {
+            // Show loading state with animation
+            slotData.placeholder.innerHTML = `
+                <i class="ri-loader-4-line ri-spin" style="font-size: 28px;"></i>
+                <span style="margin-top: 0.5rem;">Removing background...</span>
+                <span style="font-size: 9px; opacity: 0.7;">This may take a few seconds</span>
+            `;
+            
+            try {
+                // Create form data
+                const formData = new FormData();
+                formData.append('image', file);
+                
+                // Call background removal API
+                const response = await fetch('/api/bg-removal/remove', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Convert base64 to blob
+                    const base64Data = data.image.split(',')[1];
+                    const blob = base64ToBlob(base64Data, 'image/png');
+                    
+                    // Create filename with -no-bg suffix
+                    const originalName = file.name;
+                    const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+                    const newFilename = `${nameWithoutExt}-no-bg.png`;
+                    
+                    const processedFile = new File([blob], newFilename, {
+                        type: 'image/png',
+                        lastModified: Date.now()
+                    });
+                    
+                    // Display the processed image
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        slotData.img.src = e.target.result;
+                        slotData.img.style.display = 'block';
+                        slotData.img.style.objectFit = 'contain';
+                        slotData.img.style.backgroundColor = 'var(--cream)';
+                        slotData.placeholder.style.display = 'none';
+                        slotData.slot.classList.add('has-image');
+                        slotData.removeBtn.style.display = 'flex';
+                        slotData.file = processedFile;
+                        slotData.hasImage = true;
+                        
+                        // Add a small badge to indicate transparent background
+                        const transparentBadge = document.createElement('div');
+                        transparentBadge.className = 'transparent-badge';
+                        transparentBadge.innerHTML = '<i class="ri-artboard-line"></i>';
+                        transparentBadge.title = 'Transparent background';
+                        
+                        // Remove any existing transparent badge
+                        const existingBadge = slotData.slot.querySelector('.transparent-badge');
+                        if (existingBadge) existingBadge.remove();
+                        
+                        slotData.slot.appendChild(transparentBadge);
+                        
+                        if (index === 0) {
+                            slotData.mainBadge.style.display = 'block';
+                        }
+                        
+                        window.showToast('✓ Background removed successfully!', 'success');
+                        updateAddButtonVisibility();
+                    };
+                    reader.readAsDataURL(processedFile);
+                } else {
+                    // Fallback to original
+                    handleOriginalUpload(file, index);
+                    window.showToast('Background removal failed, using original', 'error');
+                }
+            } catch (error) {
+                console.error('Background removal error:', error);
+                handleOriginalUpload(file, index);
+                window.showToast('Background removal failed, using original', 'error');
+            }
+        } else {
+            // Use original upload
+            handleOriginalUpload(file, index);
+        }
+    }
+
+    // Original upload function (fallback)
+    function handleOriginalUpload(file, index) {
+        const slotData = imageSlots[index];
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            slotData.img.src = e.target.result;
+            slotData.img.style.display = 'block';
+            slotData.img.style.objectFit = 'contain';
+            slotData.img.style.backgroundColor = 'var(--cream)';
+            slotData.placeholder.style.display = 'none';
+            slotData.slot.classList.add('has-image');
+            slotData.removeBtn.style.display = 'flex';
+            slotData.file = file;
+            slotData.hasImage = true;
+            
+            // Remove any transparent badge if exists
+            const existingBadge = slotData.slot.querySelector('.transparent-badge');
+            if (existingBadge) existingBadge.remove();
+            
+            if (index === 0) {
+                slotData.mainBadge.style.display = 'block';
+            }
+            
+            updateAddButtonVisibility();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Helper: Convert base64 to blob
+    function base64ToBlob(base64, type) {
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        
+        const byteArray = new Uint8Array(byteNumbers);
+        return new Blob([byteArray], { type: type });
+    }
+
+    // Remove image from slot
+    function removeImage(event, index) {
+        event.stopPropagation();
+        
+        const slotData = imageSlots[index];
+        if (!slotData) return;
+        
+        // If this is an existing image from the database (has imageId)
+        if (slotData.imageId && editingProductId) {
+            // Confirm deletion
+            if (!confirm('Are you sure you want to delete this image?')) {
+                return;
+            }
+            
+            // Show loading state
+            const originalText = slotData.removeBtn.innerHTML;
+            slotData.removeBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+            slotData.removeBtn.disabled = true;
+            
+            // Call API to delete the image
+            fetch(`/seller/products/${editingProductId}/images/${slotData.imageId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove the slot from UI
+                    slotData.fileInput.value = '';
+                    slotData.img.src = '';
+                    slotData.img.style.display = 'none';
+                    slotData.placeholder.style.display = 'flex';
+                    slotData.slot.classList.remove('has-image');
+                    slotData.removeBtn.style.display = 'none';
+                    slotData.mainBadge.style.display = 'none';
+                    
+                    // Remove transparent badge if exists
+                    const existingBadge = slotData.slot.querySelector('.transparent-badge');
+                    if (existingBadge) existingBadge.remove();
+                    
+                    slotData.file = null;
+                    slotData.hasImage = false;
+                    slotData.imageId = null;
+                    
+                    // If this was the main image, update main badge to next available image
+                    if (index === 0 || (index === 0 && !imageSlots[0].hasImage)) {
+                        for (let i = 1; i < imageSlots.length; i++) {
+                            if (imageSlots[i] && imageSlots[i].hasImage) {
+                                imageSlots[i].mainBadge.style.display = 'block';
+                                break;
+                            }
+                        }
+                    }
+                    
+                    window.showToast('Image deleted successfully', 'success');
+                } else {
+                    window.showToast(data.error || 'Failed to delete image', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting image:', error);
+                window.showToast('Network error. Please try again.', 'error');
+            })
+            .finally(() => {
+                slotData.removeBtn.innerHTML = originalText;
+                slotData.removeBtn.disabled = false;
+            });
+        } else {
+            // This is a newly added image (not saved to DB yet)
+            slotData.fileInput.value = '';
+            slotData.img.src = '';
+            slotData.img.style.display = 'none';
+            slotData.placeholder.style.display = 'flex';
+            slotData.slot.classList.remove('has-image');
+            slotData.removeBtn.style.display = 'none';
+            slotData.mainBadge.style.display = 'none';
+            
+            // Remove transparent badge if exists
+            const existingBadge = slotData.slot.querySelector('.transparent-badge');
+            if (existingBadge) existingBadge.remove();
+            
+            slotData.file = null;
+            slotData.hasImage = false;
+            
+            // If this was the main image, update main badge to next available image
+            if (index === 0 || (index === 0 && !imageSlots[0].hasImage)) {
+                for (let i = 1; i < imageSlots.length; i++) {
+                    if (imageSlots[i] && imageSlots[i].hasImage) {
+                        imageSlots[i].mainBadge.style.display = 'block';
+                        break;
+                    }
+                }
+            }
+            
+            updateAddButtonVisibility();
+        }
+    }
+
+    // Update add button visibility
+    function updateAddButtonVisibility() {
+        const addBtn = document.getElementById('addImageSlotBtn');
+        // Only show add button if we have less than MAX_IMAGES total slots
+        if (imageSlots.length < MAX_IMAGES) {
+            addBtn.style.display = 'inline-flex';
+        } else {
+            addBtn.style.display = 'none';
+        }
+    }
+
+    // Get all image files
+    function getImageFiles() {
+        const files = [];
+        for (let i = 0; i < imageSlots.length; i++) {
+            if (imageSlots[i] && imageSlots[i].file) {
+                files.push(imageSlots[i].file);
+            }
+        }
+        return files;
+    }
+
+    // Validate at least one image
+    function validateImages() {
+        for (let i = 0; i < imageSlots.length; i++) {
+            if (imageSlots[i] && imageSlots[i].hasImage) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Modal functions
+    function showAddProductModal() {
+        document.getElementById('modalTitle').textContent = 'Add New Product';
+        document.getElementById('submitBtn').innerHTML = '<i class="ri-save-line"></i> Add Product';
+        document.getElementById('productForm').reset();
+        document.getElementById('productId').value = '';
+        
+        // Initialize image slots
+        initializeImageSlots();
+        
+        document.getElementById('productModal').style.display = 'flex';
+    }
+
+    function showEditProductModal(productId) {
+        editingProductId = productId;
+        
+        console.log('Fetching product with ID:', productId);
+        
+        fetch(`/seller/products/${productId}`)
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Product data received:', data);
+                
+                if (data.product) {
+                    const product = data.product;
+                    
+                    document.getElementById('modalTitle').textContent = 'Edit Product';
+                    document.getElementById('submitBtn').innerHTML = '<i class="ri-save-line"></i> Update Product';
+                    document.getElementById('productId').value = product.id;
+                    document.getElementById('productName').value = product.name;
+                    document.getElementById('productCategory').value = product.category;
+                    document.getElementById('productPrice').value = product.price;
+                    document.getElementById('productStock').value = product.stock_quantity;
+                    document.getElementById('productDescription').value = product.description || '';
+                    
+                    // Initialize image slots with existing images (including IDs)
+                    const existingImages = [];
+                    if (product.images && product.images.length > 0) {
+                        // Sort images by sort_order
+                        const sortedImages = product.images.sort((a, b) => a.sort_order - b.sort_order);
+                        sortedImages.forEach(img => {
+                            // Pass the full image object with id and url
+                            existingImages.push({
+                                id: img.id,
+                                image_url: img.image_url
+                            });
+                        });
+                    }
+                    initializeImageSlots(existingImages);
+                    
+                    document.getElementById('productModal').style.display = 'flex';
+                } else {
+                    console.error('No product data received');
+                    window.showToast('Error loading product data', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching product:', error);
+                window.showToast('Error loading product data. Please try again.', 'error');
+            });
+    }
+
+    function closeModal() {
+        document.getElementById('productModal').style.display = 'none';
+        editingProductId = null;
+    }
+
+    // Submit product form
+    function submitProductForm() {
+        const form = document.getElementById('productForm');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        
+        // Validate at least one image
+        if (!validateImages()) {
+            window.showToast('Please upload at least one product image', 'error');
+            return;
+        }
+        
+        const productId = document.getElementById('productId').value;
+        const isEdit = !!productId;
+        
+        const formData = new FormData();
+        formData.append('name', document.getElementById('productName').value.trim());
+        formData.append('description', document.getElementById('productDescription').value.trim() || '');
+        formData.append('price', document.getElementById('productPrice').value);
+        formData.append('stock_quantity', document.getElementById('productStock').value);
+        formData.append('category', document.getElementById('productCategory').value);
+        
+        // Append all images
+        const imageFiles = getImageFiles();
+        imageFiles.forEach((file, index) => {
+            formData.append(`image_${index}`, file);
+        });
+        
+        // Use PUT for edits, POST for new products
+        const url = isEdit ? `/seller/products/${productId}` : '/seller/products/create';
+        const method = isEdit ? 'PUT' : 'POST';
+        
+        // Show loading
+        const submitBtn = document.getElementById('submitBtn');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+        
+        fetch(url, {
+            method: method,
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.showToast(data.message, 'success');
+                closeModal();
+                setTimeout(() => location.reload(), 500);
+            } else {
+                window.showToast('Error: ' + (data.error || 'Something went wrong'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            window.showToast('Network error. Please try again.', 'error');
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        });
+    }
+
+    // Edit product
+    function editProduct(productId) {
+        showEditProductModal(productId);
+    }
+
+    // Delete product
+    function deleteProduct(productId) {
+    fetch(`/seller/products/${productId}`, { method: 'DELETE' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.needs_choice) {
+                    // Show choice dialog
+                    showArchiveChoiceDialog(productId, data.product);
+                } else if (data.archived) {
+                    window.showToast(data.message, 'info');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    window.showToast(data.message, 'success');
+                    setTimeout(() => location.reload(), 500);
+                }
+            } else {
+                window.showToast(data.error || 'Failed to delete product', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            window.showToast('Error deleting product', 'error');
+        });
+}
+
+function showArchiveChoiceDialog(productId, product) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('archiveChoiceModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.id = 'archiveChoiceModal';
+        modal.innerHTML = `
+            <div class="modal" style="max-width: 400px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">Delete or Archive?</h3>
+                    <button class="modal-close" onclick="closeArchiveModal()"><i class="ri-close-line"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p id="archiveChoiceMessage"></p>
+                    <div style="background: rgba(122, 158, 126, 0.1); padding: 1rem; border-radius: var(--radius-md); margin: 1rem 0;">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <i class="ri-information-line" style="font-size: 24px; color: var(--deep-sage);"></i>
+                            <div style="font-size: 13px; color: var(--charcoal);">
+                                <strong>Archive:</strong> Hide from store, can restore later<br>
+                                <strong>Delete:</strong> Permanently remove (cannot undo)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" onclick="closeArchiveModal()">Cancel</button>
+                    <button class="btn btn-outline" onclick="submitArchiveChoice(${productId}, 'archive')">
+                        <i class="ri-archive-line"></i> Archive
+                    </button>
+                    <button class="btn btn-danger-outline" onclick="submitArchiveChoice(${productId}, 'delete')">
+                        <i class="ri-delete-bin-line"></i> Delete
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    document.getElementById('archiveChoiceMessage').innerHTML = 
+        `Product "<strong>${product.name}</strong>" is in <strong>${product.in_carts}</strong> customer cart(s).`;
+    
+    modal.style.display = 'flex';
+}
+
+function closeArchiveModal() {
+    document.getElementById('archiveChoiceModal').style.display = 'none';
+}
+
+function submitArchiveChoice(productId, action) {
+    closeArchiveModal();
+    
+    fetch(`/seller/products/${productId}/archive-choice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            window.showToast(data.error || 'Failed to process request', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        window.showToast('Network error. Please try again.', 'error');
+    });
+}
+    // Filter products
+    function filterProducts() {
+        const searchText = document.getElementById('searchInput').value.toLowerCase();
+        const category = document.getElementById('categoryFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const sortBy = document.getElementById('sortFilter').value;
+        
+        const productCards = Array.from(document.querySelectorAll('.product-card'));
+        
+        const filteredCards = productCards.filter(card => {
+            const name = card.querySelector('.product-name').textContent.toLowerCase();
+            const desc = card.querySelector('.product-desc').textContent.toLowerCase();
+            const cardCategory = card.dataset.category;
+            const stock = parseInt(card.dataset.stock);
+            
+            const matchesSearch = !searchText || name.includes(searchText) || desc.includes(searchText);
+            const matchesCategory = !category || cardCategory === category;
+            
+            let matchesStatus = true;
+            if (status === 'in_stock') matchesStatus = stock > 10;
+            else if (status === 'low_stock') matchesStatus = stock > 0 && stock <= 10;
+            else if (status === 'out_of_stock') matchesStatus = stock <= 0;
+            
+            return matchesSearch && matchesCategory && matchesStatus;
+        });
+        
+        filteredCards.sort((a, b) => {
+            const aPrice = parseFloat(a.dataset.price);
+            const bPrice = parseFloat(b.dataset.price);
+            const aName = a.dataset.name;
+            const bName = b.dataset.name;
+            
+            switch(sortBy) {
+                case 'price_low':
+                    return aPrice - bPrice;
+                case 'price_high':
+                    return bPrice - aPrice;
+                case 'name':
+                    return aName.localeCompare(bName);
+                default:
+                    return 0;
+            }
+        });
+        
+        productCards.forEach(card => card.style.display = 'none');
+        filteredCards.forEach(card => card.style.display = 'flex');
+        
+        const grid = document.getElementById('productsGrid');
+        const existingEmptyState = grid.querySelector('.empty-state[data-type="no-results"]');
+        
+        if (filteredCards.length === 0 && !existingEmptyState) {
+            const noResults = document.createElement('div');
+            noResults.className = 'empty-state';
+            noResults.setAttribute('data-type', 'no-results');
+            noResults.style.gridColumn = '1 / -1';
+            noResults.innerHTML = `
+                <i class="ri-search-line empty-state-icon"></i>
+                <div class="empty-state-title">No Products Found</div>
+                <p class="empty-state-sub">Try adjusting your search or filters</p>
+            `;
+            grid.appendChild(noResults);
+        } else if (filteredCards.length > 0 && existingEmptyState) {
+            existingEmptyState.remove();
+        }
+    }
+
+    // Bulk Actions
+    document.getElementById('selectAllBtn')?.addEventListener('click', function() {
+        const visibleCards = Array.from(document.querySelectorAll('.product-card'))
+            .filter(c => c.style.display !== 'none');
+        
+        const allSelected = visibleCards.length > 0 && 
+                           visibleCards.every(c => c.style.outline);
+        
+        selectedProducts.clear();
+        visibleCards.forEach(card => {
+            if (!allSelected) {
+                const id = card.dataset.productId;
+                if (id) selectedProducts.add(id);
+                card.style.outline = '2px solid var(--deep-rose)';
+                card.style.outlineOffset = '2px';
+            } else {
+                card.style.outline = '';
+                card.style.outlineOffset = '';
+            }
+        });
+        
+        this.innerHTML = allSelected
+            ? '<i class="ri-checkbox-multiple-line"></i> Select All'
+            : '<i class="ri-close-circle-line"></i> Deselect All';
+        
+        updateBulkButtons();
+    });
+
+    function updateBulkButtons() {
+        const hasSelected = selectedProducts.size > 0;
+        ['bulkAvailableBtn', 'bulkUnavailableBtn', 'bulkDeleteBtn'].forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = !hasSelected;
+        });
+    }
+
+    document.getElementById('bulkAvailableBtn')?.addEventListener('click', async function() {
+        if (!selectedProducts.size) return;
+        
+        if (confirm(`Mark ${selectedProducts.size} product(s) as available?`)) {
+            for (const id of selectedProducts) {
+                await fetch(`/seller/products/${id}/availability`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_available: true })
+                });
+            }
+            window.showToast(`✓  ${selectedProducts.size} product(s) marked available`, 'success');
+            setTimeout(() => location.reload(), 800);
+        }
+    });
+
+    document.getElementById('bulkUnavailableBtn')?.addEventListener('click', async function() {
+        if (!selectedProducts.size) return;
+        
+        if (confirm(`Mark ${selectedProducts.size} product(s) as unavailable?`)) {
+            for (const id of selectedProducts) {
+                await fetch(`/seller/products/${id}/availability`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_available: false })
+                });
+            }
+            window.showToast(`${selectedProducts.size} product(s) marked unavailable`);
+            setTimeout(() => location.reload(), 800);
+        }
+    });
+
+    document.getElementById('bulkDeleteBtn')?.addEventListener('click', async function() {
+        if (!selectedProducts.size) return;
+        
+        if (confirm(`Delete ${selectedProducts.size} product(s)? This cannot be undone.`)) {
+            for (const id of selectedProducts) {
+                await fetch(`/seller/products/${id}`, { method: 'DELETE' });
+            }
+            window.showToast(`✓  ${selectedProducts.size} product(s) deleted`, 'success');
+            setTimeout(() => location.reload(), 800);
+        }
+    });
+
+    // Close modal when clicking overlay
+    document.getElementById('productModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeModal();
+        }
+    });
+
+    // Add image slot button
+    document.getElementById('addImageSlotBtn').addEventListener('click', addImageSlot);
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+        updateBulkButtons();
+    });
+
+    // ===== AVAILABILITY TOGGLE =====
+    document.addEventListener('change', async function(e) {
+        if (!e.target.matches('.availability-toggle')) return;
+        
+        const id = e.target.dataset.productId;
+        const val = e.target.checked;
+        const originalState = !val;
+        
+        console.log(`🔄 Toggling product ${id} availability to: ${val}`);
+        
+        try {
+            const response = await fetch(`/seller/products/${id}/availability`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ is_available: val })
+            });
+            
+            const data = await response.json();
+            console.log('📡 Response:', data);
+            
+            if (data.success) {
+                window.showToast(data.message || (val ? '✓ Product available' : 'Product unavailable'), 'success');
+            } else {
+                e.target.checked = originalState;
+                window.showToast(data.error || 'Failed to update availability', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating availability:', error);
+            e.target.checked = originalState;
+            window.showToast('Network error. Please try again.', 'error');
+        }
+    });
+
+    // Make functions globally available
+    window.showAddProductModal = showAddProductModal;
+    window.editProduct = editProduct;
+    window.deleteProduct = deleteProduct;
+    window.closeModal = closeModal;
+    window.submitProductForm = submitProductForm;
+    window.filterProducts = filterProducts;
+</script>
+{% endblock %}

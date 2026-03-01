@@ -1,0 +1,795 @@
+{% extends "layout.html" %}
+
+{% block title %}Riders Management - Seller{% endblock %}
+
+{% block page_title %}Riders Management{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="input-group">
+            <input type="text" class="form-control" placeholder="Search riders..." id="searchInput">
+            <select class="form-select" style="max-width: 150px;" id="statusFilter">
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="busy">Busy</option>
+            </select>
+            <button class="btn btn-outline-primary" type="button">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+    </div>
+    <div class="col-md-6 text-end">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRiderModal">
+            <i class="fas fa-user-plus me-2"></i>Add Rider
+        </button>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card border-left-primary">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">Total Riders</div>
+                        <div class="h4 mb-0">8</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-motorcycle fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card border-left-success">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">Active Now</div>
+                        <div class="h4 mb-0">5</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-user-check fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card border-left-warning">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">On Delivery</div>
+                        <div class="h4 mb-0">3</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-shipping-fast fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card border-left-info">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">Avg. Rating</div>
+                        <div class="h4 mb-0">4.5</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-star fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Riders Table -->
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Rider</th>
+                        <th>Contact</th>
+                        <th>Vehicle</th>
+                        <th>Status</th>
+                        <th>Current Location</th>
+                        <th>Today's Deliveries</th>
+                        <th>Rating</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rider in riders %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar bg-primary text-white rounded-circle me-2" 
+                                     style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fas fa-motorcycle"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold">{{ rider.name }}</div>
+                                    <small class="text-muted">ID: {{ rider.id }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div>{{ rider.phone }}</div>
+                            <small class="text-muted">{{ rider.email }}</small>
+                        </td>
+                        <td>
+                            <div>{{ rider.vehicle_type }}</div>
+                            <small class="text-muted">{{ rider.license_plate }}</small>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="me-2" style="width: 8px; height: 8px; border-radius: 50%; 
+                                      background-color: {{ 'green' if rider.status == 'active' else 'orange' if rider.status == 'busy' else 'red' }};">
+                                </div>
+                                <select class="form-select form-select-sm rider-status" 
+                                        data-rider-id="{{ rider.id }}"
+                                        style="width: 100px;">
+                                    <option value="active" {% if rider.status == 'active' %}selected{% endif %}>Active</option>
+                                    <option value="inactive" {% if rider.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                                    <option value="busy" {% if rider.status == 'busy' %}selected{% endif %}>Busy</option>
+                                </select>
+                            </div>
+                        </td>
+                        <td>
+                            {% if rider.current_location %}
+                            <div class="text-success">
+                                <i class="fas fa-map-marker-alt"></i> 
+                                <span data-bs-toggle="tooltip" title="{{ rider.current_location }}">
+                                    {{ rider.current_location|truncate(20) }}
+                                </span>
+                            </div>
+                            {% else %}
+                            <span class="text-muted">Not available</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="text-center">
+                                <div class="h5 mb-0">{{ rider.today_deliveries }}</div>
+                                <small class="text-muted">deliveries</small>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="star-rating">
+                                {% for i in range(1, 6) %}
+                                    <i class="fas fa-star {% if i <= rider.rating %}text-warning{% else %}text-secondary{% endif %}"></i>
+                                {% endfor %}
+                                <br>
+                                <small class="text-muted">({{ rider.total_ratings }})</small>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary view-rider" 
+                                        data-rider-id="{{ rider.id }}"
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#viewRiderModal">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-outline-success edit-rider" 
+                                        data-rider-id="{{ rider.id }}"
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#editRiderModal">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-outline-info track-rider" 
+                                        data-rider-id="{{ rider.id }}">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                </button>
+                                <button class="btn btn-outline-danger delete-rider"
+                                        data-rider-id="{{ rider.id }}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Live Tracking -->
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-map-marked-alt me-2"></i>Live Rider Tracking</h6>
+        <button class="btn btn-sm btn-light refresh-tracking">
+            <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+    </div>
+    <div class="card-body">
+        <div id="trackingMap" style="height: 400px; border-radius: 10px; background: #e9ecef; display: flex; align-items: center; justify-content: center;">
+            <div class="text-center text-muted">
+                <i class="fas fa-map fa-3x mb-3"></i>
+                <p>Live tracking map would be displayed here</p>
+                <p><small>Google Maps integration required</small></p>
+            </div>
+        </div>
+        
+        <div class="row mt-3" id="activeDeliveries">
+            {% for rider in active_riders %}
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card border-start border-{{ 'success' if rider.status == 'active' else 'warning' }}">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="avatar bg-primary text-white rounded-circle me-3" 
+                                 style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-motorcycle"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="mb-0">{{ rider.name }}</h6>
+                                <small class="text-muted">{{ rider.current_order }}</small>
+                            </div>
+                            <div class="text-end">
+                                <div class="text-success">{{ rider.time_elapsed }}</div>
+                                <small class="text-muted">ETA: {{ rider.eta }}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Rider Modal -->
+<div class="modal fade" id="addRiderModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Rider</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addRiderForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Full Name *</label>
+                        <input type="text" class="form-control" name="full_name" required>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Email Address *</label>
+                            <input type="email" class="form-control" name="email" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Phone Number *</label>
+                            <input type="tel" class="form-control" name="phone" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Vehicle Type *</label>
+                            <select class="form-select" name="vehicle_type" required>
+                                <option value="">Select Vehicle</option>
+                                <option value="motorcycle">Motorcycle</option>
+                                <option value="bicycle">Bicycle</option>
+                                <option value="scooter">Scooter</option>
+                                <option value="car">Car</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">License Plate</label>
+                            <input type="text" class="form-control" name="license_plate">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Initial Password *</label>
+                        <input type="password" class="form-control" name="password" required>
+                        <small class="text-muted">Rider will be asked to change on first login</small>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="is_active" id="isActive" checked>
+                        <label class="form-check-label" for="isActive">
+                            Rider is active
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Rider</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Rider Modal -->
+<div class="modal fade" id="viewRiderModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rider Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="riderDetails">
+                    <!-- Rider details will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Rider Modal -->
+<div class="modal fade" id="editRiderModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Rider</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editRiderForm">
+                <div class="modal-body">
+                    <input type="hidden" id="edit_rider_id" name="rider_id">
+                    <div id="editRiderFormContent">
+                        <!-- Edit form will be loaded here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Stats -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Delivery Performance</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="performanceChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-trophy me-2"></i>Top Performers</h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    {% for performer in top_performers %}
+                    <div class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <div class="d-flex align-items-center">
+                                <div class="position-relative me-3">
+                                    <div class="avatar bg-primary text-white rounded-circle" 
+                                         style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                                        {{ performer.rank }}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0">{{ performer.name }}</h6>
+                                    <small class="text-muted">{{ performer.vehicle }}</small>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <div class="h5 mb-0">{{ performer.deliveries }}</div>
+                                <small class="text-muted">deliveries</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Update rider status
+    document.querySelectorAll('.rider-status').forEach(select => {
+        select.addEventListener('change', function() {
+            const riderId = this.dataset.riderId;
+            const status = this.value;
+            
+            fetch(`/api/v1/seller/riders/${riderId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ status: status })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    showAlert('success', 'Rider status updated');
+                    
+                    // Update status indicator
+                    const indicator = this.previousElementSibling;
+                    let color = 'green';
+                    if (status === 'inactive') color = 'red';
+                    if (status === 'busy') color = 'orange';
+                    indicator.style.backgroundColor = color;
+                }
+            })
+            .catch(error => {
+                showAlert('danger', 'Error updating status');
+            });
+        });
+    });
+    
+    // Delete rider
+    document.querySelectorAll('.delete-rider').forEach(button => {
+        button.addEventListener('click', function() {
+            const riderId = this.dataset.riderId;
+            
+            if (confirm('Are you sure you want to delete this rider?')) {
+                fetch(`/api/v1/seller/riders/${riderId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        showAlert('success', 'Rider deleted successfully');
+                        this.closest('tr').remove();
+                    }
+                })
+                .catch(error => {
+                    showAlert('danger', 'Error deleting rider');
+                });
+            }
+        });
+    });
+    
+    // Track rider location
+    document.querySelectorAll('.track-rider').forEach(button => {
+        button.addEventListener('click', function() {
+            const riderId = this.dataset.riderId;
+            
+            // In a real application, this would open a map with the rider's location
+            fetch(`/api/v1/seller/riders/${riderId}/location`)
+                .then(response => response.json())
+                .then(location => {
+                    if (location) {
+                        showAlert('info', `Rider is at ${location.address}`);
+                    } else {
+                        showAlert('warning', 'Rider location not available');
+                    }
+                });
+        });
+    });
+    
+    // View rider details
+    document.querySelectorAll('.view-rider').forEach(button => {
+        button.addEventListener('click', function() {
+            const riderId = this.dataset.riderId;
+            
+            fetch(`/api/v1/seller/riders/${riderId}`)
+                .then(response => response.json())
+                .then(rider => {
+                    const riderDetails = document.getElementById('riderDetails');
+                    riderDetails.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-4 text-center mb-3">
+                                <div class="avatar bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" 
+                                     style="width: 100px; height: 100px; font-size: 40px;">
+                                    <i class="fas fa-motorcycle"></i>
+                                </div>
+                                <h5 class="mt-3">${rider.name}</h5>
+                                <span class="badge ${rider.status === 'active' ? 'bg-success' : 'bg-warning'}">
+                                    ${rider.status}
+                                </span>
+                            </div>
+                            <div class="col-md-8">
+                                <table class="table table-bordered">
+                                    <tr>
+                                        <th width="30%">Email:</th>
+                                        <td>${rider.email}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Phone:</th>
+                                        <td>${rider.phone}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Vehicle:</th>
+                                        <td>${rider.vehicle_type} (${rider.license_plate})</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Joined:</th>
+                                        <td>${rider.joined_date}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Last Active:</th>
+                                        <td>${rider.last_active || 'N/A'}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Performance Stats</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row text-center">
+                                            <div class="col-6">
+                                                <div class="h4">${rider.total_deliveries || 0}</div>
+                                                <small>Total Deliveries</small>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="h4">${rider.success_rate || 0}%</div>
+                                                <small>Success Rate</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Current Status</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        ${rider.current_order ? 
+                                            `<p><strong>Current Delivery:</strong> ${rider.current_order}</p>
+                                             <p><strong>Started:</strong> ${rider.delivery_started}</p>
+                                             <p><strong>ETA:</strong> ${rider.eta}</p>` :
+                                            '<p class="text-muted">No active delivery</p>'
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <h6>Recent Deliveries</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Order ID</th>
+                                            <th>Customer</th>
+                                            <th>Time</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${rider.recent_deliveries ? 
+                                            rider.recent_deliveries.map(delivery => `
+                                                <tr>
+                                                    <td>#${delivery.id}</td>
+                                                    <td>${delivery.customer}</td>
+                                                    <td>${delivery.time}</td>
+                                                    <td><span class="badge bg-success">${delivery.status}</span></td>
+                                                </tr>
+                                            `).join('') :
+                                            '<tr><td colspan="4" class="text-center">No recent deliveries</td></tr>'
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                });
+        });
+    });
+    
+    // Edit rider
+    document.querySelectorAll('.edit-rider').forEach(button => {
+        button.addEventListener('click', function() {
+            const riderId = this.dataset.riderId;
+            
+            fetch(`/api/v1/seller/riders/${riderId}`)
+                .then(response => response.json())
+                .then(rider => {
+                    document.getElementById('edit_rider_id').value = rider.id;
+                    
+                    const formContent = document.getElementById('editRiderFormContent');
+                    formContent.innerHTML = `
+                        <div class="mb-3">
+                            <label class="form-label">Full Name *</label>
+                            <input type="text" class="form-control" name="full_name" value="${rider.name}" required>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email Address *</label>
+                                <input type="email" class="form-control" name="email" value="${rider.email}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Phone Number *</label>
+                                <input type="tel" class="form-control" name="phone" value="${rider.phone}" required>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Vehicle Type *</label>
+                                <select class="form-select" name="vehicle_type" required>
+                                    <option value="">Select Vehicle</option>
+                                    <option value="motorcycle" ${rider.vehicle_type === 'motorcycle' ? 'selected' : ''}>Motorcycle</option>
+                                    <option value="bicycle" ${rider.vehicle_type === 'bicycle' ? 'selected' : ''}>Bicycle</option>
+                                    <option value="scooter" ${rider.vehicle_type === 'scooter' ? 'selected' : ''}>Scooter</option>
+                                    <option value="car" ${rider.vehicle_type === 'car' ? 'selected' : ''}>Car</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">License Plate</label>
+                                <input type="text" class="form-control" name="license_plate" value="${rider.license_plate || ''}">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Status *</label>
+                            <select class="form-select" name="status" required>
+                                <option value="active" ${rider.status === 'active' ? 'selected' : ''}>Active</option>
+                                <option value="inactive" ${rider.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+                                <option value="busy" ${rider.status === 'busy' ? 'selected' : ''}>Busy</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="is_active" id="editIsActive" 
+                                   ${rider.is_active ? 'checked' : ''}>
+                            <label class="form-check-label" for="editIsActive">
+                                Rider is active
+                            </label>
+                        </div>
+                    `;
+                });
+        });
+    });
+    
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const statusFilter = document.getElementById('statusFilter').value;
+        const rows = document.querySelectorAll('tbody tr');
+        
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            const status = row.querySelector('.rider-status').value;
+            
+            const matchesSearch = text.includes(searchTerm);
+            const matchesStatus = !statusFilter || status === statusFilter;
+            
+            row.style.display = matchesSearch && matchesStatus ? '' : 'none';
+        });
+    });
+    
+    document.getElementById('statusFilter').addEventListener('change', function() {
+        document.getElementById('searchInput').dispatchEvent(new Event('input'));
+    });
+    
+    // Refresh tracking
+    document.querySelector('.refresh-tracking').addEventListener('click', function() {
+        this.querySelector('i').classList.add('fa-spin');
+        
+        // Simulate API call
+        setTimeout(() => {
+            this.querySelector('i').classList.remove('fa-spin');
+            showAlert('info', 'Tracking data refreshed');
+        }, 1000);
+    });
+    
+    // Form submissions
+    document.getElementById('addRiderForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        
+        fetch('/api/v1/seller/riders', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                showAlert('success', 'Rider added successfully');
+                location.reload();
+            }
+        })
+        .catch(error => {
+            showAlert('danger', 'Error adding rider');
+        });
+    });
+    
+    document.getElementById('editRiderForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const riderId = document.getElementById('edit_rider_id').value;
+        
+        fetch(`/api/v1/seller/riders/${riderId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                showAlert('success', 'Rider updated successfully');
+                location.reload();
+            }
+        })
+        .catch(error => {
+            showAlert('danger', 'Error updating rider');
+        });
+    });
+    
+    // Performance Chart
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    const performanceChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            datasets: [{
+                label: 'Deliveries Completed',
+                data: [12, 19, 15, 22, 18, 25, 20],
+                backgroundColor: 'rgba(40, 167, 69, 0.7)',
+                borderColor: 'rgba(40, 167, 69, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Deliveries'
+                    }
+                }
+            }
+        }
+    });
+    
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.querySelector('.main-content').insertBefore(alert, document.querySelector('.main-content').firstChild);
+        
+        setTimeout(() => alert.remove(), 5000);
+    }
+</script>
+{% endblock %}

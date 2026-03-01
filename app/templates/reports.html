@@ -1,0 +1,1473 @@
+{% extends "layout.html" %}
+
+{% block title %}Reports — E-FLOWERS{% endblock %}
+{% block page_title %}Reports{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ─── Design Tokens ─────────────────────────────────────── */
+:root {
+  --cream:        #faf6f0;
+  --warm-white:   #fffdf9;
+  --blush:        #f2c4ce;
+  --deep-rose:    #b5445a;
+  --dusty-rose:   #d4788a;
+  --sage:         #7a9e7e;
+  --deep-sage:    #4a6b4e;
+  --terracotta:   #c4714b;
+  --bark:         #6b4c3b;
+  --charcoal:     #2c2520;
+  --muted:        #9a8d85;
+  --border:       rgba(107,76,59,.12);
+  --border-md:    rgba(107,76,59,.22);
+  --font-display: 'Cormorant Garamond', serif;
+  --font-sans:    'DM Sans', sans-serif;
+  --radius-sm:    8px;
+  --radius-md:    14px;
+  --radius-lg:    22px;
+  --radius-xl:    32px;
+  --shadow-card:  0 2px 16px rgba(42,35,30,.07);
+  --shadow-hover: 0 8px 36px rgba(42,35,30,.13);
+  --transition:   all .32s cubic-bezier(.4,0,.2,1);
+}
+
+/* ─── Shell ─────────────────────────────────────────────── */
+.rpt {
+  background: var(--cream);
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--charcoal);
+  padding: 2rem 2.5rem 5rem;
+  max-width: 1380px;
+  margin: 0 auto;
+}
+
+/* ─── Page Header ───────────────────────────────────────── */
+.rpt-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 2.25rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.rpt-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--dusty-rose);
+  margin-bottom: .35rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.rpt-eyebrow::before {
+  content: '';
+  width: 20px; height: 1.5px;
+  background: var(--dusty-rose);
+  display: inline-block;
+}
+
+.rpt-title {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--charcoal);
+}
+
+.rpt-title em { font-style: italic; color: var(--deep-rose); }
+
+/* ─── Builder Panel ─────────────────────────────────────── */
+.builder-panel {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 2rem 2.25rem;
+  margin-bottom: 1.75rem;
+  position: relative;
+  overflow: hidden;
+  animation: fadeUp .4s ease both;
+}
+
+.builder-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose), var(--sage));
+}
+
+.builder-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 1.25rem;
+  align-items: end;
+}
+
+.field-group { display: flex; flex-direction: column; gap: .45rem; }
+
+.field-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field-select, .field-input {
+  padding: .75rem 1rem;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--charcoal);
+  background: var(--cream);
+  transition: var(--transition);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%239a8d85' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .9rem center;
+  padding-right: 2.5rem;
+}
+
+.field-input {
+  background-image: none;
+  padding-right: 1rem;
+}
+
+.field-select:focus, .field-input:focus {
+  outline: none;
+  border-color: var(--deep-rose);
+  background-color: var(--warm-white);
+  box-shadow: 0 0 0 3px rgba(181,68,90,.08);
+}
+
+.generate-btn {
+  padding: .78rem 1.75rem;
+  background: var(--charcoal);
+  color: var(--cream);
+  border: none;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  white-space: nowrap;
+}
+
+.generate-btn:hover {
+  background: var(--deep-rose);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(181,68,90,.3);
+}
+
+.generate-btn.loading {
+  opacity: .7;
+  pointer-events: none;
+}
+
+/* Custom date drawer */
+.date-drawer {
+  display: none;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 1.25rem;
+  align-items: end;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  animation: slideDown .22s ease;
+}
+
+.date-drawer.open { display: grid; }
+
+@keyframes slideDown {
+  from { opacity:0; transform:translateY(-6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+.apply-range-btn {
+  padding: .75rem 1.4rem;
+  background: var(--deep-rose);
+  color: white;
+  border: none;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.apply-range-btn:hover { background: #9b3048; transform: translateY(-1px); }
+
+/* ─── Quick Report Cards ────────────────────────────────── */
+.quick-row {
+  display: grid;
+  grid-template-columns: repeat(4,1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+.quick-card {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.4rem 1.35rem;
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .6rem;
+  animation: fadeUp .4s ease both;
+}
+
+.quick-card:nth-child(1) { animation-delay:.05s; }
+.quick-card:nth-child(2) { animation-delay:.1s;  }
+.quick-card:nth-child(3) { animation-delay:.15s; }
+.quick-card:nth-child(4) { animation-delay:.2s;  }
+
+.quick-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--border-md);
+}
+
+.quick-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2.5px;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .35s ease;
+}
+
+.quick-card:hover::after { transform: scaleX(1); }
+.qc-rose::after   { background: linear-gradient(90deg,var(--deep-rose),var(--dusty-rose)); }
+.qc-sage::after   { background: linear-gradient(90deg,var(--sage),var(--deep-sage)); }
+.qc-terra::after  { background: linear-gradient(90deg,var(--terracotta),#e8906a); }
+.qc-bark::after   { background: linear-gradient(90deg,var(--bark),var(--charcoal)); }
+
+.quick-ico {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.qc-rose  .quick-ico { background:rgba(181,68,90,.1);  color:var(--deep-rose); }
+.qc-sage  .quick-ico { background:rgba(122,158,126,.13);color:var(--sage); }
+.qc-terra .quick-ico { background:rgba(196,113,75,.12); color:var(--terracotta); }
+.qc-bark  .quick-ico { background:rgba(107,76,59,.1);   color:var(--bark); }
+
+.quick-name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--charcoal);
+  line-height: 1.2;
+}
+
+.quick-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.quick-cta {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--deep-rose);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: .35rem;
+  transition: var(--transition);
+}
+
+.quick-card:hover .quick-cta { gap: 8px; }
+
+/* ─── Panel Base ────────────────────────────────────────── */
+.panel {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  animation: fadeUp .45s .25s ease both;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.35rem 1.75rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.panel-actions { display: flex; gap: .45rem; flex-wrap: wrap; }
+
+.pa-btn {
+  padding: .42rem 1rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.pa-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); background: rgba(181,68,90,.05); }
+
+.pa-btn.primary { background: var(--deep-rose); color: white; border-color: var(--deep-rose); }
+.pa-btn.primary:hover { background: #9b3048; color: white; }
+
+/* ─── Report Preview ────────────────────────────────────── */
+.preview-body { padding: 2rem 2.25rem; min-height: 280px; }
+
+/* Empty state */
+.empty-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  text-align: center;
+  gap: 1rem;
+}
+
+.empty-icon {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: rgba(107,76,59,.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: var(--muted);
+  opacity: .6;
+}
+
+.empty-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--charcoal);
+}
+
+.empty-sub { font-size: 13px; color: var(--muted); max-width: 320px; line-height: 1.6; }
+
+/* Loading state */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 4rem;
+}
+
+.spinner {
+  width: 40px; height: 40px;
+  border: 2.5px solid var(--border-md);
+  border-top-color: var(--deep-rose);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--charcoal);
+}
+
+.loading-sub { font-size: 13px; color: var(--muted); margin-top: -.5rem; }
+
+/* Report content styles */
+.report-masthead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-brand {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--charcoal);
+}
+
+.report-brand em { color: var(--deep-rose); font-style: italic; }
+
+.report-meta { text-align: right; }
+.report-meta-title { font-size: 14px; font-weight: 600; color: var(--charcoal); margin-bottom: .2rem; }
+.report-meta-date  { font-size: 12px; color: var(--muted); }
+
+.report-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4,1fr);
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.report-kpi {
+  background: var(--cream);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--border);
+}
+
+.report-kpi-val {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--charcoal);
+  line-height: 1;
+  margin-bottom: .3rem;
+}
+
+.report-kpi-lbl { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Report table */
+table.rpt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 1.75rem;
+}
+
+.rpt-table thead th {
+  padding: .65rem 1rem;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--cream);
+  border-bottom: 1px solid var(--border);
+}
+
+.rpt-table tbody tr { border-bottom: 1px solid var(--border); }
+.rpt-table tbody tr:last-child { border-bottom: none; }
+.rpt-table tbody tr:hover { background: rgba(250,246,240,.6); }
+.rpt-table td { padding: .8rem 1rem; vertical-align: middle; }
+
+.growth-up   { color: var(--deep-sage);  font-weight: 600; font-size: 12px; }
+.growth-down { color: var(--deep-rose);  font-weight: 600; font-size: 12px; }
+
+.s-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 100px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.sp-green { background:rgba(122,158,126,.15); color:var(--deep-sage); }
+.sp-rose  { background:rgba(181,68,90,.1);  color:var(--deep-rose); }
+.sp-terra { background:rgba(196,113,75,.13); color:var(--terracotta); }
+.sp-bark  { background:rgba(107,76,59,.1);   color:var(--bark); }
+
+.report-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.list-block { background: var(--cream); border-radius: var(--radius-md); overflow: hidden; }
+.list-block-title {
+  padding: .75rem 1.1rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.list-block-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .7rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  transition: var(--transition);
+}
+
+.list-block-item:last-child { border-bottom: none; }
+.list-block-item:hover { background: var(--warm-white); }
+.list-block-item strong { font-weight: 600; }
+
+.report-timestamp { font-size: 11.5px; color: var(--muted); margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+/* ─── Saved Reports Table ───────────────────────────────── */
+.saved-panel { margin-top: 1.75rem; margin-bottom: 1.75rem; }
+
+.table-scroll { overflow-x: auto; }
+
+table.saved-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.saved-table thead th {
+  padding: .65rem 1.4rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--cream);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.saved-table tbody tr { border-bottom: 1px solid var(--border); transition: var(--transition); }
+.saved-table tbody tr:last-child { border-bottom: none; }
+.saved-table tbody tr:hover { background: rgba(250,246,240,.6); }
+.saved-table td { padding: .9rem 1.4rem; vertical-align: middle; }
+
+.file-cell { display: flex; align-items: center; gap: .75rem; }
+
+.file-ico {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.fi-pdf   { background:rgba(196,113,75,.13); color:var(--terracotta); }
+.fi-excel { background:rgba(122,158,126,.13); color:var(--sage); }
+.fi-html  { background:rgba(181,68,90,.1);   color:var(--deep-rose); }
+
+.file-name  { font-size: 13px; font-weight: 600; color: var(--charcoal); }
+.file-desc  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+.sched-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 100px;
+  font-size: 11px; font-weight: 600;
+  background: rgba(122,158,126,.13); color: var(--deep-sage);
+}
+
+.row-actions { display: flex; gap: .4rem; }
+
+.row-btn {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.row-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); background: rgba(181,68,90,.05); }
+.row-btn.danger:hover { border-color: var(--terracotta); color: var(--terracotta); background: rgba(196,113,75,.05); }
+
+.empty-row td {
+  text-align: center;
+  padding: 3.5rem;
+}
+
+.empty-row-inner { display: flex; flex-direction: column; align-items: center; gap: .6rem; }
+.empty-row-icon { font-size: 32px; opacity: .2; color: var(--muted); }
+.empty-row-text { font-size: 13px; color: var(--muted); }
+
+/* ─── Templates ─────────────────────────────────────────── */
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  gap: 1.1rem;
+  padding: 1.5rem 1.75rem;
+}
+
+.tpl-card {
+  background: var(--cream);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+}
+
+.tpl-card:hover {
+  border-color: var(--deep-rose);
+  background: var(--warm-white);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(181,68,90,.1);
+}
+
+.tpl-top { display: flex; align-items: flex-start; gap: .75rem; }
+
+.tpl-ico {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.tpl-card:hover .tpl-ico { transform: scale(1.1); }
+
+.ti-rose  { background:rgba(181,68,90,.1);  color:var(--deep-rose); }
+.ti-sage  { background:rgba(122,158,126,.13);color:var(--sage); }
+.ti-terra { background:rgba(196,113,75,.12); color:var(--terracotta); }
+.ti-bark  { background:rgba(107,76,59,.1);   color:var(--bark); }
+.ti-blush { background:rgba(242,196,206,.3); color:var(--dusty-rose); }
+.ti-charcoal { background:rgba(44,37,32,.08);color:var(--charcoal); }
+
+.tpl-name { font-size: 14px; font-weight: 600; color: var(--charcoal); margin-bottom: 2px; }
+.tpl-desc { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+
+.tpl-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: .6rem;
+  border-top: 1px solid var(--border);
+}
+
+.tpl-last { font-size: 11px; color: var(--muted); }
+.tpl-use  { font-size: 11.5px; font-weight: 700; color: var(--deep-rose); display: flex; align-items: center; gap: 3px; transition: var(--transition); }
+.tpl-card:hover .tpl-use { gap: 7px; }
+
+/* ─── Schedule Modal ────────────────────────────────────── */
+.modal-bg {
+  position: fixed; inset: 0;
+  background: rgba(42,35,30,.5);
+  backdrop-filter: blur(6px);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1200;
+  padding: 1.5rem;
+}
+
+.modal-bg.open { display: flex; animation: fadeBg .2s ease; }
+@keyframes fadeBg { from{opacity:0;} to{opacity:1;} }
+
+.sched-modal {
+  background: var(--warm-white);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 500px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(42,35,30,.2);
+  animation: popIn .25s ease;
+}
+
+@keyframes popIn {
+  from { transform: scale(.95) translateY(10px); opacity:0; }
+  to   { transform: scale(1)   translateY(0);    opacity:1; }
+}
+
+.sched-head {
+  background: var(--charcoal);
+  padding: 1.5rem 2rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sched-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--cream);
+}
+
+.modal-x {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.15);
+  color: rgba(255,255,255,.7);
+  font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.modal-x:hover { background: rgba(255,255,255,.2); color:white; }
+
+.sched-body { padding: 1.75rem 2rem; display: flex; flex-direction: column; gap: 1.1rem; }
+
+.sched-field { display: flex; flex-direction: column; gap: .45rem; }
+
+.sched-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sched-input, .sched-select, .sched-textarea {
+  padding: .72rem 1rem;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--charcoal);
+  background: var(--cream);
+  transition: var(--transition);
+  width: 100%;
+}
+
+.sched-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%239a8d85' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .9rem center;
+  padding-right: 2.5rem;
+}
+
+.sched-textarea { resize: vertical; min-height: 72px; }
+
+.sched-input:focus, .sched-select:focus, .sched-textarea:focus {
+  outline: none;
+  border-color: var(--deep-rose);
+  background: var(--warm-white);
+  box-shadow: 0 0 0 3px rgba(181,68,90,.08);
+}
+
+.sched-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+.sched-hint { font-size: 11px; color: var(--muted); margin-top: .2rem; }
+
+.sched-check-row {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .75rem 1rem;
+  background: var(--cream);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+}
+
+.sched-check {
+  width: 16px; height: 16px;
+  accent-color: var(--deep-rose);
+  cursor: pointer;
+}
+
+.sched-check-label { font-size: 13px; font-weight: 500; color: var(--charcoal); cursor: pointer; }
+
+.sched-footer {
+  padding: 1.25rem 2rem 2rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: .6rem;
+  border-top: 1px solid var(--border);
+}
+
+.cancel-btn {
+  padding: .65rem 1.4rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.cancel-btn:hover { border-color: var(--charcoal); color: var(--charcoal); }
+
+.save-btn {
+  padding: .65rem 1.75rem;
+  background: var(--deep-rose);
+  color: white;
+  border: none;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.save-btn:hover { background: #9b3048; transform: translateY(-1px); }
+
+/* ─── Toast ─────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 2rem; left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: var(--charcoal);
+  color: var(--cream);
+  padding: .75rem 1.6rem;
+  border-radius: 100px;
+  font-size: 13.5px;
+  font-family: var(--font-sans);
+  box-shadow: 0 8px 28px rgba(42,35,30,.22);
+  opacity: 0;
+  transition: all .3s cubic-bezier(.4,0,.2,1);
+  z-index: 2000;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* ─── Animations ────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(16px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ─── Responsive ────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .quick-row { grid-template-columns: repeat(2,1fr); }
+  .templates-grid { grid-template-columns: repeat(2,1fr); }
+  .report-kpi-row { grid-template-columns: repeat(2,1fr); }
+}
+
+@media (max-width: 900px) {
+  .builder-grid { grid-template-columns: 1fr 1fr; }
+  .date-drawer  { grid-template-columns: 1fr 1fr; }
+  .report-two-col { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .rpt { padding: 1.25rem 1rem 3rem; }
+  .builder-grid { grid-template-columns: 1fr; }
+  .date-drawer  { grid-template-columns: 1fr; }
+  .quick-row    { grid-template-columns: 1fr 1fr; }
+  .templates-grid { grid-template-columns: 1fr; }
+  .sched-row    { grid-template-columns: 1fr; }
+  .report-kpi-row { grid-template-columns: 1fr 1fr; }
+}
+
+@media print {
+  .rpt-header, .builder-panel, .quick-row,
+  .panel-actions, .saved-panel, .templates-section,
+  .toast, .modal-bg { display: none !important; }
+  .preview-body { padding: 0; }
+  .panel { border: none; box-shadow: none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rpt">
+
+  <!-- ─── Header ──────────────────────────────────────────── -->
+  <div class="rpt-header">
+    <div>
+      <div class="rpt-eyebrow">Data & Insights</div>
+      <h1 class="rpt-title">Reports, <em>beautifully presented</em></h1>
+    </div>
+  </div>
+
+  <!-- ─── Builder ─────────────────────────────────────────── -->
+  <div class="builder-panel">
+    <div class="builder-grid">
+      <div class="field-group">
+        <span class="field-label">Report Type</span>
+        <select class="field-select" id="reportType">
+          <option value="sales">Sales Report</option>
+          <option value="orders">Orders Report</option>
+          <option value="products">Products Report</option>
+          <option value="customers">Customers Report</option>
+          <option value="riders">Riders Report</option>
+          <option value="inventory">Inventory Report</option>
+        </select>
+      </div>
+
+      <div class="field-group">
+        <span class="field-label">Date Range</span>
+        <select class="field-select" id="dateRange" onchange="handleDateChange(this)">
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="week">This Week</option>
+          <option value="month" selected>This Month</option>
+          <option value="quarter">This Quarter</option>
+          <option value="year">This Year</option>
+          <option value="custom">Custom Range…</option>
+        </select>
+      </div>
+
+      <div class="field-group">
+        <span class="field-label">Format</span>
+        <select class="field-select" id="reportFormat">
+          <option value="html">Web View</option>
+          <option value="pdf">PDF</option>
+          <option value="excel">Excel</option>
+          <option value="csv">CSV</option>
+        </select>
+      </div>
+
+      <button class="generate-btn" id="generateBtn" onclick="generateReport()">
+        <i class="ri-file-chart-line"></i> Generate
+      </button>
+    </div>
+
+    <!-- Custom date drawer -->
+    <div class="date-drawer" id="dateDrawer">
+      <div class="field-group">
+        <span class="field-label">From</span>
+        <input type="date" class="field-input" id="fromDate">
+      </div>
+      <div class="field-group">
+        <span class="field-label">To</span>
+        <input type="date" class="field-input" id="toDate">
+      </div>
+      <button class="apply-range-btn" onclick="applyRange()">
+        <i class="ri-check-line"></i> Apply
+      </button>
+    </div>
+  </div>
+
+  <!-- ─── Quick Report Cards ──────────────────────────────── -->
+  <div class="quick-row">
+    <div class="quick-card qc-rose" onclick="quickReport('sales')">
+      <div class="quick-ico"><i class="ri-money-dollar-circle-line"></i></div>
+      <div class="quick-name">Daily Sales</div>
+      <div class="quick-desc">Today's revenue, orders, and top earners at a glance</div>
+      <div class="quick-cta">Generate <i class="ri-arrow-right-line"></i></div>
+    </div>
+
+    <div class="quick-card qc-sage" onclick="quickReport('products')">
+      <div class="quick-ico"><i class="ri-plant-line"></i></div>
+      <div class="quick-name">Top Products</div>
+      <div class="quick-desc">Best selling items ranked by revenue and units sold</div>
+      <div class="quick-cta">Generate <i class="ri-arrow-right-line"></i></div>
+    </div>
+
+    <div class="quick-card qc-terra" onclick="quickReport('customers')">
+      <div class="quick-ico"><i class="ri-user-heart-line"></i></div>
+      <div class="quick-name">Customer Analysis</div>
+      <div class="quick-desc">Demographics, repeat buyers, and acquisition trends</div>
+      <div class="quick-cta">Generate <i class="ri-arrow-right-line"></i></div>
+    </div>
+
+    <div class="quick-card qc-bark" onclick="quickReport('inventory')">
+      <div class="quick-ico"><i class="ri-stack-line"></i></div>
+      <div class="quick-name">Inventory Status</div>
+      <div class="quick-desc">Stock levels, low-stock alerts, and reorder suggestions</div>
+      <div class="quick-cta">Generate <i class="ri-arrow-right-line"></i></div>
+    </div>
+  </div>
+
+  <!-- ─── Report Preview ──────────────────────────────────── -->
+  <div class="panel" style="margin-bottom:1.75rem;">
+    <div class="panel-head">
+      <span class="panel-title">Report Preview</span>
+      <div class="panel-actions">
+        <button class="pa-btn" onclick="generateReport()"><i class="ri-refresh-line"></i> Refresh</button>
+        <button class="pa-btn" onclick="exportReport()"><i class="ri-download-line"></i> Export</button>
+        <button class="pa-btn" onclick="window.print()"><i class="ri-printer-line"></i> Print</button>
+        <button class="pa-btn primary" onclick="openSchedule()"><i class="ri-time-line"></i> Schedule</button>
+      </div>
+    </div>
+    <div class="preview-body" id="previewBody">
+      <div class="empty-preview">
+        <div class="empty-icon"><i class="ri-file-chart-line"></i></div>
+        <div class="empty-title">No report generated yet</div>
+        <div class="empty-sub">Select a report type above and click Generate, or choose a quick report card to get started.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Saved Reports ───────────────────────────────────── -->
+  <div class="panel saved-panel">
+    <div class="panel-head">
+      <span class="panel-title">Saved Reports</span>
+    </div>
+    <div class="table-scroll">
+      <table class="saved-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Last Generated</th>
+            <th>Schedule</th>
+            <th>Size</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for report in saved_reports %}
+          <tr>
+            <td>
+              <div class="file-cell">
+                <div class="file-ico {% if report.format == 'pdf' %}fi-pdf{% elif report.format == 'excel' %}fi-excel{% else %}fi-html{% endif %}">
+                  <i class="ri-file-{% if report.format == 'pdf' %}pdf{% elif report.format == 'excel' %}excel-2{% else %}chart{% endif %}-line"></i>
+                </div>
+                <div>
+                  <div class="file-name">{{ report.name }}</div>
+                  <div class="file-desc">{{ report.description }}</div>
+                </div>
+              </div>
+            </td>
+            <td style="font-size:13px;color:var(--muted);">{{ report.type|capitalize }}</td>
+            <td style="font-size:13px;color:var(--muted);">{{ report.last_generated or 'Not yet' }}</td>
+            <td>
+              {% if report.schedule %}
+                <span class="sched-badge"><i class="ri-time-line"></i> {{ report.schedule }}</span>
+              {% else %}
+                <span style="font-size:12px;color:var(--muted);">Manual</span>
+              {% endif %}
+            </td>
+            <td style="font-size:13px;color:var(--muted);">{{ report.size }}</td>
+            <td>
+              <div class="row-actions">
+                <button class="row-btn" title="View" onclick="showToast('Opening report…')"><i class="ri-eye-line"></i></button>
+                <button class="row-btn" title="Download" onclick="showToast('Downloading…')"><i class="ri-download-line"></i></button>
+                <button class="row-btn" title="Schedule" onclick="openSchedule()"><i class="ri-time-line"></i></button>
+                <button class="row-btn danger" title="Delete" onclick="deleteRow(this)"><i class="ri-delete-bin-line"></i></button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr class="empty-row">
+            <td colspan="6">
+              <div class="empty-row-inner">
+                <i class="ri-folder-open-line empty-row-icon"></i>
+                <span class="empty-row-text">No saved reports yet — generate one above</span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ─── Report Templates ────────────────────────────────── -->
+  <div class="panel templates-section">
+    <div class="panel-head">
+      <span class="panel-title">Report Templates</span>
+    </div>
+    <div class="templates-grid">
+      {% for template in report_templates %}
+      <div class="tpl-card" onclick="useTemplate('{{ template.id }}')">
+        <div class="tpl-top">
+          <div class="tpl-ico ti-{{ template.color or 'rose' }}">
+            <i class="ri-{{ template.icon or 'file-chart-line' }}"></i>
+          </div>
+          <div>
+            <div class="tpl-name">{{ template.name }}</div>
+            <div class="tpl-desc">{{ template.description }}</div>
+          </div>
+        </div>
+        <div class="tpl-foot">
+          <span class="tpl-last">Last used: {{ template.last_used or 'Never' }}</span>
+          <span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span>
+        </div>
+      </div>
+      {% else %}
+      <!-- Fallback static templates if none from backend -->
+      <div class="tpl-card" onclick="quickReport('sales')">
+        <div class="tpl-top">
+          <div class="tpl-ico ti-rose"><i class="ri-money-dollar-circle-line"></i></div>
+          <div><div class="tpl-name">Monthly Sales Summary</div><div class="tpl-desc">Full revenue breakdown with trend analysis</div></div>
+        </div>
+        <div class="tpl-foot"><span class="tpl-last">Last used: Nov 30</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
+      </div>
+
+      <div class="tpl-card" onclick="quickReport('orders')">
+        <div class="tpl-top">
+          <div class="tpl-ico ti-sage"><i class="ri-shopping-bag-line"></i></div>
+          <div><div class="tpl-name">Weekly Order Report</div><div class="tpl-desc">Order status, fulfilment, and rider performance</div></div>
+        </div>
+        <div class="tpl-foot"><span class="tpl-last">Last used: Nov 28</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
+      </div>
+
+      <div class="tpl-card" onclick="quickReport('inventory')">
+        <div class="tpl-top">
+          <div class="tpl-ico ti-terra"><i class="ri-stack-line"></i></div>
+          <div><div class="tpl-name">Inventory Audit</div><div class="tpl-desc">Stock levels, reorder alerts, and dead stock</div></div>
+        </div>
+        <div class="tpl-foot"><span class="tpl-last">Last used: Nov 25</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
+      </div>
+
+      <div class="tpl-card" onclick="quickReport('customers')">
+        <div class="tpl-top">
+          <div class="tpl-ico ti-bark"><i class="ri-user-heart-line"></i></div>
+          <div><div class="tpl-name">Customer Loyalty</div><div class="tpl-desc">Repeat buyers, churn rate, and lifetime value</div></div>
+        </div>
+        <div class="tpl-foot"><span class="tpl-last">Last used: Nov 20</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
+      </div>
+
+      <div class="tpl-card" onclick="quickReport('riders')">
+        <div class="tpl-top">
+          <div class="tpl-ico ti-blush"><i class="ri-motorbike-line"></i></div>
+          <div><div class="tpl-name">Rider Performance</div><div class="tpl-desc">Delivery times, success rates, and earnings</div></div>
+        </div>
+        <div class="tpl-foot"><span class="tpl-last">Last used: Nov 18</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
+      </div>
+
+      <div class="tpl-card" onclick="quickReport('sales')">
+        <div class="tpl-top">
+          <div class="tpl-ico ti-charcoal"><i class="ri-bar-chart-grouped-line"></i></div>
+          <div><div class="tpl-name">Year-End Summary</div><div class="tpl-desc">Annual performance overview for stakeholders</div></div>
+        </div>
+        <div class="tpl-foot"><span class="tpl-last">Last used: Jan 2024</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div><!-- /rpt -->
+
+<!-- ─── Schedule Modal ───────────────────────────────────── -->
+<div class="modal-bg" id="schedModal">
+  <div class="sched-modal">
+    <div class="sched-head">
+      <span class="sched-title">Schedule Report</span>
+      <button class="modal-x" onclick="closeSchedule()"><i class="ri-close-line"></i></button>
+    </div>
+    <form class="sched-body" onsubmit="saveSchedule(event)">
+      <div class="sched-field">
+        <label class="sched-label">Report Name</label>
+        <input type="text" class="sched-input" id="schedName" placeholder="e.g. Weekly Sales Summary" required>
+      </div>
+
+      <div class="sched-row">
+        <div class="sched-field">
+          <label class="sched-label">Frequency</label>
+          <select class="sched-select" id="schedFreq" required>
+            <option value="">Select…</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+          </select>
+        </div>
+        <div class="sched-field">
+          <label class="sched-label">Time</label>
+          <input type="time" class="sched-input" id="schedTime" required>
+        </div>
+      </div>
+
+      <div class="sched-field">
+        <label class="sched-label">Delivery Method</label>
+        <select class="sched-select" id="schedDelivery">
+          <option value="email">Email</option>
+          <option value="sms">SMS</option>
+          <option value="both">Email & SMS</option>
+        </select>
+      </div>
+
+      <div class="sched-field">
+        <label class="sched-label">Recipients</label>
+        <textarea class="sched-textarea" id="schedRecipients" placeholder="email@example.com, +63912…"></textarea>
+        <div class="sched-hint">Separate multiple recipients with commas</div>
+      </div>
+
+      <label class="sched-check-row">
+        <input type="checkbox" class="sched-check" id="schedActive" checked>
+        <span class="sched-check-label">Schedule is active immediately</span>
+      </label>
+
+      <div class="sched-footer">
+        <button type="button" class="cancel-btn" onclick="closeSchedule()">Cancel</button>
+        <button type="submit" class="save-btn">Save Schedule</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="rptToast"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* ── Date Range ────────────────────────────────────────── */
+function handleDateChange(sel) {
+  const drawer = document.getElementById('dateDrawer');
+  sel.value === 'custom'
+    ? drawer.classList.add('open')
+    : drawer.classList.remove('open');
+}
+
+function applyRange() {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  if (!from || !to) { showToast('Please select both dates'); return; }
+  if (new Date(from) > new Date(to)) { showToast('From date must be before To date'); return; }
+  document.getElementById('dateDrawer').classList.remove('open');
+  showToast(`✓ Range set: ${from} → ${to}`);
+}
+
+/* ── Quick Reports ─────────────────────────────────────── */
+function quickReport(type) {
+  document.getElementById('reportType').value = type;
+  generateReport();
+}
+
+function useTemplate(id) {
+  showToast(`Loading template ${id}…`);
+  setTimeout(generateReport, 600);
+}
+
+/* ── Generate ──────────────────────────────────────────── */
+function generateReport() {
+  const type    = document.getElementById('reportType').value;
+  const range   = document.getElementById('dateRange').value;
+  const btn     = document.getElementById('generateBtn');
+  const preview = document.getElementById('previewBody');
+
+  // Loading state
+  btn.classList.add('loading');
+  btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;margin-right:.4rem;vertical-align:middle"></span> Generating…';
+  preview.innerHTML = `
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <div class="loading-text">Building your report…</div>
+      <div class="loading-sub">This only takes a moment</div>
+    </div>`;
+
+  setTimeout(() => {
+    btn.classList.remove('loading');
+    btn.innerHTML = '<i class="ri-file-chart-line"></i> Generate';
+
+    const generators = {
+      sales:     salesReport,
+      orders:    ordersReport,
+      products:  productsReport,
+      customers: customersReport,
+      riders:    ridersReport,
+      inventory: inventoryReport,
+    };
+
+    preview.innerHTML = (generators[type] || salesReport)(range);
+    showToast('✓ Report generated');
+  }, 1800);
+}
+
+/* ── Report HTML Builders ──────────────────────────────── */
+function masthead(title, range) {
+  return `
+    <div class="report-masthead">
+      <div>
+        <div class="report-brand">E-<em>FLOWERS</em></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:.25rem;">Automated Report System</div>
+      </div>
+      <div class="report-meta">
+        <div class="report-meta-title">${title}</div>
+        <div class="report-meta-date">Period: ${range} &nbsp;·&nbsp; Generated ${new Date().toLocaleString('en-PH')}</div>
+      </div>
+    </div>`;
+}
+
+function salesReport(range) {
+  return masthead('Sales Report', range) + `
+    <div class="report-kpi-row">
+      <div class="report-kpi"><div class="report-kpi-val">₱24,580</div><div class="report-kpi-lbl">Total Revenue</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">156</div><div class="report-kpi-lbl">Orders</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">₱1,575</div><div class="report-kpi-lbl">Avg. Order</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">24</div><div class="report-kpi-lbl">New Customers</div></div>
+    </div>
+
+    <table class="rpt-table">
+      <thead><tr><th>Date</th><th>Orders</th><th>Revenue</th><th>Avg. Order</th><th>Growth</th></tr></thead>
+      <tbody>
+        <tr><td>Mon, Nov 27</td><td>24</td><td>₱4,520</td><td>₱188</td><td><span class="growth-up">↑ 12.5%</span></td></tr>
+        <tr><td>Tue, Nov 28</td><td>28</td><td>₱5,200</td><td>₱186</td><td><span class="growth-up">↑ 8.2%</span></td></tr>
+        <tr><td>Wed, Nov 29</td><td>32</td><td>₱6,150</td><td>₱192</td><td><span class="growth-up">↑ 15.3%</span></td></tr>
+        <tr><td>Thu, Nov 30</td><td>30</td><td>₱5,800</td><td>₱193</td><td><span class="growth-down">↓ 5.7%</span></td></tr>
+        <tr><td>Fri, Dec 1</td><td>35</td><td>₱6,750</td><td>₱193</td><td><span class="growth-up">↑ 16.4%</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="report-two-col">
+      <div class="list-block">
+        <div class="list-block-title">Top Products by Revenue</div>
+        <div class="list-block-item"><span>Rose Bouquet</span><strong>₱4,800</strong></div>
+        <div class="list-block-item"><span>Sunflower Arrangement</span><strong>₱3,200</strong></div>
+        <div class="list-block-item"><span>Orchid Plant</span><strong>₱2,850</strong></div>
+      </div>
+      <div class="list-block">
+        <div class="list-block-title">Payment Method Split</div>
+        <div class="list-block-item"><span>GCash</span><strong>45%</strong></div>
+        <div class="list-block-item"><span>Cash on Delivery</span><strong>30%</strong></div>
+        <div class="list-block-item"><span>Credit Card</span><strong>25%</strong></div>
+      </div>
+    </div>
+    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+}
+
+function ordersReport(range) {
+  return masthead('Orders Report', range) + `
+    <table class="rpt-table">
+      <thead><tr><th>Order ID</th><th>Customer</th><th>Date</th><th>Items</th><th>Amount</th><th>Status</th><th>Payment</th></tr></thead>
+      <tbody>
+        <tr><td>#00124</td><td>Maria Santos</td><td>Dec 1, 10:30 AM</td><td>3</td><td>₱1,250</td><td><span class="s-pill sp-green">Delivered</span></td><td><span class="s-pill sp-sage">Verified</span></td></tr>
+        <tr><td>#00123</td><td>John Dela Cruz</td><td>Nov 30, 3:45 PM</td><td>5</td><td>₱2,800</td><td><span class="s-pill sp-terra">Processing</span></td><td><span class="s-pill sp-green">Paid</span></td></tr>
+        <tr><td>#00122</td><td>Anna Reyes</td><td>Nov 28, 2:15 PM</td><td>2</td><td>₱950</td><td><span class="s-pill sp-green">Delivered</span></td><td><span class="s-pill sp-green">Verified</span></td></tr>
+        <tr><td>#00121</td><td>Carlos Garcia</td><td>Nov 27, 11:00 AM</td><td>4</td><td>₱1,750</td><td><span class="s-pill sp-rose">Pending</span></td><td><span class="s-pill sp-bark">Pending</span></td></tr>
+      </tbody>
+    </table>
+    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+}
+
+function productsReport(range) {
+  return masthead('Products Report', range) + `
+    <table class="rpt-table">
+      <thead><tr><th>Product</th><th>Category</th><th>Units Sold</th><th>Revenue</th><th>Stock Left</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Rose Bouquet</td><td>Fresh Flowers</td><td>48</td><td>₱12,000</td><td>12</td><td><span class="s-pill sp-green">Available</span></td></tr>
+        <tr><td>Tulips Set</td><td>Spring Picks</td><td>32</td><td>₱8,000</td><td>5</td><td><span class="s-pill sp-terra">Low Stock</span></td></tr>
+        <tr><td>Orchid Pots</td><td>Potted Plants</td><td>28</td><td>₱7,000</td><td>0</td><td><span class="s-pill sp-rose">Out of Stock</span></td></tr>
+        <tr><td>Sunflower Bundle</td><td>Summer Edition</td><td>21</td><td>₱5,250</td><td>18</td><td><span class="s-pill sp-green">Available</span></td></tr>
+        <tr><td>Succulent Mix</td><td>Miniatures</td><td>18</td><td>₱4,500</td><td>24</td><td><span class="s-pill sp-green">Available</span></td></tr>
+      </tbody>
+    </table>
+    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+}
+
+function customersReport(range) {
+  return masthead('Customers Report', range) + `
+    <div class="report-kpi-row">
+      <div class="report-kpi"><div class="report-kpi-val">342</div><div class="report-kpi-lbl">Active Customers</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">24</div><div class="report-kpi-lbl">New This Period</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">68%</div><div class="report-kpi-lbl">Repeat Rate</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">₱4,820</div><div class="report-kpi-lbl">Avg. Lifetime Value</div></div>
+    </div>
+    <table class="rpt-table">
+      <thead><tr><th>Customer</th><th>Total Orders</th><th>Total Spent</th><th>Last Order</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Maria Santos</td><td>14</td><td>₱18,200</td><td>Dec 1</td><td><span class="s-pill sp-green">Active</span></td></tr>
+        <tr><td>John Dela Cruz</td><td>9</td><td>₱11,500</td><td>Nov 30</td><td><span class="s-pill sp-green">Active</span></td></tr>
+        <tr><td>Anna Reyes</td><td>6</td><td>₱7,800</td><td>Nov 28</td><td><span class="s-pill sp-green">Active</span></td></tr>
+        <tr><td>Carlos Garcia</td><td>3</td><td>₱4,200</td><td>Nov 27</td><td><span class="s-pill sp-terra">Inactive</span></td></tr>
+      </tbody>
+    </table>
+    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+}
+
+function ridersReport(range) {
+  return masthead('Riders Report', range) + `
+    <table class="rpt-table">
+      <thead><tr><th>Rider</th><th>Deliveries</th><th>On-time Rate</th><th>Avg. Time</th><th>Earnings</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Rico Valdes</td><td>52</td><td><span class="growth-up">99.1%</span></td><td>22 min</td><td>₱3,640</td><td><span class="s-pill sp-green">Active</span></td></tr>
+        <tr><td>Ben Cruz</td><td>45</td><td><span class="growth-up">97.8%</span></td><td>25 min</td><td>₱3,150</td><td><span class="s-pill sp-green">Active</span></td></tr>
+        <tr><td>Manny Reyes</td><td>38</td><td><span class="growth-down">94.7%</span></td><td>31 min</td><td>₱2,660</td><td><span class="s-pill sp-terra">On Leave</span></td></tr>
+      </tbody>
+    </table>
+    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+}
+
+function inventoryReport(range) {
+  return masthead('Inventory Report', range) + `
+    <div class="report-kpi-row">
+      <div class="report-kpi"><div class="report-kpi-val">124</div><div class="report-kpi-lbl">Total SKUs</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">8</div><div class="report-kpi-lbl">Low Stock</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">3</div><div class="report-kpi-lbl">Out of Stock</div></div>
+      <div class="report-kpi"><div class="report-kpi-val">₱48,200</div><div class="report-kpi-lbl">Inventory Value</div></div>
+    </div>
+    <table class="rpt-table">
+      <thead><tr><th>Product</th><th>Category</th><th>In Stock</th><th>Reorder At</th><th>Value</th><th>Alert</th></tr></thead>
+      <tbody>
+        <tr><td>Rose Bouquet</td><td>Fresh Flowers</td><td>12</td><td>10</td><td>₱6,000</td><td><span class="s-pill sp-terra">Low Stock</span></td></tr>
+        <tr><td>Tulips Set</td><td>Spring Picks</td><td>5</td><td>10</td><td>₱2,500</td><td><span class="s-pill sp-rose">⚠ Critical</span></td></tr>
+        <tr><td>Orchid Pots</td><td>Potted Plants</td><td>0</td><td>5</td><td>₱0</td><td><span class="s-pill sp-rose">Out of Stock</span></td></tr>
+        <tr><td>Succulent Mix</td><td>Miniatures</td><td>24</td><td>8</td><td>₱6,000</td><td><span class="s-pill sp-green">OK</span></td></tr>
+        <tr><td>Sunflower Bundle</td><td>Summer Edition</td><td>18</td><td>10</td><td>₱4,500</td><td><span class="s-pill sp-green">OK</span></td></tr>
+      </tbody>
+    </table>
+    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+}
+
+/* ── Export ────────────────────────────────────────────── */
+function exportReport() {
+  const fmt = document.getElementById('reportFormat').value;
+  showToast(`Exporting as ${fmt.toUpperCase()}…`);
+}
+
+/* ── Delete row ────────────────────────────────────────── */
+function deleteRow(btn) {
+  if (!confirm('Delete this saved report?')) return;
+  btn.closest('tr').style.transition = 'opacity .3s, transform .3s';
+  btn.closest('tr').style.opacity = '0';
+  btn.closest('tr').style.transform = 'translateX(20px)';
+  setTimeout(() => { btn.closest('tr').remove(); showToast('Report deleted'); }, 300);
+}
+
+/* ── Schedule Modal ────────────────────────────────────── */
+function openSchedule()  { document.getElementById('schedModal').classList.add('open'); }
+function closeSchedule() { document.getElementById('schedModal').classList.remove('open'); }
+
+function saveSchedule(e) {
+  e.preventDefault();
+  const freq = document.getElementById('schedFreq').value;
+  const time = document.getElementById('schedTime').value;
+  showToast(`✓ Scheduled ${freq} at ${time}`);
+  closeSchedule();
+}
+
+/* ── Toast ─────────────────────────────────────────────── */
+let _tt;
+function showToast(msg) {
+  const t = document.getElementById('rptToast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(_tt);
+  _tt = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+/* ── Init ──────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  const today  = new Date();
+  const week   = new Date(); week.setDate(today.getDate() - 7);
+  document.getElementById('fromDate').valueAsDate = week;
+  document.getElementById('toDate').valueAsDate   = today;
+  document.getElementById('schedTime').value = '09:00';
+});
+</script>
+{% endblock %}

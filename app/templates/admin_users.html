@@ -1,0 +1,841 @@
+{% extends "layout.html" %}
+
+{% block title %}Seller Applications - Admin{% endblock %}
+
+{% block page_title %}Seller Applications{% endblock %}
+
+{% block content %}
+<!-- Stats Cards Row -->
+<div class="stat-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.75rem;">
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-primary" style="background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">Total Applications</div>
+            <div class="stat-card-icon icon-rose">
+                <i class="ri-file-list-line"></i>
+            </div>
+        </div>
+        <div class="stat-number" id="totalApplications">0</div>
+        <div class="stat-sub">All submitted applications</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-warning" style="background: linear-gradient(90deg, #f0b429, #f5d657);"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">Pending Review</div>
+            <div class="stat-card-icon icon-terra">
+                <i class="ri-time-line"></i>
+            </div>
+        </div>
+        <div class="stat-number" id="pendingApplications">0</div>
+        <div class="stat-sub">Awaiting decision</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-success" style="background: linear-gradient(90deg, var(--sage), var(--deep-sage));"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">Approved</div>
+            <div class="stat-card-icon icon-sage">
+                <i class="ri-checkbox-circle-line"></i>
+            </div>
+        </div>
+        <div class="stat-number" id="approvedApplications">0</div>
+        <div class="stat-sub">Converted to sellers</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-danger" style="background: linear-gradient(90deg, #c0392b, #e74c3c);"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">Rejected</div>
+            <div class="stat-card-icon icon-bark">
+                <i class="ri-close-circle-line"></i>
+            </div>
+        </div>
+        <div class="stat-number" id="rejectedApplications">0</div>
+        <div class="stat-sub">Not approved</div>
+    </div>
+</div>
+
+<!-- Filter Tabs & Search -->
+<div class="card" style="padding: 1.5rem; margin-bottom: 2rem;">
+    <!-- Tabs with Badges -->
+    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); flex-wrap: wrap;">
+        <button class="tab-btn active" id="pending-tab" onclick="switchTab('pending')" style="background: none; border: none; padding: 0.75rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition); display: flex; align-items: center; gap: 0.5rem;">
+            <i class="ri-time-line"></i>Pending Review
+            <span class="tab-badge" id="pending-badge" style="background: #f0b429; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; min-width: 20px; text-align: center;">0</span>
+        </button>
+        <button class="tab-btn" id="approved-tab" onclick="switchTab('approved')" style="background: none; border: none; padding: 0.75rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition); display: flex; align-items: center; gap: 0.5rem;">
+            <i class="ri-checkbox-circle-line"></i>Approved
+            <span class="tab-badge" id="approved-badge" style="background: var(--sage); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; min-width: 20px; text-align: center;">0</span>
+        </button>
+        <button class="tab-btn" id="rejected-tab" onclick="switchTab('rejected')" style="background: none; border: none; padding: 0.75rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition); display: flex; align-items: center; gap: 0.5rem;">
+            <i class="ri-close-circle-line"></i>Rejected
+            <span class="tab-badge" id="rejected-badge" style="background: #c0392b; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; min-width: 20px; text-align: center;">0</span>
+        </button>
+        <button class="tab-btn" id="all-tab" onclick="switchTab('all')" style="background: none; border: none; padding: 0.75rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition); display: flex; align-items: center; gap: 0.5rem;">
+            <i class="ri-list-check"></i>All Applications
+            <span class="tab-badge" id="all-badge" style="background: var(--deep-rose); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; min-width: 20px; text-align: center;">0</span>
+        </button>
+    </div>
+    
+    <!-- Search Bar -->
+    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <div style="position: relative; flex: 1; min-width: 300px;">
+            <i class="ri-search-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted);"></i>
+            <input type="text" id="searchInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Search by name, store, or email..." onkeyup="filterApplications()">
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="refreshApplications()" style="padding: 0.7rem 1.5rem;">
+            <i class="ri-refresh-line"></i> Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Applications Tables - Pending -->
+<div id="pending-table" class="table-section" style="display: block;">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Applicant</th>
+                    <th>Store Name</th>
+                    <th>Contact</th>
+                    <th>Submitted</th>
+                    <th>Documents</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="pendingTableBody">
+                <tr>
+                    <td colspan="7" class="text-center py-4">
+                        <div class="loading"><div class="spinner"></div> Loading applications...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Applications Tables - Approved -->
+<div id="approved-table" class="table-section" style="display: none;">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Applicant</th>
+                    <th>Store Name</th>
+                    <th>Contact</th>
+                    <th>Approved Date</th>
+                    <th>Approved By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="approvedTableBody">
+                <tr>
+                    <td colspan="7" class="text-center py-4">
+                        <div class="loading"><div class="spinner"></div> Loading applications...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Applications Tables - Rejected -->
+<div id="rejected-table" class="table-section" style="display: none;">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Applicant</th>
+                    <th>Store Name</th>
+                    <th>Contact</th>
+                    <th>Rejected Date</th>
+                    <th>Reason</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="rejectedTableBody">
+                <tr>
+                    <td colspan="7" class="text-center py-4">
+                        <div class="loading"><div class="spinner"></div> Loading applications...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Applications Tables - All -->
+<div id="all-table" class="table-section" style="display: none;">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Applicant</th>
+                    <th>Store Name</th>
+                    <th>Contact</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="allTableBody">
+                <tr>
+                    <td colspan="7" class="text-center py-4">
+                        <div class="loading"><div class="spinner"></div> Loading applications...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Review Application Modal -->
+<div class="modal-overlay" id="reviewModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Review Seller Application</h3>
+            <button class="modal-close" onclick="closeModal('reviewModal')"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="applicationDetails" style="margin-bottom: 1.5rem;">
+                <!-- Application details will be loaded here -->
+            </div>
+            
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+            
+            <h4 style="font-family: var(--font-display); font-size: 18px; font-weight: 500; margin-bottom: 1rem;">Review Decision</h4>
+            <form id="reviewForm">
+                <input type="hidden" id="reviewApplicationId" name="application_id">
+                
+                <div style="margin-bottom: 1.25rem;">
+                    <label class="form-label" style="margin-bottom: 0.75rem;">Decision</label>
+                    <div style="display: flex; gap: 1.5rem;">
+                        <label class="toggle-wrap" style="gap: 0.5rem;">
+                            <input type="radio" name="decision" value="approve" style="display: none;">
+                            <span class="toggle-radio" style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border-strong); display: inline-block; position: relative;"></span>
+                            <span style="color: var(--sage); font-weight: 500;">
+                                <i class="ri-checkbox-circle-line" style="margin-right: 0.25rem;"></i>Approve
+                            </span>
+                        </label>
+                        <label class="toggle-wrap" style="gap: 0.5rem;">
+                            <input type="radio" name="decision" value="reject" style="display: none;">
+                            <span class="toggle-radio" style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border-strong); display: inline-block; position: relative;"></span>
+                            <span style="color: #c0392b; font-weight: 500;">
+                                <i class="ri-close-circle-line" style="margin-right: 0.25rem;"></i>Reject
+                            </span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group" id="rejectionReasonGroup" style="display: none;">
+                    <label class="form-label">Rejection Reason <span class="required-star">*</span></label>
+                    <textarea class="form-control" name="admin_notes" rows="3" placeholder="Explain why this application is being rejected..."></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeModal('reviewModal')">Cancel</button>
+            <button type="button" class="btn btn-success" onclick="submitReview('approve')" id="approveBtn" style="background: var(--sage); color: white; border: none;" disabled>
+                <i class="ri-checkbox-circle-line"></i> Approve & Convert to Seller
+            </button>
+            <button type="button" class="btn btn-danger" onclick="submitReview('reject')" id="rejectBtn" style="background: #c0392b; color: white; border: none;" disabled>
+                <i class="ri-close-circle-line"></i> Reject Application
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- View Documents Modal -->
+<div class="modal-overlay" id="documentsModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Application Documents</h3>
+            <button class="modal-close" onclick="closeModal('documentsModal')"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
+                <button class="doc-tab-btn active" id="logo-tab" onclick="switchDocumentTab('logo')" style="background: none; border: none; padding: 0.5rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;">
+                    <i class="ri-image-line" style="margin-right: 0.5rem;"></i>Store Logo
+                </button>
+                <button class="doc-tab-btn" id="id-tab" onclick="switchDocumentTab('id')" style="background: none; border: none; padding: 0.5rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;">
+                    <i class="ri-id-card-line" style="margin-right: 0.5rem;"></i>Government ID
+                </button>
+            </div>
+            
+            <div id="logo-document" class="document-section" style="display: block; text-align: center;">
+                <div style="background: var(--cream); border-radius: var(--radius-lg); padding: 2rem; min-height: 300px; display: flex; align-items: center; justify-content: center;">
+                    <img src="#" alt="Store Logo" style="max-width: 100%; max-height: 400px; object-fit: contain;">
+                </div>
+            </div>
+            
+            <div id="id-document" class="document-section" style="display: none; text-align: center;">
+                <div style="background: var(--cream); border-radius: var(--radius-lg); padding: 2rem; min-height: 300px; display: flex; align-items: center; justify-content: center;">
+                    <img src="#" alt="Government ID" style="max-width: 100%; max-height: 400px; object-fit: contain;">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeModal('documentsModal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Tab styles */
+    .tab-btn.active {
+        color: var(--deep-rose) !important;
+        border-bottom-color: var(--deep-rose) !important;
+    }
+    
+    .tab-btn:hover {
+        color: var(--charcoal) !important;
+        border-bottom-color: var(--border-strong) !important;
+    }
+    
+    /* Document tab styles */
+    .doc-tab-btn.active {
+        color: var(--deep-rose) !important;
+        border-bottom-color: var(--deep-rose) !important;
+    }
+    
+    .doc-tab-btn:hover {
+        color: var(--charcoal) !important;
+        border-bottom-color: var(--border-strong) !important;
+    }
+    
+    /* Custom radio buttons */
+    .toggle-radio {
+        display: inline-block;
+        transition: var(--transition);
+    }
+    
+    input[type="radio"]:checked + .toggle-radio {
+        border-color: var(--deep-rose);
+        background-color: var(--deep-rose);
+        box-shadow: inset 0 0 0 3px white;
+    }
+    
+    /* Avatar styles */
+    .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+    
+    /* Status badges */
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+    }
+    
+    .status-pending {
+        background: rgba(240, 180, 41, 0.1);
+        color: #b7950b;
+    }
+    
+    .status-approved {
+        background: rgba(122, 158, 126, 0.1);
+        color: var(--deep-sage);
+    }
+    
+    .status-rejected {
+        background: rgba(192, 57, 43, 0.1);
+        color: #c0392b;
+    }
+    
+    /* Table cell actions */
+    .action-btn-group {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    /* Alert styles */
+    .alert {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: var(--radius-md);
+        background: var(--warm-white);
+        box-shadow: var(--shadow-lg);
+        border-left: 4px solid;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    }
+    
+    .alert-success {
+        border-left-color: var(--sage);
+    }
+    
+    .alert-danger {
+        border-left-color: #c0392b;
+    }
+    
+    .alert-warning {
+        border-left-color: #f0b429;
+    }
+    
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentApplications = [];
+    let currentTab = 'pending';
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        loadApplications();
+        
+        // Handle decision radio buttons
+        document.querySelectorAll('input[name="decision"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const reasonGroup = document.getElementById('rejectionReasonGroup');
+                reasonGroup.style.display = this.value === 'reject' ? 'block' : 'none';
+                
+                // Update button states
+                document.getElementById('approveBtn').disabled = this.value !== 'approve';
+                document.getElementById('rejectBtn').disabled = this.value !== 'reject';
+            });
+        });
+        
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', filterApplications);
+    });
+    
+    function switchTab(tabId) {
+        // Update tab buttons
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.getElementById(`${tabId}-tab`).classList.add('active');
+        
+        // Update table visibility
+        document.querySelectorAll('.table-section').forEach(section => {
+            section.style.display = 'none';
+        });
+        document.getElementById(`${tabId}-table`).style.display = 'block';
+        
+        currentTab = tabId;
+        filterApplications(); // Re-apply filters when switching tabs
+    }
+    
+    function switchDocumentTab(tabId) {
+        // Update document tab buttons
+        document.querySelectorAll('.doc-tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.getElementById(`${tabId}-tab`).classList.add('active');
+        
+        // Update document visibility
+        document.querySelectorAll('.document-section').forEach(section => {
+            section.style.display = 'none';
+        });
+        document.getElementById(`${tabId}-document`).style.display = 'block';
+    }
+    
+    function updateTabBadges() {
+        const pending = currentApplications.filter(app => app.status === 'pending').length;
+        const approved = currentApplications.filter(app => app.status === 'approved').length;
+        const rejected = currentApplications.filter(app => app.status === 'rejected').length;
+        const total = currentApplications.length;
+        
+        document.getElementById('pending-badge').textContent = pending;
+        document.getElementById('approved-badge').textContent = approved;
+        document.getElementById('rejected-badge').textContent = rejected;
+        document.getElementById('all-badge').textContent = total;
+    }
+    
+    function loadApplications() {
+        fetch('/api/v1/admin/seller-applications')
+            .then(response => response.json())
+            .then(data => {
+                currentApplications = data.applications || [];
+                updateStats();
+                updateTabBadges();
+                renderTables();
+            })
+            .catch(error => {
+                console.error('Error loading applications:', error);
+                showAlert('danger', 'Failed to load applications');
+            });
+    }
+    
+    function updateStats() {
+        const total = currentApplications.length;
+        const pending = currentApplications.filter(app => app.status === 'pending').length;
+        const approved = currentApplications.filter(app => app.status === 'approved').length;
+        const rejected = currentApplications.filter(app => app.status === 'rejected').length;
+        
+        document.getElementById('totalApplications').textContent = total;
+        document.getElementById('pendingApplications').textContent = pending;
+        document.getElementById('approvedApplications').textContent = approved;
+        document.getElementById('rejectedApplications').textContent = rejected;
+    }
+    
+    function renderTables() {
+        renderPendingTable();
+        renderApprovedTable();
+        renderRejectedTable();
+        renderAllTable();
+    }
+    
+    function renderPendingTable() {
+        const tbody = document.getElementById('pendingTableBody');
+        const pendingApps = currentApplications.filter(app => app.status === 'pending');
+        
+        if (pendingApps.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="empty-state"><i class="ri-inbox-line empty-state-icon"></i><p>No pending applications</p></div></td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = pendingApps.map(app => `
+            <tr>
+                <td><span style="font-weight: 600;">#${app.id}</span></td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div class="avatar" style="background: linear-gradient(135deg, var(--dusty-rose), var(--deep-rose)); color: white;">
+                            ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span style="font-weight: 500;">${app.store_name}</span></td>
+                <td>${app.phone || 'N/A'}</td>
+                <td>${app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : 'N/A'}</td>
+                <td>
+                    <button class="btn btn-outline btn-sm" onclick="viewDocuments(${app.id})" style="padding: 4px 10px;">
+                        <i class="ri-file-list-line"></i> View
+                    </button>
+                </td>
+                <td>
+                    <div class="action-btn-group">
+                        <button class="btn btn-icon btn-sm" onclick="openReviewModal(${app.id})" title="Review" style="background: var(--sage); color: white; width: 32px; height: 32px;">
+                            <i class="ri-check-line"></i>
+                        </button>
+                        <button class="btn btn-icon btn-sm btn-outline" onclick="viewApplication(${app.id})" title="View Details" style="width: 32px; height: 32px;">
+                            <i class="ri-eye-line"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    function renderApprovedTable() {
+        const tbody = document.getElementById('approvedTableBody');
+        const approvedApps = currentApplications.filter(app => app.status === 'approved');
+        
+        if (approvedApps.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="empty-state"><i class="ri-inbox-line empty-state-icon"></i><p>No approved applications</p></div></td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = approvedApps.map(app => `
+            <tr>
+                <td><span style="font-weight: 600;">#${app.id}</span></td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div class="avatar" style="background: linear-gradient(135deg, var(--sage), var(--deep-sage)); color: white;">
+                            ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span style="font-weight: 500;">${app.store_name}</span></td>
+                <td>${app.phone || 'N/A'}</td>
+                <td>${app.reviewed_at ? new Date(app.reviewed_at).toLocaleDateString() : 'N/A'}</td>
+                <td>${app.reviewer_name || 'System'}</td>
+                <td>
+                    <button class="btn btn-icon btn-sm btn-outline" onclick="viewApplication(${app.id})" title="View Details" style="width: 32px; height: 32px;">
+                        <i class="ri-eye-line"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    function renderRejectedTable() {
+        const tbody = document.getElementById('rejectedTableBody');
+        const rejectedApps = currentApplications.filter(app => app.status === 'rejected');
+        
+        if (rejectedApps.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="empty-state"><i class="ri-inbox-line empty-state-icon"></i><p>No rejected applications</p></div></td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = rejectedApps.map(app => `
+            <tr>
+                <td><span style="font-weight: 600;">#${app.id}</span></td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div class="avatar" style="background: linear-gradient(135deg, #c0392b, #e74c3c); color: white;">
+                            ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span style="font-weight: 500;">${app.store_name}</span></td>
+                <td>${app.phone || 'N/A'}</td>
+                <td>${app.reviewed_at ? new Date(app.reviewed_at).toLocaleDateString() : 'N/A'}</td>
+                <td style="max-width: 200px;">
+                    <span style="font-size: 13px; color: var(--muted);">${app.admin_notes || 'No reason provided'}</span>
+                </td>
+                <td>
+                    <button class="btn btn-icon btn-sm btn-outline" onclick="viewApplication(${app.id})" title="View Details" style="width: 32px; height: 32px;">
+                        <i class="ri-eye-line"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+    
+    function renderAllTable() {
+        const tbody = document.getElementById('allTableBody');
+        
+        if (currentApplications.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="empty-state"><i class="ri-inbox-line empty-state-icon"></i><p>No applications found</p></div></td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = currentApplications.map(app => {
+            let statusClass = '';
+            let statusBg = '';
+            
+            if (app.status === 'approved') {
+                statusClass = 'status-approved';
+                statusBg = 'var(--sage)';
+            } else if (app.status === 'rejected') {
+                statusClass = 'status-rejected';
+                statusBg = '#c0392b';
+            } else {
+                statusClass = 'status-pending';
+                statusBg = '#f0b429';
+            }
+            
+            return `
+                <tr>
+                    <td><span style="font-weight: 600;">#${app.id}</span></td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div class="avatar" style="background: linear-gradient(135deg, ${statusBg}, ${statusBg}dd); color: white;">
+                                ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <div>
+                                <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
+                                <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td><span style="font-weight: 500;">${app.store_name}</span></td>
+                    <td>${app.phone || 'N/A'}</td>
+                    <td><span class="status-badge ${statusClass}">${app.status.charAt(0).toUpperCase() + app.status.slice(1)}</span></td>
+                    <td>${app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : 'N/A'}</td>
+                    <td>
+                        <button class="btn btn-icon btn-sm btn-outline" onclick="viewApplication(${app.id})" title="View Details" style="width: 32px; height: 32px;">
+                            <i class="ri-eye-line"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function filterApplications() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        
+        // Get the current table body
+        let tbodyId = '';
+        switch(currentTab) {
+            case 'pending': tbodyId = 'pendingTableBody'; break;
+            case 'approved': tbodyId = 'approvedTableBody'; break;
+            case 'rejected': tbodyId = 'rejectedTableBody'; break;
+            case 'all': tbodyId = 'allTableBody'; break;
+        }
+        
+        const rows = document.querySelectorAll(`#${tbodyId} tr`);
+        rows.forEach(row => {
+            if (row.cells && row.cells.length > 1) {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            }
+        });
+    }
+    
+    function viewDocuments(applicationId) {
+        const app = currentApplications.find(a => a.id === applicationId);
+        if (!app) return;
+        
+        // Set document images
+        const logoContainer = document.querySelector('#logo-document div');
+        const idContainer = document.querySelector('#id-document div');
+        
+        if (app.store_logo_url) {
+            logoContainer.innerHTML = `<img src="${app.store_logo_url}" alt="Store Logo" style="max-width: 100%; max-height: 400px; object-fit: contain;">`;
+        } else {
+            logoContainer.innerHTML = '<p class="text-muted" style="color: var(--muted);">No logo uploaded</p>';
+        }
+        
+        if (app.government_id_url) {
+            idContainer.innerHTML = `<img src="${app.government_id_url}" alt="Government ID" style="max-width: 100%; max-height: 400px; object-fit: contain;">`;
+        } else {
+            idContainer.innerHTML = '<p class="text-muted" style="color: var(--muted);">No ID uploaded</p>';
+        }
+        
+        // Reset to logo tab
+        switchDocumentTab('logo');
+        openModal('documentsModal');
+    }
+    
+    function openReviewModal(applicationId) {
+        const app = currentApplications.find(a => a.id === applicationId);
+        if (!app) return;
+        
+        document.getElementById('reviewApplicationId').value = app.id;
+        
+        // Reset form
+        document.querySelectorAll('input[name="decision"]').forEach(r => r.checked = false);
+        document.getElementById('rejectionReasonGroup').style.display = 'none';
+        document.getElementById('approveBtn').disabled = true;
+        document.getElementById('rejectBtn').disabled = true;
+        document.querySelector('textarea[name="admin_notes"]').value = '';
+        
+        // Load application details
+        const detailsDiv = document.getElementById('applicationDetails');
+        detailsDiv.innerHTML = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <div>
+                    <h6 style="font-weight: 600; color: var(--charcoal); margin-bottom: 0.75rem;">Applicant Information</h6>
+                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Name:</strong> ${app.full_name || 'N/A'}</p>
+                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Email:</strong> ${app.email || 'N/A'}</p>
+                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Phone:</strong> ${app.phone || 'N/A'}</p>
+                </div>
+                <div>
+                    <h6 style="font-weight: 600; color: var(--charcoal); margin-bottom: 0.75rem;">Store Information</h6>
+                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Store Name:</strong> ${app.store_name}</p>
+                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Description:</strong> ${app.store_description || 'N/A'}</p>
+                </div>
+            </div>
+            <div style="margin-top: 1rem;">
+                <button class="btn btn-outline btn-sm" onclick="viewDocuments(${app.id})" style="padding: 0.5rem 1rem;">
+                    <i class="ri-file-list-line"></i> View Submitted Documents
+                </button>
+            </div>
+        `;
+        
+        openModal('reviewModal');
+    }
+    
+    function viewApplication(applicationId) {
+        const app = currentApplications.find(a => a.id === applicationId);
+        if (!app) return;
+        
+        openReviewModal(applicationId);
+    }
+    
+    function submitReview(decision) {
+        const applicationId = document.getElementById('reviewApplicationId').value;
+        const adminNotes = document.querySelector('textarea[name="admin_notes"]').value;
+        
+        if (decision === 'reject' && !adminNotes.trim()) {
+            showAlert('warning', 'Please provide a reason for rejection');
+            return;
+        }
+        
+        const url = decision === 'approve' 
+            ? `/api/v1/admin/seller-applications/${applicationId}/approve`
+            : `/api/v1/admin/seller-applications/${applicationId}/reject`;
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ admin_notes: adminNotes })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', `Application ${decision}d successfully! User role updated to seller.`);
+                closeModal('reviewModal');
+                loadApplications(); // Refresh the list
+            } else {
+                showAlert('danger', data.error || `Failed to ${decision} application`);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', 'Network error. Please try again.');
+        });
+    }
+    
+    function refreshApplications() {
+        loadApplications();
+    }
+    
+    function openModal(id) {
+        document.getElementById(id).classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type}`;
+        alert.innerHTML = `
+            ${message}
+            <button style="background: none; border: none; position: absolute; top: 10px; right: 10px; cursor: pointer; color: var(--muted);" onclick="this.parentElement.remove()">
+                <i class="ri-close-line"></i>
+            </button>
+        `;
+        document.body.appendChild(alert);
+        
+        setTimeout(() => {
+            if (alert.parentElement) alert.remove();
+        }, 5000);
+    }
+    
+    // Make functions globally available
+    window.switchTab = switchTab;
+    window.switchDocumentTab = switchDocumentTab;
+    window.filterApplications = filterApplications;
+    window.viewDocuments = viewDocuments;
+    window.openReviewModal = openReviewModal;
+    window.viewApplication = viewApplication;
+    window.submitReview = submitReview;
+    window.refreshApplications = refreshApplications;
+    window.openModal = openModal;
+    window.closeModal = closeModal;
+</script>
+{% endblock %}

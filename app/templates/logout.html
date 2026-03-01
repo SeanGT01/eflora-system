@@ -1,0 +1,128 @@
+{% extends "layout.html" %}
+
+{% block title %}Logout{% endblock %}
+
+{% block page_title %}Logout{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-sign-out-alt fa-4x text-primary"></i>
+                </div>
+                
+                <h3 class="mb-3">Logging Out...</h3>
+                <p class="text-muted mb-4">You are being logged out of the system.</p>
+                
+                <div class="spinner-border text-primary mb-4" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    You will be redirected to the login page in a few seconds.
+                </div>
+                
+                <div class="mt-4">
+                    <a href="/login" class="btn btn-primary">
+                        <i class="fas fa-sign-in-alt me-2"></i>Return to Login
+                    </a>
+                    <a href="/" class="btn btn-outline-secondary ms-2">
+                        <i class="fas fa-home me-2"></i>Go to Home
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card shadow-sm mt-4">
+            <div class="card-body">
+                <h6 class="mb-3">Logout Information</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-2">
+                            <small class="text-muted">User:</small>
+                            <div class="fw-bold">{{ session.get('full_name', 'User') }}</div>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Role:</small>
+                            <div class="fw-bold">{{ session.get('role', 'User')|capitalize }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-2">
+                            <small class="text-muted">Last Login:</small>
+                            <div class="fw-bold">Today, 10:30 AM</div>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Session Duration:</small>
+                            <div class="fw-bold">2 hours 15 minutes</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-4">
+            <small class="text-muted">
+                <i class="fas fa-seedling me-1"></i>
+                E-FLOWERS Management System © 2024
+            </small>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto logout after 3 seconds
+    setTimeout(() => {
+        // Clear session data
+        fetch('/api/v1/auth/logout', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        })
+        .then(() => {
+            // Clear local storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Redirect to login
+            window.location.href = '/login';
+        })
+        .catch(() => {
+            window.location.href = '/login';
+        });
+    }, 3000);
+    
+    // Manual logout button
+    document.addEventListener('DOMContentLoaded', function() {
+        // If user clicks return to login, clear data immediately
+        document.querySelector('a[href="/login"]').addEventListener('click', function(e) {
+            e.preventDefault();
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.href = '/login';
+        });
+    });
+</script>
+
+<style>
+    .card {
+        animation: fadeIn 0.5s;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+</style>
+{% endblock %}

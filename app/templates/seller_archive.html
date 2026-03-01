@@ -1,0 +1,676 @@
+{% extends "layout.html" %}
+
+{% block title %}Archive - E-FLOWERS{% endblock %}
+{% block page_title %}Product Archive{% endblock %}
+
+{% block content %}
+<!-- Header Section -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem;">
+    <div>
+        <div class="section-eyebrow">Recover or Permanently Delete</div>
+        <h2 class="section-title">Archived Products</h2>
+        <p style="color: var(--muted); margin-top: 0.5rem;">Products you've archived will appear here</p>
+    </div>
+    <div style="display: flex; gap: 1rem;">
+        <a href="/seller/products" class="btn btn-outline">
+            <i class="ri-arrow-left-line"></i>
+            Back to Products
+        </a>
+    </div>
+</div>
+
+<!-- Archive Stats Cards -->
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+    <div class="card" style="padding: 1.5rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="width: 48px; height: 48px; border-radius: var(--radius-md); background: rgba(122, 158, 126, 0.1); display: flex; align-items: center; justify-content: center;">
+                <i class="ri-archive-line" style="font-size: 24px; color: var(--deep-sage);"></i>
+            </div>
+            <div>
+                <div style="font-size: 28px; font-weight: 600; color: var(--charcoal);" id="totalArchived">0</div>
+                <div style="font-size: 12px; color: var(--muted);">Total Archived</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="padding: 1.5rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="width: 48px; height: 48px; border-radius: var(--radius-md); background: rgba(196, 113, 75, 0.1); display: flex; align-items: center; justify-content: center;">
+                <i class="ri-shopping-cart-line" style="font-size: 24px; color: var(--terracotta);"></i>
+            </div>
+            <div>
+                <div style="font-size: 28px; font-weight: 600; color: var(--charcoal);" id="productsInCarts">0</div>
+                <div style="font-size: 12px; color: var(--muted);">In Customer Carts</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card" style="padding: 1.5rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="width: 48px; height: 48px; border-radius: var(--radius-md); background: rgba(42, 35, 30, 0.05); display: flex; align-items: center; justify-content: center;">
+                <i class="ri-history-line" style="font-size: 24px; color: var(--muted);"></i>
+            </div>
+            <div>
+                <div style="font-size: 14px; color: var(--charcoal);">Latest Archive</div>
+                <div style="font-size: 12px; color: var(--muted);" id="latestArchive">-</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Section -->
+<div class="card" style="padding: 1.5rem; margin-bottom: 2rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Search</label>
+            <div style="display: flex; gap: 0.5rem;">
+                <div style="position: relative; flex: 1;">
+                    <i class="ri-search-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted); z-index: 1;"></i>
+                    <input type="text" id="searchInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Search archived products..." onkeyup="filterArchived()">
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Sort By</label>
+            <select id="sortFilter" class="form-control" onchange="filterArchived()">
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="name">Name A-Z</option>
+            </select>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Category</label>
+            <select id="categoryFilter" class="form-control" onchange="filterArchived()">
+                <option value="">All Categories</option>
+                <option value="flowers">Fresh Flowers</option>
+                <option value="plants">Potted Plants</option>
+                <option value="bouquets">Bouquets</option>
+                <option value="succulents">Succulents</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Archived Products Grid -->
+<div id="archivedGrid" class="products-grid"></div>
+
+<!-- Bulk Actions Bar -->
+<div class="bulk-bar" id="bulkBar" style="display: none;">
+    <div class="bulk-bar-label">
+        <span id="selectedCount">0</span> product(s) selected
+    </div>
+    <div class="bulk-bar-actions">
+        <button class="btn btn-outline btn-sm" id="selectAllBtn">
+            <i class="ri-checkbox-multiple-line"></i> Select All
+        </button>
+        <button class="btn btn-primary btn-sm" id="bulkRestoreBtn" disabled>
+            <i class="ri-history-line"></i> Restore Selected
+        </button>
+        <button class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
+            <i class="ri-delete-bin-line"></i> Permanently Delete
+        </button>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" style="text-align: center; padding: 4rem;">
+    <div class="spinner"></div>
+    <p style="color: var(--muted); margin-top: 1rem;">Loading archived products...</p>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="empty-state" style="display: none; background: var(--warm-white); border-radius: var(--radius-xl); border: 1px solid var(--border);">
+    <i class="ri-archive-line empty-state-icon"></i>
+    <div class="empty-state-title">Archive is Empty</div>
+    <p class="empty-state-sub">Products you archive will appear here</p>
+    <a href="/seller/products" class="btn btn-rose">
+        <i class="ri-arrow-left-line"></i>
+        Back to Products
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .products-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 1.25rem;
+        margin-bottom: 2rem;
+    }
+    
+    .product-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        transition: var(--transition);
+        display: flex;
+        flex-direction: column;
+        height: fit-content;
+        opacity: 0.85;
+        position: relative;
+    }
+    
+    .product-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-sm);
+        border-color: var(--border-strong);
+        opacity: 1;
+    }
+    
+    .product-card.selected {
+        outline: 2px solid var(--deep-rose);
+        outline-offset: 2px;
+        opacity: 1;
+    }
+    
+    .archived-badge {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 10;
+        background: var(--charcoal);
+        color: var(--warm-white);
+        padding: 0.25rem 0.75rem;
+        border-radius: var(--radius-pill);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        opacity: 0.9;
+    }
+    
+    .product-img-wrap {
+        position: relative;
+        height: 180px;
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .product-img-wrap img {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        filter: grayscale(0.3);
+        transition: filter 0.3s ease;
+    }
+    
+    .product-card:hover .product-img-wrap img {
+        filter: grayscale(0);
+    }
+    
+    .product-img-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: rgba(107, 76, 59, 0.12);
+        font-size: 40px;
+    }
+    
+    .product-card-body {
+        padding: 1rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+    
+    .product-name {
+        font-family: var(--font-display);
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--charcoal);
+        margin-bottom: 0.25rem;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    .product-category {
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .archive-info {
+        font-size: 11px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+        border-top: 1px dashed var(--border);
+        margin-top: 0.5rem;
+    }
+    
+    .archive-info i {
+        font-size: 12px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.4rem;
+        margin-top: 0.5rem;
+    }
+    
+    .action-buttons .btn-sm {
+        padding: 0.4rem 0.75rem;
+        font-size: 11px;
+        flex: 1;
+        white-space: nowrap;
+    }
+    
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid var(--border);
+        border-top-color: var(--deep-rose);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    @media (max-width: 768px) {
+        .products-grid {
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        }
+        
+        .product-img-wrap {
+            height: 150px;
+        }
+        
+        .product-name {
+            font-size: 14px;
+        }
+        
+        .action-buttons .btn-sm {
+            padding: 0.3rem 0.5rem;
+            font-size: 10px;
+        }
+    }
+    
+    @media (max-width: 576px) {
+        .products-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+        
+        .product-img-wrap {
+            height: 130px;
+        }
+        
+        .archive-info {
+            font-size: 10px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let archivedProducts = [];
+    let selectedProducts = new Set();
+
+    // Load archived products on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadArchivedProducts();
+    });
+
+    function loadArchivedProducts() {
+        document.getElementById('loadingState').style.display = 'block';
+        document.getElementById('archivedGrid').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('bulkBar').style.display = 'none';
+
+        fetch('/api/v1/seller/archive/products')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loadingState').style.display = 'none';
+                
+                if (data.success && data.products && data.products.length > 0) {
+                    archivedProducts = data.products;
+                    displayArchivedProducts(archivedProducts);
+                    updateStats();
+                    document.getElementById('archivedGrid').style.display = 'grid';
+                    document.getElementById('bulkBar').style.display = 'flex';
+                } else {
+                    document.getElementById('emptyState').style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading archived products:', error);
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('emptyState').style.display = 'block';
+            });
+    }
+
+    function displayArchivedProducts(products) {
+        const grid = document.getElementById('archivedGrid');
+        grid.innerHTML = '';
+
+        products.forEach(product => {
+            const card = createProductCard(product);
+            grid.appendChild(card);
+        });
+    }
+
+    function createProductCard(product) {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.dataset.productId = product.id;
+        card.dataset.category = product.category || '';
+        card.dataset.name = product.name;
+        card.dataset.archivedAt = product.archived_at;
+        
+        const primaryImage = product.images && product.images.length > 0 
+            ? product.images.find(img => img.is_primary) || product.images[0]
+            : null;
+        
+        const archivedDate = product.archived_at ? new Date(product.archived_at).toLocaleDateString() : 'Unknown date';
+        
+        card.innerHTML = `
+            <div class="archived-badge">
+                <i class="ri-archive-line"></i> Archived
+            </div>
+            
+            <div class="product-img-wrap">
+                ${primaryImage ? 
+                    `<img src="${primaryImage.image_url}" alt="${product.name}">` : 
+                    `<div class="product-img-placeholder"><i class="ri-leaf-line"></i><span style="display: block; font-size: 12px; margin-top: 0.5rem;">No image</span></div>`
+                }
+            </div>
+            
+            <div class="product-card-body">
+                <div class="product-name">${product.name}</div>
+                <div class="product-category">${product.category || 'General'}</div>
+                
+                <div style="font-size: 15px; font-weight: 600; color: var(--deep-rose); margin: 0.25rem 0;">
+                    ₱${product.price.toFixed(2)}
+                </div>
+                
+                <div class="archive-info">
+                    <i class="ri-calendar-line"></i>
+                    <span>Archived: ${archivedDate}</span>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="btn btn-primary btn-sm" onclick="restoreProduct(${product.id})">
+                        <i class="ri-history-line"></i> Restore
+                    </button>
+                    <button class="btn btn-danger-outline btn-sm" onclick="permanentDeleteProduct(${product.id})">
+                        <i class="ri-delete-bin-line"></i> Delete
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        card.addEventListener('click', (e) => {
+            if (!e.target.closest('button')) {
+                toggleSelectProduct(card, product.id);
+            }
+        });
+        
+        return card;
+    }
+
+    function toggleSelectProduct(card, productId) {
+        if (selectedProducts.has(productId)) {
+            selectedProducts.delete(productId);
+            card.classList.remove('selected');
+        } else {
+            selectedProducts.add(productId);
+            card.classList.add('selected');
+        }
+        
+        updateSelectedCount();
+        updateBulkButtons();
+    }
+
+    function updateSelectedCount() {
+        document.getElementById('selectedCount').textContent = selectedProducts.size;
+    }
+
+    function updateBulkButtons() {
+        const hasSelected = selectedProducts.size > 0;
+        document.getElementById('bulkRestoreBtn').disabled = !hasSelected;
+        document.getElementById('bulkDeleteBtn').disabled = !hasSelected;
+    }
+
+    document.getElementById('selectAllBtn')?.addEventListener('click', function() {
+        const visibleCards = Array.from(document.querySelectorAll('.product-card'));
+        const allSelected = visibleCards.every(card => card.classList.contains('selected'));
+        
+        selectedProducts.clear();
+        
+        visibleCards.forEach(card => {
+            if (!allSelected) {
+                const productId = card.dataset.productId;
+                selectedProducts.add(productId);
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+        
+        this.innerHTML = allSelected
+            ? '<i class="ri-checkbox-multiple-line"></i> Select All'
+            : '<i class="ri-close-circle-line"></i> Deselect All';
+        
+        updateSelectedCount();
+        updateBulkButtons();
+    });
+
+    function restoreProduct(productId) {
+        if (!confirm('Restore this product? It will become available in your store again.')) return;
+        
+        const btn = event.target.closest('button');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+        
+        fetch(`/api/v1/seller/archive/products/${productId}/restore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.showToast(data.message, 'success');
+                setTimeout(() => loadArchivedProducts(), 500);
+            } else {
+                window.showToast(data.error || 'Failed to restore product', 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            window.showToast('Network error. Please try again.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+
+    function permanentDeleteProduct(productId) {
+        if (!confirm('⚠️ PERMANENTLY DELETE this product? This action CANNOT be undone.')) return;
+        
+        const btn = event.target.closest('button');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+        
+        fetch(`/api/v1/seller/archive/products/${productId}/permanent-delete`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.showToast(data.message, 'success');
+                setTimeout(() => loadArchivedProducts(), 500);
+            } else {
+                window.showToast(data.error || 'Failed to delete product', 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            window.showToast('Network error. Please try again.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+
+    document.getElementById('bulkRestoreBtn')?.addEventListener('click', function() {
+        if (selectedProducts.size === 0) return;
+        
+        if (!confirm(`Restore ${selectedProducts.size} product(s)?`)) return;
+        
+        const btn = this;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+        
+        fetch('/api/v1/seller/archive/products/bulk/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_ids: Array.from(selectedProducts) })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.showToast(data.message, 'success');
+                setTimeout(() => loadArchivedProducts(), 500);
+            } else {
+                window.showToast(data.error || 'Failed to restore products', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            window.showToast('Network error. Please try again.', 'error');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    });
+
+    document.getElementById('bulkDeleteBtn')?.addEventListener('click', function() {
+        if (selectedProducts.size === 0) return;
+        
+        if (!confirm(`⚠️ PERMANENTLY DELETE ${selectedProducts.size} product(s)? This CANNOT be undone.`)) return;
+        
+        const btn = this;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+        
+        fetch('/api/v1/seller/archive/products/bulk/permanent-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_ids: Array.from(selectedProducts) })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let message = data.message;
+                if (data.failed_products && data.failed_products.length > 0) {
+                    message += ` (${data.failed_products.length} failed - in carts)`;
+                }
+                window.showToast(message, data.failed_products?.length ? 'warning' : 'success');
+                setTimeout(() => loadArchivedProducts(), 500);
+            } else {
+                window.showToast(data.error || 'Failed to delete products', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            window.showToast('Network error. Please try again.', 'error');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    });
+
+    function filterArchived() {
+        const searchText = document.getElementById('searchInput').value.toLowerCase();
+        const sortBy = document.getElementById('sortFilter').value;
+        const category = document.getElementById('categoryFilter').value;
+        
+        let filtered = [...archivedProducts];
+        
+        // Apply search filter
+        if (searchText) {
+            filtered = filtered.filter(p => 
+                p.name.toLowerCase().includes(searchText) ||
+                (p.description && p.description.toLowerCase().includes(searchText))
+            );
+        }
+        
+        // Apply category filter
+        if (category) {
+            filtered = filtered.filter(p => p.category === category);
+        }
+        
+        // Apply sorting
+        filtered.sort((a, b) => {
+            switch(sortBy) {
+                case 'newest':
+                    return new Date(b.archived_at) - new Date(a.archived_at);
+                case 'oldest':
+                    return new Date(a.archived_at) - new Date(b.archived_at);
+                case 'name':
+                    return a.name.localeCompare(b.name);
+                default:
+                    return 0;
+            }
+        });
+        
+        displayArchivedProducts(filtered);
+    }
+
+    function updateStats() {
+        fetch('/api/v1/seller/archive/stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('totalArchived').textContent = data.stats.total_archived;
+                    document.getElementById('productsInCarts').textContent = data.stats.products_in_carts;
+                    
+                    if (data.stats.recent_archives && data.stats.recent_archives.length > 0) {
+                        const latest = data.stats.recent_archives[0];
+                        const date = new Date(latest.archived_at).toLocaleDateString();
+                        document.getElementById('latestArchive').textContent = `${latest.name} (${date})`;
+                    } else {
+                        document.getElementById('latestArchive').textContent = '-';
+                    }
+                }
+            })
+            .catch(error => console.error('Error loading stats:', error));
+    }
+
+    window.filterArchived = filterArchived;
+    window.restoreProduct = restoreProduct;
+    window.permanentDeleteProduct = permanentDeleteProduct;
+</script>
+{% endblock %}

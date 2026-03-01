@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}E-FLOWERS - Beautiful Flowers & Plants{% endblock %}
+
+{% block content %}
+<!-- Hero Banner -->
+<section class="hero" style="margin-bottom: 3rem;">
+    <div style="background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: var(--radius-xl); padding: 3rem; color: white; text-align: center;">
+        <h1 style="font-size: 36px; margin-bottom: 1rem; font-family: 'Playfair Display', serif;">
+            Blooming with Technology
+        </h1>
+        <p style="font-size: 18px; margin-bottom: 2rem; opacity: 0.9;">
+            Fresh flowers and plants delivered to your doorstep
+        </p>
+        <div style="display: flex; gap: 1rem; justify-content: center;">
+            <a href="#products" class="btn" style="background: white; color: var(--primary);">
+                Shop Now
+            </a>
+            <a href="{{ url_for('customer.stores') }}" class="btn" style="background: transparent; border: 2px solid white;">
+                Browse Stores
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Categories -->
+<section class="categories" style="margin-bottom: 3rem;">
+    <h2 style="font-size: 24px; margin-bottom: 1.5rem; font-weight: 600;">Shop by Category</h2>
+    <div class="category-grid">
+        {% for category in categories %}
+        <a href="{{ url_for('customer.category', category_id=category.id) }}" class="category-card">
+            <div class="category-image">
+                <i class="ri-{{ category.icon }}"></i>
+            </div>
+            <div class="category-content">
+                <h3 class="category-title">{{ category.name }}</h3>
+                <p class="category-count">{{ category.count }} products</p>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+
+<!-- Featured Products -->
+<section id="products" style="margin-bottom: 3rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 24px; font-weight: 600;">Featured Products</h2>
+        <a href="{{ url_for('customer.all_products') }}" class="btn btn-outline" style="padding: 0.5rem 1rem;">
+            View All
+        </a>
+    </div>
+    
+    {% if products %}
+    <div class="product-grid">
+        {% for product in products %}
+        <div class="product-card">
+            {% if product.stock_quantity < 10 %}
+            <div class="product-badge">Low Stock</div>
+            {% endif %}
+            
+            <div class="product-image">
+                {% if product.image_url %}
+                <img src="{{ product.image_url }}" alt="{{ product.name }}">
+                {% else %}
+                <i class="ri-image-line" style="font-size: 48px; color: #ccc;"></i>
+                {% endif %}
+            </div>
+            
+            <div class="product-content">
+                <div class="product-store">{{ product.store_name }}</div>
+                <h3 class="product-title">{{ product.name }}</h3>
+                <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
+                
+                <div class="product-actions">
+                    {% if product.stock_quantity > 0 and product.is_available %}
+                    <button class="btn btn-primary" onclick="addToCart({{ product|tojson|safe }})">
+                        <i class="ri-shopping-cart-line"></i>
+                        Add to Cart
+                    </button>
+                    <button class="btn btn-outline btn-icon" onclick="viewProduct({{ product.id }})">
+                        <i class="ri-eye-line"></i>
+                    </button>
+                    {% else %}
+                    <button class="btn btn-outline" disabled style="flex: 1;">
+                        Out of Stock
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="ri-leaf-line empty-state-icon"></i>
+        <p>No products available at the moment</p>
+    </div>
+    {% endif %}
+</section>
+
+<!-- Featured Stores -->
+<section style="margin-bottom: 3rem;">
+    <h2 style="font-size: 24px; margin-bottom: 1.5rem; font-weight: 600;">Featured Stores</h2>
+    
+    {% if stores %}
+    {% for store in stores %}
+    <div class="store-card">
+        <div class="store-avatar">
+            {{ store.name[0] }}
+        </div>
+        <div class="store-info">
+            <h3 class="store-name">{{ store.name }}</h3>
+            <div class="store-rating">
+                <i class="ri-star-fill" style="color: var(--sunflower);"></i>
+                <span>4.8 • {{ store.product_count }} products</span>
+            </div>
+            <p style="color: var(--text-light); margin-bottom: 1rem;">{{ store.address }}</p>
+            <div class="store-stats">
+                <span><i class="ri-truck-line"></i> Free delivery within {{ store.delivery_radius_km }}km</span>
+                <span><i class="ri-time-line"></i> Open Now</span>
+            </div>
+        </div>
+        <a href="{{ url_for('customer.store', store_id=store.id) }}" class="btn btn-outline">
+            Visit Store
+        </a>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">
+        <i class="ri-store-line empty-state-icon"></i>
+        <p>No stores available at the moment</p>
+    </div>
+    {% endif %}
+</section>
+
+<!-- Testimonials -->
+<section style="margin-bottom: 3rem;">
+    <h2 style="font-size: 24px; margin-bottom: 1.5rem; font-weight: 600; text-align: center;">
+        What Our Customers Say
+    </h2>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+        {% for testimonial in testimonials %}
+        <div style="background: var(--surface); padding: 1.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;">
+                    {{ testimonial.customer_name[0] }}
+                </div>
+                <div>
+                    <div style="font-weight: 500;">{{ testimonial.customer_name }}</div>
+                    <div style="font-size: 14px; color: var(--text-light);">
+                        {% for i in range(5) %}
+                        <i class="ri-star-{{ 'fill' if i < testimonial.rating else 'line' }}" style="color: var(--sunflower);"></i>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <p style="color: var(--text); font-style: italic;">"{{ testimonial.comment }}"</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function viewProduct(productId) {
+        window.location.href = "{{ url_for('customer.product', product_id=0) }}".replace('0', productId);
+    }
+</script>
+{% endblock %}

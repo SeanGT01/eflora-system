@@ -1,0 +1,665 @@
+{% extends "base.html" %}
+
+{% block title %}My Account — E-FLOWERS{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ─── Layout ─── */
+    .account-wrapper {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        gap: 2rem;
+        align-items: start;
+    }
+
+    /* ─── Breadcrumb ─── */
+    .breadcrumb {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 2rem;
+        letter-spacing: 0.04em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .breadcrumb a { color: var(--muted); text-decoration: none; transition: var(--transition); }
+    .breadcrumb a:hover { color: var(--deep-rose); }
+    .breadcrumb .sep { opacity: 0.4; }
+    .breadcrumb .current { color: var(--charcoal); font-weight: 500; }
+
+    /* ─── Sidebar ─── */
+    .profile-sidebar {
+        background: var(--warm-white);
+        border-radius: var(--radius-xl);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        position: sticky;
+        top: 100px;
+    }
+
+    .sidebar-user {
+        padding: 2rem 1.5rem 1.5rem;
+        border-bottom: 1px solid var(--border);
+        text-align: center;
+    }
+
+    .sidebar-avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--blush), var(--dusty-rose));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: var(--font-display);
+        font-size: 26px;
+        font-weight: 500;
+        margin: 0 auto 0.875rem;
+        overflow: hidden;
+        border: 2px solid var(--border-strong);
+    }
+
+    .sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .sidebar-name {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--charcoal);
+        margin-bottom: 3px;
+    }
+
+    .sidebar-email {
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .sidebar-nav { padding: 0.75rem 0; }
+
+    .sidebar-section-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 0.75rem 1.5rem 0.4rem;
+        opacity: 0.6;
+    }
+
+    .menu-item {
+        list-style: none;
+        padding: 0 0.75rem;
+        margin-bottom: 2px;
+    }
+
+    .menu-link {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 0.875rem;
+        text-decoration: none;
+        color: var(--muted);
+        border-radius: var(--radius-md);
+        font-size: 14px;
+        font-weight: 500;
+        transition: var(--transition);
+        cursor: pointer;
+        border: none;
+        background: none;
+        width: 100%;
+        font-family: var(--font-sans);
+    }
+
+    .menu-link i { font-size: 17px; flex-shrink: 0; }
+
+    .menu-link:hover {
+        background: rgba(181, 68, 90, 0.06);
+        color: var(--deep-rose);
+    }
+
+    .menu-item.active .menu-link {
+        background: rgba(181, 68, 90, 0.08);
+        color: var(--deep-rose);
+        font-weight: 600;
+    }
+
+    .menu-item.active .menu-link i { color: var(--deep-rose); }
+
+    .menu-link-danger { color: #c0392b !important; }
+    .menu-link-danger:hover { background: rgba(192, 57, 43, 0.06) !important; color: #c0392b !important; }
+
+    .sidebar-divider {
+        margin: 0.5rem 1.5rem;
+        border: none;
+        border-top: 1px solid var(--border);
+    }
+
+    /* ─── Content Area ─── */
+    .profile-content {
+        min-height: 400px;
+    }
+
+    /* Loading State */
+    .loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 5rem 3rem;
+        color: var(--muted);
+        gap: 1rem;
+    }
+
+    .loading-spinner {
+        width: 32px;
+        height: 32px;
+        border: 2.5px solid var(--border-strong);
+        border-top-color: var(--deep-rose);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Orders Table ─── */
+    .orders-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .orders-table th,
+    .orders-table td {
+        padding: 1rem 1.25rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .orders-table th {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: var(--cream);
+    }
+
+    .orders-table tr:last-child td { border-bottom: none; }
+
+    .orders-table tbody tr {
+        transition: var(--transition);
+    }
+
+    .orders-table tbody tr:hover { background: rgba(181, 68, 90, 0.02); }
+
+    .order-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+    }
+
+    .order-status::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .status-pending { background: rgba(255, 183, 77, 0.12); color: #8a5e00; }
+    .status-pending::before { background: #f0b429; }
+    .status-processing { background: rgba(66, 153, 225, 0.1); color: #1a5f9e; }
+    .status-processing::before { background: #4299e1; }
+    .status-delivered { background: rgba(72, 187, 120, 0.12); color: #276749; }
+    .status-delivered::before { background: #48bb78; }
+    .status-cancelled { background: rgba(192, 57, 43, 0.1); color: #9b1c1c; }
+    .status-cancelled::before { background: #c0392b; }
+
+    .btn-sm { padding: 0.4rem 0.875rem; font-size: 12px; }
+
+    /* ─── Order Modal ─── */
+    .order-modal-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.875rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .order-modal-item:last-child { border-bottom: none; }
+
+    .order-modal-item-name {
+        font-family: var(--font-display);
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    .order-modal-item-store {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 900px) {
+        .account-wrapper { grid-template-columns: 1fr; }
+        .profile-sidebar { position: static; }
+        .sidebar-user { display: none; }
+        .sidebar-nav { display: flex; padding: 0.5rem; gap: 0.25rem; overflow-x: auto; }
+        .sidebar-section-label { display: none; }
+        .sidebar-divider { display: none; }
+        .menu-item { padding: 0; white-space: nowrap; }
+        .menu-link { padding: 0.6rem 0.875rem; font-size: 13px; }
+        .orders-table { display: block; overflow-x: auto; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb -->
+<div class="breadcrumb" id="accountBreadcrumb">
+    <a href="{{ url_for('templates.index') }}">Home</a>
+    <span class="sep">/</span>
+    <span>My Account</span>
+    <span class="sep">/</span>
+    <span class="current">My Profile</span>
+</div>
+
+<div class="account-wrapper">
+    <!-- Sidebar -->
+    <aside class="profile-sidebar">
+        <div class="sidebar-user">
+            <div class="sidebar-avatar">
+                {% if user and user.avatar_url %}
+                    <img src="{{ user.avatar_url }}" alt="{{ session.get('user_name','User') }}">
+                {% else %}
+                    {{ session.get('user_name','U')[0] }}
+                {% endif %}
+            </div>
+            <div class="sidebar-name">{{ session.get('user_name', 'My Account') }}</div>
+            <div class="sidebar-email">{{ session.get('user_email', '') }}</div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-section-label">Account</div>
+            <ul style="list-style:none;padding:0;">
+                <li class="menu-item active" data-page="profile">
+                    <a href="#" class="menu-link" onclick="loadAccountPage('profile'); return false;">
+                        <i class="ri-user-3-line"></i> My Profile
+                    </a>
+                </li>
+                <li class="menu-item" data-page="orders">
+                    <a href="#" class="menu-link" onclick="loadAccountPage('orders'); return false;">
+                        <i class="ri-shopping-bag-3-line"></i> Purchase History
+                    </a>
+                </li>
+                <li class="menu-item" data-page="settings">
+                    <a href="#" class="menu-link" onclick="loadAccountPage('settings'); return false;">
+                        <i class="ri-settings-4-line"></i> Settings
+                    </a>
+                </li>
+            </ul>
+
+            <hr class="sidebar-divider">
+
+            <ul style="list-style:none;padding:0;">
+                <li class="menu-item">
+                    <a href="{{ url_for('templates.logout') }}" class="menu-link menu-link-danger">
+                        <i class="ri-logout-box-r-line"></i> Sign Out
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </aside>
+
+    <!-- Content -->
+    <div class="profile-content" id="accountContent">
+        {% if initial_page == 'profile' %}
+            {% include 'account_parts/profile_content.html' %}
+        {% elif initial_page == 'orders' %}
+            {% include 'account_parts/orders_content.html' %}
+        {% elif initial_page == 'settings' %}
+            {% include 'account_parts/settings_content.html' %}
+        {% else %}
+            {% include 'account_parts/profile_content.html' %}
+        {% endif %}
+    </div>
+</div>
+<div id="global-toast" style="position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--charcoal); color: white; padding: 12px 24px; border-radius: 50px; font-size: 14px; z-index: 9999; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; display: none;"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function() {
+        if (window.location.pathname.startsWith('/api/')) {
+            const match = window.location.pathname.match(/\/api\/account\/(\w+)/);
+            if (match) { window.location.replace(`/my-account?page=${match[1]}`); return; }
+        }
+    })();
+
+    window.loadAccountPage = loadAccountPage;
+    window.changeAvatar = changeAvatar;
+    window.resetForm = resetForm;
+    window.showNotification = showNotification;
+    window.closeModal = closeModal;
+    window.uploadAvatar = uploadAvatar;
+
+    let currentPage = '{{ initial_page or "profile" }}';
+
+    const pageInfo = {
+        profile:  { title: 'My Profile',        breadcrumb: 'My Profile' },
+        orders:   { title: 'Purchase History',   breadcrumb: 'Purchase History' },
+        settings: { title: 'Account Settings',   breadcrumb: 'Settings' }
+    };
+
+    async function loadAccountPage(page) {
+        if (currentPage === page) return;
+
+        document.getElementById('accountContent').innerHTML = `
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <span style="font-size:14px;font-family:var(--font-sans);">Loading…</span>
+            </div>`;
+
+        updateActiveMenuItem(page);
+
+        try {
+            const response = await fetch(`/api/account/${page}`);
+            if (!response.ok) throw new Error('Failed to load page');
+
+            const ct = response.headers.get('content-type');
+            if (ct && ct.includes('application/json')) {
+                window.location.href = `/my-account?page=${page}`;
+                return;
+            }
+
+            const content = await response.text();
+            document.getElementById('accountContent').innerHTML = content;
+            updatePageUI(page);
+            currentPage = page;
+            initializePageScripts(page);
+
+        } catch (error) {
+            document.getElementById('accountContent').innerHTML = `
+                <div class="empty-state">
+                    <i class="ri-error-warning-line empty-state-icon"></i>
+                    <p>Failed to load page</p>
+                    <p style="font-size:13px;margin-top:0.25rem;">${error.message}</p>
+                    <button class="btn btn-rose" style="margin-top:1.5rem;" onclick="loadAccountPage('${page}')">
+                        <i class="ri-refresh-line"></i> Try Again
+                    </button>
+                </div>`;
+        }
+    }
+
+    function updateActiveMenuItem(page) {
+        document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+        document.querySelector(`.menu-item[data-page="${page}"]`)?.classList.add('active');
+    }
+
+    function updatePageUI(page) {
+        const info = pageInfo[page] || pageInfo.profile;
+        const bc = document.getElementById('accountBreadcrumb');
+        if (bc) bc.innerHTML = `
+            <a href="{{ url_for('templates.index') }}">Home</a>
+            <span class="sep">/</span>
+            <span>My Account</span>
+            <span class="sep">/</span>
+            <span class="current">${info.breadcrumb}</span>`;
+        document.title = `${info.title} — E-FLOWERS`;
+        history.replaceState({ page }, '', `/my-account?page=${page}`);
+    }
+
+    function initializePageScripts(page) {
+        switch (page) {
+            case 'profile':  initProfilePage();  break;
+            case 'orders':   initOrdersPage();   break;
+            case 'settings': initSettingsPage(); break;
+        }
+    }
+
+    // ── Profile ──
+    function initProfilePage() {
+        const pf = document.getElementById('profileForm');
+        if (pf) {
+            const nf = pf.cloneNode(true);
+            pf.parentNode.replaceChild(nf, pf);
+            nf.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const btn = this.querySelector('button[type="submit"]');
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving…';
+                btn.disabled = true;
+                try {
+                    const r = await fetch('/api/account/profile/update', { method: 'POST', body: new FormData(this) });
+                    const d = await r.json();
+                    showToast(d.success ? '✓  Profile saved' : 'Error: ' + (d.error || 'Unknown error'));
+                } catch { showToast('Network error. Please try again.'); }
+                finally { btn.innerHTML = orig; btn.disabled = false; }
+            });
+        }
+
+        const pwf = document.getElementById('passwordForm');
+        if (pwf) {
+            const nf = pwf.cloneNode(true);
+            pwf.parentNode.replaceChild(nf, pwf);
+            nf.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const fd = new FormData(this);
+                if (fd.get('new_password') !== fd.get('confirm_password')) { showToast('Passwords do not match'); return; }
+                if (fd.get('new_password').length < 6) { showToast('Password must be at least 6 characters'); return; }
+                const btn = this.querySelector('button[type="submit"]');
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Changing…';
+                btn.disabled = true;
+                try {
+                    const r = await fetch('/api/account/password/change', { method: 'POST', body: fd });
+                    const d = await r.json();
+                    if (d.success) { showToast('✓  Password changed'); this.reset(); }
+                    else showToast('Error: ' + (d.error || 'Unknown'));
+                } catch { showToast('Network error. Please try again.'); }
+                finally { btn.innerHTML = orig; btn.disabled = false; }
+            });
+        }
+
+        const ai = document.getElementById('avatarInput');
+        if (ai) {
+            const na = ai.cloneNode(true);
+            ai.parentNode.replaceChild(na, ai);
+            na.addEventListener('change', e => { if (e.target.files[0]) uploadAvatar(e.target.files[0]); });
+        }
+    }
+
+    async function uploadAvatar(file) {
+        const fd = new FormData();
+        fd.append('avatar', file);
+        const pf = document.getElementById('profileForm');
+        if (pf) {
+            ['first_name','last_name','phone','birthday'].forEach(k => fd.append(k, pf.querySelector(`[name="${k}"]`)?.value || ''));
+            const g = pf.querySelector('[name="gender"]:checked');
+            if (g) fd.append('gender', g.value);
+        }
+        const btn = document.querySelector('.profile-header .btn-outline');
+        if (btn) { btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading…'; btn.disabled = true; }
+        try {
+            const r = await fetch('/api/account/profile/update', { method: 'POST', body: fd });
+            const d = await r.json();
+            if (d.success) {
+                const ac = document.querySelector('.avatar-circle');
+                if (ac && d.user.avatar_url) ac.innerHTML = `<img src="${d.user.avatar_url}?t=${Date.now()}" alt="Profile" style="width:100%;height:100%;object-fit:cover;">`;
+                showToast('✓  Profile photo updated');
+            } else showToast('Error: ' + (d.error || 'Upload failed'));
+        } catch { showToast('Network error. Please try again.'); }
+        finally {
+            if (btn) { btn.innerHTML = '<i class="ri-camera-line"></i> Change Photo'; btn.disabled = false; }
+            const ai = document.getElementById('avatarInput');
+            if (ai) ai.value = '';
+        }
+    }
+
+    // ── Orders ──
+    function initOrdersPage() {
+        loadOrdersData();
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.view-order-details')) {
+                viewOrderDetails(e.target.closest('.view-order-details').dataset.orderId);
+            }
+            if (e.target.closest('.cancel-order-btn')) {
+                cancelOrder(e.target.closest('.cancel-order-btn').dataset.orderId);
+            }
+        }, { once: true });
+    }
+
+    async function loadOrdersData() {
+        try {
+            const r = await fetch('/api/account/orders/data');
+            const orders = await r.json();
+            const container = document.querySelector('.orders-container');
+            if (!container) return;
+
+            if (!orders.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="ri-shopping-bag-3-line empty-state-icon"></i>
+                        <p>No orders yet</p>
+                        <p style="font-size:13px;margin-top:.25rem;font-family:var(--font-sans);">Start shopping to see your orders here!</p>
+                        <a href="{{ url_for('templates.index') }}" class="btn btn-rose" style="margin-top:1.5rem;">
+                            <i class="ri-store-line"></i> Shop Now
+                        </a>
+                    </div>`;
+                return;
+            }
+
+            const tbody = document.querySelector('.orders-table tbody');
+            if (tbody) {
+                tbody.innerHTML = orders.map(o => `
+                    <tr>
+                        <td style="font-family:var(--font-display);font-size:16px;">#${o.order_number}</td>
+                        <td style="color:var(--muted);font-size:13px;">${new Date(o.date).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</td>
+                        <td style="font-weight:600;">₱${o.total.toFixed(2)}</td>
+                        <td><span class="order-status status-${o.status}">${o.status.charAt(0).toUpperCase() + o.status.slice(1)}</span></td>
+                        <td>
+                            <button class="btn btn-outline btn-sm view-order-details" data-order-id="${o.id}">View</button>
+                            ${o.status === 'pending' ? `<button class="btn btn-outline btn-sm cancel-order-btn" data-order-id="${o.id}" style="margin-left:.4rem;color:#c0392b;border-color:rgba(192,57,43,0.2)">Cancel</button>` : ''}
+                        </td>
+                    </tr>`).join('');
+            }
+        } catch (err) { console.error('Error loading orders:', err); }
+    }
+
+    async function viewOrderDetails(orderId) {
+        try {
+            const r = await fetch(`/api/account/orders/${orderId}`);
+            const order = await r.json();
+            showOrderModal(order);
+        } catch { showToast('Failed to load order details'); }
+    }
+
+    async function cancelOrder(orderId) {
+        if (!confirm('Cancel this order?')) return;
+        try {
+            const r = await fetch(`/api/account/orders/${orderId}/cancel`, { method: 'POST' });
+            const d = await r.json();
+            if (d.success) { showToast('✓  Order cancelled'); loadOrdersData(); }
+            else showToast('Error: ' + d.message);
+        } catch { showToast('Failed to cancel order'); }
+    }
+
+    function showOrderModal(order) {
+        document.getElementById('orderDetailsModal')?.remove();
+        document.body.insertAdjacentHTML('beforeend', `
+            <div class="modal-overlay active" id="orderDetailsModal">
+                <div class="modal" style="max-width:600px;">
+                    <div class="modal-header">
+                        <h3>Order #${order.order_number}</h3>
+                        <button class="cart-close" onclick="closeModal('orderDetailsModal')"><i class="ri-close-line"></i></button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem;">
+                            <div>
+                                <div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Date</div>
+                                <div style="font-family:var(--font-display);font-size:16px;">${new Date(order.date).toLocaleDateString('en-PH',{month:'long',day:'numeric',year:'numeric'})}</div>
+                            </div>
+                            <div>
+                                <div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Status</div>
+                                <span class="order-status status-${order.status}">${order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span>
+                            </div>
+                            <div>
+                                <div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Total</div>
+                                <div style="font-family:var(--font-display);font-size:20px;font-weight:600;color:var(--deep-rose);">₱${order.total.toFixed(2)}</div>
+                            </div>
+                        </div>
+                        <div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:0.875rem;">Items</div>
+                        <div>
+                            ${order.items.map(item => `
+                                <div class="order-modal-item">
+                                    <div>
+                                        <div class="order-modal-item-name">${item.name}</div>
+                                        <div class="order-modal-item-store">${item.store_name}</div>
+                                    </div>
+                                    <div style="font-weight:600;font-size:15px;">₱${item.price.toFixed(2)} × ${item.quantity}</div>
+                                </div>`).join('')}
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-outline" onclick="closeModal('orderDetailsModal')">Close</button>
+                    </div>
+                </div>
+            </div>`);
+    }
+
+    function closeModal(id) { document.getElementById(id)?.remove(); }
+
+    // ── Settings ──
+    function initSettingsPage() { console.log('Settings initialized'); }
+
+    // ── History ──
+    window.addEventListener('popstate', function(e) {
+        if (window.location.pathname.startsWith('/api/')) {
+            const m = window.location.pathname.match(/\/api\/account\/(\w+)/);
+            if (m) { window.location.replace(`/my-account?page=${m[1]}`); return; }
+        }
+        const page = e.state?.page || new URLSearchParams(window.location.search).get('page') || 'profile';
+        loadAccountPage(page);
+    });
+
+    // ── Init ──
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.location.pathname.startsWith('/api/')) {
+            const m = window.location.pathname.match(/\/api\/account\/(\w+)/);
+            if (m) { window.location.replace(`/my-account?page=${m[1]}`); return; }
+        }
+        currentPage = '{{ initial_page or "profile" }}';
+        updateActiveMenuItem(currentPage);
+        updatePageUI(currentPage);
+        initializePageScripts(currentPage);
+        history.replaceState({ page: currentPage }, '', window.location.href);
+    });
+
+    // ── Utilities ──
+    function changeAvatar() { document.getElementById('avatarInput')?.click(); }
+    function resetForm() { if (confirm('Discard all changes?')) document.getElementById('profileForm')?.reset(); }
+
+    function showNotification(message, type = 'info') { showToast(message); }
+
+    function showToast(message) {
+        const t = document.getElementById('toast');
+        if (!t) return;
+        t.textContent = message;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // Spin animation for loader icons
+    const spinStyle = document.createElement('style');
+    spinStyle.textContent = `.ri-spin { animation: spin .8s linear infinite; } @keyframes spin { to { transform:rotate(360deg); } }`;
+    document.head.appendChild(spinStyle);
+</script>
+{% endblock %}

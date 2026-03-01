@@ -1,0 +1,721 @@
+{% extends "layout.html" %}
+
+{% block title %}Orders Management - E-FLOWERS{% endblock %}
+
+{% block page_title %}Orders Management{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div>
+        <h3 style="font-weight: 600; color: var(--text); margin-bottom: 0.5rem;">Manage All Orders</h3>
+        <p style="color: var(--text-light);">View, track, and manage orders from all stores</p>
+    </div>
+    <div style="display: flex; gap: 1rem;">
+        <button class="btn btn-outline" onclick="exportOrders()">
+            <i class="ri-download-line"></i>
+            Export
+        </button>
+        <button class="btn btn-primary" onclick="refreshOrders()">
+            <i class="ri-refresh-line"></i>
+            Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Filters & Stats -->
+<div class="content-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 2rem;">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Total Orders</h3>
+            <div class="card-icon">
+                <i class="ri-shopping-bag-line"></i>
+            </div>
+        </div>
+        <div class="stat-number" id="totalOrders">0</div>
+        <p class="stat-label">All time</p>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Today's Orders</h3>
+            <div class="card-icon">
+                <i class="ri-calendar-line"></i>
+            </div>
+        </div>
+        <div class="stat-number" id="todayOrders">0</div>
+        <p class="stat-label">Placed today</p>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Pending</h3>
+            <div class="card-icon">
+                <i class="ri-time-line"></i>
+            </div>
+        </div>
+        <div class="stat-number" id="pendingOrders">0</div>
+        <p class="stat-label">Awaiting processing</p>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Revenue</h3>
+            <div class="card-icon">
+                <i class="ri-money-dollar-circle-line"></i>
+            </div>
+        </div>
+        <div class="stat-number" id="totalRevenue">₱0</div>
+        <p class="stat-label">This month</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card" style="margin-bottom: 2rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div class="form-group">
+            <label class="form-label">Store</label>
+            <select class="form-control" id="storeFilter">
+                <option value="">All Stores</option>
+                <!-- Will be populated by JavaScript -->
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-control" id="statusFilter">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="accepted">Accepted</option>
+                <option value="preparing">Preparing</option>
+                <option value="on_delivery">On Delivery</option>
+                <option value="delivered">Delivered</option>
+                <option value="canceled">Canceled</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Date Range</label>
+            <select class="form-control" id="dateFilter">
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="week">This Week</option>
+                <option value="month" selected>This Month</option>
+                <option value="all">All Time</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Search</label>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="text" class="form-control" id="searchInput" placeholder="Search order ID or customer...">
+                <button class="btn btn-primary" onclick="searchOrders()" style="padding: 0.875rem 1rem;">
+                    <i class="ri-search-line"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Orders Table -->
+<div class="chart-container">
+    <div class="chart-header">
+        <h3 class="chart-title">All Orders</h3>
+        <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-outline" onclick="clearFilters()" style="padding: 0.5rem 1rem;">
+                Clear Filters
+            </button>
+        </div>
+    </div>
+    <div class="table-container">
+        <table class="table" id="ordersTable">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Store</th>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="ordersTableBody">
+                <!-- Orders will be loaded here by JavaScript -->
+                <tr id="loadingRow">
+                    <td colspan="9" style="text-align: center; padding: 3rem;">
+                        <div class="loading-spinner" style="margin: 0 auto;"></div>
+                        <p style="margin-top: 1rem; color: var(--text-light);">Loading orders...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    <div style="display: flex; justify-content: center; margin-top: 2rem; padding-top: 2rem; border-top: 1px solid rgba(182, 110, 121, 0.1);">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button class="btn btn-outline" id="prevPage" style="padding: 0.5rem 1rem;" disabled>
+                <i class="ri-arrow-left-s-line"></i>
+            </button>
+            <span style="font-size: 14px; color: var(--text);">
+                Page <span id="currentPage">1</span> of <span id="totalPages">1</span>
+            </span>
+            <button class="btn btn-outline" id="nextPage" style="padding: 0.5rem 1rem;" disabled>
+                <i class="ri-arrow-right-s-line"></i>
+            </button>
+            <select class="form-control" id="pageSize" style="width: auto; padding: 0.5rem; font-size: 14px;">
+                <option value="10">10 per page</option>
+                <option value="25" selected>25 per page</option>
+                <option value="50">50 per page</option>
+                <option value="100">100 per page</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Order Details Modal -->
+<div id="orderDetailsModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 2000; align-items: center; justify-content: center; padding: 1rem;">
+    <div style="background: var(--surface); border-radius: var(--radius-xl); padding: 2rem; width: 90%; max-width: 800px; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h3 style="font-weight: 600; color: var(--text);">Order Details</h3>
+            <button onclick="closeOrderDetails()" style="background: none; border: none; font-size: 24px; color: var(--text-light); cursor: pointer;">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        
+        <div id="orderDetailsContent">
+            <!-- Order details will be loaded here -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Mock data for demonstration
+    const mockStores = [
+        { id: 1, name: "Rose Garden Florist" },
+        { id: 2, name: "Sunflower Central" },
+        { id: 3, name: "Orchid Oasis" },
+        { id: 4, name: "Tulip Town" }
+    ];
+
+    const mockOrders = [
+        {
+            id: "ORD-00124",
+            customer: "Maria Santos",
+            store: "Rose Garden Florist",
+            date: "2024-12-06 10:30 AM",
+            amount: 1250,
+            type: "Online",
+            status: "on_delivery",
+            payment: "verified",
+            items: [
+                { name: "Red Rose Bouquet", quantity: 1, price: 1250 }
+            ],
+            address: "123 Flower St, Manila",
+            rider: "Juan Dela Cruz",
+            contact: "09171234567"
+        },
+        {
+            id: "ORD-00123",
+            customer: "John Dela Cruz",
+            store: "Sunflower Central",
+            date: "2024-12-05 03:45 PM",
+            amount: 2800,
+            type: "Online",
+            status: "delivered",
+            payment: "paid",
+            items: [
+                { name: "Sunflower Arrangement", quantity: 1, price: 1800 },
+                { name: "Greeting Card", quantity: 1, price: 50 }
+            ],
+            address: "456 Garden Ave, Quezon City",
+            rider: "Pedro Santos",
+            contact: "09182345678"
+        },
+        {
+            id: "ORD-00122",
+            customer: "Anna Reyes",
+            store: "Orchid Oasis",
+            date: "2024-12-04 02:15 PM",
+            amount: 950,
+            type: "Walk-in",
+            status: "delivered",
+            payment: "cash",
+            items: [
+                { name: "Orchid Plant", quantity: 1, price: 950 }
+            ],
+            address: "Store Pickup",
+            rider: null,
+            contact: "09193456789"
+        },
+        {
+            id: "ORD-00121",
+            customer: "Carlos Garcia",
+            store: "Tulip Town",
+            date: "2024-12-03 11:20 AM",
+            amount: 1750,
+            type: "Online",
+            status: "preparing",
+            payment: "pending",
+            items: [
+                { name: "Mixed Tulips", quantity: 1, price: 1400 },
+                { name: "Vase", quantity: 1, price: 350 }
+            ],
+            address: "789 Petal Dr, Makati",
+            rider: null,
+            contact: "09204567890"
+        },
+        {
+            id: "ORD-00120",
+            customer: "Sofia Lim",
+            store: "Rose Garden Florist",
+            date: "2024-12-02 04:50 PM",
+            amount: 3200,
+            type: "Online",
+            status: "accepted",
+            payment: "verified",
+            items: [
+                { name: "Premium Rose Bouquet", quantity: 2, price: 1600 }
+            ],
+            address: "321 Blossom Rd, Taguig",
+            rider: null,
+            contact: "09215678901"
+        },
+        {
+            id: "ORD-00119",
+            customer: "Michael Tan",
+            store: "Sunflower Central",
+            date: "2024-12-01 01:30 PM",
+            amount: 2100,
+            type: "Walk-in",
+            status: "delivered",
+            payment: "cash",
+            items: [
+                { name: "Sunflower Basket", quantity: 1, price: 1500 },
+                { name: "Chocolate", quantity: 2, price: 300 }
+            ],
+            address: "Store Pickup",
+            rider: null,
+            contact: "09226789012"
+        },
+        {
+            id: "ORD-00118",
+            customer: "Lisa Wong",
+            store: "Orchid Oasis",
+            date: "2024-11-30 09:15 AM",
+            amount: 4800,
+            type: "Online",
+            status: "canceled",
+            payment: "refunded",
+            items: [
+                { name: "Orchid Collection", quantity: 3, price: 1600 }
+            ],
+            address: "654 Gardenia St, Mandaluyong",
+            rider: null,
+            contact: "09237890123"
+        }
+    ];
+
+    // State management
+    let currentPage = 1;
+    let pageSize = 25;
+    let filteredOrders = [...mockOrders];
+    let totalOrders = mockOrders.length;
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        loadStats();
+        populateStoreFilter();
+        loadOrders();
+        setupEventListeners();
+    });
+
+    function loadStats() {
+        const today = new Date().toISOString().split('T')[0];
+        const todayOrders = mockOrders.filter(order => order.date.includes('2024-12-06')).length;
+        const pendingOrders = mockOrders.filter(order => ['pending', 'accepted', 'preparing'].includes(order.status)).length;
+        const totalRevenue = mockOrders.reduce((sum, order) => sum + order.amount, 0);
+
+        document.getElementById('totalOrders').textContent = totalOrders;
+        document.getElementById('todayOrders').textContent = todayOrders;
+        document.getElementById('pendingOrders').textContent = pendingOrders;
+        document.getElementById('totalRevenue').textContent = `₱${totalRevenue.toLocaleString()}`;
+    }
+
+    function populateStoreFilter() {
+        const storeFilter = document.getElementById('storeFilter');
+        mockStores.forEach(store => {
+            const option = document.createElement('option');
+            option.value = store.id;
+            option.textContent = store.name;
+            storeFilter.appendChild(option);
+        });
+    }
+
+    function loadOrders() {
+        const tableBody = document.getElementById('ordersTableBody');
+        tableBody.innerHTML = '';
+
+        // Calculate pagination
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const pageOrders = filteredOrders.slice(startIndex, endIndex);
+
+        if (pageOrders.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 3rem;">
+                        <div class="empty-state-icon">
+                            <i class="ri-shopping-bag-line"></i>
+                        </div>
+                        <h3 style="margin-bottom: 0.5rem; color: var(--text);">No Orders Found</h3>
+                        <p style="color: var(--text-light);">Try changing your filters</p>
+                    </td>
+                </tr>
+            `;
+        } else {
+            pageOrders.forEach(order => {
+                const row = document.createElement('tr');
+                
+                // Status badge
+                let statusBadge = '';
+                switch(order.status) {
+                    case 'pending':
+                        statusBadge = '<span class="status-badge status-pending">Pending</span>';
+                        break;
+                    case 'accepted':
+                        statusBadge = '<span class="status-badge status-pending">Accepted</span>';
+                        break;
+                    case 'preparing':
+                        statusBadge = '<span class="status-badge status-pending">Preparing</span>';
+                        break;
+                    case 'on_delivery':
+                        statusBadge = '<span class="status-badge status-active">On Delivery</span>';
+                        break;
+                    case 'delivered':
+                        statusBadge = '<span class="status-badge status-completed">Delivered</span>';
+                        break;
+                    case 'canceled':
+                        statusBadge = '<span class="status-badge status-cancelled">Canceled</span>';
+                        break;
+                }
+
+                // Payment status
+                let paymentStatus = '';
+                switch(order.payment) {
+                    case 'pending':
+                        paymentStatus = '<span style="color: #b7950b;">Pending</span>';
+                        break;
+                    case 'verified':
+                    case 'paid':
+                        paymentStatus = '<span style="color: var(--sage-green);">Paid</span>';
+                        break;
+                    case 'cash':
+                        paymentStatus = '<span style="color: var(--sage-green);">Cash</span>';
+                        break;
+                    case 'refunded':
+                        paymentStatus = '<span style="color: #c62828;">Refunded</span>';
+                        break;
+                }
+
+                row.innerHTML = `
+                    <td><strong>${order.id}</strong></td>
+                    <td>${order.customer}</td>
+                    <td>${order.store}</td>
+                    <td>${order.date}</td>
+                    <td><strong>₱${order.amount.toLocaleString()}</strong></td>
+                    <td>${order.type}</td>
+                    <td>${statusBadge}</td>
+                    <td>${paymentStatus}</td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-outline" onclick="viewOrderDetails('${order.id}')" style="padding: 4px 12px; font-size: 12px;">
+                                <i class="ri-eye-line"></i>
+                            </button>
+                            ${order.status === 'pending' ? `
+                                <button class="btn btn-outline" onclick="updateOrderStatus('${order.id}', 'accepted')" style="padding: 4px 12px; font-size: 12px; color: var(--sage-green);">
+                                    <i class="ri-check-line"></i>
+                                </button>
+                            ` : ''}
+                            ${order.status === 'on_delivery' ? `
+                                <button class="btn btn-outline" onclick="updateOrderStatus('${order.id}', 'delivered')" style="padding: 4px 12px; font-size: 12px; color: var(--sage-green);">
+                                    <i class="ri-truck-line"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        updatePagination();
+    }
+
+    function setupEventListeners() {
+        // Filter changes
+        document.getElementById('storeFilter').addEventListener('change', applyFilters);
+        document.getElementById('statusFilter').addEventListener('change', applyFilters);
+        document.getElementById('dateFilter').addEventListener('change', applyFilters);
+        document.getElementById('pageSize').addEventListener('change', function() {
+            pageSize = parseInt(this.value);
+            currentPage = 1;
+            loadOrders();
+        });
+
+        // Pagination buttons
+        document.getElementById('prevPage').addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                loadOrders();
+            }
+        });
+
+        document.getElementById('nextPage').addEventListener('click', () => {
+            const totalPages = Math.ceil(filteredOrders.length / pageSize);
+            if (currentPage < totalPages) {
+                currentPage++;
+                loadOrders();
+            }
+        });
+
+        // Search input
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchOrders();
+            }
+        });
+    }
+
+    function applyFilters() {
+        const storeId = document.getElementById('storeFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const dateRange = document.getElementById('dateFilter').value;
+
+        filteredOrders = mockOrders.filter(order => {
+            let matches = true;
+
+            // Store filter
+            if (storeId) {
+                const store = mockStores.find(s => s.id == storeId);
+                matches = matches && order.store === store.name;
+            }
+
+            // Status filter
+            if (status) {
+                matches = matches && order.status === status;
+            }
+
+            // Date filter (simplified for demo)
+            if (dateRange === 'today') {
+                matches = matches && order.date.includes('2024-12-06');
+            } else if (dateRange === 'yesterday') {
+                matches = matches && order.date.includes('2024-12-05');
+            } else if (dateRange === 'week') {
+                // Last 7 days logic would go here
+            }
+
+            return matches;
+        });
+
+        currentPage = 1;
+        loadOrders();
+        updateStats();
+    }
+
+    function searchOrders() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        
+        if (!searchTerm) {
+            filteredOrders = [...mockOrders];
+        } else {
+            filteredOrders = mockOrders.filter(order => 
+                order.id.toLowerCase().includes(searchTerm) ||
+                order.customer.toLowerCase().includes(searchTerm) ||
+                order.store.toLowerCase().includes(searchTerm)
+            );
+        }
+
+        currentPage = 1;
+        loadOrders();
+        updateStats();
+    }
+
+    function clearFilters() {
+        document.getElementById('storeFilter').value = '';
+        document.getElementById('statusFilter').value = '';
+        document.getElementById('dateFilter').value = 'month';
+        document.getElementById('searchInput').value = '';
+        
+        filteredOrders = [...mockOrders];
+        currentPage = 1;
+        loadOrders();
+        updateStats();
+    }
+
+    function updateStats() {
+        const today = new Date().toISOString().split('T')[0];
+        const todayOrders = filteredOrders.filter(order => order.date.includes('2024-12-06')).length;
+        const pendingOrders = filteredOrders.filter(order => ['pending', 'accepted', 'preparing'].includes(order.status)).length;
+        const totalRevenue = filteredOrders.reduce((sum, order) => sum + order.amount, 0);
+
+        document.getElementById('totalOrders').textContent = filteredOrders.length;
+        document.getElementById('todayOrders').textContent = todayOrders;
+        document.getElementById('pendingOrders').textContent = pendingOrders;
+        document.getElementById('totalRevenue').textContent = `₱${totalRevenue.toLocaleString()}`;
+    }
+
+    function updatePagination() {
+        const totalPages = Math.ceil(filteredOrders.length / pageSize);
+        const prevBtn = document.getElementById('prevPage');
+        const nextBtn = document.getElementById('nextPage');
+
+        document.getElementById('currentPage').textContent = currentPage;
+        document.getElementById('totalPages').textContent = totalPages;
+
+        prevBtn.disabled = currentPage <= 1;
+        nextBtn.disabled = currentPage >= totalPages;
+    }
+
+    function viewOrderDetails(orderId) {
+        const order = mockOrders.find(o => o.id === orderId);
+        if (!order) return;
+
+        const modal = document.getElementById('orderDetailsModal');
+        const content = document.getElementById('orderDetailsContent');
+
+        // Format items list
+        const itemsHtml = order.items.map(item => `
+            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: rgba(182, 110, 121, 0.05); border-radius: var(--radius-md); margin-bottom: 0.5rem;">
+                <div>
+                    <div style="font-weight: 500;">${item.name}</div>
+                    <div style="font-size: 12px; color: var(--text-light);">Quantity: ${item.quantity}</div>
+                </div>
+                <div style="font-weight: 600;">₱${(item.price * item.quantity).toLocaleString()}</div>
+            </div>
+        `).join('');
+
+        content.innerHTML = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <div>
+                    <div class="form-group">
+                        <label class="form-label">Order ID</label>
+                        <div style="padding: 0.875rem; background: rgba(182, 110, 121, 0.05); border-radius: var(--radius-md); font-weight: 600;">
+                            ${order.id}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Customer</label>
+                        <div style="padding: 0.875rem; background: rgba(182, 110, 121, 0.05); border-radius: var(--radius-md);">
+                            ${order.customer}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Contact</label>
+                        <div style="padding: 0.875rem; background: rgba(182, 110, 121, 0.05); border-radius: var(--radius-md);">
+                            ${order.contact}
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="form-group">
+                        <label class="form-label">Store</label>
+                        <div style="padding: 0.875rem; background: rgba(182, 110, 121, 0.05); border-radius: var(--radius-md);">
+                            ${order.store}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Order Type</label>
+                        <div style="padding: 0.875rem; background: rgba(182, 110, 121, 0.05); border-radius: var(--radius-md);">
+                            ${order.type}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Order Date</label>
+                        <div style="padding: 0.875rem; background: rgba(182, 110, 121, 0.05); border-radius: var(--radius-md);">
+                            ${order.date}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Delivery Address</label>
+                <div style="padding: 0.875rem; background: rgba(182, 110, 121, 0.05); border-radius: var(--radius-md); min-height: 60px;">
+                    ${order.address}
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Order Items</label>
+                ${itemsHtml}
+                <div style="display: flex; justify-content: space-between; padding: 1rem; background: linear-gradient(135deg, rgba(182, 110, 121, 0.1), rgba(157, 193, 131, 0.1)); border-radius: var(--radius-md); margin-top: 1rem;">
+                    <div style="font-weight: 600; font-size: 18px;">Total Amount</div>
+                    <div style="font-weight: 700; font-size: 24px; background: linear-gradient(135deg, var(--primary), var(--secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                        ₱${order.amount.toLocaleString()}
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button class="btn btn-primary" onclick="printOrder('${order.id}')">
+                    <i class="ri-printer-line"></i>
+                    Print Receipt
+                </button>
+                <button class="btn btn-outline" onclick="closeOrderDetails()">
+                    Close
+                </button>
+            </div>
+        `;
+
+        modal.style.display = 'flex';
+    }
+
+    function closeOrderDetails() {
+        document.getElementById('orderDetailsModal').style.display = 'none';
+    }
+
+    function updateOrderStatus(orderId, newStatus) {
+        if (confirm(`Are you sure you want to update order ${orderId} to ${newStatus}?`)) {
+            // Here you would typically make an API call to update the status
+            alert(`Order ${orderId} status updated to ${newStatus}`);
+            // Refresh orders
+            refreshOrders();
+        }
+    }
+
+    function printOrder(orderId) {
+        alert(`Printing receipt for order ${orderId}`);
+        // Print functionality would go here
+    }
+
+    function exportOrders() {
+        alert('Exporting orders to CSV...');
+        // Export functionality would go here
+    }
+
+    function refreshOrders() {
+        // Simulate loading
+        const tableBody = document.getElementById('ordersTableBody');
+        tableBody.innerHTML = `
+            <tr id="loadingRow">
+                <td colspan="9" style="text-align: center; padding: 3rem;">
+                    <div class="loading-spinner" style="margin: 0 auto;"></div>
+                    <p style="margin-top: 1rem; color: var(--text-light);">Refreshing orders...</p>
+                </td>
+            </tr>
+        `;
+
+        setTimeout(() => {
+            loadOrders();
+            alert('Orders refreshed successfully!');
+        }, 1000);
+    }
+</script>
+{% endblock %}

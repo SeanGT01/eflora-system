@@ -1,0 +1,1044 @@
+{% extends "base.html" %}
+
+{% block title %}{{ store.name }} — E-FLOWERS{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ─── Store Hero ─── */
+    .store-hero {
+        position: relative;
+        border-radius: 28px;
+        overflow: hidden;
+        margin-bottom: 3rem;
+        background: var(--charcoal);
+        min-height: 320px;
+        display: flex;
+        align-items: flex-end;
+    }
+
+    .store-hero-bg {
+        position: absolute;
+        inset: 0;
+        background: 
+            radial-gradient(ellipse at 20% 50%, rgba(212,120,138,0.25) 0%, transparent 60%),
+            radial-gradient(ellipse at 80% 20%, rgba(122,158,126,0.2) 0%, transparent 50%),
+            var(--charcoal);
+    }
+
+    .store-hero-pattern {
+        position: absolute;
+        inset: 0;
+        opacity: 0.04;
+        background-image: 
+            repeating-linear-gradient(45deg, var(--cream) 0, var(--cream) 1px, transparent 0, transparent 50%);
+        background-size: 20px 20px;
+    }
+
+    .store-hero-content {
+        position: relative;
+        z-index: 2;
+        padding: 2.5rem 3rem;
+        width: 100%;
+        display: flex;
+        align-items: flex-end;
+        gap: 2rem;
+        flex-wrap: wrap;
+    }
+
+    .store-logo-large {
+        width: 100px;
+        height: 100px;
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        flex-shrink: 0;
+        border: 3px solid rgba(250,246,240,0.15);
+        background: linear-gradient(135deg, var(--blush), var(--dusty-rose));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: var(--font-display);
+        font-size: 40px;
+        font-weight: 500;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+
+    .store-logo-large img {
+        width: 100%; height: 100%; object-fit: cover;
+    }
+
+    .store-hero-info { flex: 1; min-width: 240px; }
+
+    .store-hero-name {
+        font-family: var(--font-display);
+        font-size: clamp(28px, 4vw, 46px);
+        font-weight: 400;
+        color: var(--cream);
+        line-height: 1.1;
+        margin-bottom: 0.75rem;
+    }
+
+    .store-hero-desc {
+        font-size: 14px;
+        color: rgba(250,246,240,0.55);
+        line-height: 1.6;
+        max-width: 520px;
+        margin-bottom: 1.25rem;
+    }
+
+    .store-hero-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .store-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.875rem;
+        background: rgba(250,246,240,0.1);
+        border: 1px solid rgba(250,246,240,0.12);
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        color: rgba(250,246,240,0.75);
+        font-family: var(--font-sans);
+        font-weight: 500;
+        letter-spacing: 0.02em;
+    }
+
+    .store-tag i { font-size: 13px; color: var(--blush); }
+
+    .store-hero-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-end;
+        flex-shrink: 0;
+    }
+
+    /* ─── Store Stats Bar ─── */
+    .store-stats-bar {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        border: 1px solid var(--border);
+        margin-bottom: 3rem;
+    }
+
+    .stat-cell {
+        background: var(--warm-white);
+        padding: 1.5rem;
+        text-align: center;
+        transition: var(--transition);
+    }
+
+    .stat-cell:hover { background: var(--cream); }
+
+    .stat-value {
+        font-family: var(--font-display);
+        font-size: 28px;
+        font-weight: 500;
+        color: var(--charcoal);
+        line-height: 1;
+        margin-bottom: 0.35rem;
+    }
+
+    .stat-value span {
+        font-size: 16px;
+        color: var(--deep-rose);
+    }
+
+    .stat-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-family: var(--font-sans);
+    }
+
+    /* ─── Layout ─── */
+    .store-layout {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 2.5rem;
+        align-items: start;
+    }
+
+    /* ─── Filter Bar ─── */
+    .filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.75rem;
+        flex-wrap: wrap;
+    }
+
+    .filter-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-family: var(--font-sans);
+        white-space: nowrap;
+    }
+
+    .filter-pills {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        flex: 1;
+    }
+
+    .filter-pill {
+        padding: 0.45rem 1rem;
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        background: var(--warm-white);
+        cursor: pointer;
+        transition: var(--transition);
+        font-family: var(--font-sans);
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+    }
+
+    .filter-pill:hover,
+    .filter-pill.active {
+        border-color: var(--deep-rose);
+        color: var(--deep-rose);
+        background: rgba(181,68,90,0.05);
+    }
+
+    .filter-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        background: var(--deep-rose);
+        color: white;
+        border-radius: 50%;
+        font-size: 9px;
+        margin-left: 4px;
+    }
+
+    /* ─── Products Grid ─── */
+    .store-products-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 1.25rem;
+    }
+
+    .product-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        border: 1px solid var(--border);
+        transition: var(--transition);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        cursor: pointer;
+    }
+
+    .product-card:hover {
+        transform: translateY(-5px);
+        box-shadow: var(--shadow-leaf);
+        border-color: var(--border-strong);
+    }
+
+    .product-badge {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+        font-size: 9px;
+        padding: 3px 8px;
+        border-radius: var(--radius-pill);
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        z-index: 2;
+        font-family: var(--font-sans);
+    }
+
+    .badge-low { background: var(--terracotta); color: white; }
+    .badge-new { background: var(--deep-rose); color: white; }
+    .badge-out { background: rgba(107,76,59,0.15); color: var(--muted); }
+
+    .product-image {
+        height: 190px;
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
+        overflow: hidden;
+        position: relative;
+    }
+
+    .product-image img {
+        width: 100%; height: 100%; object-fit: cover;
+        transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .product-card:hover .product-image img { transform: scale(1.07); }
+
+    .product-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(42,35,30,0);
+        transition: var(--transition);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .product-card:hover .product-overlay { background: rgba(42,35,30,0.25); }
+
+    .overlay-btn {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        background: white;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transform: translateY(10px);
+        opacity: 0;
+        transition: var(--transition);
+        font-size: 16px;
+        color: var(--charcoal);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .product-card:hover .overlay-btn {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    .overlay-btn:nth-child(2) { transition-delay: 0.05s; }
+    .overlay-btn:hover { background: var(--deep-rose); color: white; transform: scale(1.1) !important; }
+
+    .product-content {
+        padding: 1rem 1.25rem 1.25rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .product-category {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--sage);
+        margin-bottom: 0.3rem;
+        font-family: var(--font-sans);
+    }
+
+    .product-title {
+        font-family: var(--font-display);
+        font-size: 17px;
+        font-weight: 500;
+        color: var(--charcoal);
+        margin-bottom: 0.5rem;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        min-height: 2.8rem;
+    }
+
+    .product-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: auto;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .product-price {
+        font-family: var(--font-display);
+        font-size: 19px;
+        font-weight: 600;
+        color: var(--deep-rose);
+    }
+
+    .add-btn {
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        background: var(--deep-rose);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: white;
+        font-size: 18px;
+        transition: var(--transition);
+        flex-shrink: 0;
+    }
+
+    .add-btn:hover { background: var(--dusty-rose); transform: scale(1.1) rotate(90deg); }
+    .add-btn:disabled { background: var(--border-strong); cursor: not-allowed; transform: none; }
+
+    /* ─── Sidebar ─── */
+    .store-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        position: sticky;
+        top: 100px;
+    }
+
+    .sidebar-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        transition: var(--transition);
+    }
+
+    .sidebar-card:hover { border-color: var(--border-strong); }
+
+    .sidebar-card-header {
+        padding: 1.25rem 1.5rem 0.875rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .sidebar-icon {
+        width: 32px; height: 32px;
+        border-radius: var(--radius-md);
+        background: rgba(181,68,90,0.08);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; color: var(--deep-rose);
+        flex-shrink: 0;
+    }
+
+    .sidebar-card-title {
+        font-family: var(--font-display);
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--charcoal);
+    }
+
+    .sidebar-card-body { padding: 1.25rem 1.5rem; }
+
+    .info-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.875rem;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+    }
+
+    .info-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .info-row:first-child { padding-top: 0; }
+
+    .info-row i {
+        font-size: 15px;
+        color: var(--sage);
+        margin-top: 1px;
+        flex-shrink: 0;
+        width: 16px;
+    }
+
+    .info-row-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-family: var(--font-sans);
+        margin-bottom: 2px;
+    }
+
+    .info-row-value {
+        font-size: 13px;
+        color: var(--charcoal);
+        line-height: 1.5;
+    }
+
+    .status-open {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #276749;
+    }
+
+    .status-open::before {
+        content: '';
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        background: #48bb78;
+        animation: pulse-dot 2s ease-in-out infinite;
+        flex-shrink: 0;
+    }
+
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.8); }
+    }
+
+    .mini-review {
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .mini-review:last-child { border-bottom: none; padding-bottom: 0; }
+    .mini-review:first-child { padding-top: 0; }
+
+    .mini-review-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .mini-reviewer {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--charcoal);
+    }
+
+    .mini-avatar {
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--blush), var(--dusty-rose));
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-size: 12px; font-weight: 500;
+        flex-shrink: 0;
+    }
+
+    .mini-stars { color: #f0b429; font-size: 10px; display: flex; gap: 1px; }
+
+    .mini-review-text {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+        font-style: italic;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .empty-products {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 4rem 2rem;
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+    }
+
+    .empty-products i {
+        font-size: 48px;
+        color: var(--border-strong);
+        display: block;
+        margin-bottom: 1rem;
+    }
+
+    .empty-products p {
+        font-family: var(--font-display);
+        font-size: 20px;
+        color: var(--muted);
+        margin-bottom: 0.5rem;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 1100px) {
+        .store-layout { grid-template-columns: 1fr 260px; gap: 2rem; }
+    }
+
+    @media (max-width: 900px) {
+        .store-layout { grid-template-columns: 1fr; }
+        .store-sidebar { position: static; }
+        .store-stats-bar { grid-template-columns: repeat(2, 1fr); }
+        .store-hero-actions { flex-direction: row; align-items: center; }
+    }
+
+    @media (max-width: 600px) {
+        .store-hero { border-radius: 20px; min-height: 260px; }
+        .store-hero-content { padding: 1.5rem; gap: 1.25rem; }
+        .store-logo-large { width: 72px; height: 72px; font-size: 28px; }
+        .store-hero-name { font-size: clamp(22px, 5vw, 32px); }
+        .store-stats-bar { grid-template-columns: repeat(2, 1fr); }
+        .store-products-grid { grid-template-columns: repeat(2, 1fr); gap: 0.875rem; }
+        .product-image { height: 140px; }
+        .product-content { padding: 0.75rem; }
+        .product-title { font-size: 14px; }
+    }
+
+    @media (max-width: 420px) {
+        .store-hero-content { flex-direction: column; align-items: flex-start; }
+        .store-hero-actions { flex-direction: row; width: 100%; }
+        .store-hero-actions .btn { flex: 1; justify-content: center; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ─── Store Hero ─── -->
+<section class="store-hero">
+    <div class="store-hero-bg"></div>
+    <div class="store-hero-pattern"></div>
+
+    <div class="store-hero-content">
+        <!-- Logo -->
+        <div class="store-logo-large">
+            {% if store.logo_url %}
+                <img src="{{ store.logo_url }}" alt="{{ store.name }}"
+                     onerror="this.style.display='none'">
+            {% endif %}
+            {{ store.name[0] if store.name else 'S' }}
+        </div>
+
+        <!-- Info -->
+        <div class="store-hero-info">
+            <h1 class="store-hero-name">{{ store.name }}</h1>
+            {% if store.description %}
+            <p class="store-hero-desc">{{ store.description }}</p>
+            {% endif %}
+            <div class="store-hero-tags">
+                <span class="store-tag">
+                    <i class="ri-map-pin-line"></i>
+                    {{ store.address[:45] + '…' if store.address and store.address|length > 45 else (store.address or 'Location TBA') }}
+                </span>
+                <span class="store-tag">
+                    <i class="ri-truck-line"></i> {{ store.delivery_radius_km or 5 }}km delivery
+                </span>
+                {% if store.contact_number %}
+                <span class="store-tag">
+                    <i class="ri-phone-line"></i> {{ store.contact_number }}
+                </span>
+                {% endif %}
+                <span class="store-tag" style="color:rgba(72,187,120,0.9); border-color:rgba(72,187,120,0.2);">
+                    <i class="ri-checkbox-circle-line" style="color:#48bb78;"></i> Verified Store
+                </span>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="store-hero-actions">
+            <span class="status-open">Open Now</span>
+            {% if store.contact_number %}
+            <a href="tel:{{ store.contact_number }}" class="btn btn-ghost"
+               style="border-color:rgba(250,246,240,0.2); color:var(--cream); font-size:13px;">
+                <i class="ri-phone-line"></i> Call Store
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<!-- ─── Stats Bar ─── -->
+<div class="store-stats-bar">
+    <div class="stat-cell">
+        <div class="stat-value">{{ products|length }}<span>+</span></div>
+        <div class="stat-label">Products</div>
+    </div>
+    <div class="stat-cell">
+        <div class="stat-value">
+            {% if avg_rating and avg_rating > 0 %}{{ avg_rating }}{% else %}—{% endif %}
+            <span>★</span>
+        </div>
+        <div class="stat-label">Avg Rating</div>
+    </div>
+    <div class="stat-cell">
+        <div class="stat-value">{{ store.delivery_radius_km or 5 }}<span>km</span></div>
+        <div class="stat-label">Delivery Area</div>
+    </div>
+    <div class="stat-cell">
+        <div class="stat-value">{{ testimonials|length }}<span>+</span></div>
+        <div class="stat-label">Reviews</div>
+    </div>
+</div>
+
+<!-- ─── Main Layout ─── -->
+<div class="store-layout">
+
+    <!-- ─── Products Column ─── -->
+    <div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem;">
+            <div>
+                <div style="font-size:10px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:var(--dusty-rose);margin-bottom:0.4rem;">Browse</div>
+                <h2 style="font-family:var(--font-display);font-size:clamp(24px,3vw,32px);font-weight:400;color:var(--charcoal);line-height:1.15;">
+                    Store Products
+                </h2>
+            </div>
+            <div style="font-size:13px;color:var(--muted);">
+                <span id="visibleCount">{{ products|length }}</span> items
+            </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <span class="filter-label">Filter:</span>
+            <div class="filter-pills">
+                <button class="filter-pill active" onclick="filterProducts('all', this)">
+                    All <span class="filter-count">{{ products|length }}</span>
+                </button>
+                {% set categories = products | map(attribute='category') | select | unique | list %}
+                {% for cat in categories %}
+                {% set cat_count = products | selectattr('category', 'equalto', cat) | list | length %}
+                <button class="filter-pill" onclick="filterProducts('{{ cat }}', this)">
+                    {{ cat|title }} <span class="filter-count">{{ cat_count }}</span>
+                </button>
+                {% endfor %}
+                <button class="filter-pill" onclick="filterProducts('available', this)">In Stock</button>
+            </div>
+        </div>
+
+        <!-- Products Grid -->
+        <div class="store-products-grid" id="productsGrid">
+            {% if products and products|length > 0 %}
+                {% for product in products %}
+                <div class="product-card"
+                     data-category="{{ product.category or 'uncategorized' }}"
+                     data-available="{{ 'true' if product.is_available and product.stock_quantity > 0 else 'false' }}">
+
+                    {% if not product.is_available or product.stock_quantity == 0 %}
+                        <div class="product-badge badge-out">Out of Stock</div>
+                    {% elif product.stock_quantity < 5 %}
+                        <div class="product-badge badge-low">Low Stock</div>
+                    {% elif product.created_at and product.created_at > (now - timedelta(days=14)).isoformat() %}
+                        <div class="product-badge badge-new">New</div>
+                    {% endif %}
+
+                    <div class="product-image" onclick="viewProduct({{ product.id }})">
+                        {% if product.image_url %}
+                        <img src="{{ product.image_url }}" alt="{{ product.name }}"
+                             onerror="this.parentElement.innerHTML='<div style=\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:40px;opacity:0.15\'><i class=\'ri-image-line\'></i></div>'">
+                        {% else %}
+                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:40px;opacity:0.15;">
+                            <i class="ri-image-line"></i>
+                        </div>
+                        {% endif %}
+
+                        <div class="product-overlay">
+                            <button class="overlay-btn"
+                                    onclick="event.stopPropagation(); viewProduct({{ product.id }})"
+                                    title="View Details">
+                                <i class="ri-eye-line"></i>
+                            </button>
+                            {% if product.is_available and product.stock_quantity > 0 %}
+                            <button class="overlay-btn"
+                                    onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'")|safe }}', {{ product.price }}, '{{ product.category|replace("'", "\\'")|safe }}')"
+                                    title="Quick Add">
+                                <i class="ri-shopping-bag-line"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="product-content">
+                        {% if product.category %}
+                        <div class="product-category">{{ product.category }}</div>
+                        {% endif %}
+                        <div class="product-title">{{ product.name }}</div>
+                        <div class="product-footer">
+                            <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
+                            <button class="add-btn"
+                                {% if not product.is_available or product.stock_quantity == 0 %}disabled{% endif %}
+                                onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'")|safe }}', {{ product.price }}, '{{ product.category|replace("'", "\\'")|safe }}')"
+                                title="{{ 'Add to cart' if product.is_available and product.stock_quantity > 0 else 'Out of stock' }}">
+                                <i class="ri-add-line"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+            <div class="empty-products">
+                <i class="ri-store-line"></i>
+                <p>No products yet</p>
+                <p style="font-size:13px;color:var(--muted);font-family:var(--font-sans);">
+                    This store hasn't added any products yet. Check back soon!
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ─── Sidebar ─── -->
+    <aside class="store-sidebar">
+
+        <!-- Store Info -->
+        <div class="sidebar-card">
+            <div class="sidebar-card-header">
+                <div class="sidebar-icon"><i class="ri-store-2-line"></i></div>
+                <div class="sidebar-card-title">Store Info</div>
+            </div>
+            <div class="sidebar-card-body">
+                <div class="info-row">
+                    <i class="ri-map-pin-2-line"></i>
+                    <div>
+                        <div class="info-row-label">Address</div>
+                        <div class="info-row-value">{{ store.address or 'Not provided' }}</div>
+                    </div>
+                </div>
+                {% if store.contact_number %}
+                <div class="info-row">
+                    <i class="ri-phone-line"></i>
+                    <div>
+                        <div class="info-row-label">Contact</div>
+                        <div class="info-row-value">
+                            <a href="tel:{{ store.contact_number }}"
+                               style="color:var(--deep-rose);text-decoration:none;">
+                                {{ store.contact_number }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="info-row">
+                    <i class="ri-truck-line"></i>
+                    <div>
+                        <div class="info-row-label">Delivery Radius</div>
+                        <div class="info-row-value">Up to {{ store.delivery_radius_km or 5 }}km from store</div>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <i class="ri-time-line"></i>
+                    <div>
+                        <div class="info-row-label">Status</div>
+                        <div class="info-row-value">
+                            <span class="status-open">Open Now</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <i class="ri-calendar-line"></i>
+                    <div>
+                        <div class="info-row-label">Member Since</div>
+                        <div class="info-row-value">
+                            {% if store.approved_at %}
+                                {{ store.approved_at[:10] }}
+                            {% else %}
+                                E-FLOWERS Partner
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reviews -->
+        <div class="sidebar-card">
+            <div class="sidebar-card-header">
+                <div class="sidebar-icon" style="background:rgba(240,180,41,0.1); color:#a07000;">
+                    <i class="ri-star-line"></i>
+                </div>
+                <div class="sidebar-card-title">Reviews</div>
+            </div>
+            <div class="sidebar-card-body">
+                {% if testimonials and testimonials|length > 0 %}
+                    {% for t in testimonials[:3] %}
+                    <div class="mini-review">
+                        <div class="mini-review-header">
+                            <div class="mini-reviewer">
+                                <div class="mini-avatar">
+                                    {{ t.customer_name[0] if t.customer_name else 'C' }}
+                                </div>
+                                {{ t.customer_name or 'Customer' }}
+                            </div>
+                            <div class="mini-stars">
+                                {% for i in range(t.rating) %}<i class="ri-star-fill"></i>{% endfor %}
+                                {% for i in range(5 - t.rating) %}<i class="ri-star-line" style="opacity:0.3;"></i>{% endfor %}
+                            </div>
+                        </div>
+                        {% if t.comment %}
+                        <div class="mini-review-text">{{ t.comment }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div style="text-align:center;padding:1rem 0;color:var(--muted);font-size:13px;">
+                    <i class="ri-star-line" style="font-size:24px;display:block;margin-bottom:0.5rem;opacity:0.3;"></i>
+                    No reviews yet
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Share -->
+        <div class="sidebar-card">
+            <div class="sidebar-card-header">
+                <div class="sidebar-icon"><i class="ri-share-line"></i></div>
+                <div class="sidebar-card-title">Share Store</div>
+            </div>
+            <div class="sidebar-card-body" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                <button class="btn btn-outline btn-sm" onclick="copyStoreLink()" style="flex:1;">
+                    <i class="ri-link"></i> Copy Link
+                </button>
+                <a href="https://www.facebook.com/sharer/sharer.php?u={{ request.url }}"
+                   target="_blank" class="btn btn-outline btn-sm" style="flex:1;">
+                    <i class="ri-facebook-line"></i> Share
+                </a>
+            </div>
+        </div>
+
+        <!-- ✅ FIXED: Back button points to index, not stores -->
+        <a href="{{ url_for('templates.index') }}"
+           class="btn btn-outline"
+           style="width:100%;justify-content:center;">
+            <i class="ri-arrow-left-line"></i> Back to Home
+        </a>
+
+    </aside>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function filterProducts(category, btn) {
+        document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+
+        const cards = document.querySelectorAll('#productsGrid .product-card');
+        let visible = 0;
+        cards.forEach(card => {
+            let show = false;
+            if (category === 'all') {
+                show = true;
+            } else if (category === 'available') {
+                show = card.dataset.available === 'true';
+            } else {
+                show = card.dataset.category === category;
+            }
+            card.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        document.getElementById('visibleCount').textContent = visible;
+    }
+
+    function viewProduct(productId) {
+        window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
+    }
+
+    // Enhanced quickAdd function that uses the global cart system
+    async function quickAdd(productId, productName, productPrice, productCategory) {
+        // Get the button that was clicked
+        const button = event.currentTarget;
+        const originalHtml = button.innerHTML;
+        
+        // Show loading state
+        button.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+        button.disabled = true;
+        
+        try {
+            // Get the product card to extract image URL
+            const productCard = button.closest('.product-card');
+            const imageElement = productCard.querySelector('.product-image img');
+            const imageUrl = imageElement ? imageElement.src : '';
+            
+            // Create product object for the global addToCart function
+            const product = {
+                id: productId,
+                name: productName,
+                price: productPrice,
+                store_id: {{ store.id }},
+                store_name: "{{ store.name|replace('"', '\\"')|safe }}",
+                image_url: imageUrl
+            };
+            
+            // Check if the global addToCart function exists (from base.html)
+            if (typeof window.addToCart === 'function') {
+                // Use the global function which handles both logged-in and guest users
+                await window.addToCart(product);
+                
+                // Show success message
+                showToast(`✓ ${productName} added to bag`);
+            } else {
+                // Fallback if global function doesn't exist
+                const response = await fetch('/api/cart/items', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product_id: productId, quantity: 1 })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`✓ ${productName} added to bag`);
+                    
+                    // Try to update cart count if function exists
+                    if (typeof window.updateCartCount === 'function') {
+                        window.updateCartCount();
+                    }
+                    
+                    // Try to reload cart if function exists
+                    if (typeof window.loadCart === 'function') {
+                        window.loadCart();
+                    }
+                } else {
+                    showToast(data.error || 'Could not add to cart');
+                }
+            }
+        } catch (error) {
+            console.error('Error adding to cart:', error);
+            showToast('Network error — please try again');
+        } finally {
+            // Restore button after a short delay
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, 500);
+        }
+    }
+
+    function copyStoreLink() {
+        navigator.clipboard.writeText(window.location.href)
+            .then(() => showToast('✓ Store link copied!'))
+            .catch(() => {
+                const el = document.createElement('input');
+                el.value = window.location.href;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                el.remove();
+                showToast('✓ Store link copied!');
+            });
+    }
+
+    // Ensure showToast function exists
+    if (typeof window.showToast !== 'function') {
+        window.showToast = function(msg) {
+            const t = document.createElement('div');
+            t.style.cssText = `position:fixed;top:20px;right:20px;z-index:9999;padding:.875rem 1.25rem;
+                background:var(--charcoal);color:var(--cream);border-radius:12px;font-size:14px;
+                font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.2);transition:opacity .3s;`;
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2800);
+        }
+    }
+
+    // Initialize any cart-related UI updates on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Update cart count if function exists
+        if (typeof window.updateCartCount === 'function') {
+            window.updateCartCount();
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,1910 @@
+{% extends "base.html" %}
+
+{% block title %}E-FLOWERS — Fresh Blooms & Beautiful Plants{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ─── Hero ─── */
+    .hero-section {
+        position: relative;
+        border-radius: 28px;
+        overflow: hidden;
+        margin-bottom: 3rem;
+        min-height: 400px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .hero-left {
+        background: var(--charcoal);
+        padding: 0.5rem 4rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        z-index: 1;
+    }
+
+    .hero-left::before {
+        content: '';
+        position: absolute;
+        top: -80px;
+        left: -80px;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(212,120,138,0.2) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+
+    .hero-left::after {
+        content: '';
+        position: absolute;
+        bottom: -60px;
+        right: -60px;
+        width: 220px;
+        height: 220px;
+        background: radial-gradient(circle, rgba(122,158,126,0.15) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+
+    .hero-eyebrow {
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--dusty-rose);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .hero-eyebrow::before {
+        content: '';
+        display: inline-block;
+        width: 24px;
+        height: 1px;
+        background: var(--dusty-rose);
+    }
+
+    .hero-title {
+        font-family: var(--font-display);
+        font-size: clamp(44px, 5vw, 62px);
+        font-weight: 400;
+        color: var(--cream);
+        line-height: 1.1;
+        margin-bottom: 1.25rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .hero-title em {
+        font-style: italic;
+        color: var(--blush);
+    }
+
+    .hero-desc {
+        font-size: 15px;
+        color: rgba(250, 246, 240, 0.6);
+        line-height: 1.7;
+        margin-bottom: 2rem;
+        max-width: 340px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .hero-actions {
+        display: flex;
+        gap: 0.875rem;
+        align-items: center;
+        position: relative;
+        z-index: 1;
+    }
+
+    .hero-right {
+        position: relative;
+        background: linear-gradient(145deg, #e8d5c4, #d4c4b0);
+        overflow: hidden;
+    }
+
+    .hero-right-img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+
+    .hero-right-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(42,35,30,0.15) 0%, rgba(212,120,138,0.1) 100%);
+    }
+
+    .hero-right-badge {
+        position: absolute;
+        bottom: 2rem;
+        left: 2rem;
+        background: rgba(255, 253, 249, 0.92);
+        backdrop-filter: blur(12px);
+        padding: 1rem 1.5rem;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    }
+
+    .hero-badge-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--sage);
+        margin-bottom: 4px;
+    }
+
+    .hero-badge-value {
+        font-family: var(--font-display);
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--charcoal);
+    }
+
+    .hero-right-decoration {
+        position: absolute;
+        top: 2rem;
+        right: 2rem;
+        background: var(--deep-rose);
+        color: white;
+        padding: 0.75rem 1.25rem;
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+    }
+
+    /* Floating petal decoration */
+    .hero-petals {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+    }
+
+    .petal {
+        position: absolute;
+        width: 12px;
+        height: 18px;
+        background: rgba(242, 196, 206, 0.3);
+        border-radius: 50% 0 50% 0;
+        animation: floatPetal linear infinite;
+    }
+
+    @keyframes floatPetal {
+        0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 0.5; }
+        100% { transform: translateY(580px) rotate(360deg); opacity: 0; }
+    }
+
+    /* ─── Section Headers ─── */
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 2.25rem;
+    }
+
+    .section-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--dusty-rose);
+        margin-bottom: 0.5rem;
+    }
+
+    .section-title {
+        font-family: var(--font-display);
+        font-size: clamp(28px, 3.5vw, 38px);
+        font-weight: 400;
+        color: var(--charcoal);
+        line-height: 1.15;
+    }
+
+    /* ─── Categories ─── */
+    .categories-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.25rem;
+        margin-bottom: 3rem;
+    }
+
+    .categories-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+/* Each grid cell contains both the card and text */
+.category-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.category-card {
+    display: block;
+    text-decoration: none;
+    transition: var(--transition);
+}
+
+.category-image-wrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--radius-lg);
+    background: var(--cream);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    transition: var(--transition);
+}
+
+.category-image-wrap:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-leaf);
+    border-color: var(--deep-rose);
+}
+
+.category-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    transition: transform 0.5s ease;
+}
+
+.category-image-wrap:hover .category-image {
+    transform: scale(1.05);
+}
+
+.category-text {
+    text-align: center;
+    padding: 0 0.5rem;
+}
+
+.category-name {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--charcoal);
+    margin-bottom: 0.25rem;
+}
+
+.category-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+/* Icon fallback styles */
+.category-image-wrap i {
+    font-size: 48px;
+    color: var(--muted);
+    opacity: 0.5;
+}
+
+.icon-pink i { color: var(--deep-rose); }
+.icon-green i { color: var(--sage); }
+.icon-rose i { color: var(--terracotta); }
+.icon-lavender i { color: var(--dusty-rose); }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .categories-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .category-name {
+        font-size: 16px;
+    }
+    .category-desc {
+        font-size: 11px;
+    }
+}
+
+    .icon-pink { background: rgba(242, 196, 206, 0.3); color: var(--deep-rose); }
+    .icon-green { background: rgba(122, 158, 126, 0.2); color: var(--deep-sage); }
+    .icon-rose { background: rgba(196, 113, 75, 0.15); color: var(--terracotta); }
+    .icon-lavender { background: rgba(181, 68, 90, 0.1); color: var(--dusty-rose); }
+
+    .category-name {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 500;
+        margin-bottom: 0.4rem;
+    }
+
+    .category-desc {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+    }
+
+    /* ─── Navigation Container (for mobile scrolling) ─── */
+    .nav-container {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 0 2rem;
+        display: flex;
+        align-items: center;
+        gap: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .nav-container::-webkit-scrollbar {
+        display: none;
+    }
+
+    .nav-link {
+        padding: 0.8rem 1.1rem;
+        text-decoration: none;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+        position: relative;
+        transition: var(--transition);
+        font-family: var(--font-sans);
+        flex-shrink: 0;
+    }
+
+    
+
+    /* ─── Featured Products ─── */
+    .featured-section { margin-bottom: 3rem; }
+
+    .product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .product-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        border: 1px solid var(--border);
+        transition: var(--transition);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .product-card:hover {
+        transform: translateY(-6px);
+        box-shadow: var(--shadow-leaf);
+        border-color: var(--border-strong);
+    }
+
+    .product-badge {
+        position: absolute;
+        top: 0.875rem;
+        left: 0.875rem;
+        background: var(--terracotta);
+        color: white;
+        font-size: 10px;
+        padding: 3px 10px;
+        border-radius: var(--radius-pill);
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        z-index: 2;
+        font-family: var(--font-sans);
+    }
+
+    .product-image {
+        height: 220px;
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .product-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .product-card:hover .product-image img { transform: scale(1.06); }
+
+    .product-content { 
+        padding: 1.25rem 1.5rem 1.5rem; 
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .product-store {
+        font-size: 11px;
+        color: var(--sage);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 0.4rem;
+    }
+
+    .product-title {
+        font-family: var(--font-display);
+        font-size: 19px;
+        font-weight: 500;
+        color: var(--charcoal);
+        margin-bottom: 0.5rem;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        min-height: 1.5rem;
+    }
+
+    .product-price {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--deep-rose);
+        margin-bottom: 1rem;
+        font-family: var(--font-display);
+    }
+
+    .product-actions { 
+        display: flex; 
+        gap: 0.5rem; 
+        align-items: center;
+        margin-top: auto;
+    }
+
+    .product-actions .btn {
+        flex: 1;
+        white-space: nowrap;
+        padding: 0.7rem 0.5rem;
+    }
+
+    .product-actions .btn-icon {
+        flex: 0 0 auto;
+        width: 42px;
+        padding: 0;
+    }
+
+    /* ─── Stores ─── */
+    .stores-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.25rem;
+        margin-bottom: 3rem;
+    }
+
+    .store-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        border: 1px solid var(--border);
+        transition: var(--transition);
+        display: flex;
+        gap: 1.25rem;
+        align-items: center;
+    }
+
+    .store-card:hover {
+        box-shadow: var(--shadow-petal);
+        border-color: rgba(181, 68, 90, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .store-avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-md);
+        background: linear-gradient(135deg, var(--blush), var(--dusty-rose));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: var(--font-display);
+        font-size: 24px;
+        font-weight: 500;
+        flex-shrink: 0;
+    }
+
+    .store-info { flex: 1; min-width: 0; }
+
+    .store-name {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 500;
+        margin-bottom: 0.25rem;
+        color: var(--charcoal);
+    }
+
+    .store-address {
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 0.6rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .store-meta {
+        display: flex;
+        gap: 1rem;
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .store-meta span {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+    }
+
+    .store-meta .ri-star-fill { color: #ffd700; }
+
+    /* ─── Why Choose ─── */
+    .why-section {
+        background: var(--charcoal);
+        border-radius: 28px;
+        padding: 4rem 3.5rem;
+        margin-bottom: 5rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .why-section::before {
+        content: '';
+        position: absolute;
+        top: -100px;
+        right: -100px;
+        width: 400px;
+        height: 400px;
+        background: radial-gradient(circle, rgba(212,120,138,0.12) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+
+    .why-header {
+        text-align: center;
+        margin-bottom: 3.5rem;
+    }
+
+    .why-header .section-label { color: rgba(212, 120, 138, 0.7); }
+
+    .why-header .section-title { color: var(--cream); }
+
+    .why-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .why-card { text-align: center; }
+
+    .why-icon-wrap {
+        width: 60px;
+        height: 60px;
+        margin: 0 auto 1.25rem;
+        border-radius: 50%;
+        background: rgba(250, 246, 240, 0.08);
+        border: 1px solid rgba(250, 246, 240, 0.12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        color: var(--blush);
+        transition: var(--transition);
+    }
+
+    .why-card:hover .why-icon-wrap {
+        background: rgba(181, 68, 90, 0.2);
+        border-color: rgba(181, 68, 90, 0.3);
+        transform: scale(1.1);
+    }
+
+    .why-title {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--cream);
+        margin-bottom: 0.5rem;
+    }
+
+    .why-desc {
+        font-size: 13px;
+        color: rgba(250, 246, 240, 0.45);
+        line-height: 1.6;
+    }
+
+    /* ─── Testimonials ─── */
+    .testimonials-section { margin-bottom: 5rem; }
+
+    .testimonials-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+    }
+
+    .testimonial-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        border: 1px solid var(--border);
+        transition: var(--transition);
+        position: relative;
+    }
+
+    .testimonial-card::before {
+        content: '"';
+        position: absolute;
+        top: 1rem;
+        right: 1.5rem;
+        font-family: var(--font-display);
+        font-size: 72px;
+        line-height: 1;
+        color: rgba(181, 68, 90, 0.08);
+        font-weight: 400;
+    }
+
+    .testimonial-card:hover {
+        box-shadow: var(--shadow-petal);
+        transform: translateY(-3px);
+    }
+
+    .reviewer {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .reviewer-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 500;
+        flex-shrink: 0;
+    }
+
+    .reviewer-name {
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--charcoal);
+        margin-bottom: 3px;
+    }
+
+    .stars { color: #f0b429; font-size: 12px; display: flex; gap: 2px; }
+
+    .testimonial-text {
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.7;
+        font-style: italic;
+    }
+
+    /* ─── Newsletter ─── */
+    .newsletter-section {
+        background: linear-gradient(135deg, rgba(242, 196, 206, 0.2), rgba(122, 158, 126, 0.12));
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        padding: 4rem;
+        text-align: center;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .newsletter-section::before {
+        content: '🌸';
+        position: absolute;
+        top: -20px;
+        left: 5%;
+        font-size: 80px;
+        opacity: 0.1;
+        filter: grayscale(1);
+    }
+
+    .newsletter-section::after {
+        content: '🌿';
+        position: absolute;
+        bottom: -10px;
+        right: 5%;
+        font-size: 80px;
+        opacity: 0.1;
+        filter: grayscale(1);
+    }
+
+    .newsletter-section .section-title {
+        margin-bottom: 0.75rem;
+    }
+
+    .newsletter-desc {
+        font-size: 15px;
+        color: var(--muted);
+        max-width: 460px;
+        margin: 0 auto 2.25rem;
+        line-height: 1.6;
+    }
+
+    .newsletter-form {
+        display: flex;
+        gap: 0.75rem;
+        max-width: 440px;
+        margin: 0 auto;
+    }
+
+    .newsletter-input {
+        flex: 1;
+        padding: 0.875rem 1.25rem;
+        background: var(--warm-white);
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--radius-pill);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        color: var(--charcoal);
+        transition: var(--transition);
+    }
+
+    .newsletter-input:focus {
+        outline: none;
+        border-color: var(--deep-rose);
+        box-shadow: 0 0 0 3px rgba(181, 68, 90, 0.08);
+    }
+
+    /* ─── Responsive Hero ─── */
+    @media (max-width: 1200px) {
+        .hero-right {
+            height: 500px;
+        }
+    }
+
+    @media (max-width: 1024px) {
+        .hero-right {
+            height: 450px;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .hero-section { 
+            grid-template-columns: 1fr; 
+            min-height: auto; 
+            border-radius: 24px;
+        }
+        .hero-right { 
+            height: 400px; 
+            order: -1;
+        }
+        .hero-left { 
+            padding: 3rem 2.5rem; 
+        }
+        .hero-desc {
+            max-width: 100%;
+        }
+        .hero-right-badge {
+            bottom: 1.5rem;
+            left: 1.5rem;
+            padding: 0.875rem 1.25rem;
+        }
+        .hero-right-badge .hero-badge-value {
+            font-size: 20px;
+        }
+        .hero-right-decoration {
+            top: 1.5rem;
+            right: 1.5rem;
+            padding: 0.6rem 1rem;
+            font-size: 11px;
+        }
+        .testimonials-grid { 
+            grid-template-columns: 1fr; 
+        }
+        
+        /* Navigation scrolling on tablet */
+        .nav-container {
+            padding: 0 1.5rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .hero-right { 
+            height: 350px; 
+        }
+        .hero-left { 
+            padding: 2.5rem 2rem; 
+        }
+        .hero-title {
+            font-size: clamp(38px, 4.5vw, 52px);
+        }
+        
+        /* Product grid adjustments */
+        .product-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        
+        .categories-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        
+        .why-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        /* Keep buttons side by side */
+        .product-actions {
+            gap: 0.35rem;
+        }
+        
+        .product-actions .btn {
+            font-size: 12px;
+            padding: 0.6rem 0.25rem;
+        }
+        
+        .product-actions .btn-icon {
+            width: 38px;
+        }
+        
+        /* Navigation scrolling */
+        .nav-container {
+            padding: 0 1rem;
+        }
+    }
+
+    @media (max-width: 600px) {
+        .hero-section { 
+            border-radius: 20px; 
+        }
+        .hero-right { 
+            height: 400px; 
+        }
+        .hero-left { 
+            padding: 2rem 1.5rem; 
+        }
+        .hero-title {
+            font-size: clamp(32px, 7vw, 42px);
+        }
+        .hero-desc {
+            font-size: 14px;
+            margin-bottom: 1.75rem;
+        }
+        .hero-actions {
+            flex-direction: column;
+            gap: 0.75rem;
+            align-items: stretch;
+        }
+        .hero-actions .btn {
+            width: 100%;
+            justify-content: center;
+            padding: 0.8rem 1.5rem;
+        }
+        .hero-right-badge {
+            padding: 0.6rem 1rem;
+            bottom: 1rem;
+            left: 1rem;
+        }
+        .hero-badge-label {
+            font-size: 8px;
+        }
+        .hero-badge-value {
+            font-size: 16px;
+        }
+        .hero-right-decoration {
+            font-size: 10px;
+            padding: 0.5rem 0.875rem;
+            top: 1rem;
+            right: 1rem;
+        }
+        
+        .why-section { 
+            padding: 2.5rem 1.75rem; 
+        }
+        .why-grid { 
+            grid-template-columns: 1fr 1fr; 
+            gap: 1.25rem; 
+        }
+        .newsletter-form { 
+            flex-direction: column; 
+        }
+        .newsletter-section { 
+            padding: 2.5rem 1.5rem; 
+        }
+        .stores-grid { 
+            grid-template-columns: 1fr; 
+        }
+        
+        /* Product card mobile optimizations - KEEP BUTTONS SIDE BY SIDE */
+        .product-grid {
+            gap: 0.75rem;
+        }
+        
+        .product-card .product-image {
+            height: 140px;
+        }
+        
+        .product-card .product-content {
+            padding: 0.75rem;
+        }
+        
+        .product-card .product-title {
+            font-size: 14px;
+            min-height: 2.5rem;
+        }
+        
+        .product-card .product-store {
+            font-size: 10px;
+        }
+        
+        .product-card .product-price {
+            font-size: 16px;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Keep buttons side by side, not stacked */
+        .product-card .product-actions {
+            flex-direction: row;
+            gap: 0.35rem;
+        }
+        
+        .product-card .product-actions .btn {
+            padding: 0.5rem 0.25rem;
+            font-size: 11px;
+        }
+        
+        .product-card .product-actions .btn-icon {
+            width: 36px;
+            height: 36px;
+            flex: 0 0 auto;
+        }
+        
+        /* Navigation scrolling */
+        .nav-container {
+            padding: 0 0.75rem;
+        }
+        
+        .nav-link {
+            padding: 0.85rem 1rem;
+            font-size: 12px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .hero-right { 
+            height: 400px; 
+        }
+        .hero-left { 
+            padding: 1.75rem 1.25rem; 
+        }
+        .hero-title {
+            font-size: clamp(28px, 6vw, 36px);
+        }
+        .hero-desc {
+            font-size: 13px;
+            margin-bottom: 1.5rem;
+        }
+        .hero-right-badge {
+            display: block;
+            padding: 0.5rem 0.875rem;
+        }
+        .hero-badge-label {
+            font-size: 7px;
+        }
+        .hero-badge-value {
+            font-size: 14px;
+        }
+        .hero-right-decoration {
+            font-size: 9px;
+            padding: 0.4rem 0.75rem;
+        }
+        
+        /* Keep 2 columns on small phones */
+        .product-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+        
+        .product-card .product-image {
+            height: 120px;
+        }
+        
+        .product-card .product-content {
+            padding: 0.5rem;
+        }
+        
+        .product-card .product-title {
+            font-size: 12px;
+            margin-bottom: 0.25rem;
+            min-height: 2.2rem;
+        }
+        
+        .product-card .product-store {
+            font-size: 8px;
+            margin-bottom: 0.25rem;
+        }
+        
+        .product-card .product-price {
+            font-size: 14px;
+            margin-bottom: 0.4rem;
+        }
+        
+        /* Keep buttons side by side on very small screens */
+        .product-card .product-actions {
+            gap: 0.25rem;
+        }
+        
+        .product-card .product-actions .btn {
+            padding: 0.4rem 0.2rem;
+            font-size: 10px;
+        }
+        
+        .product-card .product-actions .btn-icon {
+            width: 32px;
+            height: 32px;
+        }
+        
+        /* Category cards smaller */
+        .category-card {
+            padding: 1.5rem 1rem;
+        }
+        
+        .flowerline{
+            height: 120px;
+            object-fit: contain;
+            width: auto;
+            margin: 10px;
+            display: block;
+        }
+        .category-icon-wrap {
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+        }
+        
+        .category-name {
+            font-size: 14px;
+        }
+        
+        .category-desc {
+            font-size: 10px;
+        }
+    }
+
+    @media (max-width: 380px) {
+        .hero-right { 
+            height: 180px; 
+        }
+        .hero-right-badge {
+            padding: 0.4rem 0.75rem;
+        }
+        .hero-badge-value {
+            font-size: 12px;
+        }
+        .hero-right-decoration {
+            font-size: 8px;
+            padding: 0.3rem 0.6rem;
+        }
+        
+        /* Only go to 1 column on very tiny phones */
+        .product-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .product-card .product-image {
+            height: 180px;
+        }
+        
+        /* Buttons side by side even on single column */
+        .product-card .product-actions {
+            flex-direction: row;
+        }
+        
+        .product-card .product-actions .btn {
+            padding: 0.5rem;
+            font-size: 12px;
+        }
+        
+        .product-card .product-actions .btn-icon {
+            width: 40px;
+            height: 40px;
+        }
+    }
+
+    /* Landscape orientation for phones */
+    @media (max-width: 900px) and (orientation: landscape) {
+        .hero-right { 
+            height: 300px; 
+        }
+        .hero-left { 
+            padding: 2rem; 
+        }
+        .hero-title {
+            font-size: 36px;
+        }
+        .hero-desc {
+            margin-bottom: 1.5rem;
+        }
+    }
+
+    /* Remove duplicate media queries */
+    @media (max-width: 1100px) {
+        .why-grid { grid-template-columns: repeat(2, 1fr); }
+        .categories-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+
+    /* Category Advertisement Styles */
+.category-ad-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 2rem;
+    background: linear-gradient(145deg, rgba(250, 246, 240, 0.95), rgba(245, 237, 230, 0.95));
+    backdrop-filter: blur(10px);
+}
+
+.category-ad-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.ad-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--deep-rose);
+}
+
+.ad-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.ad-control {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(181, 68, 90, 0.2);
+    color: var(--charcoal);
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    backdrop-filter: blur(5px);
+}
+
+.ad-control:hover {
+    background: var(--deep-rose);
+    color: white;
+    border-color: var(--deep-rose);
+    transform: scale(1.05);
+}
+
+.category-ad-carousel {
+    position: relative;
+    height: 350px;
+    overflow: hidden;
+}
+
+.category-ad-item {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.category-ad-item.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.category-ad-card {
+    display: block;
+    text-decoration: none;
+    transition: var(--transition);
+}
+
+.category-ad-image-wrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--radius-lg);
+    background: var(--cream);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    transition: var(--transition);
+    box-shadow: var(--shadow-petal);
+}
+
+.category-ad-image-wrap:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-leaf);
+    border-color: var(--deep-rose);
+}
+
+.category-ad-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.category-ad-image-wrap:hover .category-ad-image {
+    transform: scale(1.05);
+}
+
+.category-ad-text {
+    text-align: center;
+}
+
+.category-ad-name {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--charcoal);
+    margin-bottom: 0.5rem;
+}
+
+.category-ad-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+.category-ad-shop {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1.25rem;
+    background: var(--deep-rose);
+    color: white;
+    text-decoration: none;
+    border-radius: var(--radius-pill);
+    font-size: 13px;
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.category-ad-shop:hover {
+    background: var(--dusty-rose);
+    transform: translateX(5px);
+    box-shadow: 0 4px 12px rgba(181, 68, 90, 0.3);
+}
+
+/* Dots indicator */
+.ad-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+}
+
+.ad-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(107, 76, 59, 0.2);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.ad-dot.active {
+    width: 24px;
+    border-radius: 4px;
+    background: var(--deep-rose);
+}
+
+.ad-dot:hover {
+    background: var(--dusty-rose);
+}
+
+/* Update hero-right to accommodate the carousel */
+.hero-right {
+    position: relative;
+    background: linear-gradient(145deg, #e8d5c4, #d4c4b0);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Icon fallback styles */
+.category-ad-image-wrap i {
+    font-size: 64px;
+    color: var(--muted);
+    opacity: 0.5;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+    .category-ad-container {
+        padding: 1.5rem;
+    }
+    
+    .category-ad-carousel {
+        height: 300px;
+    }
+    
+    .category-ad-name {
+        font-size: 20px;
+    }
+    
+    .category-ad-desc {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 600px) {
+    .category-ad-carousel {
+        height: 280px;
+    }
+    
+    .category-ad-name {
+        font-size: 18px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ─── Hero ─── -->
+<section class="hero-section">
+    <div class="hero-left">
+        <div class="hero-eyebrow">Freshly curated blooms</div>
+        <h1 class="hero-title">
+            Nature's finest,<br>
+            <em>at your door</em>
+        </h1>
+        <p class="hero-desc">
+            Handpicked flowers and plants sourced directly from local farms — fresh, beautiful, and delivered with care.
+        </p>
+        <div class="hero-actions">
+            <a href="#featured-products" class="btn btn-rose">
+                <i class="ri-shopping-bag-line"></i> Shop Now
+            </a>
+            <a href="{{ url_for('templates.stores') }}" class="btn btn-ghost">
+                Browse Stores
+            </a>
+        </div>
+    </div>
+
+    <div class="hero-right">
+        <!-- Category Advertisement Carousel -->
+        <div class="category-ad-container">
+            <div class="category-ad-header">
+                <span class="ad-label">Shop by Category</span>
+                <div class="ad-controls">
+                    <button class="ad-control prev" onclick="rotateCategory(-1)"><i class="ri-arrow-left-s-line"></i></button>
+                    <button class="ad-control next" onclick="rotateCategory(1)"><i class="ri-arrow-right-s-line"></i></button>
+                </div>
+            </div>
+            
+            <div class="category-ad-carousel" id="categoryCarousel">
+                <!-- Item 1 -->
+                <div class="category-ad-item active">
+                    <a href="{{ url_for('templates.category', category_id='flowers') }}" class="category-ad-card">
+                        <div class="category-ad-image-wrap">
+                            <img src="../static/uploads/products/1771658413_OIP__3_-removebg-preview-Picsart-AiImageEnhancer.png" alt="Fresh Flowers" class="category-ad-image">
+                        </div>
+                    </a>
+                    <div class="category-ad-text">
+                        <div class="category-ad-name">Fresh Flowers</div>
+                        <div class="category-ad-desc">Roses, tulips, lilies & more</div>
+                        <a href="{{ url_for('templates.category', category_id='flowers') }}" class="category-ad-shop">Shop Now <i class="ri-arrow-right-line"></i></a>
+                    </div>
+                </div>
+
+                <!-- Item 2 -->
+                <div class="category-ad-item">
+                    <a href="{{ url_for('templates.category', category_id='plants') }}" class="category-ad-card">
+                        <div class="category-ad-image-wrap">
+                            <img src="../static/uploads/products/potted plants.webp" alt="Potted Plants" class="category-ad-image" onerror="this.parentElement.innerHTML='<i class=\'ri-plant-line\'></i>'">
+                        </div>
+                    </a>
+                    <div class="category-ad-text">
+                        <div class="category-ad-name">Potted Plants</div>
+                        <div class="category-ad-desc">Indoor & outdoor beauties</div>
+                        <a href="{{ url_for('templates.category', category_id='plants') }}" class="category-ad-shop">Shop Now <i class="ri-arrow-right-line"></i></a>
+                    </div>
+                </div>
+
+                <!-- Item 3 -->
+                <div class="category-ad-item">
+                    <a href="{{ url_for('templates.category', category_id='bouquets') }}" class="category-ad-card">
+                        <div class="category-ad-image-wrap">
+                            <img src="/static/uploads/products/p30_2_168170_b4128d2d.png" alt="Bouquets" class="category-ad-image" onerror="this.parentElement.innerHTML='<i class=\'ri-heart-line\'></i>'">
+                        </div>
+                    </a>
+                    <div class="category-ad-text">
+                        <div class="category-ad-name">Bouquets</div>
+                        <div class="category-ad-desc">Arrangements for every occasion</div>
+                        <a href="{{ url_for('templates.category', category_id='bouquets') }}" class="category-ad-shop">Shop Now <i class="ri-arrow-right-line"></i></a>
+                    </div>
+                </div>
+
+                <!-- Item 4 -->
+                <div class="category-ad-item">
+                    <a href="{{ url_for('templates.category', category_id='succulents') }}" class="category-ad-card">
+                        <div class="category-ad-image-wrap">
+                            <img src="../static/uploads/products/succ.jpg" alt="Succulents" class="category-ad-image" onerror="this.parentElement.innerHTML='<i class=\'ri-seedling-line\'></i>'">
+                        </div>
+                    </a>
+                    <div class="category-ad-text">
+                        <div class="category-ad-name">Succulents</div>
+                        <div class="category-ad-desc">Low-maintenance, high beauty</div>
+                        <a href="{{ url_for('templates.category', category_id='succulents') }}" class="category-ad-shop">Shop Now <i class="ri-arrow-right-line"></i></a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dots indicator -->
+            <div class="ad-dots" id="adDots">
+                <span class="ad-dot active" onclick="showCategory(0)"></span>
+                <span class="ad-dot" onclick="showCategory(1)"></span>
+                <span class="ad-dot" onclick="showCategory(2)"></span>
+                <span class="ad-dot" onclick="showCategory(3)"></span>
+            </div>
+        </div>
+
+        <!-- Falling petals decoration -->
+        <div class="hero-petals" id="heroPetals"></div>
+    </div>
+</section>
+
+<!-- ─── Categories ─── -->
+<section style="margin-bottom:5rem; ">
+    <div class="section-header">
+        <div>
+            <div class="section-label">Explore</div>
+            <h2 class="section-title">Shop by Category</h2>
+        </div>
+        <a href="{{ url_for('templates.categories') }}" class="btn btn-outline" style="flex-shrink:0;">
+            View All <i class="ri-arrow-right-line"></i>
+        </a>
+    </div>
+
+    <div class="categories-grid">
+    <!-- Item 1 -->
+    <div class="category-item">
+        <a href="{{ url_for('templates.category', category_id='flowers') }}" class="category-card">
+            <div class="category-image-wrap icon-pink">
+                <img src="../static/uploads/products/1771658413_OIP__3_-removebg-preview-Picsart-AiImageEnhancer.png" alt="Fresh Flowers" class="category-image">
+            </div>
+        </a>
+        <div class="category-text">
+            <div class="category-name">Fresh Flowers</div>
+            <div class="category-desc">Roses, tulips, lilies & more</div>
+        </div>
+    </div>
+
+    <!-- Item 2 -->
+    <div class="category-item">
+        <a href="{{ url_for('templates.category', category_id='plants') }}" class="category-card">
+            <div class="category-image-wrap icon-green">
+                <img src="../static/uploads/products/potted plants.webp" alt="Potted Plants" class="category-image" onerror="this.parentElement.innerHTML='<i class=\'ri-plant-line\'></i>'">
+            </div>
+        </a>
+        <div class="category-text">
+            <div class="category-name">Potted Plants</div>
+            <div class="category-desc">Indoor & outdoor beauties</div>
+        </div>
+    </div>
+
+    <!-- Item 3 -->
+    <div class="category-item">
+        <a href="{{ url_for('templates.category', category_id='bouquets') }}" class="category-card">
+            <div class="category-image-wrap icon-rose">
+                <img src="/static/uploads/products/p30_2_168170_b4128d2d.png" alt="Bouquets" class="category-image" onerror="this.parentElement.innerHTML='<i class=\'ri-heart-line\'></i>'">
+            </div>
+        </a>
+        <div class="category-text">
+            <div class="category-name">Bouquets</div>
+            <div class="category-desc">Arrangements for every occasion</div>
+        </div>
+    </div>
+
+    <!-- Item 4 -->
+    <div class="category-item">
+        <a href="{{ url_for('templates.category', category_id='succulents') }}" class="category-card">
+            <div class="category-image-wrap icon-lavender">
+                <img src="../static/uploads/products/succ.jpg" alt="Succulents" class="category-image" onerror="this.parentElement.innerHTML='<i class=\'ri-seedling-line\'></i>'">
+            </div>
+        </a>
+        <div class="category-text">
+            <div class="category-name">Succulents</div>
+            <div class="category-desc">Low-maintenance, high beauty</div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ─── Featured Products ─── -->
+<section class="featured-section" id="featured-products">
+    <div class="section-header">
+        <div>
+            <div class="section-label">Handpicked for you</div>
+            <h2 class="section-title">Featured Products</h2>
+        </div>
+        <a href="{{ url_for('templates.products') }}" class="btn btn-outline" style="flex-shrink:0;">
+            View All <i class="ri-arrow-right-line"></i>
+        </a>
+    </div>
+
+    {% if products and products|length > 0 %}
+    <div class="product-grid">
+        {% for product in products %}
+        <div class="product-card">
+            {% if product.stock_quantity < 10 %}
+            <div class="product-badge">Low Stock</div>
+            {% endif %}
+
+            <div class="product-image">
+                {% if product.image_url %}
+                <img src="{{ product.image_url }}" alt="{{ product.name }}"
+                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;opacity:0.2\'><i class=\'ri-image-line\'></i></div>';">
+                {% else %}
+                <div style="font-size:48px;opacity:0.2"><i class="ri-image-line"></i></div>
+                {% endif %}
+            </div>
+
+            <div class="product-content">
+                <div class="product-store">{{ product.store_name or 'Flower Shop' }}</div>
+                <h3 class="product-title">{{ product.name }}</h3>
+                <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
+
+                <div class="product-actions">
+                    {% if product.stock_quantity > 0 and product.is_available %}
+                    <button class="btn btn-primary" onclick='addToCart({
+                        id: {{ product.id }},
+                        name: "{{ product.name|replace('"', '\\"')|safe }}",
+                        price: {{ product.price }},
+                        store_id: {{ product.store_id }},
+                        store_name: "{{ product.store_name|replace('"', '\\"')|safe if product.store_name else 'Flower Shop' }}",
+                        image_url: "{{ product.image_url|safe if product.image_url else '' }}"
+                    })'>
+                        <i class="ri-shopping-bag-line"></i> Add to Bag
+                    </button>
+                    <button class="btn btn-outline btn-icon" onclick="viewProduct({{ product.id }})">
+                        <i class="ri-eye-line"></i>
+                    </button>
+                    {% else %}
+                    <button class="btn btn-outline" disabled style="flex:1;opacity:0.5;cursor:not-allowed;">
+                        Out of Stock
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="ri-leaf-line empty-state-icon"></i>
+        <p>No products yet</p>
+        <p style="font-size:13px;margin-top:0.5rem;font-family:var(--font-sans);">Check back soon for beautiful blooms!</p>
+    </div>
+    {% endif %}
+</section>
+
+<!-- ─── Featured Stores ─── -->
+<section style="margin-bottom:5rem;">
+    <div class="section-header">
+        <div>
+            <div class="section-label">Local Partners</div>
+            <h2 class="section-title">Featured Stores</h2>
+        </div>
+        <a href="{{ url_for('templates.stores') }}" class="btn btn-outline" style="flex-shrink:0;">
+            View All <i class="ri-arrow-right-line"></i>
+        </a>
+    </div>
+
+    {% if stores and stores|length > 0 %}
+    <div class="stores-grid">
+        {% for store in stores %}
+        <div class="store-card">
+            <div class="store-avatar">{{ store.name[0] if store.name else 'S' }}</div>
+            <div class="store-info">
+                <div class="store-name">{{ store.name }}</div>
+                <div class="store-address">
+                    {% if store.address %}
+                        {{ store.address[:55] }}{% if store.address|length > 55 %}…{% endif %}
+                    {% else %}
+                        <em style="font-style:italic;">Address not available</em>
+                    {% endif %}
+                </div>
+                <div class="store-meta">
+                    <span><i class="ri-star-fill"></i> 4.8</span>
+                    <span><i class="ri-map-pin-line"></i> {{ store.delivery_radius_km or 5 }}km radius</span>
+                </div>
+            </div>
+            <a href="{{ url_for('templates.store_detail', store_id=store.id) }}" class="btn btn-outline" style="flex-shrink:0;padding:0.6rem 1rem;font-size:13px;">
+                Visit
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="ri-store-line empty-state-icon"></i>
+        <p>No stores yet</p>
+    </div>
+    {% endif %}
+</section>
+
+<!-- ─── Why Choose ─── -->
+<section class="why-section">
+    <div class="why-header">
+        <div class="section-label">Our Promise</div>
+        <h2 class="section-title">Why Choose E-FLOWERS?</h2>
+    </div>
+    <div class="why-grid">
+        <div class="why-card">
+            <div class="why-icon-wrap"><i class="ri-truck-line"></i></div>
+            <div class="why-title">Fast Delivery</div>
+            <div class="why-desc">Same-day delivery within service areas. Always on time.</div>
+        </div>
+        <div class="why-card">
+            <div class="why-icon-wrap"><i class="ri-leaf-line"></i></div>
+            <div class="why-title">Farm Fresh</div>
+            <div class="why-desc">Sourced directly from local farms and trusted growers.</div>
+        </div>
+        <div class="why-card">
+            <div class="why-icon-wrap"><i class="ri-shield-check-line"></i></div>
+            <div class="why-title">Secure Payment</div>
+            <div class="why-desc">Multiple options with bank-grade security on every order.</div>
+        </div>
+        <div class="why-card">
+            <div class="why-icon-wrap"><i class="ri-customer-service-2-line"></i></div>
+            <div class="why-title">24/7 Support</div>
+            <div class="why-desc">Our team is always here for your floral needs.</div>
+        </div>
+    </div>
+</section>
+
+<!-- ─── Testimonials ─── -->
+<section class="testimonials-section">
+    <div class="section-header">
+        <div>
+            <div class="section-label">Happy Customers</div>
+            <h2 class="section-title">What They're Saying</h2>
+        </div>
+    </div>
+    <div class="testimonials-grid">
+        <div class="testimonial-card">
+            <div class="reviewer">
+                <div class="reviewer-avatar" style="background:linear-gradient(135deg,var(--blush),var(--dusty-rose));">M</div>
+                <div>
+                    <div class="reviewer-name">Maria Santos</div>
+                    <div class="stars">
+                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i>
+                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i>
+                    </div>
+                </div>
+            </div>
+            <p class="testimonial-text">The flowers arrived fresh and absolutely stunning! Delivery was faster than expected. Will definitely be ordering again for my next event.</p>
+        </div>
+
+        <div class="testimonial-card">
+            <div class="reviewer">
+                <div class="reviewer-avatar" style="background:linear-gradient(135deg,var(--sage),var(--deep-sage));">J</div>
+                <div>
+                    <div class="reviewer-name">John Dela Cruz</div>
+                    <div class="stars">
+                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i>
+                        <i class="ri-star-fill"></i><i class="ri-star-half-fill"></i>
+                    </div>
+                </div>
+            </div>
+            <p class="testimonial-text">Perfect birthday surprise for my wife. The bouquet was exactly as shown online, and customer service was excellent throughout the whole process.</p>
+        </div>
+
+        <div class="testimonial-card">
+            <div class="reviewer">
+                <div class="reviewer-avatar" style="background:linear-gradient(135deg,var(--terracotta),var(--bark));">A</div>
+                <div>
+                    <div class="reviewer-name">Anna Reyes</div>
+                    <div class="stars">
+                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i>
+                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i>
+                    </div>
+                </div>
+            </div>
+            <p class="testimonial-text">As a plant enthusiast, I'm truly impressed. The succulents arrived healthy, beautifully packaged, and the variety available is just wonderful.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ─── Newsletter ─── -->
+<section class="newsletter-section">
+    <div class="section-label" style="justify-content:center;display:flex;">Stay in Bloom</div>
+    <h2 class="section-title" style="margin-bottom:0.75rem;">Exclusive Offers & Arrivals</h2>
+    <p class="newsletter-desc">Subscribe for seasonal deals, new flower collections, and care tips delivered to your inbox.</p>
+    <div class="newsletter-form">
+        <input type="email" class="newsletter-input" id="newsletterEmail" placeholder="Your email address">
+        <button class="btn btn-rose" onclick="subscribeNewsletter()">Subscribe</button>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function viewProduct(productId) {
+        window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
+    }
+
+    function subscribeNewsletter() {
+        const email = document.getElementById('newsletterEmail').value;
+        if (email && email.includes('@')) {
+            showToast('✓ Thanks for subscribing! Check your email for offers.');
+            document.getElementById('newsletterEmail').value = '';
+        } else {
+            showToast('Please enter a valid email address');
+        }
+    }
+
+    // Animated falling petals
+    document.addEventListener('DOMContentLoaded', function() {
+        const container = document.getElementById('heroPetals');
+        if (!container) return;
+        for (let i = 0; i < 8; i++) {
+            const petal = document.createElement('div');
+            petal.className = 'petal';
+            petal.style.cssText = `
+                left: ${10 + Math.random() * 80}%;
+                animation-duration: ${5 + Math.random() * 6}s;
+                animation-delay: ${Math.random() * 5}s;
+                width: ${8 + Math.random() * 8}px;
+                height: ${12 + Math.random() * 10}px;
+                transform: rotate(${Math.random() * 360}deg);
+                opacity: ${0.15 + Math.random() * 0.2};
+            `;
+            container.appendChild(petal);
+        }
+
+        // Safety check for addToCart function
+        if (typeof addToCart !== 'function') {
+            console.warn('addToCart function not found in base.html - make sure base.html is properly loaded');
+        }
+    });
+
+
+</script>
+
+
+
+<script>
+// Category Advertisement Carousel
+let currentCategoryIndex = 0;
+const categoryItems = document.querySelectorAll('.category-ad-item');
+const dots = document.querySelectorAll('.ad-dot');
+const totalCategories = categoryItems.length;
+let autoRotateInterval;
+
+function showCategory(index) {
+    // Handle wrap around
+    if (index < 0) index = totalCategories - 1;
+    if (index >= totalCategories) index = 0;
+    
+    // Update active class on items
+    categoryItems.forEach(item => item.classList.remove('active'));
+    categoryItems[index].classList.add('active');
+    
+    // Update dots
+    dots.forEach(dot => dot.classList.remove('active'));
+    dots[index].classList.add('active');
+    
+    currentCategoryIndex = index;
+}
+
+function rotateCategory(direction) {
+    showCategory(currentCategoryIndex + direction);
+}
+
+// Auto-rotate every 2 seconds
+function startAutoRotate() {
+    autoRotateInterval = setInterval(() => rotateCategory(1), 2000);
+}
+
+// Stop auto-rotate
+function stopAutoRotate() {
+    clearInterval(autoRotateInterval);
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Start auto-rotation
+    startAutoRotate();
+    
+    // Pause auto-rotate on hover
+    const carousel = document.querySelector('.category-ad-container');
+    if (carousel) {
+        carousel.addEventListener('mouseenter', stopAutoRotate);
+        carousel.addEventListener('mouseleave', startAutoRotate);
+    }
+    
+    // Initialize falling petals
+    const container = document.getElementById('heroPetals');
+    if (!container) return;
+    for (let i = 0; i < 8; i++) {
+        const petal = document.createElement('div');
+        petal.className = 'petal';
+        petal.style.cssText = `
+            left: ${10 + Math.random() * 80}%;
+            animation-duration: ${5 + Math.random() * 6}s;
+            animation-delay: ${Math.random() * 5}s;
+            width: ${8 + Math.random() * 8}px;
+            height: ${12 + Math.random() * 10}px;
+            transform: rotate(${Math.random() * 360}deg);
+            opacity: ${0.15 + Math.random() * 0.2};
+        `;
+        container.appendChild(petal);
+    }
+});
+
+// Add click handlers for controls
+document.querySelector('.ad-control.prev')?.addEventListener('click', function() {
+    stopAutoRotate();
+    rotateCategory(-1);
+    startAutoRotate();
+});
+
+document.querySelector('.ad-control.next')?.addEventListener('click', function() {
+    stopAutoRotate();
+    rotateCategory(1);
+    startAutoRotate();
+});
+
+// Add click handlers for dots
+dots.forEach((dot, index) => {
+    dot.addEventListener('click', function() {
+        stopAutoRotate();
+        showCategory(index);
+        startAutoRotate();
+    });
+});
+</script>
+{% endblock %}

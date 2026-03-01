@@ -1,0 +1,880 @@
+{% extends "layout.html" %}
+
+{% block title %}Orders Management - Seller{% endblock %}
+
+{% block page_title %}Orders Management{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="input-group">
+            <input type="text" class="form-control" placeholder="Search orders..." id="searchInput">
+            <select class="form-select" style="max-width: 150px;" id="statusFilter">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="accepted">Accepted</option>
+                <option value="preparing">Preparing</option>
+                <option value="on_delivery">On Delivery</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+            <button class="btn btn-outline-primary" type="button">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createOrderModal">
+            <i class="fas fa-plus-circle me-2"></i>Create Order
+        </button>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
+        <div class="card stat-card border-left-primary">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">Today</div>
+                        <div class="h4 mb-0">12</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-calendar-day fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
+        <div class="card stat-card border-left-warning">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">Pending</div>
+                        <div class="h4 mb-0">5</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-clock fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
+        <div class="card stat-card border-left-info">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">Processing</div>
+                        <div class="h4 mb-0">3</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-cogs fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
+        <div class="card stat-card border-left-secondary">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">On Delivery</div>
+                        <div class="h4 mb-0">2</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-shipping-fast fa-2x text-secondary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
+        <div class="card stat-card border-left-success">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">Delivered</div>
+                        <div class="h4 mb-0">8</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-check-circle fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
+        <div class="card stat-card border-left-danger">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="text-muted">Cancelled</div>
+                        <div class="h4 mb-0">1</div>
+                    </div>
+                    <div class="ms-auto">
+                        <i class="fas fa-times-circle fa-2x text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Orders Table -->
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Order ID</th>
+                        <th>Customer</th>
+                        <th>Date</th>
+                        <th>Items</th>
+                        <th>Amount</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th>Delivery</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td>
+                            <strong>#{{ order.id }}</strong>
+                            <br>
+                            <small class="text-muted">
+                                <i class="fas fa-{{ 'store' if order.order_type == 'walkin' else 'mobile-alt' }}"></i>
+                                {{ order.order_type|capitalize }}
+                            </small>
+                        </td>
+                        <td>
+                            <div class="fw-bold">{{ order.customer_name }}</div>
+                            <small class="text-muted">{{ order.customer_phone }}</small>
+                        </td>
+                        <td>
+                           <div>{{ order.created_at.strftime('%Y-%m-%d %H:%M') if order.created_at else '' }}</div>
+                        <small class="text-muted">
+    {% if order.created_at and 'T' in order.created_at %}
+        {{ order.created_at.split('T')[1][:5] }}
+    {% endif %}
+</small>
+                        </td>
+                        <td>
+                            <div>{{ order.items_count }} items</div>
+                            <button class="btn btn-sm btn-outline-info mt-1 view-items" 
+                                    data-order-id="{{ order.id }}">
+                                View Items
+                            </button>
+                        </td>
+                        <td>
+                     <div class="fw-bold">₱{{ "%.2f"|format(order.total_amount) if order.total_amount else "0.00" }}</div>
+                        </td>
+                        <td>
+                            <span class="badge 
+                                {% if order.payment_status == 'paid' %}bg-success
+                                {% elif order.payment_status == 'pending' %}bg-warning
+                                {% elif order.payment_status == 'verified' %}bg-info
+                                {% else %}bg-secondary{% endif %}">
+                                {{ order.payment_status|capitalize }}
+                            </span>
+                            <br>
+                            <small>{{ order.payment_method|capitalize }}</small>
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm order-status" 
+                                    data-order-id="{{ order.id }}"
+                                    style="width: 140px;">
+                                <option value="pending" {% if order.status == 'pending' %}selected{% endif %}>Pending</option>
+                                <option value="accepted" {% if order.status == 'accepted' %}selected{% endif %}>Accepted</option>
+                                <option value="preparing" {% if order.status == 'preparing' %}selected{% endif %}>Preparing</option>
+                                <option value="on_delivery" {% if order.status == 'on_delivery' %}selected{% endif %}>On Delivery</option>
+                                <option value="delivered" {% if order.status == 'delivered' %}selected{% endif %}>Delivered</option>
+                                <option value="cancelled" {% if order.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                            </select>
+                        </td>
+                        <td>
+                            {% if order.rider_name %}
+                            <div class="fw-bold">{{ order.rider_name }}</div>
+                            <small class="text-muted">{{ order.rider_vehicle }}</small>
+                            {% else %}
+                            <button class="btn btn-sm btn-outline-primary assign-rider" 
+                                    data-order-id="{{ order.id }}">
+                                Assign Rider
+                            </button>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary view-order" 
+                                        data-order-id="{{ order.id }}"
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#viewOrderModal">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-outline-success print-order" 
+                                        data-order-id="{{ order.id }}">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                                {% if order.payment_proof %}
+                                <button class="btn btn-outline-info view-payment" 
+                                        data-proof="{{ order.payment_proof_url }}"
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#paymentModal">
+                                    <i class="fas fa-receipt"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center">
+                <li class="page-item disabled">
+                    <a class="page-link" href="#">Previous</a>
+                </li>
+                <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                <li class="page-item"><a class="page-link" href="#">2</a></li>
+                <li class="page-item"><a class="page-link" href="#">3</a></li>
+                <li class="page-item">
+                    <a class="page-link" href="#">Next</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<!-- Create Order Modal -->
+<div class="modal fade" id="createOrderModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Order</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createOrderForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <!-- Customer Details -->
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-user me-2"></i>Customer Details</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Customer Name *</label>
+                                            <input type="text" class="form-control" name="customer_name" required>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Contact Number</label>
+                                            <input type="tel" class="form-control" name="customer_phone">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Delivery Address</label>
+                                        <textarea class="form-control" name="delivery_address" rows="2"></textarea>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Order Type</label>
+                                            <select class="form-select" name="order_type">
+                                                <option value="walkin">Walk-in</option>
+                                                <option value="online">Online</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Payment Method</label>
+                                            <select class="form-select" name="payment_method">
+                                                <option value="cash">Cash</option>
+                                                <option value="gcash">GCash</option>
+                                                <option value="card">Credit/Debit Card</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Products Selection -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-shopping-cart me-2"></i>Select Products</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table" id="productsTable">
+                                            <thead>
+                                                <tr>
+                                                    <th>Product</th>
+                                                    <th>Price</th>
+                                                    <th>Stock</th>
+                                                    <th>Quantity</th>
+                                                    <th>Total</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="orderItems">
+                                                <!-- Items will be added here -->
+                                            </tbody>
+                                            <tfoot>
+                                                <tr>
+                                                    <td colspan="4" class="text-end fw-bold">Subtotal:</td>
+                                                    <td id="subtotal">₱0.00</td>
+                                                    <td></td>
+                                                </tr>
+                                                <tr>
+                                                    <td colspan="4" class="text-end fw-bold">Delivery Fee:</td>
+                                                    <td>
+                                                        <input type="number" class="form-control form-control-sm" 
+                                                               id="deliveryFee" value="50" style="width: 100px; display: inline;">
+                                                    </td>
+                                                    <td></td>
+                                                </tr>
+                                                <tr>
+                                                    <td colspan="4" class="text-end fw-bold">Total:</td>
+                                                    <td id="totalAmount" class="h5 text-primary">₱0.00</td>
+                                                    <td></td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                    
+                                    <button type="button" class="btn btn-outline-primary" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#addProductModal">
+                                        <i class="fas fa-plus me-2"></i>Add Product
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <!-- Order Summary -->
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-receipt me-2"></i>Order Summary</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Order Notes</label>
+                                        <textarea class="form-control" name="notes" rows="3"></textarea>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Delivery Date & Time</label>
+                                        <input type="datetime-local" class="form-control" name="delivery_time">
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Assign Rider</label>
+                                        <select class="form-select" name="rider_id">
+                                            <option value="">Select Rider</option>
+                                            {% for rider in riders %}
+                                            <option value="{{ rider.id }}">{{ rider.name }} - {{ rider.vehicle }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Initial Status</label>
+                                        <select class="form-select" name="status">
+                                            <option value="pending">Pending</option>
+                                            <option value="accepted">Accepted</option>
+                                            <option value="preparing">Preparing</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Quick Actions -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-grid gap-2">
+                                        <button type="button" class="btn btn-outline-success" id="saveDraftBtn">
+                                            <i class="fas fa-save me-2"></i>Save as Draft
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary" id="sendInvoiceBtn">
+                                            <i class="fas fa-paper-plane me-2"></i>Send Invoice
+                                        </button>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-check-circle me-2"></i>Create Order
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Order Modal -->
+<div class="modal fade" id="viewOrderModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Order Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="orderDetails">
+                    <!-- Order details will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="printOrderBtn">
+                    <i class="fas fa-print me-2"></i>Print Invoice
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Proof Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Payment Proof</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="paymentProofImage" src="" class="img-fluid rounded" style="max-height: 500px;">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success" id="verifyPaymentBtn">
+                    <i class="fas fa-check-circle me-2"></i>Verify Payment
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Rider Modal -->
+<div class="modal fade" id="assignRiderModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assign Rider</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="assignRiderForm">
+                <div class="modal-body">
+                    <input type="hidden" id="assign_order_id" name="order_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Select Rider *</label>
+                        <select class="form-select" id="rider_id" name="rider_id" required>
+                            <option value="">Select Rider</option>
+                            {% for rider in available_riders %}
+                            <option value="{{ rider.id }}">
+                                {{ rider.name }} - {{ rider.vehicle }} 
+                                ({{ 'Available' if rider.is_available else 'Busy' }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Delivery Instructions</label>
+                        <textarea class="form-control" name="instructions" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign Rider</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Order Items Modal -->
+<div class="modal fade" id="itemsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Order Items</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="itemsList">
+                    <!-- Items will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Update order status
+    document.querySelectorAll('.order-status').forEach(select => {
+        select.addEventListener('change', function() {
+            const orderId = this.dataset.orderId;
+            const status = this.value;
+            
+            fetch(`/api/v1/seller/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ status: status })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    showAlert('success', 'Order status updated');
+                    
+                    // If status changed to on_delivery and no rider assigned, show assign rider modal
+                    if (status === 'on_delivery') {
+                        const row = this.closest('tr');
+                        if (!row.querySelector('.assign-rider').disabled) {
+                            showAssignRiderModal(orderId);
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                showAlert('danger', 'Error updating status');
+                this.value = this.dataset.previousValue;
+            });
+            
+            this.dataset.previousValue = status;
+        });
+    });
+    
+    // Assign rider
+    document.querySelectorAll('.assign-rider').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.dataset.orderId;
+            showAssignRiderModal(orderId);
+        });
+    });
+    
+    function showAssignRiderModal(orderId) {
+        document.getElementById('assign_order_id').value = orderId;
+        const modal = new bootstrap.Modal(document.getElementById('assignRiderModal'));
+        modal.show();
+    }
+    
+    // View order items
+    document.querySelectorAll('.view-items').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.dataset.orderId;
+            
+            fetch(`/api/v1/seller/orders/${orderId}/items`)
+                .then(response => response.json())
+                .then(items => {
+                    const itemsList = document.getElementById('itemsList');
+                    let html = '<table class="table table-sm">';
+                    html += '<thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    items.forEach(item => {
+                        html += `
+                            <tr>
+                                <td>${item.product_name}</td>
+                                <td>${item.quantity}</td>
+                                <td>₱${item.price}</td>
+                                <td>₱${item.quantity * item.price}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                    itemsList.innerHTML = html;
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('itemsModal'));
+                    modal.show();
+                });
+        });
+    });
+    
+    // View order details
+    document.querySelectorAll('.view-order').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.dataset.orderId;
+            
+            fetch(`/api/v1/seller/orders/${orderId}`)
+                .then(response => response.json())
+                .then(order => {
+                    const orderDetails = document.getElementById('orderDetails');
+                    orderDetails.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Order Information</h6>
+                                <table class="table table-bordered">
+                                    <tr><th>Order ID:</th><td>#${order.id}</td></tr>
+                                    <tr><th>Customer:</th><td>${order.customer_name}</td></tr>
+                                    <tr><th>Contact:</th><td>${order.customer_phone || 'N/A'}</td></tr>
+                                    <tr><th>Order Type:</th><td>${order.order_type}</td></tr>
+                                    <tr><th>Date:</th><td>${order.created_at}</td></tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Payment & Delivery</h6>
+                                <table class="table table-bordered">
+                                    <tr><th>Status:</th><td><span class="badge bg-${getStatusColor(order.status)}">${order.status}</span></td></tr>
+                                    <tr><th>Payment Method:</th><td>${order.payment_method}</td></tr>
+                                    <tr><th>Payment Status:</th><td><span class="badge bg-${getPaymentStatusColor(order.payment_status)}">${order.payment_status}</span></td></tr>
+                                    <tr><th>Total Amount:</th><td class="fw-bold">₱${order.total_amount}</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <h6>Delivery Information</h6>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <p><strong>Address:</strong> ${order.delivery_address || 'N/A'}</p>
+                                        ${order.delivery_notes ? `<p><strong>Notes:</strong> ${order.delivery_notes}</p>` : ''}
+                                        ${order.rider_name ? `<p><strong>Rider:</strong> ${order.rider_name} (${order.rider_vehicle})</p>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <h6>Order Items</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered">
+                                        <thead>
+                                            <tr>
+                                                <th>Product</th>
+                                                <th>Quantity</th>
+                                                <th>Price</th>
+                                                <th>Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${order.items.map(item => `
+                                                <tr>
+                                                    <td>${item.product_name}</td>
+                                                    <td>${item.quantity}</td>
+                                                    <td>₱${item.price}</td>
+                                                    <td>₱${item.quantity * item.price}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colspan="3" class="text-end fw-bold">Total:</td>
+                                                <td class="fw-bold">₱${order.total_amount}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.getElementById('printOrderBtn').dataset.orderId = orderId;
+                });
+        });
+    });
+    
+    // View payment proof
+    document.querySelectorAll('.view-payment').forEach(button => {
+        button.addEventListener('click', function() {
+            const proofUrl = this.dataset.proof;
+            document.getElementById('paymentProofImage').src = proofUrl;
+            document.getElementById('verifyPaymentBtn').dataset.orderId = this.closest('tr').querySelector('.order-status').dataset.orderId;
+        });
+    });
+    
+    // Verify payment
+    document.getElementById('verifyPaymentBtn').addEventListener('click', function() {
+        const orderId = this.dataset.orderId;
+        
+        fetch(`/api/v1/seller/orders/${orderId}/verify-payment`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                showAlert('success', 'Payment verified successfully');
+                bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
+                location.reload();
+            }
+        })
+        .catch(error => {
+            showAlert('danger', 'Error verifying payment');
+        });
+    });
+    
+    // Print order
+    document.querySelectorAll('.print-order').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.dataset.orderId;
+            window.open(`/seller/orders/${orderId}/print`, '_blank');
+        });
+    });
+    
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const statusFilter = document.getElementById('statusFilter').value;
+        const rows = document.querySelectorAll('tbody tr');
+        
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            const status = row.querySelector('.order-status').value;
+            
+            const matchesSearch = text.includes(searchTerm);
+            const matchesStatus = !statusFilter || status === statusFilter;
+            
+            row.style.display = matchesSearch && matchesStatus ? '' : 'none';
+        });
+    });
+    
+    document.getElementById('statusFilter').addEventListener('change', function() {
+        document.getElementById('searchInput').dispatchEvent(new Event('input'));
+    });
+    
+    // Form submissions
+    document.getElementById('createOrderForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Collect order data
+        const orderData = {
+            customer_name: this.querySelector('[name="customer_name"]').value,
+            customer_phone: this.querySelector('[name="customer_phone"]').value,
+            delivery_address: this.querySelector('[name="delivery_address"]').value,
+            order_type: this.querySelector('[name="order_type"]').value,
+            payment_method: this.querySelector('[name="payment_method"]').value,
+            notes: this.querySelector('[name="notes"]').value,
+            delivery_time: this.querySelector('[name="delivery_time"]').value,
+            rider_id: this.querySelector('[name="rider_id"]').value,
+            status: this.querySelector('[name="status"]').value,
+            items: getOrderItems()
+        };
+        
+        fetch('/api/v1/seller/orders', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify(orderData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                showAlert('success', 'Order created successfully');
+                location.reload();
+            }
+        })
+        .catch(error => {
+            showAlert('danger', 'Error creating order');
+        });
+    });
+    
+    document.getElementById('assignRiderForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const orderId = document.getElementById('assign_order_id').value;
+        
+        fetch(`/api/v1/seller/orders/${orderId}/assign-rider`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                showAlert('success', 'Rider assigned successfully');
+                location.reload();
+            }
+        })
+        .catch(error => {
+            showAlert('danger', 'Error assigning rider');
+        });
+    });
+    
+    function getOrderItems() {
+        const items = [];
+        document.querySelectorAll('#orderItems tr').forEach(row => {
+            if (row.dataset.productId) {
+                items.push({
+                    product_id: row.dataset.productId,
+                    quantity: parseInt(row.querySelector('.item-quantity').value),
+                    price: parseFloat(row.querySelector('.item-price').value)
+                });
+            }
+        });
+        return items;
+    }
+    
+    function getStatusColor(status) {
+        const colors = {
+            'pending': 'warning',
+            'accepted': 'info',
+            'preparing': 'primary',
+            'on_delivery': 'secondary',
+            'delivered': 'success',
+            'cancelled': 'danger'
+        };
+        return colors[status] || 'secondary';
+    }
+    
+    function getPaymentStatusColor(status) {
+        const colors = {
+            'pending': 'warning',
+            'paid': 'success',
+            'verified': 'info',
+            'refunded': 'danger'
+        };
+        return colors[status] || 'secondary';
+    }
+    
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.querySelector('.main-content').insertBefore(alert, document.querySelector('.main-content').firstChild);
+        
+        setTimeout(() => alert.remove(), 5000);
+    }
+</script>
+{% endblock %}

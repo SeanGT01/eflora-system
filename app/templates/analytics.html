@@ -1,0 +1,1536 @@
+{% extends "layout.html" %}
+
+{% block title %}Analytics — E-FLOWERS{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ─── Design Tokens (E-FLOWERS system) ─────────────────── */
+:root {
+  --cream:        #faf6f0;
+  --warm-white:   #fffdf9;
+  --blush:        #f2c4ce;
+  --deep-rose:    #b5445a;
+  --dusty-rose:   #d4788a;
+  --sage:         #7a9e7e;
+  --deep-sage:    #4a6b4e;
+  --terracotta:   #c4714b;
+  --bark:         #6b4c3b;
+  --charcoal:     #2c2520;
+  --muted:        #9a8d85;
+  --border:       rgba(107,76,59,.12);
+  --border-md:    rgba(107,76,59,.22);
+  --font-display: 'Cormorant Garamond', serif;
+  --font-sans:    'DM Sans', sans-serif;
+  --radius-sm:    8px;
+  --radius-md:    14px;
+  --radius-lg:    22px;
+  --radius-xl:    32px;
+  --shadow-card:  0 2px 16px rgba(42,35,30,.07);
+  --shadow-hover: 0 8px 36px rgba(42,35,30,.13);
+  --transition:   all .32s cubic-bezier(.4,0,.2,1);
+}
+
+/* ─── Shell ─────────────────────────────────────────────── */
+.ana {
+  background: var(--cream);
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--charcoal);
+  padding: 2rem 2.5rem 5rem;
+  max-width: 1380px;
+  margin: 0 auto;
+}
+
+/* ─── Page Header ───────────────────────────────────────── */
+.ana-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 2.25rem;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+.ana-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--dusty-rose);
+  margin-bottom: .35rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.ana-eyebrow::before {
+  content: '';
+  width: 20px; height: 1.5px;
+  background: var(--dusty-rose);
+  display: inline-block;
+}
+
+.ana-title {
+  font-family: var(--font-display);
+  font-size: clamp(28px,3.2vw,40px);
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--charcoal);
+}
+
+.ana-title em { font-style: italic; color: var(--deep-rose); }
+
+/* ─── Period Bar ────────────────────────────────────────── */
+.period-bar {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: .35rem .5rem;
+  flex-wrap: wrap;
+}
+
+.period-btn {
+  padding: .45rem 1.1rem;
+  border-radius: 100px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.period-btn:hover { color: var(--charcoal); }
+
+.period-btn.active {
+  background: var(--charcoal);
+  color: var(--cream);
+  box-shadow: 0 2px 8px rgba(44,37,32,.25);
+}
+
+.period-divider {
+  width: 1px; height: 18px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.custom-btn {
+  padding: .45rem 1rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.custom-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); }
+
+/* ─── Custom Range Drawer ───────────────────────────────── */
+.custom-drawer {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.75rem;
+  display: none;
+  margin-bottom: 1.5rem;
+  align-items: flex-end;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  animation: slideDown .25s ease;
+}
+
+.custom-drawer.open { display: flex; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.drawer-field { display: flex; flex-direction: column; gap: .4rem; }
+
+.drawer-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.drawer-input {
+  padding: .65rem 1rem;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--charcoal);
+  background: var(--cream);
+  transition: var(--transition);
+}
+
+.drawer-input:focus {
+  outline: none;
+  border-color: var(--deep-rose);
+  box-shadow: 0 0 0 3px rgba(181,68,90,.08);
+}
+
+.apply-btn {
+  padding: .68rem 1.5rem;
+  background: var(--deep-rose);
+  color: white;
+  border: none;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.apply-btn:hover { background: #9b3048; transform: translateY(-1px); }
+
+/* ─── KPI Strip ─────────────────────────────────────────── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4,1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+.kpi-card {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem 1.75rem;
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.kpi-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .4s ease;
+}
+
+.kpi-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+.kpi-card:hover::after { transform: scaleX(1); }
+
+.kpi-card:nth-child(1)::after { background: linear-gradient(90deg,var(--deep-rose),var(--dusty-rose)); }
+.kpi-card:nth-child(2)::after { background: linear-gradient(90deg,var(--sage),var(--deep-sage)); }
+.kpi-card:nth-child(3)::after { background: linear-gradient(90deg,var(--terracotta),#e8906a); }
+.kpi-card:nth-child(4)::after { background: linear-gradient(90deg,var(--bark),var(--charcoal)); }
+
+.kpi-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kpi-ico {
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+}
+
+.kpi-card:nth-child(1) .kpi-ico { background:rgba(181,68,90,.1);  color:var(--deep-rose); }
+.kpi-card:nth-child(2) .kpi-ico { background:rgba(122,158,126,.14); color:var(--sage); }
+.kpi-card:nth-child(3) .kpi-ico { background:rgba(196,113,75,.13); color:var(--terracotta); }
+.kpi-card:nth-child(4) .kpi-ico { background:rgba(107,76,59,.1);  color:var(--bark); }
+
+.kpi-val {
+  font-family: var(--font-display);
+  font-size: clamp(26px,2.8vw,36px);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--charcoal);
+  margin-bottom: .3rem;
+}
+
+.kpi-sub { font-size: 12px; color: var(--muted); margin-bottom: .85rem; }
+
+.kpi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 100px;
+}
+
+.badge-up   { background:rgba(122,158,126,.15); color:var(--deep-sage); }
+.badge-down { background:rgba(181,68,90,.1);   color:var(--deep-rose); }
+
+/* ─── Panel Base ────────────────────────────────────────── */
+.panel {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.35rem 1.75rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.panel-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--deep-rose);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: .3rem .75rem;
+  border-radius: 100px;
+  border: 1.5px solid transparent;
+  transition: var(--transition);
+}
+
+.panel-link:hover { border-color: var(--deep-rose); background: rgba(181,68,90,.05); }
+
+.chart-pad { padding: 1.5rem 1.75rem; }
+
+/* ─── Row Layouts ───────────────────────────────────────── */
+.row-2-1 { display: grid; grid-template-columns: 1fr 360px; gap: 1.5rem; margin-bottom: 1.5rem; }
+.row-3   { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
+.row-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+
+/* ─── Top Products in panel ─────────────────────────────── */
+.prod-rank {
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+  padding: .85rem 1.75rem;
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.prod-rank:last-child { border-bottom: none; }
+.prod-rank:hover { background: var(--cream); }
+
+.rk-num {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.gold   { background:rgba(255,210,63,.2); color:#b8860b; }
+.silver { background:rgba(150,150,160,.15); color:#555; }
+.bronze { background:rgba(196,113,75,.15); color:var(--terracotta); }
+.plain  { background:var(--cream); color:var(--muted); border:1px solid var(--border); }
+
+.rk-info { flex:1; min-width:0; }
+.rk-name { font-size:13.5px; font-weight:600; color:var(--charcoal); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rk-cat  { font-size:11px; color:var(--muted); margin-top:1px; }
+
+.rk-right { text-align:right; flex-shrink:0; }
+.rk-rev { font-family:var(--font-display); font-size:17px; font-weight:500; color:var(--charcoal); }
+.rk-qty { font-size:11px; color:var(--muted); }
+
+/* ─── Delivery Stats ────────────────────────────────────── */
+.delivery-stats {
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.dstat {
+  background: var(--warm-white);
+  padding: 1.4rem 1.25rem;
+  text-align: center;
+}
+
+.dstat-val {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1;
+  margin-bottom: .3rem;
+}
+
+.dstat-val.green { color: var(--deep-sage); }
+.dstat-val.blue  { color: #5b87c5; }
+.dstat-val.amber { color: var(--terracotta); }
+
+.dstat-label { font-size: 11.5px; color: var(--muted); }
+
+/* ─── Rating Section ────────────────────────────────────── */
+.rating-big {
+  text-align: center;
+  padding: 1.5rem 1.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.rating-num {
+  font-family: var(--font-display);
+  font-size: 56px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--charcoal);
+}
+
+.stars-row {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+  margin: .5rem 0 .35rem;
+  font-size: 18px;
+}
+
+.star-full  { color: #f0b429; }
+.star-half  { color: #f0b429; opacity: .6; }
+.star-empty { color: #e0d5cf; }
+
+.rating-count { font-size: 12.5px; color: var(--muted); }
+
+.rating-bars { padding: 1rem 1.75rem; }
+
+.rbar-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .6rem;
+}
+
+.rbar-label {
+  width: 42px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.rbar-label i { font-size: 10px; color: #f0b429; }
+
+.rbar-track {
+  flex: 1;
+  height: 7px;
+  background: rgba(107,76,59,.08);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.rbar-fill {
+  height: 100%;
+  border-radius: 100px;
+  background: linear-gradient(90deg, #f0b429, #f5c842);
+  transition: width 1s cubic-bezier(.4,0,.2,1);
+}
+
+.rbar-count { font-size: 12px; color: var(--muted); width: 28px; text-align: right; flex-shrink: 0; }
+
+/* ─── Reviews Feed ──────────────────────────────────────── */
+.reviews-feed { padding: 0; }
+
+.review-item {
+  display: flex;
+  gap: .85rem;
+  padding: 1rem 1.75rem;
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.review-item:last-child { border-bottom: none; }
+.review-item:hover { background: var(--cream); }
+
+.rv-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-family: var(--font-display);
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.rv-body { flex: 1; min-width: 0; }
+
+.rv-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .25rem;
+}
+
+.rv-name { font-size: 13px; font-weight: 600; color: var(--charcoal); }
+
+.rv-stars {
+  display: flex;
+  gap: 2px;
+  font-size: 10px;
+  color: #f0b429;
+}
+
+.rv-text { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+/* ─── Orders Table ──────────────────────────────────────── */
+.table-scroll { overflow-x: auto; }
+
+table.ana-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ana-table thead th {
+  padding: .7rem 1.4rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--cream);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ana-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.ana-table tbody tr:last-child { border-bottom: none; }
+.ana-table tbody tr:hover { background: rgba(250,246,240,.7); }
+
+.ana-table td { padding: .9rem 1.4rem; vertical-align: middle; }
+
+.oid { font-family: var(--font-display); font-size: 15px; font-weight: 500; }
+
+.cust-cell { display: flex; align-items: center; gap: .6rem; }
+.c-av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-family: var(--font-display); font-size: 13px; flex-shrink: 0; }
+.c-nm { font-weight: 500; }
+
+.amt-cell { font-family: var(--font-display); font-size: 15px; font-weight: 500; }
+
+.s-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.s-pill::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+
+.sp-delivered { background:rgba(122,158,126,.15); color:var(--deep-sage); }
+.sp-delivered::before { background:var(--sage); }
+.sp-delivery  { background:rgba(196,113,75,.13); color:var(--terracotta); }
+.sp-delivery::before { background:var(--terracotta); animation: blink 1.5s infinite; }
+.sp-processing{ background:rgba(181,68,90,.1); color:var(--deep-rose); }
+.sp-processing::before { background:var(--deep-rose); }
+.sp-pending   { background:rgba(107,76,59,.1); color:var(--muted); }
+.sp-pending::before { background:var(--muted); }
+
+@keyframes blink {
+  0%,100% { opacity:1; } 50% { opacity:.3; }
+}
+
+/* ─── Export Bar ────────────────────────────────────────── */
+.export-bar {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.4rem 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.export-label {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.export-label span { color: var(--deep-rose); font-style: italic; }
+
+.export-btns { display: flex; gap: .6rem; flex-wrap: wrap; }
+
+.exp-btn {
+  padding: .55rem 1.2rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--charcoal);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.exp-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); background: rgba(181,68,90,.05); transform: translateY(-1px); }
+
+.exp-btn.primary { background: var(--deep-rose); color: white; border-color: var(--deep-rose); }
+.exp-btn.primary:hover { background: #9b3048; color: white; }
+
+/* ─── Share Modal ───────────────────────────────────────── */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(42,35,30,.5);
+  backdrop-filter: blur(6px);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1200;
+  padding: 1.5rem;
+}
+
+.modal-bg.open { display: flex; animation: fadeIn .2s ease; }
+
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.share-modal {
+  background: var(--warm-white);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 480px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(42,35,30,.2);
+  animation: popUp .25s ease;
+}
+
+@keyframes popUp {
+  from { transform: scale(.95) translateY(10px); opacity:0; }
+  to   { transform: scale(1)   translateY(0);    opacity:1; }
+}
+
+.share-head {
+  background: var(--charcoal);
+  padding: 1.5rem 2rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.share-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--cream);
+}
+
+.modal-close {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.15);
+  color: rgba(255,255,255,.7);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.modal-close:hover { background: rgba(255,255,255,.2); color: white; }
+
+.share-body { padding: 1.75rem 2rem 2rem; }
+
+.share-field { margin-bottom: 1.25rem; }
+
+.share-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: .5rem;
+}
+
+.share-input-row { display: flex; gap: .5rem; }
+
+.share-input {
+  flex: 1;
+  padding: .7rem 1rem;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--charcoal);
+  background: var(--cream);
+}
+
+.copy-btn {
+  padding: .7rem 1.1rem;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--muted);
+  transition: var(--transition);
+}
+
+.copy-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); }
+
+.share-channels { display: flex; gap: .6rem; }
+
+.channel-btn {
+  flex: 1;
+  padding: .65rem .5rem;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--cream);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--charcoal);
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+}
+
+.channel-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); background: rgba(181,68,90,.05); }
+
+.share-select {
+  width: 100%;
+  padding: .7rem 1rem;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--charcoal);
+  background: var(--cream);
+}
+
+.share-select:focus { outline: none; border-color: var(--deep-rose); }
+
+.share-footer { display: flex; justify-content: flex-end; gap: .6rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+.cancel-btn {
+  padding: .65rem 1.4rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.cancel-btn:hover { border-color: var(--charcoal); color: var(--charcoal); }
+
+.confirm-btn {
+  padding: .65rem 1.75rem;
+  border-radius: 100px;
+  background: var(--deep-rose);
+  color: white;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.confirm-btn:hover { background: #9b3048; transform: translateY(-1px); }
+
+/* ─── Toast ─────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 2rem; left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: var(--charcoal);
+  color: var(--cream);
+  padding: .75rem 1.6rem;
+  border-radius: 100px;
+  font-size: 13.5px;
+  font-family: var(--font-sans);
+  box-shadow: 0 8px 28px rgba(42,35,30,.22);
+  opacity: 0;
+  transition: all .3s cubic-bezier(.4,0,.2,1);
+  z-index: 2000;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ─── Entry animations ──────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(16px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+.kpi-card { animation: fadeUp .4s ease both; }
+.kpi-card:nth-child(1) { animation-delay:.04s; }
+.kpi-card:nth-child(2) { animation-delay:.1s;  }
+.kpi-card:nth-child(3) { animation-delay:.16s; }
+.kpi-card:nth-child(4) { animation-delay:.22s; }
+.panel { animation: fadeUp .45s .28s ease both; }
+.export-bar { animation: fadeUp .45s .45s ease both; }
+
+/* ─── Responsive ────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .kpi-row { grid-template-columns: repeat(2,1fr); }
+  .row-2-1 { grid-template-columns: 1fr; }
+  .row-3   { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 768px) {
+  .ana { padding: 1.25rem 1rem 3rem; }
+  .kpi-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .row-3 { grid-template-columns: 1fr; }
+  .row-2 { grid-template-columns: 1fr; }
+  .delivery-stats { grid-template-columns: repeat(3,1fr); }
+}
+
+@media (max-width: 480px) {
+  .kpi-row { grid-template-columns: 1fr; }
+  .period-bar { justify-content: center; }
+  .delivery-stats { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ana">
+
+  <!-- ─── Header ──────────────────────────────────────────── -->
+  <div class="ana-header">
+    <div>
+      <div class="ana-eyebrow">Store Insights</div>
+      <h1 class="ana-title">Your Analytics, <em>in full bloom</em></h1>
+    </div>
+
+    <!-- Period selector -->
+    <div class="period-bar">
+      <button class="period-btn" data-period="today"  onclick="setPeriod('today',this)">Today</button>
+      <button class="period-btn active" data-period="week" onclick="setPeriod('week',this)">This Week</button>
+      <button class="period-btn" data-period="month" onclick="setPeriod('month',this)">Month</button>
+      <button class="period-btn" data-period="year"  onclick="setPeriod('year',this)">Year</button>
+      <div class="period-divider"></div>
+      <button class="custom-btn" id="customToggle" onclick="toggleCustom()">
+        <i class="ri-calendar-2-line"></i> Custom
+      </button>
+    </div>
+  </div>
+
+  <!-- Custom date drawer -->
+  <div class="custom-drawer" id="customDrawer">
+    <div class="drawer-field">
+      <span class="drawer-label">From</span>
+      <input type="date" class="drawer-input" id="fromDate">
+    </div>
+    <div class="drawer-field">
+      <span class="drawer-label">To</span>
+      <input type="date" class="drawer-input" id="toDate">
+    </div>
+    <button class="apply-btn" onclick="applyCustom()">
+      <i class="ri-check-line"></i> Apply Range
+    </button>
+  </div>
+
+  <!-- ─── KPIs ────────────────────────────────────────────── -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Total Revenue</span>
+        <div class="kpi-ico"><i class="ri-money-dollar-circle-line"></i></div>
+      </div>
+      <div class="kpi-val" id="kpiRevenue">₱24,580</div>
+      <div class="kpi-sub">This period</div>
+      <span class="kpi-badge badge-up"><i class="ri-arrow-up-line"></i>12.5%</span>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Total Orders</span>
+        <div class="kpi-ico"><i class="ri-shopping-bag-line"></i></div>
+      </div>
+      <div class="kpi-val" id="kpiOrders">156</div>
+      <div class="kpi-sub">Orders placed</div>
+      <span class="kpi-badge badge-up"><i class="ri-arrow-up-line"></i>8.2%</span>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Avg. Order Value</span>
+        <div class="kpi-ico"><i class="ri-line-chart-line"></i></div>
+      </div>
+      <div class="kpi-val" id="kpiAvg">₱1,575</div>
+      <div class="kpi-sub">Per order</div>
+      <span class="kpi-badge badge-up"><i class="ri-arrow-up-line"></i>4.1%</span>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">New Customers</span>
+        <div class="kpi-ico"><i class="ri-user-add-line"></i></div>
+      </div>
+      <div class="kpi-val" id="kpiNew">24</div>
+      <div class="kpi-sub">This period</div>
+      <span class="kpi-badge badge-down"><i class="ri-arrow-down-line"></i>2.3%</span>
+    </div>
+  </div>
+
+  <!-- ─── Revenue Chart + Top Products ───────────────────── -->
+  <div class="row-2-1">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Revenue Overview</span>
+        <div style="display:flex;gap:.4rem;">
+          <button class="custom-btn" style="font-size:11.5px;padding:.35rem .8rem;" onclick="toggleChartType()">
+            <i class="ri-bar-chart-2-line" id="chartTypeIcon"></i>
+          </button>
+        </div>
+      </div>
+      <div class="chart-pad">
+        <canvas id="revenueChart" height="230"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Top Products</span>
+        <a href="{{ url_for('templates.seller_products') }}" class="panel-link">All <i class="ri-arrow-right-line"></i></a>
+      </div>
+
+      <div class="prod-rank">
+        <div class="rk-num gold">1</div>
+        <div class="rk-info"><div class="rk-name">Rose Bouquet</div><div class="rk-cat">Fresh Flowers</div></div>
+        <div class="rk-right"><div class="rk-rev">₱12,000</div><div class="rk-qty">48 sold</div></div>
+      </div>
+      <div class="prod-rank">
+        <div class="rk-num silver">2</div>
+        <div class="rk-info"><div class="rk-name">Tulips Set</div><div class="rk-cat">Spring Picks</div></div>
+        <div class="rk-right"><div class="rk-rev">₱8,000</div><div class="rk-qty">32 sold</div></div>
+      </div>
+      <div class="prod-rank">
+        <div class="rk-num bronze">3</div>
+        <div class="rk-info"><div class="rk-name">Orchid Pots</div><div class="rk-cat">Potted Plants</div></div>
+        <div class="rk-right"><div class="rk-rev">₱7,000</div><div class="rk-qty">28 sold</div></div>
+      </div>
+      <div class="prod-rank">
+        <div class="rk-num plain">4</div>
+        <div class="rk-info"><div class="rk-name">Sunflower Bundle</div><div class="rk-cat">Summer Edition</div></div>
+        <div class="rk-right"><div class="rk-rev">₱5,250</div><div class="rk-qty">21 sold</div></div>
+      </div>
+      <div class="prod-rank">
+        <div class="rk-num plain">5</div>
+        <div class="rk-info"><div class="rk-name">Succulent Mix</div><div class="rk-cat">Miniatures</div></div>
+        <div class="rk-right"><div class="rk-rev">₱4,500</div><div class="rk-qty">18 sold</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Three Charts Row ────────────────────────────────── -->
+  <div class="row-3">
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Order Status</span></div>
+      <div class="chart-pad"><canvas id="statusChart" height="220"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Sales by Category</span></div>
+      <div class="chart-pad"><canvas id="categoryChart" height="220"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Peak Hours</span></div>
+      <div class="chart-pad"><canvas id="peakChart" height="220"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ─── Delivery + Reviews ──────────────────────────────── -->
+  <div class="row-2">
+
+    <!-- Delivery -->
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Delivery Performance</span></div>
+      <div class="delivery-stats">
+        <div class="dstat">
+          <div class="dstat-val green">98.2%</div>
+          <div class="dstat-label">On-time Rate</div>
+        </div>
+        <div class="dstat">
+          <div class="dstat-val blue">24.5 min</div>
+          <div class="dstat-label">Avg. Delivery</div>
+        </div>
+        <div class="dstat">
+          <div class="dstat-val amber">1.2%</div>
+          <div class="dstat-label">Cancellation</div>
+        </div>
+      </div>
+      <div class="chart-pad">
+        <canvas id="deliveryChart" height="160"></canvas>
+      </div>
+    </div>
+
+    <!-- Reviews -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Customer Reviews</span>
+        <a href="#" class="panel-link">All <i class="ri-arrow-right-line"></i></a>
+      </div>
+
+      <div class="rating-big">
+        <div class="rating-num">4.8</div>
+        <div class="stars-row">
+          <i class="ri-star-fill star-full"></i>
+          <i class="ri-star-fill star-full"></i>
+          <i class="ri-star-fill star-full"></i>
+          <i class="ri-star-fill star-full"></i>
+          <i class="ri-star-half-fill star-half"></i>
+        </div>
+        <div class="rating-count">Based on 124 reviews</div>
+      </div>
+
+      <div class="rating-bars">
+        <div class="rbar-row"><span class="rbar-label">5 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:72%"></div></div><span class="rbar-count">89</span></div>
+        <div class="rbar-row"><span class="rbar-label">4 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:18%"></div></div><span class="rbar-count">22</span></div>
+        <div class="rbar-row"><span class="rbar-label">3 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:6%"></div></div><span class="rbar-count">8</span></div>
+        <div class="rbar-row"><span class="rbar-label">2 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:3%"></div></div><span class="rbar-count">3</span></div>
+        <div class="rbar-row"><span class="rbar-label">1 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:1.5%"></div></div><span class="rbar-count">2</span></div>
+      </div>
+
+      <div class="reviews-feed">
+        <div class="review-item">
+          <div class="rv-avatar" style="background:linear-gradient(135deg,var(--blush),var(--dusty-rose))">M</div>
+          <div class="rv-body">
+            <div class="rv-top">
+              <span class="rv-name">Maria Santos</span>
+              <div class="rv-stars"><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i></div>
+            </div>
+            <div class="rv-text">Flowers arrived so fresh! Delivery was right on time. Will absolutely order again.</div>
+          </div>
+        </div>
+        <div class="review-item">
+          <div class="rv-avatar" style="background:linear-gradient(135deg,var(--sage),var(--deep-sage))">J</div>
+          <div class="rv-body">
+            <div class="rv-top">
+              <span class="rv-name">John Dela Cruz</span>
+              <div class="rv-stars"><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-line"></i></div>
+            </div>
+            <div class="rv-text">Beautiful bouquet for my wife's birthday. Exactly as pictured, great packaging.</div>
+          </div>
+        </div>
+        <div class="review-item">
+          <div class="rv-avatar" style="background:linear-gradient(135deg,var(--terracotta),var(--bark))">A</div>
+          <div class="rv-body">
+            <div class="rv-top">
+              <span class="rv-name">Anna Reyes</span>
+              <div class="rv-stars"><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i></div>
+            </div>
+            <div class="rv-text">Succulents arrived healthy and well-packaged. Impressive variety, highly recommend.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Recent Orders ───────────────────────────────────── -->
+  <div class="panel" style="margin-bottom:1.5rem;">
+    <div class="panel-head">
+      <span class="panel-title">Recent Orders</span>
+      <a href="{{ url_for('templates.seller_orders') }}" class="panel-link">View all <i class="ri-arrow-right-line"></i></a>
+    </div>
+    <div class="table-scroll">
+      <table class="ana-table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="oid">#00124</span></td>
+            <td><div class="cust-cell"><div class="c-av" style="background:linear-gradient(135deg,var(--blush),var(--dusty-rose))">M</div><span class="c-nm">Maria Santos</span></div></td>
+            <td><span class="amt-cell">₱1,250</span></td>
+            <td><span class="s-pill sp-delivery">On Delivery</span></td>
+            <td style="color:var(--muted);font-size:12px;">Today, 10:30 AM</td>
+          </tr>
+          <tr>
+            <td><span class="oid">#00123</span></td>
+            <td><div class="cust-cell"><div class="c-av" style="background:linear-gradient(135deg,var(--sage),var(--deep-sage))">J</div><span class="c-nm">John Dela Cruz</span></div></td>
+            <td><span class="amt-cell">₱2,800</span></td>
+            <td><span class="s-pill sp-delivered">Delivered</span></td>
+            <td style="color:var(--muted);font-size:12px;">Yesterday, 3:45 PM</td>
+          </tr>
+          <tr>
+            <td><span class="oid">#00122</span></td>
+            <td><div class="cust-cell"><div class="c-av" style="background:linear-gradient(135deg,var(--terracotta),var(--bark))">A</div><span class="c-nm">Anna Reyes</span></div></td>
+            <td><span class="amt-cell">₱950</span></td>
+            <td><span class="s-pill sp-delivered">Delivered</span></td>
+            <td style="color:var(--muted);font-size:12px;">Nov 28, 2024</td>
+          </tr>
+          <tr>
+            <td><span class="oid">#00121</span></td>
+            <td><div class="cust-cell"><div class="c-av" style="background:linear-gradient(135deg,#a9c5e8,#6b8fb5)">C</div><span class="c-nm">Carlos Garcia</span></div></td>
+            <td><span class="amt-cell">₱1,750</span></td>
+            <td><span class="s-pill sp-processing">Processing</span></td>
+            <td style="color:var(--muted);font-size:12px;">Nov 27, 2024</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ─── Export Bar ──────────────────────────────────────── -->
+  <div class="export-bar">
+    <div class="export-label">Export your <span>analytics data</span></div>
+    <div class="export-btns">
+      <button class="exp-btn" onclick="showToast('Exporting to Excel…')">
+        <i class="ri-file-excel-2-line"></i> Excel
+      </button>
+      <button class="exp-btn" onclick="showToast('Generating PDF…')">
+        <i class="ri-file-pdf-2-line"></i> PDF
+      </button>
+      <button class="exp-btn" onclick="showToast('Building report…')">
+        <i class="ri-bar-chart-grouped-line"></i> Report
+      </button>
+      <button class="exp-btn primary" onclick="openShareModal()">
+        <i class="ri-share-forward-line"></i> Share
+      </button>
+    </div>
+  </div>
+
+</div><!-- /ana -->
+
+<!-- ─── Share Modal ──────────────────────────────────────── -->
+<div class="modal-bg" id="shareModal">
+  <div class="share-modal">
+    <div class="share-head">
+      <span class="share-title">Share Dashboard</span>
+      <button class="modal-close" onclick="closeShareModal()"><i class="ri-close-line"></i></button>
+    </div>
+    <div class="share-body">
+      <div class="share-field">
+        <label>Share Link</label>
+        <div class="share-input-row">
+          <input class="share-input" type="text" id="shareLink" value="https://eflowers.com/analytics/dashboard" readonly>
+          <button class="copy-btn" onclick="copyLink()"><i class="ri-file-copy-line"></i></button>
+        </div>
+      </div>
+
+      <div class="share-field">
+        <label>Share via</label>
+        <div class="share-channels">
+          <button class="channel-btn" onclick="showToast('Opening email…')"><i class="ri-mail-line"></i> Email</button>
+          <button class="channel-btn" onclick="showToast('Opening SMS…')"><i class="ri-message-2-line"></i> SMS</button>
+          <button class="channel-btn" onclick="showToast('Opening WhatsApp…')"><i class="ri-whatsapp-line"></i> WhatsApp</button>
+        </div>
+      </div>
+
+      <div class="share-field">
+        <label>Schedule Report</label>
+        <select class="share-select">
+          <option value="">Select frequency…</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+
+      <div class="share-footer">
+        <button class="cancel-btn" onclick="closeShareModal()">Cancel</button>
+        <button class="confirm-btn" onclick="showToast('✓ Dashboard shared!'); closeShareModal();">Share</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="anaToast"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+/* ── Colour Palette ────────────────────────────────────── */
+const C = {
+  rose:    'rgba(181,68,90,1)',
+  roseA:   'rgba(181,68,90,.15)',
+  dusty:   'rgba(212,120,138,1)',
+  dustyA:  'rgba(212,120,138,.12)',
+  sage:    'rgba(122,158,126,1)',
+  sageA:   'rgba(122,158,126,.15)',
+  terra:   'rgba(196,113,75,1)',
+  terraA:  'rgba(196,113,75,.13)',
+  bark:    'rgba(107,76,59,1)',
+  muted:   'rgba(154,141,133,1)',
+  charcoal:'rgba(44,37,32,1)',
+};
+
+const FONT_SANS    = "'DM Sans', sans-serif";
+const FONT_DISPLAY = "'Cormorant Garamond', serif";
+
+const tooltipDefaults = {
+  backgroundColor: '#fffdf9',
+  titleColor: '#2c2520',
+  bodyColor:  '#9a8d85',
+  borderColor:'rgba(107,76,59,.15)',
+  borderWidth: 1,
+  padding: 12,
+  titleFont: { family: FONT_DISPLAY, size: 15 },
+  bodyFont:  { family: FONT_SANS,    size: 12 },
+};
+
+/* ── Revenue Chart ─────────────────────────────────────── */
+const rCtx = document.getElementById('revenueChart').getContext('2d');
+const rGrad = rCtx.createLinearGradient(0,0,0,230);
+rGrad.addColorStop(0,'rgba(181,68,90,.18)');
+rGrad.addColorStop(1,'rgba(181,68,90,.02)');
+
+let chartType = 'line';
+let revenueChart = buildRevenueChart('line');
+
+function buildRevenueChart(type) {
+  if (revenueChart) revenueChart.destroy();
+  return new Chart(rCtx, {
+    type,
+    data: {
+      labels: ['Nov 1','Nov 5','Nov 10','Nov 15','Nov 20','Nov 25','Nov 30'],
+      datasets: [{
+        label: 'Revenue (₱)',
+        data: [1200,1900,3000,5000,2800,3600,4500],
+        borderColor: C.rose,
+        backgroundColor: type === 'line' ? rGrad : C.roseA,
+        borderWidth: 2.5,
+        fill: type === 'line',
+        tension: 0.42,
+        pointRadius: 4,
+        pointBackgroundColor: C.rose,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 6,
+        borderRadius: type === 'bar' ? 6 : 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipDefaults,
+          callbacks: { label: c => `  ₱${c.parsed.y.toLocaleString()}` }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(107,76,59,.05)' },
+          ticks: { font: { family: FONT_SANS, size: 11 }, color: '#9a8d85' }
+        },
+        y: {
+          grid: { color: 'rgba(107,76,59,.06)' },
+          ticks: {
+            font: { family: FONT_SANS, size: 11 },
+            color: '#9a8d85',
+            callback: v => '₱' + v.toLocaleString()
+          }
+        }
+      }
+    }
+  });
+}
+
+function toggleChartType() {
+  chartType = chartType === 'line' ? 'bar' : 'line';
+  document.getElementById('chartTypeIcon').className =
+    chartType === 'line' ? 'ri-bar-chart-2-line' : 'ri-line-chart-line';
+  revenueChart = buildRevenueChart(chartType);
+}
+
+/* ── Status Doughnut ───────────────────────────────────── */
+new Chart(document.getElementById('statusChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Delivered','On Delivery','Processing','Pending','Cancelled'],
+    datasets: [{
+      data: [45,15,20,15,5],
+      backgroundColor: [C.sage, C.terra, C.rose, C.bark, C.muted],
+      borderColor: '#fffdf9',
+      borderWidth: 3,
+      hoverOffset: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    cutout: '65%',
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          font:  { family: FONT_SANS, size: 11 },
+          color: '#9a8d85',
+          boxWidth: 10,
+          padding: 12,
+        }
+      },
+      tooltip: tooltipDefaults
+    }
+  }
+});
+
+/* ── Category Bar ──────────────────────────────────────── */
+new Chart(document.getElementById('categoryChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Flowers','Plants','Bouquets','Succulents','Seasonal'],
+    datasets: [{
+      data: [12000,8000,15000,5000,7000],
+      backgroundColor: [C.roseA, C.sageA, C.dustyA, C.terraA, 'rgba(107,76,59,.13)'],
+      borderColor:     [C.rose,  C.sage,  C.dusty,  C.terra,  C.bark],
+      borderWidth: 1.5,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        ...tooltipDefaults,
+        callbacks: { label: c => `  ₱${c.parsed.y.toLocaleString()}` }
+      }
+    },
+    scales: {
+      x: { grid: { display:false }, ticks: { font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } },
+      y: { grid:{ color:'rgba(107,76,59,.05)' }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85', callback: v => '₱' + v.toLocaleString() } }
+    }
+  }
+});
+
+/* ── Peak Hours ────────────────────────────────────────── */
+new Chart(document.getElementById('peakChart'), {
+  type: 'bar',
+  data: {
+    labels: ['8AM','10AM','12PM','2PM','4PM','6PM','8PM'],
+    datasets: [{
+      data: [12,25,45,30,28,35,15],
+      backgroundColor: ctx => {
+        const v = ctx.parsed?.y ?? 0;
+        if (v >= 40) return C.rose;
+        if (v >= 28) return C.dusty;
+        return C.roseA;
+      },
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: tooltipDefaults
+    },
+    scales: {
+      x: { grid:{ display:false }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } },
+      y: { grid:{ color:'rgba(107,76,59,.05)' }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } }
+    }
+  }
+});
+
+/* ── Delivery Line ─────────────────────────────────────── */
+const dCtx = document.getElementById('deliveryChart').getContext('2d');
+const dGrad = dCtx.createLinearGradient(0,0,0,160);
+dGrad.addColorStop(0,'rgba(122,158,126,.2)');
+dGrad.addColorStop(1,'rgba(122,158,126,.02)');
+
+new Chart(dCtx, {
+  type: 'line',
+  data: {
+    labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+    datasets: [{
+      label: 'On-time Rate',
+      data: [97,98,99,98,97,99,98],
+      borderColor: C.sage,
+      backgroundColor: dGrad,
+      borderWidth: 2.5,
+      fill: true,
+      tension: 0.42,
+      pointRadius: 4,
+      pointBackgroundColor: C.sage,
+      pointBorderColor: '#fff',
+      pointBorderWidth: 2,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        ...tooltipDefaults,
+        callbacks: { label: c => `  ${c.parsed.y}%` }
+      }
+    },
+    scales: {
+      x: { grid:{ display:false }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } },
+      y: {
+        min: 90, max: 100,
+        grid:{ color:'rgba(107,76,59,.05)' },
+        ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85', callback: v => v+'%' }
+      }
+    }
+  }
+});
+
+/* ── Period KPI Data ───────────────────────────────────── */
+const periodData = {
+  today: { rev:'₱4,520',  orders:'12',   avg:'₱376',   newC:'3' },
+  week:  { rev:'₱24,580', orders:'156',  avg:'₱1,575', newC:'24' },
+  month: { rev:'₱98,450', orders:'625',  avg:'₱1,575', newC:'96' },
+  year:  { rev:'₱1.18M',  orders:'7,500',avg:'₱1,575', newC:'1,150' },
+};
+
+function setPeriod(p, btn) {
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const d = periodData[p] || periodData.week;
+
+  // animate out then back in
+  const vals = ['kpiRevenue','kpiOrders','kpiAvg','kpiNew'];
+  vals.forEach(id => {
+    const el = document.getElementById(id);
+    el.style.opacity = '.3';
+    el.style.transform = 'translateY(4px)';
+  });
+
+  setTimeout(() => {
+    document.getElementById('kpiRevenue').textContent = d.rev;
+    document.getElementById('kpiOrders').textContent  = d.orders;
+    document.getElementById('kpiAvg').textContent     = d.avg;
+    document.getElementById('kpiNew').textContent     = d.newC;
+    vals.forEach(id => {
+      const el = document.getElementById(id);
+      el.style.transition = 'opacity .3s ease, transform .3s ease';
+      el.style.opacity = '1';
+      el.style.transform = 'translateY(0)';
+    });
+  }, 200);
+}
+
+/* ── Custom Date Drawer ────────────────────────────────── */
+function toggleCustom() {
+  const d = document.getElementById('customDrawer');
+  d.classList.toggle('open');
+}
+
+function applyCustom() {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  if (!from || !to) { showToast('Please select both dates'); return; }
+  if (new Date(from) > new Date(to)) { showToast('From date must be before To date'); return; }
+  document.getElementById('customDrawer').classList.remove('open');
+  showToast(`✓ Showing data: ${from} → ${to}`);
+}
+
+/* ── Share Modal ───────────────────────────────────────── */
+function openShareModal()  { document.getElementById('shareModal').classList.add('open'); }
+function closeShareModal() { document.getElementById('shareModal').classList.remove('open'); }
+
+function copyLink() {
+  const inp = document.getElementById('shareLink');
+  inp.select();
+  navigator.clipboard.writeText(inp.value).then(() => showToast('✓ Link copied!'));
+}
+
+/* ── Toast ─────────────────────────────────────────────── */
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('anaToast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+/* ── Animate rating bars ───────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.rbar-fill').forEach(el => {
+    const w = el.style.width;
+    el.style.width = '0';
+    setTimeout(() => { el.style.width = w; }, 600);
+  });
+
+  // set default custom dates
+  const today = new Date();
+  const weekAgo = new Date(); weekAgo.setDate(today.getDate() - 7);
+  document.getElementById('fromDate').valueAsDate = weekAgo;
+  document.getElementById('toDate').valueAsDate = today;
+});
+</script>
+{% endblock %}

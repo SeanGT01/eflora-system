@@ -1,0 +1,1128 @@
+{% extends "layout.html" %}
+
+{% block title %}Products — E-FLOWERS Seller{% endblock %}
+{% block page_title %}Products{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="page-toolbar">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <i class="ri-search-line"></i>
+            <input type="text" id="searchInput" placeholder="Search products…">
+        </div>
+        <select class="filter-select" id="categoryFilter">
+            <option value="">All Categories</option>
+            <option value="flowers">Flowers</option>
+            <option value="plants">Plants</option>
+            <option value="bouquets">Bouquets</option>
+            <option value="succulents">Succulents</option>
+            <option value="seasonal">Seasonal</option>
+        </select>
+        <select class="filter-select" id="stockFilter">
+            <option value="">All Stock</option>
+            <option value="in_stock">In Stock</option>
+            <option value="low_stock">Low Stock</option>
+            <option value="out_of_stock">Out of Stock</option>
+        </select>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn btn-rose" onclick="openAddModal()">
+            <i class="ri-add-line"></i> Add Product
+        </button>
+    </div>
+</div>
+
+<!-- Stat Row -->
+<div class="stat-row">
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-rose"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">Total Products</div>
+            <div class="stat-card-icon icon-rose"><i class="ri-leaf-line"></i></div>
+        </div>
+        <div class="stat-number">{{ products|length if products else 0 }}</div>
+        <div class="stat-sub">All listed items</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-sage"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">In Stock</div>
+            <div class="stat-card-icon icon-sage"><i class="ri-checkbox-circle-line"></i></div>
+        </div>
+        <div class="stat-number">{{ products|selectattr('stock_quantity','gt',10)|list|length if products else 0 }}</div>
+        <div class="stat-sub">Healthy inventory</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-terra"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">Low Stock</div>
+            <div class="stat-card-icon icon-terra"><i class="ri-alarm-warning-line"></i></div>
+        </div>
+        <div class="stat-number">{{ products|selectattr('stock_quantity','gt',0)|selectattr('stock_quantity','le',10)|list|length if products else 0 }}</div>
+        <div class="stat-sub">Needs restocking</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-bark"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">Out of Stock</div>
+            <div class="stat-card-icon icon-bark"><i class="ri-close-circle-line"></i></div>
+        </div>
+        <div class="stat-number">{{ products|selectattr('stock_quantity','le',0)|list|length if products else 0 }}</div>
+        <div class="stat-sub">Unavailable items</div>
+    </div>
+</div>
+
+<!-- Products Grid -->
+{% if products %}
+<div class="products-grid" id="productsGrid">
+    {% for product in products %}
+    <div class="product-card"
+         data-name="{{ product.name|lower }}"
+         data-category="{{ product.category|lower if product.category else '' }}"
+         data-stock="{{ product.stock_quantity }}">
+        
+        <!-- Image area -->
+        <div class="product-img-wrap">
+            {% if product.image_url %}
+                <img src="{{ product.image_url }}" alt="{{ product.name }}"
+                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\'product-img-placeholder\'><i class=\'ri-image-line\'></i></div>';">
+            {% else %}
+                <div class="product-img-placeholder"><i class="ri-image-line"></i></div>
+            {% endif %}
+            
+            <!-- Category badge -->
+            <span class="product-cat-badge">
+                {{ product.category|capitalize if product.category else 'General' }}
+            </span>
+            
+            <!-- Stock badge -->
+            <div class="product-stock-badge">
+                {% if product.stock_quantity > 10 %}
+                    <span class="status-badge badge-available">In Stock</span>
+                {% elif product.stock_quantity > 0 %}
+                    <span class="status-badge badge-low">Low Stock</span>
+                {% else %}
+                    <span class="status-badge badge-out">Out of Stock</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Content -->
+        <div class="product-card-body">
+            <div class="product-name">{{ product.name }}</div>
+            <div class="product-desc">{{ product.description or 'No description provided.' }}</div>
+            
+            <!-- Price + availability row -->
+            <div class="product-meta">
+                <div>
+                    <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
+                    <div class="product-stock-info">{{ product.stock_quantity }} units</div>
+                </div>
+                <label class="toggle-wrap" title="Toggle availability">
+                    <input type="checkbox" class="toggle-input availability-toggle"
+                           data-product-id="{{ product.id }}"
+                           {{ 'checked' if product.is_available else '' }}>
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+            
+            <!-- Action buttons -->
+            <div class="product-actions">
+                <button class="btn btn-outline btn-sm" onclick="openEditModal({{ product.id }})">
+                    <i class="ri-pencil-line"></i> Edit
+                </button>
+                <button class="btn btn-danger-outline btn-sm btn-icon" onclick="deleteProduct({{ product.id }}, this)" title="Delete">
+                    <i class="ri-delete-bin-line"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Bulk bar -->
+<div class="bulk-bar">
+    <div class="bulk-bar-label">Bulk Actions</div>
+    <div class="bulk-bar-actions">
+        <button class="btn btn-outline btn-sm" id="selectAllBtn">
+            <i class="ri-checkbox-multiple-line"></i> Select All
+        </button>
+        <button class="btn btn-outline btn-sm" id="bulkAvailableBtn" disabled>
+            <i class="ri-eye-line"></i> Mark Available
+        </button>
+        <button class="btn btn-outline btn-sm" id="bulkUnavailableBtn" disabled>
+            <i class="ri-eye-off-line"></i> Mark Unavailable
+        </button>
+        <button class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
+            <i class="ri-delete-bin-line"></i> Delete Selected
+        </button>
+    </div>
+</div>
+
+{% else %}
+<div class="empty-state">
+    <i class="ri-leaf-line empty-state-icon"></i>
+    <div class="empty-state-title">No products yet</div>
+    <p class="empty-state-sub">Add your first product to start selling on E-FLOWERS</p>
+    <button class="btn btn-rose" onclick="openAddModal()">
+        <i class="ri-add-line"></i> Add First Product
+    </button>
+</div>
+{% endif %}
+
+
+<!-- ══ ADD PRODUCT MODAL ══ -->
+<div class="modal-overlay" id="addProductModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Add New Product</h3>
+            <button class="modal-close" onclick="closeModal('addProductModal')"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="addProductForm" enctype="multipart/form-data">
+                <div class="modal-form-grid">
+
+                    <!-- Left column -->
+                    <div class="modal-form-left">
+                        <div class="form-group">
+                            <label class="form-label">Product Name <span class="required-star">*</span></label>
+                            <input type="text" class="form-control" name="name" required placeholder="e.g., Red Rose Bouquet">
+                        </div>
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label class="form-label">Price (₱) <span class="required-star">*</span></label>
+                                <input type="number" class="form-control" name="price" step="0.01" min="0" required placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Stock Qty <span class="required-star">*</span></label>
+                                <input type="number" class="form-control" name="stock_quantity" min="0" required placeholder="0">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Category <span class="required-star">*</span></label>
+                            <select class="form-select" name="category" required>
+                                <option value="">Select a category</option>
+                                <option value="flowers">Fresh Flowers</option>
+                                <option value="plants">Potted Plants</option>
+                                <option value="bouquets">Bouquets</option>
+                                <option value="succulents">Succulents</option>
+                                <option value="seasonal">Seasonal</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" name="description" rows="4"
+                                      placeholder="Describe your product…"></textarea>
+                        </div>
+                        <label class="toggle-wrap">
+                            <input type="checkbox" class="toggle-input" name="is_available" checked>
+                            <span class="toggle-track"></span>
+                            <span class="toggle-label">Available for sale immediately</span>
+                        </label>
+                    </div>
+
+                    <!-- Right column - Image upload -->
+                    <div class="modal-form-right">
+                        <label class="form-label">Product Image</label>
+                        <div class="img-preview-box" id="addImgPreviewBox"
+                             onclick="document.getElementById('addImageInput').click()">
+                            <img id="addImgPreview" src="" alt="">
+                            <div class="img-ph">
+                                <i class="ri-image-add-line"></i>
+                                <span>Click to upload</span>
+                                <span class="img-ph-hint">PNG, JPG — max 5 MB</span>
+                            </div>
+                        </div>
+                        <input type="file" id="addImageInput" name="image" accept="image/*" style="display:none;">
+                        <button type="button" class="btn btn-outline btn-sm btn-block" onclick="document.getElementById('addImageInput').click()">
+                            <i class="ri-upload-2-line"></i> Choose Image
+                        </button>
+                        <p class="form-hint">
+                            A clear, well-lit photo on a neutral background works best.
+                        </p>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('addProductModal')">Cancel</button>
+            <button class="btn btn-rose" onclick="submitAddProduct()">
+                <i class="ri-save-line"></i> Add Product
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ══ EDIT PRODUCT MODAL ══ -->
+<div class="modal-overlay" id="editProductModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Edit Product</h3>
+            <button class="modal-close" onclick="closeModal('editProductModal')"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" id="editModalBody">
+            <div class="loading"><div class="spinner"></div> Loading product…</div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('editProductModal')">Cancel</button>
+            <button class="btn btn-rose" onclick="submitEditProduct()">
+                <i class="ri-save-line"></i> Save Changes
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ══ QUICK STOCK MODAL ══ -->
+<div class="modal-overlay" id="quickStockModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h3 class="modal-title">Update Stock</h3>
+            <button class="modal-close" onclick="closeModal('quickStockModal')"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="quickStockForm">
+                <input type="hidden" id="stockProductId" name="product_id">
+                <div class="form-group">
+                    <label class="form-label">Product</label>
+                    <input type="text" class="form-control" id="stockProductName" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Update Type</label>
+                    <select class="form-select" id="updateType" name="update_type">
+                        <option value="set">Set to specific value</option>
+                        <option value="add">Add to current stock</option>
+                        <option value="subtract">Subtract from current stock</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Value <span class="required-star">*</span></label>
+                    <input type="number" class="form-control" id="stockValue" name="stock_quantity" min="0" required placeholder="0">
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('quickStockModal')">Cancel</button>
+            <button class="btn btn-rose" onclick="submitStockUpdate()">
+                <i class="ri-check-line"></i> Update Stock
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Additional styles not covered in layout */
+    .required-star {
+        color: var(--deep-rose);
+    }
+    
+    .btn-block {
+        width: 100%;
+    }
+    
+    .img-ph-hint {
+        font-size: 11px;
+        opacity: 0.6;
+    }
+    
+    /* Make sure product grid is contained */
+    .products-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .product-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-xl);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        transition: var(--transition);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    
+    .product-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-md);
+        border-color: var(--border-strong);
+    }
+    
+    .product-img-wrap {
+        position: relative;
+        height: 200px;
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+    
+    .product-img-wrap img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .product-card:hover .product-img-wrap img {
+        transform: scale(1.05);
+    }
+    
+    .product-img-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 48px;
+        color: rgba(107, 76, 59, 0.12);
+    }
+    
+    .product-cat-badge {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+        z-index: 2;
+        background: rgba(42, 35, 30, 0.58);
+        color: rgba(250, 246, 240, 0.92);
+        backdrop-filter: blur(8px);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 3px 9px;
+        border-radius: var(--radius-pill);
+    }
+    
+    .product-stock-badge {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 2;
+    }
+    
+    .product-card-body {
+        padding: 1.25rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .product-name {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--charcoal);
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    .product-desc {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        flex: 1;
+    }
+    
+    .product-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border);
+        margin-top: 0.25rem;
+    }
+    
+    .product-price {
+        font-family: var(--font-display);
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--deep-rose);
+        line-height: 1;
+    }
+    
+    .product-stock-info {
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 500;
+        margin-top: 2px;
+    }
+    
+    .product-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    
+    .product-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .btn-danger-outline.btn-icon {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border-radius: 50%;
+        flex: 0 0 auto;
+    }
+    
+    .modal-form-grid {
+        display: grid;
+        grid-template-columns: 1fr 260px;
+        gap: 1.5rem;
+    }
+    
+    .modal-form-left {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .modal-form-right {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .img-preview-box {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: var(--transition);
+        border: 2px dashed var(--border-strong);
+        position: relative;
+    }
+    
+    .img-preview-box:hover {
+        border-color: var(--deep-rose);
+        background: rgba(181,68,90,0.02);
+    }
+    
+    .img-preview-box img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: none;
+        border-radius: calc(var(--radius-lg) - 2px);
+    }
+    
+    .img-preview-box.has-image img {
+        display: block;
+    }
+    
+    .img-preview-box.has-image .img-ph {
+        display: none;
+    }
+    
+    .img-ph {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
+        padding: 1rem;
+    }
+    
+    .img-ph i {
+        font-size: 36px;
+        opacity: 0.25;
+    }
+    
+    .stat-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.75rem;
+    }
+    
+    .page-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.75rem;
+        flex-wrap: wrap;
+    }
+    
+    .toolbar-left {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1;
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+    
+    .toolbar-right {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        flex-shrink: 0;
+    }
+    
+    .search-box {
+        display: flex;
+        align-items: center;
+        background: var(--warm-white);
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--radius-pill);
+        padding: 0.55rem 1rem;
+        gap: 0.5rem;
+        flex: 1;
+        max-width: 380px;
+        transition: var(--transition);
+    }
+    
+    .search-box:focus-within {
+        border-color: var(--deep-rose);
+        box-shadow: 0 0 0 3px rgba(181, 68, 90, 0.08);
+    }
+    
+    .search-box input {
+        border: none;
+        background: none;
+        font-family: var(--font-sans);
+        font-size: 13.5px;
+        color: var(--charcoal);
+        width: 100%;
+        outline: none;
+    }
+    
+    .filter-select {
+        padding: 0.55rem 1.25rem 0.55rem 1rem;
+        background: var(--warm-white);
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--radius-pill);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        color: var(--charcoal);
+        cursor: pointer;
+        transition: var(--transition);
+        outline: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239a8d85'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 16px;
+    }
+    
+    .filter-select:focus {
+        border-color: var(--deep-rose);
+        box-shadow: 0 0 0 3px rgba(181, 68, 90, 0.08);
+    }
+    
+    .bulk-bar {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        padding: 1.125rem 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .bulk-bar-label {
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 500;
+    }
+    
+    .bulk-bar-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    @media (max-width: 1000px) {
+        .stat-row {
+            grid-template-columns: 1fr 1fr;
+        }
+        .modal-form-grid {
+            grid-template-columns: 1fr;
+        }
+        .modal-form-right {
+            order: -1;
+        }
+    }
+    
+    @media (max-width: 700px) {
+        .stat-row {
+            grid-template-columns: 1fr;
+        }
+        .products-grid {
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        }
+        .page-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .toolbar-left {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .search-box {
+            max-width: 100%;
+        }
+        .bulk-bar {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let editingProductId = null;
+    let selectedProducts = new Set();
+
+    // Image preview for add modal
+    document.getElementById('addImageInput')?.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const preview = document.getElementById('addImgPreview');
+            preview.src = ev.target.result;
+            preview.style.display = 'block';
+            document.getElementById('addImgPreviewBox').classList.add('has-image');
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // Modal controls
+    function openModal(id) {
+        document.getElementById(id).classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(o => {
+        o.addEventListener('click', e => { if (e.target === o) closeModal(o.id); });
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal-overlay.active').forEach(o => closeModal(o.id));
+        }
+    });
+
+    // Add Product
+    function openAddModal() {
+        document.getElementById('addProductForm').reset();
+        const preview = document.getElementById('addImgPreview');
+        preview.src = '';
+        preview.style.display = 'none';
+        document.getElementById('addImgPreviewBox').classList.remove('has-image');
+        openModal('addProductModal');
+    }
+
+    async function submitAddProduct() {
+        const form = document.getElementById('addProductForm');
+        if (!form.checkValidity()) { form.reportValidity(); return; }
+        
+        const btn = document.querySelector('#addProductModal .btn-rose');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Adding…';
+        btn.disabled = true;
+        
+        try {
+            const response = await fetch('/api/v1/seller/products', { 
+                method: 'POST', 
+                body: new FormData(form) 
+            });
+            const data = await response.json();
+            
+            if (data.message || data.success) {
+                window.showToast('✓  Product added successfully', 'success');
+                closeModal('addProductModal');
+                setTimeout(() => location.reload(), 900);
+            } else {
+                window.showToast('Error: ' + (data.error || 'Failed to add product'), 'error');
+            }
+        } catch {
+            window.showToast('Network error. Please try again.', 'error');
+        } finally { 
+            btn.innerHTML = orig; 
+            btn.disabled = false; 
+        }
+    }
+
+    // Edit Product
+    async function openEditModal(productId) {
+        editingProductId = productId;
+        document.getElementById('editModalBody').innerHTML =
+            '<div class="loading"><div class="spinner"></div> Loading product…</div>';
+        openModal('editProductModal');
+
+        try {
+            const response = await fetch(`/api/v1/seller/products/${productId}`);
+            const p = await response.json();
+
+            const categories = ['flowers', 'plants', 'bouquets', 'succulents', 'seasonal'];
+            const categoryOptions = categories.map(c =>
+                `<option value="${c}" ${p.category === c ? 'selected' : ''}>${c.charAt(0).toUpperCase() + c.slice(1)}</option>`
+            ).join('');
+
+            const imageHtml = p.image_url 
+                ? `<div class="existing-img">
+                       <img src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.name)}">
+                   </div>
+                   <label class="toggle-wrap">
+                       <input type="checkbox" class="toggle-input" name="remove_image">
+                       <span class="toggle-track"></span>
+                       <span class="toggle-label">Remove current image</span>
+                   </label>`
+                : `<div class="no-image-placeholder">No image uploaded</div>`;
+
+            document.getElementById('editModalBody').innerHTML = `
+                <form id="editProductForm" enctype="multipart/form-data">
+                    <div class="modal-form-grid">
+                        <div class="modal-form-left">
+                            <div class="form-group">
+                                <label class="form-label">Product Name <span class="required-star">*</span></label>
+                                <input type="text" class="form-control" name="name" value="${escapeHtml(p.name)}" required>
+                            </div>
+                            <div class="grid-2">
+                                <div class="form-group">
+                                    <label class="form-label">Price (₱) <span class="required-star">*</span></label>
+                                    <input type="number" class="form-control" name="price" step="0.01" min="0" value="${p.price}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Stock Qty <span class="required-star">*</span></label>
+                                    <input type="number" class="form-control" name="stock_quantity" min="0" value="${p.stock_quantity}" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Category <span class="required-star">*</span></label>
+                                <select class="form-select" name="category" required>${categoryOptions}</select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Description</label>
+                                <textarea class="form-control" name="description" rows="4">${escapeHtml(p.description || '')}</textarea>
+                            </div>
+                            <label class="toggle-wrap">
+                                <input type="checkbox" class="toggle-input" name="is_available" ${p.is_available ? 'checked' : ''}>
+                                <span class="toggle-track"></span>
+                                <span class="toggle-label">Available for sale</span>
+                            </label>
+                        </div>
+                        <div class="modal-form-right">
+                            <label class="form-label">Product Image</label>
+                            ${imageHtml}
+                            <div class="upload-zone" onclick="document.getElementById('editImageInput').click()">
+                                <i class="ri-image-add-line upload-zone-icon"></i>
+                                <p>${p.image_url ? 'Replace image' : 'Upload image'}</p>
+                                <button type="button" class="btn btn-outline btn-sm">Choose File</button>
+                            </div>
+                            <input type="file" id="editImageInput" name="image" accept="image/*" style="display:none;">
+                        </div>
+                    </div>
+                </form>`;
+
+            document.getElementById('editImageInput').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    const img = document.querySelector('#editModalBody .existing-img img');
+                    if (img) img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+
+        } catch {
+            document.getElementById('editModalBody').innerHTML = `
+                <div class="empty-state">
+                    <i class="ri-error-warning-line empty-state-icon"></i>
+                    <div class="empty-state-title">Failed to load product</div>
+                    <button class="btn btn-rose" onclick="openEditModal(${productId})">
+                        <i class="ri-refresh-line"></i> Retry
+                    </button>
+                </div>`;
+        }
+    }
+
+    async function submitEditProduct() {
+        if (!editingProductId) return;
+        const form = document.getElementById('editProductForm');
+        if (!form || !form.checkValidity()) { form?.reportValidity(); return; }
+        
+        const btn = document.querySelector('#editProductModal .btn-rose');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving…';
+        btn.disabled = true;
+        
+        try {
+            const response = await fetch(`/api/v1/seller/products/${editingProductId}`, { 
+                method: 'PUT', 
+                body: new FormData(form) 
+            });
+            const data = await response.json();
+            
+            if (data.message || data.success) {
+                window.showToast('✓  Product updated', 'success');
+                closeModal('editProductModal');
+                setTimeout(() => location.reload(), 900);
+            } else {
+                window.showToast('Error: ' + (data.error || 'Update failed'), 'error');
+            }
+        } catch {
+            window.showToast('Network error. Please try again.', 'error');
+        } finally { 
+            btn.innerHTML = orig; 
+            btn.disabled = false; 
+        }
+    }
+
+    // Delete Product
+    async function deleteProduct(productId, btn) {
+        if (!confirm('Delete this product? This cannot be undone.')) return;
+        
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+        btn.disabled = true;
+        
+        try {
+            const response = await fetch(`/api/v1/seller/products/${productId}`, { method: 'DELETE' });
+            const data = await response.json();
+            
+            if (data.message || data.success) {
+                const card = btn.closest('.product-card');
+                if (card) {
+                    card.style.transition = 'opacity .3s, transform .3s';
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.95)';
+                    setTimeout(() => card.remove(), 300);
+                }
+                window.showToast('✓  Product deleted', 'success');
+            } else {
+                window.showToast('Failed to delete product', 'error');
+                btn.innerHTML = orig; 
+                btn.disabled = false;
+            }
+        } catch {
+            window.showToast('Network error. Please try again.', 'error');
+            btn.innerHTML = orig; 
+            btn.disabled = false;
+        }
+    }
+
+    // Availability toggle
+    document.addEventListener('change', async function(e) {
+        if (!e.target.matches('.availability-toggle')) return;
+        
+        const id = e.target.dataset.productId;
+        const val = e.target.checked;
+        
+        try {
+            const response = await fetch(`/api/v1/seller/products/${id}/availability`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_available: val })
+            });
+            const data = await response.json();
+            
+            if (data.message || data.success) {
+                window.showToast(val ? '✓  Marked available' : 'Marked unavailable', val ? 'success' : '');
+            } else {
+                e.target.checked = !val;
+                window.showToast('Failed to update availability', 'error');
+            }
+        } catch {
+            e.target.checked = !val;
+            window.showToast('Network error', 'error');
+        }
+    });
+
+    // Search & Filter
+    function filterProducts() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const category = document.getElementById('categoryFilter').value.toLowerCase();
+        const stock = document.getElementById('stockFilter').value;
+
+        document.querySelectorAll('#productsGrid .product-card').forEach(card => {
+            const name = card.dataset.name || '';
+            const cat = card.dataset.category || '';
+            const qty = parseInt(card.dataset.stock) || 0;
+
+            const matchSearch = !search || name.includes(search);
+            const matchCat = !category || cat.includes(category);
+            let matchStock = true;
+            
+            if (stock === 'in_stock') matchStock = qty > 10;
+            else if (stock === 'low_stock') matchStock = qty > 0 && qty <= 10;
+            else if (stock === 'out_of_stock') matchStock = qty <= 0;
+
+            card.style.display = (matchSearch && matchCat && matchStock) ? '' : 'none';
+        });
+    }
+
+    document.getElementById('searchInput').addEventListener('input', filterProducts);
+    document.getElementById('categoryFilter').addEventListener('change', filterProducts);
+    document.getElementById('stockFilter').addEventListener('change', filterProducts);
+
+    // Bulk Actions
+    document.getElementById('selectAllBtn')?.addEventListener('click', function() {
+        const cards = [...document.querySelectorAll('#productsGrid .product-card')]
+            .filter(c => c.style.display !== 'none');
+        const allSelected = cards.length > 0 && cards.every(c => c.style.outline);
+
+        selectedProducts.clear();
+        cards.forEach(card => {
+            if (!allSelected) {
+                const id = card.querySelector('[data-product-id]')?.dataset.productId;
+                if (id) selectedProducts.add(id);
+                card.style.outline = '2px solid var(--deep-rose)';
+                card.style.outlineOffset = '2px';
+            } else {
+                card.style.outline = '';
+                card.style.outlineOffset = '';
+            }
+        });
+
+        this.innerHTML = allSelected
+            ? '<i class="ri-checkbox-multiple-line"></i> Select All'
+            : '<i class="ri-close-circle-line"></i> Deselect All';
+        updateBulkButtons();
+    });
+
+    function updateBulkButtons() {
+        const has = selectedProducts.size > 0;
+        ['bulkAvailableBtn', 'bulkUnavailableBtn', 'bulkDeleteBtn'].forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = !has;
+        });
+    }
+
+    document.getElementById('bulkAvailableBtn')?.addEventListener('click', async function() {
+        if (!selectedProducts.size || !confirm(`Mark ${selectedProducts.size} product(s) as available?`)) return;
+        for (const id of selectedProducts) {
+            await fetch(`/api/v1/seller/products/${id}/availability`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_available: true })
+            });
+        }
+        window.showToast(`✓  ${selectedProducts.size} product(s) marked available`, 'success');
+        setTimeout(() => location.reload(), 800);
+    });
+
+    document.getElementById('bulkUnavailableBtn')?.addEventListener('click', async function() {
+        if (!selectedProducts.size || !confirm(`Mark ${selectedProducts.size} product(s) as unavailable?`)) return;
+        for (const id of selectedProducts) {
+            await fetch(`/api/v1/seller/products/${id}/availability`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_available: false })
+            });
+        }
+        window.showToast(`${selectedProducts.size} product(s) marked unavailable`);
+        setTimeout(() => location.reload(), 800);
+    });
+
+    document.getElementById('bulkDeleteBtn')?.addEventListener('click', async function() {
+        if (!selectedProducts.size || !confirm(`Delete ${selectedProducts.size} product(s)? This cannot be undone.`)) return;
+        for (const id of selectedProducts) {
+            await fetch(`/api/v1/seller/products/${id}`, { method: 'DELETE' });
+        }
+        window.showToast(`✓  ${selectedProducts.size} product(s) deleted`, 'success');
+        setTimeout(() => location.reload(), 800);
+    });
+
+    // Quick Stock Update
+    function openStockModal(productId, productName) {
+        document.getElementById('stockProductId').value = productId;
+        document.getElementById('stockProductName').value = productName;
+        document.getElementById('stockValue').value = '';
+        openModal('quickStockModal');
+    }
+
+    async function submitStockUpdate() {
+        const productId = document.getElementById('stockProductId').value;
+        const value = parseInt(document.getElementById('stockValue').value);
+        const type = document.getElementById('updateType').value;
+        
+        if (isNaN(value)) { 
+            window.showToast('Enter a valid stock value', 'error'); 
+            return; 
+        }
+        
+        try {
+            const response = await fetch(`/api/v1/seller/products/${productId}/stock`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ update_type: type, stock_quantity: value })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                window.showToast('✓  Stock updated', 'success');
+                closeModal('quickStockModal');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                window.showToast('Error: ' + (data.error || 'Update failed'), 'error');
+            }
+        } catch {
+            window.showToast('Network error', 'error');
+        }
+    }
+
+    // Helper function to escape HTML
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // Make functions globally available
+    window.openAddModal = openAddModal;
+    window.closeModal = closeModal;
+    window.submitAddProduct = submitAddProduct;
+    window.openEditModal = openEditModal;
+    window.submitEditProduct = submitEditProduct;
+    window.deleteProduct = deleteProduct;
+    window.openStockModal = openStockModal;
+    window.submitStockUpdate = submitStockUpdate;
+</script>
+{% endblock %}

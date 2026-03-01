@@ -1,0 +1,1198 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard — E-FLOWERS{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ─── Design Tokens ─────────────────────────────────────── */
+:root {
+  --cream:       #faf6f0;
+  --warm-white:  #fffdf9;
+  --blush:       #f2c4ce;
+  --deep-rose:   #b5445a;
+  --dusty-rose:  #d4788a;
+  --sage:        #7a9e7e;
+  --deep-sage:   #4a6b4e;
+  --terracotta:  #c4714b;
+  --bark:        #6b4c3b;
+  --charcoal:    #2c2520;
+  --muted:       #9a8d85;
+  --border:      rgba(107,76,59,.12);
+  --border-md:   rgba(107,76,59,.22);
+  --font-display:'Cormorant Garamond', serif;
+  --font-sans:   'DM Sans', sans-serif;
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   22px;
+  --radius-xl:   32px;
+  --shadow-card: 0 2px 16px rgba(42,35,30,.07);
+  --shadow-hover:0 8px 36px rgba(42,35,30,.13);
+  --transition:  all .32s cubic-bezier(.4,0,.2,1);
+}
+
+/* ─── Page Shell ────────────────────────────────────────── */
+.dash {
+  background: var(--cream);
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--charcoal);
+  padding: 2rem 2.5rem 4rem;
+  max-width: 1340px;
+  margin: 0 auto;
+}
+
+/* ─── Header Bar ────────────────────────────────────────── */
+.dash-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dash-greeting-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--dusty-rose);
+  margin-bottom: .35rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.dash-greeting-label::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 1.5px;
+  background: var(--dusty-rose);
+}
+
+.dash-title {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3.5vw, 42px);
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--charcoal);
+}
+
+.dash-title em {
+  font-style: italic;
+  color: var(--deep-rose);
+}
+
+.dash-date {
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: .45rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.dash-date i { color: var(--dusty-rose); font-size: 15px; }
+
+/* ─── KPI Strip ─────────────────────────────────────────── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.kpi-card {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem 1.75rem;
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition);
+  cursor: default;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .4s ease;
+}
+
+.kpi-card:hover { 
+  box-shadow: var(--shadow-hover); 
+  transform: translateY(-3px);
+  border-color: var(--border-md);
+}
+
+.kpi-card:hover::before { transform: scaleX(1); }
+
+.kpi-card.green::before  { background: linear-gradient(90deg, var(--sage), var(--deep-sage)); }
+.kpi-card.terra::before  { background: linear-gradient(90deg, var(--terracotta), var(--bark)); }
+.kpi-card.bark::before   { background: linear-gradient(90deg, var(--bark), var(--charcoal)); }
+
+.kpi-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kpi-icon {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.kpi-card:nth-child(1) .kpi-icon { background: rgba(181,68,90,.1); color: var(--deep-rose); }
+.kpi-card:nth-child(2) .kpi-icon { background: rgba(122,158,126,.13); color: var(--sage); }
+.kpi-card:nth-child(3) .kpi-icon { background: rgba(196,113,75,.12); color: var(--terracotta); }
+.kpi-card:nth-child(4) .kpi-icon { background: rgba(107,76,59,.1); color: var(--bark); }
+
+.kpi-value {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 500;
+  color: var(--charcoal);
+  line-height: 1;
+  margin-bottom: .35rem;
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: .9rem;
+}
+
+.kpi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 100px;
+}
+
+.kpi-badge.up   { background: rgba(122,158,126,.15); color: var(--deep-sage); }
+.kpi-badge.down { background: rgba(181,68,90,.1);   color: var(--deep-rose); }
+
+/* ─── Two-column body ───────────────────────────────────── */
+.dash-body {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ─── Panel base ────────────────────────────────────────── */
+.panel {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.4rem 1.75rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.panel-action {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--deep-rose);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: var(--transition);
+  padding: .35rem .8rem;
+  border-radius: 100px;
+  border: 1.5px solid transparent;
+}
+
+.panel-action:hover {
+  border-color: var(--deep-rose);
+  background: rgba(181,68,90,.05);
+}
+
+/* ─── Chart Area ────────────────────────────────────────── */
+.chart-wrap {
+  padding: 1.5rem 1.75rem;
+}
+
+.chart-tabs {
+  display: flex;
+  gap: .35rem;
+  margin-bottom: 1.5rem;
+}
+
+.chart-tab {
+  padding: .4rem 1rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.chart-tab.active,
+.chart-tab:hover {
+  border-color: var(--deep-rose);
+  color: var(--deep-rose);
+  background: rgba(181,68,90,.06);
+}
+
+/* ─── Top Products Panel ────────────────────────────────── */
+.product-rank {
+  padding: .85rem 1.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.product-rank:last-child { border-bottom: none; }
+.product-rank:hover { background: var(--cream); }
+
+.rank-num {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rank-num.gold   { background: rgba(255,210,63,.2); color: #b8860b; }
+.rank-num.silver { background: rgba(150,150,160,.15); color: #555; }
+.rank-num.bronze { background: rgba(196,113,75,.15); color: var(--terracotta); }
+.rank-num.plain  { background: var(--cream); color: var(--muted); border: 1px solid var(--border); }
+
+.rank-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rank-info { flex: 1; min-width: 0; }
+
+.rank-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-store {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.rank-sold {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--charcoal);
+  flex-shrink: 0;
+}
+
+.rank-sold span {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* ─── Orders Table ──────────────────────────────────────── */
+.orders-panel { margin-bottom: 1.5rem; }
+
+.table-scroll { overflow-x: auto; }
+
+table.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.dash-table thead th {
+  padding: .75rem 1.4rem;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--cream);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.dash-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.dash-table tbody tr:last-child { border-bottom: none; }
+.dash-table tbody tr:hover { background: rgba(250,246,240,.7); }
+
+.dash-table td {
+  padding: .95rem 1.4rem;
+  vertical-align: middle;
+}
+
+.order-id {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.customer-cell {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.c-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: white;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.c-name { font-weight: 500; font-size: 13px; }
+
+.amount-cell {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+/* Status badges */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border-radius: 100px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pill::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+
+.s-delivered { background: rgba(122,158,126,.15); color: var(--deep-sage); }
+.s-delivered::before { background: var(--sage); }
+
+.s-delivery  { background: rgba(196,113,75,.13); color: var(--terracotta); }
+.s-delivery::before  { background: var(--terracotta); box-shadow: 0 0 0 2px rgba(196,113,75,.3); animation: pulse 1.5s infinite; }
+
+.s-processing { background: rgba(181,68,90,.1); color: var(--deep-rose); }
+.s-processing::before { background: var(--deep-rose); }
+
+.s-pending { background: rgba(107,76,59,.1); color: var(--bark); }
+.s-pending::before { background: var(--muted); }
+
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(196,113,75,.4); }
+  50%      { box-shadow: 0 0 0 4px rgba(196,113,75,0); }
+}
+
+.action-btn-sm {
+  padding: 5px 14px;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--charcoal);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: var(--transition);
+}
+
+.action-btn-sm:hover {
+  border-color: var(--deep-rose);
+  color: var(--deep-rose);
+  background: rgba(181,68,90,.05);
+}
+
+/* ─── Bottom Row ────────────────────────────────────────── */
+.dash-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+/* ─── Quick Actions ─────────────────────────────────────── */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75rem;
+  padding: 1.4rem 1.75rem;
+}
+
+.qa-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .5rem;
+  padding: 1.1rem 1.25rem;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--cream);
+  text-decoration: none;
+  color: var(--charcoal);
+  transition: var(--transition);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+
+.qa-btn:hover {
+  border-color: var(--deep-rose);
+  background: var(--warm-white);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(181,68,90,.1);
+}
+
+.qa-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  transition: var(--transition);
+}
+
+.qa-btn:hover .qa-icon { transform: scale(1.1); }
+
+.qa-icon.rose   { background: rgba(181,68,90,.1);   color: var(--deep-rose); }
+.qa-icon.sage   { background: rgba(122,158,126,.13); color: var(--sage); }
+.qa-icon.terra  { background: rgba(196,113,75,.12);  color: var(--terracotta); }
+.qa-icon.bark   { background: rgba(107,76,59,.1);    color: var(--bark); }
+
+.qa-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.qa-desc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ─── Performance ───────────────────────────────────────── */
+.perf-body { padding: 1.25rem 1.75rem; }
+
+.perf-item { margin-bottom: 1.5rem; }
+.perf-item:last-child { margin-bottom: 0; }
+
+.perf-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .55rem;
+}
+
+.perf-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--charcoal);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.perf-name i { font-size: 14px; color: var(--muted); }
+
+.perf-val {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.perf-track {
+  height: 7px;
+  background: rgba(107,76,59,.08);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.perf-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 1.2s cubic-bezier(.4,0,.2,1);
+}
+
+.fill-rose  { background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose)); }
+.fill-sage  { background: linear-gradient(90deg, var(--sage), var(--deep-sage)); }
+.fill-terra { background: linear-gradient(90deg, var(--terracotta), #e8906a); }
+
+.perf-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: .4rem;
+}
+
+/* ─── Activity Feed ─────────────────────────────────────── */
+.activity-feed { padding: .5rem 0; }
+
+.activity-item {
+  display: flex;
+  gap: 1rem;
+  padding: .85rem 1.75rem;
+  position: relative;
+  transition: var(--transition);
+}
+
+.activity-item:hover { background: var(--cream); }
+
+.activity-item::before {
+  content: '';
+  position: absolute;
+  left: calc(1.75rem + 15px);
+  top: calc(.85rem + 32px);
+  width: 1px;
+  height: calc(100% - .85rem);
+  background: var(--border);
+}
+
+.activity-item:last-child::before { display: none; }
+
+.act-dot {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.act-dot.order    { background: rgba(181,68,90,.1);   color: var(--deep-rose); }
+.act-dot.delivery { background: rgba(196,113,75,.13); color: var(--terracotta); }
+.act-dot.product  { background: rgba(122,158,126,.13); color: var(--sage); }
+.act-dot.review   { background: rgba(255,210,63,.18); color: #b8860b; }
+
+.act-text {
+  flex: 1;
+}
+
+.act-main {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--charcoal);
+  line-height: 1.4;
+}
+
+.act-main strong { color: var(--deep-rose); font-weight: 600; }
+
+.act-time {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ─── Responsive ────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .kpi-row { grid-template-columns: repeat(2,1fr); }
+  .dash-body { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .dash { padding: 1.25rem 1rem 3rem; }
+  .kpi-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .dash-bottom { grid-template-columns: 1fr; }
+  .quick-actions-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 480px) {
+  .kpi-row { grid-template-columns: 1fr; }
+  .quick-actions-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── Entry Animations ──────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.kpi-card    { animation: fadeUp .45s ease both; }
+.kpi-card:nth-child(1) { animation-delay: .05s; }
+.kpi-card:nth-child(2) { animation-delay: .12s; }
+.kpi-card:nth-child(3) { animation-delay: .19s; }
+.kpi-card:nth-child(4) { animation-delay: .26s; }
+
+.panel       { animation: fadeUp .5s .3s ease both; }
+.orders-panel{ animation: fadeUp .5s .4s ease both; }
+.dash-bottom .panel { animation: fadeUp .5s .5s ease both; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dash">
+
+  <!-- ─── Header ─────────────────────────────────────────── -->
+  <div class="dash-header">
+    <div>
+      <div class="dash-greeting-label">Welcome back</div>
+      <h1 class="dash-title">Your Store, <em>in bloom</em></h1>
+    </div>
+    <div class="dash-date" id="dashDate">
+      <i class="ri-calendar-line"></i>
+      <span id="dateStr">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ─── KPI Strip ───────────────────────────────────────── -->
+  <div class="kpi-row">
+    <!-- Revenue -->
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <div class="kpi-label">Total Revenue</div>
+        <div class="kpi-icon"><i class="ri-money-dollar-circle-line"></i></div>
+      </div>
+      <div class="kpi-value" id="kpiRevenue">₱24,580</div>
+      <div class="kpi-sub">This month</div>
+      <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> 12.5%</span>
+    </div>
+
+    <!-- Orders -->
+    <div class="kpi-card green">
+      <div class="kpi-top">
+        <div class="kpi-label">Total Orders</div>
+        <div class="kpi-icon"><i class="ri-shopping-bag-line"></i></div>
+      </div>
+      <div class="kpi-value" id="kpiOrders">156</div>
+      <div class="kpi-sub">Orders placed</div>
+      <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> 8.2%</span>
+    </div>
+
+    <!-- Customers -->
+    <div class="kpi-card terra">
+      <div class="kpi-top">
+        <div class="kpi-label">Active Customers</div>
+        <div class="kpi-icon"><i class="ri-user-heart-line"></i></div>
+      </div>
+      <div class="kpi-value" id="kpiCustomers">342</div>
+      <div class="kpi-sub">This month</div>
+      <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> 5.3%</span>
+    </div>
+
+    <!-- Delivery -->
+    <div class="kpi-card bark">
+      <div class="kpi-top">
+        <div class="kpi-label">Delivery Rate</div>
+        <div class="kpi-icon"><i class="ri-truck-line"></i></div>
+      </div>
+      <div class="kpi-value" id="kpiDelivery">98.2%</div>
+      <div class="kpi-sub">On-time</div>
+      <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> 2.1%</span>
+    </div>
+  </div>
+
+  <!-- ─── Body: Chart + Top Products ─────────────────────── -->
+  <div class="dash-body">
+
+    <!-- Revenue Chart -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Revenue Overview</span>
+        <div class="chart-tabs">
+          <button class="chart-tab" onclick="switchPeriod('7d',this)">7 days</button>
+          <button class="chart-tab active" onclick="switchPeriod('30d',this)">30 days</button>
+          <button class="chart-tab" onclick="switchPeriod('90d',this)">90 days</button>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="revenueChart" height="220"></canvas>
+      </div>
+    </div>
+
+    <!-- Top Products -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Top Products</span>
+        <a href="{{ url_for('templates.seller_products') }}" class="panel-action">
+          All <i class="ri-arrow-right-line"></i>
+        </a>
+      </div>
+
+      <div class="product-rank">
+        <div class="rank-num gold">1</div>
+        <div class="rank-dot" style="background:var(--deep-rose)"></div>
+        <div class="rank-info">
+          <div class="rank-name">Rose Bouquet</div>
+          <div class="rank-store">Classic Collection</div>
+        </div>
+        <div class="rank-sold">48 <span>sold</span></div>
+      </div>
+
+      <div class="product-rank">
+        <div class="rank-num silver">2</div>
+        <div class="rank-dot" style="background:var(--sage)"></div>
+        <div class="rank-info">
+          <div class="rank-name">Tulips Set</div>
+          <div class="rank-store">Spring Picks</div>
+        </div>
+        <div class="rank-sold">32 <span>sold</span></div>
+      </div>
+
+      <div class="product-rank">
+        <div class="rank-num bronze">3</div>
+        <div class="rank-dot" style="background:var(--dusty-rose)"></div>
+        <div class="rank-info">
+          <div class="rank-name">Orchid Pots</div>
+          <div class="rank-store">Potted Plants</div>
+        </div>
+        <div class="rank-sold">28 <span>sold</span></div>
+      </div>
+
+      <div class="product-rank">
+        <div class="rank-num plain">4</div>
+        <div class="rank-dot" style="background:var(--terracotta)"></div>
+        <div class="rank-info">
+          <div class="rank-name">Sunflower Bundle</div>
+          <div class="rank-store">Summer Edition</div>
+        </div>
+        <div class="rank-sold">21 <span>sold</span></div>
+      </div>
+
+      <div class="product-rank">
+        <div class="rank-num plain">5</div>
+        <div class="rank-dot" style="background:var(--bark)"></div>
+        <div class="rank-info">
+          <div class="rank-name">Succulent Mix</div>
+          <div class="rank-store">Miniatures</div>
+        </div>
+        <div class="rank-sold">18 <span>sold</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Recent Orders ───────────────────────────────────── -->
+  <div class="panel orders-panel">
+    <div class="panel-head">
+      <span class="panel-title">Recent Orders</span>
+      <a href="{{ url_for('templates.seller_orders') }}" class="panel-action">
+        View all <i class="ri-arrow-right-line"></i>
+      </a>
+    </div>
+    <div class="table-scroll">
+      <table class="dash-table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="order-id">#00124</span></td>
+            <td>
+              <div class="customer-cell">
+                <div class="c-avatar" style="background:linear-gradient(135deg,var(--blush),var(--dusty-rose))">M</div>
+                <span class="c-name">Maria Santos</span>
+              </div>
+            </td>
+            <td style="color:var(--muted);font-size:12.5px;">Today, 10:30 AM</td>
+            <td><span class="amount-cell">₱1,250</span></td>
+            <td><span class="status-pill s-delivery">On Delivery</span></td>
+            <td><button class="action-btn-sm">Track</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#00123</span></td>
+            <td>
+              <div class="customer-cell">
+                <div class="c-avatar" style="background:linear-gradient(135deg,var(--sage),var(--deep-sage))">J</div>
+                <span class="c-name">John Dela Cruz</span>
+              </div>
+            </td>
+            <td style="color:var(--muted);font-size:12.5px;">Yesterday, 3:45 PM</td>
+            <td><span class="amount-cell">₱2,800</span></td>
+            <td><span class="status-pill s-delivered">Delivered</span></td>
+            <td><button class="action-btn-sm">View</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#00122</span></td>
+            <td>
+              <div class="customer-cell">
+                <div class="c-avatar" style="background:linear-gradient(135deg,var(--terracotta),var(--bark))">A</div>
+                <span class="c-name">Anna Reyes</span>
+              </div>
+            </td>
+            <td style="color:var(--muted);font-size:12.5px;">Nov 28, 2024</td>
+            <td><span class="amount-cell">₱950</span></td>
+            <td><span class="status-pill s-delivered">Delivered</span></td>
+            <td><button class="action-btn-sm">View</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#00121</span></td>
+            <td>
+              <div class="customer-cell">
+                <div class="c-avatar" style="background:linear-gradient(135deg,#a9c5e8,#6b8fb5)">C</div>
+                <span class="c-name">Carlos Garcia</span>
+              </div>
+            </td>
+            <td style="color:var(--muted);font-size:12.5px;">Nov 27, 2024</td>
+            <td><span class="amount-cell">₱1,750</span></td>
+            <td><span class="status-pill s-processing">Processing</span></td>
+            <td><button class="action-btn-sm">Process</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#00120</span></td>
+            <td>
+              <div class="customer-cell">
+                <div class="c-avatar" style="background:linear-gradient(135deg,#e8d5c4,#c4a080)">L</div>
+                <span class="c-name">Liza Mendoza</span>
+              </div>
+            </td>
+            <td style="color:var(--muted);font-size:12.5px;">Nov 26, 2024</td>
+            <td><span class="amount-cell">₱3,200</span></td>
+            <td><span class="status-pill s-pending">Pending</span></td>
+            <td><button class="action-btn-sm">Review</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ─── Bottom Row ──────────────────────────────────────── -->
+  <div class="dash-bottom">
+
+    <!-- Quick Actions -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Quick Actions</span>
+      </div>
+      <div class="quick-actions-grid">
+        <a href="{{ url_for('templates.seller_products') }}" class="qa-btn">
+          <div class="qa-icon rose"><i class="ri-add-circle-line"></i></div>
+          <div class="qa-label">Add Product</div>
+          <div class="qa-desc">List a new bloom or plant</div>
+        </a>
+        <a href="{{ url_for('templates.seller_orders') }}" class="qa-btn">
+          <div class="qa-icon sage"><i class="ri-shopping-bag-3-line"></i></div>
+          <div class="qa-label">View Orders</div>
+          <div class="qa-desc">Manage incoming orders</div>
+        </a>
+        <a href="{{ url_for('templates.seller_riders') }}" class="qa-btn">
+          <div class="qa-icon terra"><i class="ri-motorbike-line"></i></div>
+          <div class="qa-label">Riders</div>
+          <div class="qa-desc">Assign & track deliveries</div>
+        </a>
+        <a href="{{ url_for('templates.analytics') }}" class="qa-btn">
+          <div class="qa-icon bark"><i class="ri-bar-chart-grouped-line"></i></div>
+          <div class="qa-label">Analytics</div>
+          <div class="qa-desc">Deep-dive into your data</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- Performance + Activity split -->
+    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+
+      <!-- Store Performance -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Performance</span>
+        </div>
+        <div class="perf-body">
+          <div class="perf-item">
+            <div class="perf-meta">
+              <span class="perf-name"><i class="ri-star-line"></i> Customer Satisfaction</span>
+              <span class="perf-val">4.8/5</span>
+            </div>
+            <div class="perf-track">
+              <div class="perf-fill fill-rose" style="width:96%"></div>
+            </div>
+            <div class="perf-note">Based on 142 reviews this month</div>
+          </div>
+
+          <div class="perf-item">
+            <div class="perf-meta">
+              <span class="perf-name"><i class="ri-checkbox-circle-line"></i> Order Accuracy</span>
+              <span class="perf-val">99.2%</span>
+            </div>
+            <div class="perf-track">
+              <div class="perf-fill fill-sage" style="width:99.2%"></div>
+            </div>
+            <div class="perf-note">Only 1 error in 125 orders</div>
+          </div>
+
+          <div class="perf-item">
+            <div class="perf-meta">
+              <span class="perf-name"><i class="ri-timer-line"></i> Avg. Prep Time</span>
+              <span class="perf-val">18 min</span>
+            </div>
+            <div class="perf-track">
+              <div class="perf-fill fill-terra" style="width:74%"></div>
+            </div>
+            <div class="perf-note">Target: 15 min — improving</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Activity</span>
+        </div>
+        <div class="activity-feed">
+          <div class="activity-item">
+            <div class="act-dot order"><i class="ri-shopping-bag-line"></i></div>
+            <div class="act-text">
+              <div class="act-main"><strong>New order</strong> from Maria Santos — ₱1,250</div>
+              <div class="act-time">Just now</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot delivery"><i class="ri-truck-line"></i></div>
+            <div class="act-text">
+              <div class="act-main">Order <strong>#00119</strong> marked as delivered</div>
+              <div class="act-time">32 minutes ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot review"><i class="ri-star-line"></i></div>
+            <div class="act-text">
+              <div class="act-main"><strong>5-star review</strong> received on Rose Bouquet</div>
+              <div class="act-time">1 hour ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot product"><i class="ri-plant-line"></i></div>
+            <div class="act-text">
+              <div class="act-main"><strong>Low stock</strong> alert: Tulips Set (3 left)</div>
+              <div class="act-time">2 hours ago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /dash -->
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+/* ── Date ─────────────────────────────────────────────── */
+(function(){
+  const d = new Date();
+  const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
+  document.getElementById('dateStr').textContent = d.toLocaleDateString('en-PH', opts);
+})();
+
+/* ── Chart data sets ──────────────────────────────────── */
+const datasets = {
+  '7d': {
+    labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+    revenue: [1800, 2200, 1600, 2800, 3100, 4200, 3800],
+    orders:  [5, 7, 4, 9, 10, 13, 12]
+  },
+  '30d': {
+    labels: ['Nov 1','Nov 5','Nov 10','Nov 15','Nov 20','Nov 25','Nov 30'],
+    revenue: [1200, 1900, 3000, 5000, 2800, 3600, 4500],
+    orders:  [4, 6, 8, 12, 8, 10, 13]
+  },
+  '90d': {
+    labels: ['Sep','Oct wk1','Oct wk2','Oct wk3','Nov wk1','Nov wk2','Nov wk3','Nov wk4'],
+    revenue: [8000, 10200, 9600, 12800, 11000, 15400, 13200, 18000],
+    orders:  [24, 31, 28, 38, 33, 46, 40, 52]
+  }
+};
+
+/* ── Build Chart ──────────────────────────────────────── */
+const ctx = document.getElementById('revenueChart').getContext('2d');
+
+const roseGrad = ctx.createLinearGradient(0,0,0,220);
+roseGrad.addColorStop(0,   'rgba(181,68,90,.18)');
+roseGrad.addColorStop(1,   'rgba(181,68,90,.02)');
+
+const sageGrad = ctx.createLinearGradient(0,0,0,220);
+sageGrad.addColorStop(0,   'rgba(122,158,126,.18)');
+sageGrad.addColorStop(1,   'rgba(122,158,126,.02)');
+
+let chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: datasets['30d'].labels,
+    datasets: [
+      {
+        label: 'Revenue (₱)',
+        data: datasets['30d'].revenue,
+        borderColor: 'rgba(181,68,90,1)',
+        backgroundColor: roseGrad,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.42,
+        pointRadius: 4,
+        pointBackgroundColor: 'rgba(181,68,90,1)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 6,
+      },
+      {
+        label: 'Orders',
+        data: datasets['30d'].orders,
+        borderColor: 'rgba(122,158,126,1)',
+        backgroundColor: sageGrad,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.42,
+        yAxisID: 'y1',
+        pointRadius: 4,
+        pointBackgroundColor: 'rgba(122,158,126,1)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 6,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: {
+          font: { family: "'DM Sans', sans-serif", size: 12 },
+          boxWidth: 12,
+          padding: 16,
+          color: '#9a8d85'
+        }
+      },
+      tooltip: {
+        backgroundColor: '#fffdf9',
+        titleColor: '#2c2520',
+        bodyColor: '#9a8d85',
+        borderColor: 'rgba(107,76,59,.15)',
+        borderWidth: 1,
+        padding: 12,
+        titleFont: { family: "'Cormorant Garamond', serif", size: 16 },
+        bodyFont:  { family: "'DM Sans', sans-serif", size: 12 },
+        callbacks: {
+          label: c => c.datasetIndex === 0
+            ? `  Revenue: ₱${c.parsed.y.toLocaleString()}`
+            : `  Orders: ${c.parsed.y}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(107,76,59,.06)' },
+        ticks: { font: { family: "'DM Sans'", size: 11 }, color: '#9a8d85' }
+      },
+      y: {
+        position: 'left',
+        grid: { color: 'rgba(107,76,59,.06)' },
+        ticks: {
+          font: { family: "'DM Sans'", size: 11 },
+          color: '#9a8d85',
+          callback: v => '₱' + v.toLocaleString()
+        }
+      },
+      y1: {
+        position: 'right',
+        grid: { drawOnChartArea: false },
+        ticks: {
+          font: { family: "'DM Sans'", size: 11 },
+          color: '#9a8d85',
+        }
+      }
+    }
+  }
+});
+
+/* ── Period Switch ────────────────────────────────────── */
+function switchPeriod(period, btn) {
+  document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  const d = datasets[period];
+  chart.data.labels = d.labels;
+  chart.data.datasets[0].data = d.revenue;
+  chart.data.datasets[1].data = d.orders;
+  chart.update('active');
+}
+
+/* ── Animate progress bars on load ───────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.perf-fill').forEach(el => {
+    const target = el.style.width;
+    el.style.width = '0';
+    requestAnimationFrame(() => {
+      setTimeout(() => { el.style.width = target; }, 600);
+    });
+  });
+});
+</script>
+{% endblock %}

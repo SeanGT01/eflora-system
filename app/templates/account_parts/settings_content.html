@@ -1,0 +1,93 @@
+<h1 class="profile-title">Account Settings</h1>
+
+<div class="profile-card">
+    <h3 class="card-title" style="margin-bottom: 1.5rem;">Notification Preferences</h3>
+    
+    <form id="settingsForm">
+        <div class="form-group">
+            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="email_notifications" checked>
+                <span>Email Notifications</span>
+            </label>
+            <small class="form-text">Receive order updates and promotions via email</small>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="sms_notifications" checked>
+                <span>SMS Notifications</span>
+            </label>
+            <small class="form-text">Receive order updates via SMS</small>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="marketing_emails">
+                <span>Marketing Emails</span>
+            </label>
+            <small class="form-text">Receive promotional emails and offers</small>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Preferences</button>
+        </div>
+    </form>
+</div>
+
+<div class="profile-card" style="margin-top: 2rem;">
+    <h3 class="card-title">Privacy Settings</h3>
+    
+    <div style="margin-bottom: 1.5rem;">
+        <button class="btn btn-outline" onclick="exportData()">
+            <i class="ri-download-line"></i> Export My Data
+        </button>
+        <small class="form-text">Download all your personal data from E-FLOWERS</small>
+    </div>
+    
+    <div>
+        <button class="btn btn-outline" style="color: #ff6b6b;" onclick="deleteAccount()">
+            <i class="ri-delete-bin-line"></i> Delete Account
+        </button>
+        <small class="form-text" style="color: #ff6b6b;">This action cannot be undone</small>
+    </div>
+</div>
+
+<script>
+    // Settings form submission
+    document.getElementById('settingsForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+        
+        try {
+            const response = await fetch('/api/account/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showNotification('Settings updated successfully!');
+            } else {
+                alert('Error: ' + result.message);
+            }
+        } catch (error) {
+            alert('Network error. Please try again.');
+        }
+    });
+    
+    function exportData() {
+        alert('Data export functionality coming soon!');
+    }
+    
+    function deleteAccount() {
+        if (confirm('Are you sure you want to delete your account? This cannot be undone.')) {
+            alert('Account deletion functionality coming soon!');
+        }
+    }
+</script>
