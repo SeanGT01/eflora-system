@@ -1,5 +1,21 @@
 <style>
     /* ─── Profile Content Styles ─── */
+
+
+        /* Add to your styles */
+    .mapboxgl-ctrl-geocoder {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: var(--radius-md) !important;
+        border: 1.5px solid var(--border-strong) !important;
+        box-shadow: none !important;
+    }
+
+    .mapboxgl-ctrl-geocoder--input {
+        height: 44px !important;
+        padding: 0 2.5rem !important;
+        font-family: var(--font-sans) !important;
+    }
     .content-header {
         margin-bottom: 2rem;
     }
@@ -446,6 +462,77 @@
         margin-bottom: 1.5rem;
     }
 
+    /* ─── Map Styles ─── */
+    #mapSection {
+        margin-top: 0.5rem;
+    }
+
+    #addressMap {
+        width: 100%;
+        height: 350px;
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        border: 1.5px solid var(--border-strong);
+        position: relative;
+    }
+
+    .map-overlay {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: white;
+        padding: 8px 12px;
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-sm);
+        font-size: 11px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        z-index: 10;
+        pointer-events: none;
+    }
+
+    .map-overlay i {
+        color: var(--deep-rose);
+        font-size: 14px;
+    }
+
+    .mapboxgl-ctrl-logo {
+        display: none !important;
+    }
+
+    .mapboxgl-marker {
+        cursor: pointer;
+    }
+
+    .mapboxgl-popup-content {
+        padding: 12px;
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-petal);
+    }
+
+    .map-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 350px;
+        background: var(--cream);
+        border-radius: var(--radius-lg);
+        border: 1.5px solid var(--border);
+    }
+
+    .map-loading i {
+        font-size: 32px;
+        color: var(--muted);
+        animation: spin-loader 1s linear infinite;
+    }
+
+    @keyframes spin-loader {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
     /* ─── Responsive ─── */
     @media (max-width: 700px) {
         .form-grid { grid-template-columns: 1fr; }
@@ -457,6 +544,7 @@
         .form-actions .btn { width: 100%; justify-content: center; }
         .address-actions { flex-direction: column; width: 100%; }
         .address-actions .btn { width: 100%; }
+        #addressMap { height: 300px; }
     }
 </style>
 
@@ -709,9 +797,9 @@
 {% endif %}
 
 <!-- ─── Add/Edit Address Modal ─── -->
-<div id="addressModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
-    <div style="background:var(--warm-white);border-radius:var(--radius-xl);width:90%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-petal);">
-        <div class="card-header">
+<div id="addressModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;overflow-y:auto;padding:1rem;">
+    <div style="background:var(--warm-white);border-radius:var(--radius-xl);width:90%;max-width:700px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-petal);margin:auto;">
+        <div class="card-header" style="position:sticky;top:0;background:var(--warm-white);z-index:10;border-bottom:1px solid var(--border);">
             <div class="card-header-left">
                 <div class="card-header-icon"><i class="ri-map-pin-add-line"></i></div>
                 <div class="card-title" id="addressModalTitle">Add Delivery Address</div>
@@ -724,6 +812,10 @@
         <div class="card-body">
             <form id="addressForm">
                 <input type="hidden" id="addressId" name="address_id">
+                <input type="hidden" id="exactLat" name="exact_lat">
+                <input type="hidden" id="exactLng" name="exact_lng">
+                <!-- NEW: Hidden input for place_id -->
+                <input type="hidden" id="exactPlaceId" name="place_id">
                 
                 <div class="form-grid">
                     <!-- Address Label -->
@@ -759,7 +851,7 @@
                     <!-- Barangay -->
                     <div class="form-group">
                         <label class="form-label">Barangay <span style="color:var(--deep-rose)">*</span></label>
-                        <select class="form-control" id="barangay" name="barangay" required disabled>
+                        <select class="form-control" id="barangay" name="barangay" required disabled onchange="updateAddressPreview()">
                             <option value="">Select Municipality first</option>
                         </select>
                     </div>
@@ -768,7 +860,8 @@
                     <div class="form-group form-group-full">
                         <label class="form-label">Street Name (Optional)</label>
                         <input type="text" class="form-control" id="street" name="street" 
-                               placeholder="e.g., Main Street, J.P. Rizal Ave">
+                               placeholder="e.g., Main Street, J.P. Rizal Ave"
+                               oninput="updateAddressPreview()">
                         <div class="form-hint">Street, subdivision, or road name</div>
                     </div>
 
@@ -776,10 +869,36 @@
                     <div class="form-group form-group-full">
                         <label class="form-label">House/Unit Details (Optional)</label>
                         <textarea class="form-control" id="building_details" name="building_details" rows="2"
-                                  placeholder="e.g., Bldg 5, Unit 301, near Sari-Sari Store" style="resize:vertical;"></textarea>
+                                  placeholder="e.g., Bldg 5, Unit 301, near Sari-Sari Store" 
+                                  style="resize:vertical;"
+                                  oninput="updateAddressPreview()"></textarea>
                         <div class="form-hint">House number, building, unit, landmarks</div>
                     </div>
 
+             
+                                    <!-- MAP SECTION -->
+                    <div class="form-group form-group-full" id="mapSection" style="display:none;">
+                        <label class="form-label">
+                            Pin Your Exact Location <span style="color:var(--deep-rose)">*</span>
+                            <span style="font-weight:normal;color:var(--muted);font-size:11px;margin-left:0.5rem;">
+                                (Click or drag marker on map)
+                            </span>
+                        </label>
+                        
+                        <!-- ADD THIS: Geocoder search container -->
+                        <div id="geocoder" style="margin-bottom: 10px;"></div>
+                        
+                        <div style="position:relative;">
+                            <div id="addressMap"></div>
+                            <div class="map-overlay">
+                                <i class="ri-map-pin-line"></i>
+                                <span id="mapCoords">Loading map...</span>
+                            </div>
+                        </div>
+                        <div class="form-hint" style="margin-top:0.5rem;">
+                            <i class="ri-information-line"></i> Drag the marker to your exact house location for accurate delivery.
+                        </div>
+                    </div>
                     <!-- Preview -->
                     <div class="form-group form-group-full" id="addressPreviewSection" style="display:none;">
                         <label class="form-label">Address Preview</label>
@@ -843,6 +962,45 @@ function showToast(message, type = 'info') {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Get Mapbox token using multiple fallback methods
+    let MAPBOX_TOKEN = '';
+    
+    // Method 1: Hidden input from parent template
+    const tokenInput = document.getElementById('mapbox-token');
+    if (tokenInput && tokenInput.value) {
+        MAPBOX_TOKEN = tokenInput.value;
+        console.log('✅ Token found via hidden input');
+    }
+    
+    // Method 2: Global variable from parent template
+    if (!MAPBOX_TOKEN && window.MAPBOX_TOKEN) {
+        MAPBOX_TOKEN = window.MAPBOX_TOKEN;
+        console.log('✅ Token found via window.MAPBOX_TOKEN');
+    }
+    
+    // Method 3: Template variable (if passed with context)
+    if (!MAPBOX_TOKEN) {
+        try {
+            const templateToken = '{{ mapbox_token }}';
+            if (templateToken && templateToken !== '') {
+                MAPBOX_TOKEN = templateToken;
+                console.log('✅ Token found via template variable');
+            }
+        } catch (e) {
+            // Ignore template errors
+        }
+    }
+    
+    // Set as global for other functions
+    window.MAPBOX_TOKEN = MAPBOX_TOKEN;
+    
+    if (!MAPBOX_TOKEN) {
+        console.error('❌ Mapbox token not configured - address map will not work');
+    } else {
+        console.log('🗺️ Mapbox token loaded successfully');
+    }
+    
+    // Initialize other functions
     checkApplicationStatus();
     setupImagePreviews();
     setupSellerApplicationForm();
@@ -851,15 +1009,13 @@ document.addEventListener('DOMContentLoaded', function() {
     setupPasswordForm();
     loadAddresses();
     loadMunicipalities();
-    
-    // Listen for changes to update preview
-    ['municipality', 'barangay', 'street', 'building_details'].forEach(id => {
-        document.getElementById(id)?.addEventListener('change', updateAddressPreview);
-        document.getElementById(id)?.addEventListener('input', updateAddressPreview);
-    });
 });
 
-// ═════ ADDRESS MANAGEMENT ═════
+// ═════ ADDRESS MANAGEMENT WITH MAPBOX ═════
+let map = null;
+let marker = null;
+let geocoder = null; // Add geocoder variable
+
 async function loadAddresses() {
     try {
         const r = await fetch('/api/account/addresses');
@@ -935,6 +1091,12 @@ async function loadBarangays(municipality) {
     if (!municipality) {
         barangaySelect.innerHTML = '<option value="">Select Municipality first</option>';
         barangaySelect.disabled = true;
+        document.getElementById('mapSection').style.display = 'none';
+        if (map) {
+            map.remove();
+            map = null;
+            marker = null;
+        }
         return;
     }
     
@@ -946,11 +1108,179 @@ async function loadBarangays(municipality) {
             barangaySelect.innerHTML = '<option value="">Select Barangay</option>' +
                 d.barangays.map(b => `<option value="${b}">${b}</option>`).join('');
             barangaySelect.disabled = false;
+            
+            // Initialize map with municipality coordinates
+            if (d.coordinates) {
+                initializeMap(d.coordinates.lat, d.coordinates.lng);
+            }
+            
+            updateAddressPreview();
         }
     } catch (error) {
         console.error('Error loading barangays:', error);
         showToast('Error loading barangays', 'error');
     }
+}
+
+function initializeMap(lat, lng) {
+    console.log('🗺️ Initializing map:', lat, lng);
+    
+    // Show map section
+    document.getElementById('mapSection').style.display = 'block';
+    document.getElementById('mapCoords').textContent = 'Loading map...';
+    
+    // Wait for element to be visible
+    setTimeout(() => {
+        // Remove existing map
+        if (map) {
+            map.remove();
+        }
+        
+        // Get token from window.MAPBOX_TOKEN
+        const token = window.MAPBOX_TOKEN;
+        
+        if (!token) {
+            console.error('❌ Mapbox token not configured');
+            document.getElementById('mapCoords').textContent = 'Map token not configured';
+            showToast('Map configuration error', 'error');
+            return;
+        }
+        
+        mapboxgl.accessToken = token;
+        
+        map = new mapboxgl.Map({
+            container: 'addressMap',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [lng, lat],
+            zoom: 15
+        });
+        
+        // Add navigation controls
+        map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+        
+        // Add draggable marker
+        marker = new mapboxgl.Marker({
+            draggable: true,
+            color: '#B5445A'
+        })
+        .setLngLat([lng, lat])
+        .addTo(map);
+        
+        // Update coordinates display
+        updateMapCoords(lat, lng);
+        
+        // Update hidden inputs
+        document.getElementById('exactLat').value = lat;
+        document.getElementById('exactLng').value = lng;
+        
+        // Function to reverse geocode and get place_id
+        async function reverseGeocode(lngLat) {
+            try {
+                const response = await fetch(
+                    `https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${token}&types=address,poi&limit=1`
+                );
+                const data = await response.json();
+                
+                if (data.features && data.features.length > 0) {
+                    const feature = data.features[0];
+                    document.getElementById('exactPlaceId').value = feature.id;
+                    console.log('✅ Place ID captured from reverse geocode:', feature.id);
+                } else {
+                    document.getElementById('exactPlaceId').value = '';
+                }
+            } catch (error) {
+                console.error('❌ Reverse geocode error:', error);
+            }
+        }
+        
+        // Listen to marker drag
+        marker.on('dragend', function() {
+            const lngLat = marker.getLngLat();
+            updateMapCoords(lngLat.lat, lngLat.lng);
+            document.getElementById('exactLat').value = lngLat.lat;
+            document.getElementById('exactLng').value = lngLat.lng;
+            // Get place_id for new location
+            reverseGeocode(lngLat);
+        });
+        
+        // Click to place marker
+        map.on('click', function(e) {
+            const lngLat = e.lngLat;
+            marker.setLngLat([lngLat.lng, lngLat.lat]);
+            updateMapCoords(lngLat.lat, lngLat.lng);
+            document.getElementById('exactLat').value = lngLat.lat;
+            document.getElementById('exactLng').value = lngLat.lng;
+            // Get place_id for clicked location
+            reverseGeocode(lngLat);
+        });
+        
+        document.getElementById('mapCoords').textContent = 'Click to pin location';
+        console.log('✅ Map initialized successfully');
+        
+        // Initialize geocoder for search
+        setTimeout(() => {
+            try {
+                // Remove existing geocoder if any
+                const existingGeocoder = document.getElementById('geocoder');
+                if (existingGeocoder) {
+                    existingGeocoder.innerHTML = '';
+                }
+                
+                geocoder = new MapboxGeocoder({
+                    accessToken: token,
+                    mapboxgl: mapboxgl,
+                    marker: false,
+                    placeholder: 'Search for your exact address',
+                    countries: 'ph',
+                    proximity: [lng, lat]
+                });
+                
+                // Add geocoder to map
+                const geocoderContainer = document.getElementById('geocoder');
+                if (geocoderContainer) {
+                    geocoderContainer.appendChild(geocoder.onAdd(map));
+                }
+                
+                // Handle geocoder result
+                geocoder.on('result', function(e) {
+                    const result = e.result;
+                    const coordinates = result.geometry.coordinates;
+                    const placeId = result.id;
+                    
+                    // Update marker
+                    marker.setLngLat([coordinates[0], coordinates[1]]);
+                    
+                    // Update coordinates display
+                    updateMapCoords(coordinates[1], coordinates[0]);
+                    
+                    // Update hidden inputs
+                    document.getElementById('exactLat').value = coordinates[1];
+                    document.getElementById('exactLng').value = coordinates[0];
+                    document.getElementById('exactPlaceId').value = placeId;
+                    
+                    // Fly to location
+                    map.flyTo({
+                        center: [coordinates[0], coordinates[1]],
+                        zoom: 17
+                    });
+                    
+                    console.log('✅ Place ID captured from search:', placeId);
+                });
+                
+            } catch (e) {
+                console.error('Error initializing geocoder:', e);
+            }
+        }, 500);
+        
+        // Initial reverse geocode for the default location
+        reverseGeocode({ lat, lng });
+        
+    }, 150);
+}
+
+function updateMapCoords(lat, lng) {
+    document.getElementById('mapCoords').textContent = 
+        `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 }
 
 function updateAddressPreview() {
@@ -979,16 +1309,34 @@ function showAddAddressModal() {
     document.getElementById('addressModalTitle').textContent = 'Add Delivery Address';
     document.getElementById('addressForm').reset();
     document.getElementById('addressId').value = '';
+    document.getElementById('exactLat').value = '';
+    document.getElementById('exactLng').value = '';
+    document.getElementById('exactPlaceId').value = ''; // Clear place_id
     document.getElementById('saveAddressBtn').innerHTML = '<i class="ri-save-line"></i> Save Address';
     document.getElementById('addressPreviewSection').style.display = 'none';
+    document.getElementById('mapSection').style.display = 'none';
     document.getElementById('addressModal').style.display = 'flex';
     
     document.getElementById('barangay').disabled = true;
     document.getElementById('barangay').innerHTML = '<option value="">Select Municipality first</option>';
+    
+    // Remove existing map
+    if (map) {
+        map.remove();
+        map = null;
+        marker = null;
+    }
 }
 
 function closeAddressModal() {
     document.getElementById('addressModal').style.display = 'none';
+    
+    // Clean up map
+    if (map) {
+        map.remove();
+        map = null;
+        marker = null;
+    }
 }
 
 async function editAddress(addressId) {
@@ -1013,8 +1361,19 @@ async function editAddress(addressId) {
             document.getElementById('building_details').value = address.building_details || '';
             document.getElementById('isDefault').checked = address.is_default;
             
+            // Set exact coordinates if available
+            if (address.latitude && address.longitude) {
+                initializeMap(address.latitude, address.longitude);
+                document.getElementById('exactLat').value = address.latitude;
+                document.getElementById('exactLng').value = address.longitude;
+                // Place_id will be preserved from existing address data
+                if (address.place_id) {
+                    document.getElementById('exactPlaceId').value = address.place_id;
+                }
+            }
+            
             updateAddressPreview();
-        }, 100);
+        }, 200);
         
         document.getElementById('addressModal').style.display = 'flex';
     } catch (error) {
@@ -1066,13 +1425,27 @@ document.getElementById('addressForm')?.addEventListener('submit', async functio
     const addressId = document.getElementById('addressId').value;
     const isEdit = !!addressId;
     
+    const exactLat = document.getElementById('exactLat').value;
+    const exactLng = document.getElementById('exactLng').value;
+    const exactPlaceId = document.getElementById('exactPlaceId').value;
+    
+    if (!exactLat || !exactLng) {
+        showToast('Please pin your exact location on the map', 'error');
+        // Scroll to map
+        document.getElementById('mapSection')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
+    
     const data = {
         municipality: document.getElementById('municipality').value,
         barangay: document.getElementById('barangay').value,
         street: document.getElementById('street').value.trim() || null,
         building_details: document.getElementById('building_details').value.trim() || null,
         address_label: document.querySelector('[name="address_label"]:checked').value,
-        is_default: document.getElementById('isDefault').checked
+        is_default: document.getElementById('isDefault').checked,
+        latitude: parseFloat(exactLat),
+        longitude: parseFloat(exactLng),
+        place_id: exactPlaceId || null // Include place_id in the data
     };
     
     const btn = document.getElementById('saveAddressBtn');

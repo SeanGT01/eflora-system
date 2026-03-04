@@ -3,6 +3,14 @@
 {% block title %}My Account — E-FLOWERS{% endblock %}
 
 {% block extra_css %}
+
+
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.css' rel='stylesheet' />
+    
+    <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js'></script>
+    <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css' />
+
 <style>
     /* ─── Layout ─── */
     .account-wrapper {
@@ -272,6 +280,21 @@
     <span class="current">My Profile</span>
 </div>
 
+<!-- DEBUG: Show token is loading -->
+<script>
+    console.log('🔍 Mapbox token from Flask:', '{{ mapbox_token }}');
+    console.log('🔍 Token exists:', {{ 'true' if mapbox_token else 'false' }});
+</script>
+
+<!-- Multiple token storage methods -->
+<!-- Method 1: Hidden input (most reliable) -->
+<input type="hidden" id="mapbox-token" value="{{ mapbox_token }}">
+
+<!-- Method 2: Global JavaScript variable -->
+<script>
+    window.MAPBOX_TOKEN = '{{ mapbox_token }}';
+</script>
+
 <div class="account-wrapper">
     <!-- Sidebar -->
     <aside class="profile-sidebar">
@@ -322,13 +345,13 @@
     <!-- Content -->
     <div class="profile-content" id="accountContent">
         {% if initial_page == 'profile' %}
-            {% include 'account_parts/profile_content.html' %}
+            {% include 'account_parts/profile_content.html' with context %}
         {% elif initial_page == 'orders' %}
-            {% include 'account_parts/orders_content.html' %}
+            {% include 'account_parts/orders_content.html' with context %}
         {% elif initial_page == 'settings' %}
-            {% include 'account_parts/settings_content.html' %}
+            {% include 'account_parts/settings_content.html' with context %}
         {% else %}
-            {% include 'account_parts/profile_content.html' %}
+            {% include 'account_parts/profile_content.html' with context %}
         {% endif %}
     </div>
 </div>
@@ -662,4 +685,5 @@
     spinStyle.textContent = `.ri-spin { animation: spin .8s linear infinite; } @keyframes spin { to { transform:rotate(360deg); } }`;
     document.head.appendChild(spinStyle);
 </script>
+
 {% endblock %}

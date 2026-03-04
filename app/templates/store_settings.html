@@ -516,7 +516,7 @@
 <div class="settings-container">
     <div class="settings-header">
         <div>
-            <h1 class="settings-title">⚙️ Store Settings</h1>
+            <h1 class="settings-title">Store Settings</h1>
             <p class="settings-subtitle">Manage your store information, location, and delivery preferences</p>
         </div>
         <div class="store-name-badge">
@@ -569,11 +569,38 @@
                                           placeholder="Tell customers about your store...">{{ store.description or '' }}</textarea>
                             </div>
                             
+                            <!-- ADDRESS FIELDS - Using laguna_addresses.py -->
+                            <div class="form-group">
+                                <label class="form-label">Municipality/City <span class="required-star">*</span></label>
+                                <select class="form-control" id="municipality" name="municipality" required>
+                                    <option value="">Select Municipality/City</option>
+                                    {% for municipality in municipalities %}
+                                    <option value="{{ municipality }}" {% if store.municipality == municipality %}selected{% endif %}>
+                                        {{ municipality }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Barangay <span class="required-star">*</span></label>
+                                <select class="form-control" id="barangay" name="barangay" required disabled>
+                                    <option value="">Select Municipality first</option>
+                                    {% if store.municipality and store.barangay %}
+                                        {% for barangay in get_barangays(store.municipality) %}
+                                        <option value="{{ barangay }}" {% if store.barangay == barangay %}selected{% endif %}>
+                                            {{ barangay }}
+                                        </option>
+                                        {% endfor %}
+                                    {% endif %}
+                                </select>
+                            </div>
+
                             <div class="form-group form-group-full">
-                                <label class="form-label">Street Address <span class="required-star">*</span></label>
+                                <label class="form-label">Street/Building Details (Optional)</label>
                                 <input type="text" class="form-control" id="street-address" 
-                                       value="{{ store.address }}" placeholder="e.g., 123 Mabini St., Barangay San Antonio" required>
-                                <div class="form-hint">This is your physical store address</div>
+                                       value="{{ store.street or '' }}" placeholder="e.g., Unit 123, Building Name, Landmark">
+                                <div class="form-hint">Optional - Add specific street name, building, or landmark</div>
                             </div>
                         </div>
                     </form>
@@ -660,20 +687,28 @@
                         <label class="form-label">Delivery Method</label>
                         <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
                             <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="delivery-method" id="method-radius" value="radius" checked>
+                                <input type="radio" name="delivery-method" id="method-radius" value="radius" 
+                                       {% if store.delivery_method == 'radius' or store.delivery_method is none %}checked{% endif %}>
                                 <span style="font-weight: 500;">Simple Radius</span>
                                 <span style="font-size: 11px; color: var(--muted);">(Circle around store)</span>
                             </label>
                             <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="delivery-method" id="method-zone" value="zone">
+                                <input type="radio" name="delivery-method" id="method-zone" value="zone" 
+                                       {% if store.delivery_method == 'zone' %}checked{% endif %}>
                                 <span style="font-weight: 500;">Custom Zone</span>
                                 <span style="font-size: 11px; color: var(--muted);">(Draw polygon)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="delivery-method" id="method-municipality" value="municipality" 
+                                       {% if store.delivery_method == 'municipality' %}checked{% endif %}>
+                                <span style="font-weight: 500;">Municipality Selection</span>
+                                <span style="font-size: 11px; color: var(--muted);">(Select cities/municipalities)</span>
                             </label>
                         </div>
                     </div>
 
-                    <!-- RADIUS SETTINGS (shown when radius is selected) -->
-                    <div id="radius-settings">
+                    <!-- RADIUS SETTINGS -->
+                    <div id="radius-settings" {% if store.delivery_method == 'zone' or store.delivery_method == 'municipality' %}style="display: none;"{% endif %}>
                         <form id="delivery-settings-form">
                             <div class="form-group">
                                 <label class="form-label">Delivery Radius (km)</label>
@@ -718,10 +753,17 @@
                                 <div class="form-hint">Orders above this amount get free delivery</div>
                             </div>
                         </form>
+                        
+                        <!-- RADIUS VISUALIZATION BUTTON (only shown in radius mode) -->
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button type="button" class="zone-btn" id="show-radius-btn">
+                                <i class="ri-radar-line"></i> Show Radius
+                            </button>
+                        </div>
                     </div>
 
-                    <!-- ZONE SETTINGS (shown when zone is selected) -->
-                    <div id="zone-settings" style="display: none;">
+                    <!-- ZONE SETTINGS -->
+                    <div id="zone-settings" {% if store.delivery_method != 'zone' %}style="display: none;"{% endif %}>
                         <div class="form-group">
                             <label class="form-label">Custom Delivery Zone</label>
                             <div class="delivery-zone-controls">
@@ -765,24 +807,88 @@
                                        value="{{ store.free_delivery_minimum or 500 }}" min="0" step="50">
                             </div>
                         </div>
+                        
+                        <!-- ZONE VISUALIZATION BUTTON (only shown in zone mode) -->
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button type="button" class="zone-btn" id="show-zone-btn">
+                                <i class="ri-map-pin-line"></i> Show Zone
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- MUNICIPALITY SETTINGS -->
+                    <div id="municipality-settings" {% if store.delivery_method != 'municipality' %}style="display: none;"{% endif %}>
+                        <div class="form-group">
+                            <label class="form-label">Select Municipalities/Cities for Delivery</label>
+                            <div class="municipality-selector" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; background: var(--cream);">
+                                {% for municipality in municipalities %}
+                                <div class="municipality-checkbox" style="margin-bottom: 0.5rem; padding: 0.25rem 0;">
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                        <input type="checkbox" class="municipality-check" value="{{ municipality }}" 
+                                            {% if store.selected_municipalities and municipality in store.selected_municipalities %}checked{% endif %}>
+                                        <span>{{ municipality }}</span>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div id="municipality-validation-message" class="zone-info" style="border-left-color: #f39c12; background: rgba(243, 156, 18, 0.08); display: none;">
+                                ⚠️ Validation message will appear here
+                            </div>
+                            <div class="form-hint" style="margin-top: 0.5rem;">
+                                Select municipalities you want to deliver to. They must be adjacent (next to each other).
+                            </div>
+                        </div>
+                        
+                        <div id="municipality-preview" style="margin-top: 1rem; padding: 0.75rem; background: var(--cream); border-radius: var(--radius-md);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <strong>Selected: </strong>
+                                <span id="selected-count" style="background: var(--deep-rose); color: white; padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-weight: 600;">0</span>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button type="button" class="zone-btn" id="load-municipality-boundaries">
+                                    <i class="ri-map-pin-line"></i> Load Boundaries
+                                </button>
+                                <button type="button" class="zone-btn" id="preview-municipality-btn">
+                                    <i class="ri-eye-line"></i> Preview on Map
+                                </button>
+                                <button type="button" class="zone-btn" id="generate-municipality-zone">
+                                    <i class="ri-shape-line"></i> Generate Delivery Zone
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Delivery fee fields for municipality mode -->
+                        <div class="form-group" style="margin-top: 1rem;">
+                            <label class="form-label">Base Delivery Fee (₱)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">₱</span>
+                                <input type="number" class="form-control" id="municipality-base-fee" 
+                                    value="{{ store.base_delivery_fee or 50 }}" min="0" step="5">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Free Delivery Minimum (₱)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">₱</span>
+                                <input type="number" class="form-control" id="municipality-free-minimum" 
+                                    value="{{ store.free_delivery_minimum or 500 }}" min="0" step="50">
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Visual aid -->
                     <div style="margin-top: 1rem; padding: 0.75rem; background: var(--cream); border-radius: var(--radius-md); font-size: 12px;">
                         <i class="ri-information-line" style="color: var(--deep-rose);"></i>
                         <span id="method-description">
-                            <strong>Simple Radius:</strong> Deliver in a circle around your store
+                            {% if store.delivery_method == 'zone' %}
+                                <strong>Custom Zone:</strong> Deliver only inside the area you draw
+                            {% elif store.delivery_method == 'municipality' %}
+                                <strong>Municipality Selection:</strong> Deliver to entire cities/municipalities
+                            {% else %}
+                                <strong>Simple Radius:</strong> Deliver in a circle around your store
+                            {% endif %}
                         </span>
-                    </div>
-
-                    <!-- Visualization Buttons -->
-                    <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                        <button type="button" class="zone-btn" id="show-radius-btn">
-                            <i class="ri-radar-line"></i> Show Radius
-                        </button>
-                        <button type="button" class="zone-btn" id="show-zone-btn">
-                            <i class="ri-map-pin-line"></i> Show Zone
-                        </button>
                     </div>
                 </div>
             </div>
@@ -814,35 +920,56 @@
 <input type="hidden" id="store-id" value="{{ store.id }}">
 <input type="hidden" id="delivery-zone" name="delivery_zone" value="{{ store.delivery_area or '' }}">
 <input type="hidden" id="delivery-geojson" value="{{ delivery_geojson or '' }}">
+<!-- Clear zone flag -->
+<input type="hidden" id="clear-zone-flag" value="false">
 
 <!-- Store data as JSON -->
 <script id="store-data" type="application/json">
 {
     "id": {{ store.id }},
-    "name": {{ store.name|tojson|safe }},
-    "address": {{ store.address|tojson|safe }},
-    "contact_number": {{ 'null' if store.contact_number is none else ('"' + store.contact_number|string + '"')|safe }},
-    "description": {{ 'null' if store.description is none else store.description|tojson|safe }},
-    "status": {{ store.status|tojson|safe }},
+    "name": {{ store.name|tojson }},
+    "address": {{ store.address|tojson }},
+    "contact_number": {{ store.contact_number|tojson if store.contact_number else 'null' }},
+    "description": {{ store.description|tojson if store.description else 'null' }},
+    "status": {{ store.status|tojson }},
     "latitude": {{ store.latitude if store.latitude is not none else 'null' }},
     "longitude": {{ store.longitude if store.longitude is not none else 'null' }},
-    "formatted_address": {{ 'null' if store.formatted_address is none else store.formatted_address|tojson|safe }},
-    "place_id": {{ 'null' if store.place_id is none else store.place_id|tojson|safe }},
+    "formatted_address": {{ store.formatted_address|tojson if store.formatted_address else 'null' }},
+    "place_id": {{ store.place_id|tojson if store.place_id else 'null' }},
+    "municipality": {{ store.municipality|tojson if store.municipality else 'null' }},
+    "barangay": {{ store.barangay|tojson if store.barangay else 'null' }},
+    "street": {{ store.street|tojson if store.street else 'null' }},
+    "delivery_method": {{ store.delivery_method|tojson if store.delivery_method else '"radius"' }},
+    "selected_municipalities": {{ store.selected_municipalities|tojson if store.selected_municipalities else 'null' }},
     "delivery_radius_km": {{ store.delivery_radius_km if store.delivery_radius_km is not none else 15 }},
     "base_delivery_fee": {{ store.base_delivery_fee if store.base_delivery_fee is not none else 50 }},
     "delivery_rate_per_km": {{ store.delivery_rate_per_km if store.delivery_rate_per_km is not none else 20 }},
     "free_delivery_minimum": {{ store.free_delivery_minimum if store.free_delivery_minimum is not none else 500 }},
-    "max_delivery_distance": {{ store.max_delivery_distance if store.max_delivery_distance is not none else 15 }}
+    "max_delivery_distance": {{ store.max_delivery_distance if store.max_delivery_distance is not none else 15 }},
+    "delivery_area": {{ delivery_geojson|tojson if delivery_geojson else 'null' }}
 }
 </script>
 
 <!-- Toast notification placeholder -->
 <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;"></div>
+
+<!-- Add CSS animations for toast -->
+<style>
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+</style>
 {% endblock %}
+
 {% block extra_js %}
 <script>
-    // Enhanced toast function
-    window.showToast = window.showToast || function(message, type = 'info') {
+    // Enhanced toast function with optional duration
+    window.showToast = window.showToast || function(message, type = 'info', duration = 5000) {
         console.log(`[${type}] ${message}`);
         const toast = document.createElement('div');
         toast.style.cssText = `
@@ -854,10 +981,14 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             animation: slideIn 0.3s ease;
             z-index: 10000;
+            opacity: 0.95;
         `;
         toast.textContent = message;
         document.getElementById('toast-container').appendChild(toast);
-        setTimeout(() => toast.remove(), 5000);
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
     };
 
     // Debug logger
@@ -1002,15 +1133,77 @@
         let locationChanged = false;
         let boundaryVisible = true;
         
-        // Store the original zone value when switching modes
-        let originalZoneValue = document.getElementById('delivery-zone').value;
-        debug.log('Original zone value loaded:', originalZoneValue ? 'Yes (length: ' + originalZoneValue.length + ')' : 'None');
+        // ===== PERSISTENT ZONE STORAGE =====
+        // Store zone data separately from what's in the draw control
+        let persistentZoneData = document.getElementById('delivery-zone').value || storeData.delivery_area || null;
+        debug.log('Persistent zone data loaded:', persistentZoneData ? 'Yes (length: ' + persistentZoneData.length + ')' : 'None');
         
         // Check if the zone is in GeoJSON format or database format
         function isGeoJSONFormat(value) {
             if (!value) return false;
             // Check if it starts with { or [ (JSON format)
-            return value.trim().startsWith('{') || value.trim().startsWith('[');
+            const trimmed = value.trim();
+            return trimmed.startsWith('{') || trimmed.startsWith('[');
+        }
+        
+        // ===== ADDRESS DROPDOWN FUNCTIONS USING API =====
+        function loadBarangays(municipality) {
+            const barangaySelect = document.getElementById('barangay');
+            
+            if (!barangaySelect) return;
+            
+            // Disable and show loading
+            barangaySelect.innerHTML = '<option value="">Loading...</option>';
+            barangaySelect.disabled = true;
+            
+            if (!municipality) {
+                barangaySelect.innerHTML = '<option value="">Select Municipality first</option>';
+                return;
+            }
+            
+            // Fetch barangays from API
+            fetch(`/api/laguna/barangays/${encodeURIComponent(municipality)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.barangays && data.barangays.length > 0) {
+                        barangaySelect.innerHTML = '<option value="">Select Barangay</option>';
+                        data.barangays.forEach(barangay => {
+                            const option = document.createElement('option');
+                            option.value = barangay;
+                            option.textContent = barangay;
+                            
+                            // Pre-select if this matches the store's barangay
+                            if (storeData.barangay && barangay === storeData.barangay) {
+                                option.selected = true;
+                            }
+                            
+                            barangaySelect.appendChild(option);
+                        });
+                        barangaySelect.disabled = false;
+                        
+                        // Update map with municipality coordinates if available
+                        if (data.coordinates && typeof initializeMapWithCoords === 'function') {
+                            initializeMapWithCoords(data.coordinates.lat, data.coordinates.lng);
+                        }
+                    } else {
+                        barangaySelect.innerHTML = '<option value="">No barangays found</option>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading barangays:', error);
+                    barangaySelect.innerHTML = '<option value="">Error loading barangays</option>';
+                    showToast('Failed to load barangays', 'error');
+                });
+        }
+
+        // Initialize municipality dropdown
+        const municipalitySelect = document.getElementById('municipality');
+        
+        if (municipalitySelect) {
+            // Add change event listener
+            municipalitySelect.addEventListener('change', function() {
+                loadBarangays(this.value);
+            });
         }
         
         // Initialize map
@@ -1150,17 +1343,15 @@
                     
                     map.addControl(draw);
                     
-                    // Load existing delivery zone into draw tool if it's GeoJSON
-                    const existingZone = document.getElementById('delivery-zone').value;
-                    debug.log('Existing delivery zone from hidden input:', existingZone ? 'Found (length: ' + existingZone.length + ')' : 'None');
-                    
-                    if (existingZone && isGeoJSONFormat(existingZone)) {
+                    // Load existing delivery zone into draw tool if we're in zone mode
+                    const deliveryMethod = document.querySelector('input[name="delivery-method"]:checked').value;
+                    if (deliveryMethod === 'zone' && persistentZoneData && isGeoJSONFormat(persistentZoneData)) {
                         try {
-                            const zoneGeoJSON = JSON.parse(existingZone);
+                            const zoneGeoJSON = JSON.parse(persistentZoneData);
                             draw.add(zoneGeoJSON);
-                            debug.success('Loaded existing delivery zone as GeoJSON');
+                            debug.success('Loaded existing delivery zone into draw tool');
                         } catch (e) {
-                            debug.error('Failed to parse existing zone:', e);
+                            debug.error('Failed to parse persistent zone:', e);
                         }
                     }
                     
@@ -1203,14 +1394,11 @@
                             });
                             
                             debug.success('Displayed saved zone on map');
-                            document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone is displayed on map (green outline)';
+                            if (document.querySelector('input[name="delivery-method"]:checked').value === 'zone') {
+                                document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone is displayed on map (green outline)';
+                            }
                         } catch (e) {
                             debug.error('Failed to display zone from GeoJSON:', e);
-                        }
-                    } else {
-                        debug.log('No GeoJSON zone to display');
-                        if (existingZone) {
-                            document.getElementById('zone-info').innerHTML = '✅ Zone saved in database (click "Show Zone" to view)';
                         }
                     }
                     
@@ -1233,8 +1421,10 @@
                         debug.log('✅ Zone created, geometry type:', zone.geometry.type);
                         debug.log('✅ Zone stringified length:', zoneString.length);
                         
+                        // Update both the input and persistent storage
                         document.getElementById('delivery-zone').value = zoneString;
-                        originalZoneValue = zoneString;
+                        persistentZoneData = zoneString;
+                        
                         document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone saved (within Laguna)';
                         showToast('Delivery zone created within Laguna!', 'success');
                     });
@@ -1254,8 +1444,10 @@
                         const zoneString = JSON.stringify(zone.geometry);
                         debug.log('🔄 Zone updated, length:', zoneString.length);
                         
+                        // Update both the input and persistent storage
                         document.getElementById('delivery-zone').value = zoneString;
-                        originalZoneValue = zoneString;
+                        persistentZoneData = zoneString;
+                        
                         document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone updated (within Laguna)';
                         showToast('Delivery zone updated!', 'success');
                     });
@@ -1264,7 +1456,7 @@
                     map.on('draw.delete', function() {
                         debug.log('🗑️ Zone deleted');
                         document.getElementById('delivery-zone').value = '';
-                        originalZoneValue = ''; // Clear backup
+                        persistentZoneData = null; // Clear persistent data when explicitly deleted
                         document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
                         showToast('Delivery zone cleared', 'info');
                     });
@@ -1316,74 +1508,184 @@
             }
         }
         
-        // ===== DELIVERY METHOD TOGGLE =====
+        // ===== MAP INITIALIZATION WITH COORDINATES =====
+        function initializeMapWithCoords(lat, lng) {
+            if (map && marker) {
+                map.flyTo({
+                    center: [lng, lat],
+                    zoom: 15,
+                    duration: 1000
+                });
+                marker.setLngLat([lng, lat]);
+                
+                // Update hidden inputs if they exist
+                const exactLat = document.getElementById('exactLat');
+                const exactLng = document.getElementById('exactLng');
+                if (exactLat && exactLng) {
+                    exactLat.value = lat;
+                    exactLng.value = lng;
+                }
+                
+                // Optionally reverse geocode to get exact address
+                reverseGeocode({ lat, lng });
+            }
+        }
+        
+        // ===== DELIVERY METHOD TOGGLE WITH PERSISTENT ZONE DATA AND AUTO-SAVE =====
         const methodRadius = document.getElementById('method-radius');
         const methodZone = document.getElementById('method-zone');
+        const methodMunicipality = document.getElementById('method-municipality');
         const radiusSettings = document.getElementById('radius-settings');
         const zoneSettings = document.getElementById('zone-settings');
+        const municipalitySettings = document.getElementById('municipality-settings');
         const methodDesc = document.getElementById('method-description');
 
+        // Auto-save function for delivery method only
+        async function autoSaveDeliveryMethod(method) {
+            console.log('🔄 Auto-saving delivery method:', method);
+            
+            try {
+                const response = await fetch('/api/seller/store/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        delivery_method: method,
+                        // Include current values to prevent overwriting
+                        name: document.getElementById('store-name').value.trim(),
+                        municipality: document.getElementById('municipality').value,
+                        barangay: document.getElementById('barangay').value,
+                        street: document.getElementById('street-address').value.trim(),
+                        contact_number: document.getElementById('contact-number').value.trim(),
+                        description: document.getElementById('store-description').value.trim(),
+                        status: document.getElementById('store-status').value,
+                        latitude: currentLocation.lat,
+                        longitude: currentLocation.lng,
+                        formatted_address: currentLocation.address,
+                        place_id: currentLocation.place_id,
+                        delivery_radius_km: parseFloat(document.getElementById('delivery-radius').value) || 15,
+                        max_delivery_distance: parseFloat(document.getElementById('max-distance').value) || 15,
+                        base_delivery_fee: parseFloat(document.getElementById('base-fee').value) || 50,
+                        delivery_rate_per_km: parseFloat(document.getElementById('rate-per-km').value) || 20,
+                        free_delivery_minimum: parseFloat(document.getElementById('free-minimum').value) || 500,
+                        // Preserve existing data
+                        selected_municipalities: storeData.selected_municipalities || [],
+                        delivery_area: persistentZoneData
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('✅ Delivery method auto-saved successfully');
+                    showToast(`Switched to ${method} mode`, 'success', 2000);
+                    
+                    // Update storeData with new method
+                    storeData.delivery_method = method;
+                } else {
+                    console.error('❌ Auto-save failed:', data.error);
+                    showToast('Failed to save delivery method', 'error');
+                }
+            } catch (error) {
+                console.error('❌ Auto-save network error:', error);
+                showToast('Network error saving delivery method', 'error');
+            }
+        }
+
+        // Radius mode change handler - with auto-save
         methodRadius.addEventListener('change', function() {
             if (this.checked) {
                 radiusSettings.style.display = 'block';
                 zoneSettings.style.display = 'none';
+                municipalitySettings.style.display = 'none';
                 methodDesc.innerHTML = '<strong>Simple Radius:</strong> Deliver in a circle around your store';
                 
-                // Save current zone value before clearing from display
-                originalZoneValue = document.getElementById('delivery-zone').value;
-                
-                // Hide zone from map but don't delete the data
-                if (draw) {
-                    draw.deleteAll(); // This removes from map but we keep originalZoneValue
+                // IMPORTANT: Save the current zone value to persistent storage before clearing display
+                const currentZoneValue = document.getElementById('delivery-zone').value;
+                if (currentZoneValue && isGeoJSONFormat(currentZoneValue)) {
+                    persistentZoneData = currentZoneValue;
+                    debug.log('Saved zone to persistent storage before switching to radius');
                 }
-                document.getElementById('zone-info').innerHTML = 'ℹ️ Zone hidden (using radius mode)';
-                debug.log('Switched to radius method, zone value saved:', originalZoneValue ? 'Yes' : 'No');
+                
+                // Hide zone from map but KEEP the persistent data
+                if (draw) {
+                    draw.deleteAll(); // This only clears the visual representation
+                }
+                
+                document.getElementById('zone-info').innerHTML = 'ℹ️ Zone data preserved (hidden in radius mode)';
+                debug.log('Switched to radius - zone data preserved:', persistentZoneData ? 'Yes (length: ' + persistentZoneData.length + ')' : 'No');
+                
+                // Auto-save the delivery method
+                autoSaveDeliveryMethod('radius');
             }
         });
 
+        // Zone mode change handler - with auto-save
         methodZone.addEventListener('change', function() {
             if (this.checked) {
                 radiusSettings.style.display = 'none';
                 zoneSettings.style.display = 'block';
+                municipalitySettings.style.display = 'none';
                 methodDesc.innerHTML = '<strong>Custom Zone:</strong> Deliver only inside the area you draw';
                 
-                // Restore the zone value if it exists
-                if (originalZoneValue) {
-                    document.getElementById('delivery-zone').value = originalZoneValue;
+                // Restore the zone data from persistent storage
+                if (persistentZoneData) {
+                    document.getElementById('delivery-zone').value = persistentZoneData;
                     
                     // Only try to load in draw if it's GeoJSON format
-                    if (isGeoJSONFormat(originalZoneValue)) {
+                    if (isGeoJSONFormat(persistentZoneData)) {
                         try {
-                            const zoneGeoJSON = JSON.parse(originalZoneValue);
+                            const zoneGeoJSON = JSON.parse(persistentZoneData);
                             if (draw) {
                                 draw.deleteAll();
                                 draw.add(zoneGeoJSON);
                             }
                             document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone restored (editable)';
-                            debug.success('Restored saved zone, length:', originalZoneValue.length);
+                            debug.success('Restored saved zone to draw control, length:', persistentZoneData.length);
                         } catch (e) {
-                            debug.error('Failed to restore zone:', e);
-                            document.getElementById('zone-info').innerHTML = 'ℹ️ Zone exists but cannot be edited - click "Show Zone" to view';
+                            debug.error('Failed to restore zone to draw:', e);
+                            document.getElementById('zone-info').innerHTML = '✅ Zone data exists but needs to be redrawn';
                         }
                     } else {
+                        // Zone exists but not in GeoJSON format (database format)
                         document.getElementById('zone-info').innerHTML = '✅ Zone loaded from database (green outline on map)';
                     }
                 } else {
                     document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
                 }
-                debug.log('Switched to zone method');
+                debug.log('Switched to zone method - persistent data:', persistentZoneData ? 'Yes' : 'No');
+                
+                // Auto-save the delivery method
+                autoSaveDeliveryMethod('zone');
             }
         });
 
-        // Check if store already has a delivery zone, if so, select zone method
-        {% if store.delivery_area %}
-        methodZone.checked = true;
-        methodRadius.checked = false;
-        radiusSettings.style.display = 'none';
-        zoneSettings.style.display = 'block';
-        methodDesc.innerHTML = '<strong>Custom Zone:</strong> Deliver only inside the area you draw';
-        debug.log('Store has existing delivery zone, selected zone method');
-        {% endif %}
+        // Municipality mode change handler - with auto-save
+        methodMunicipality.addEventListener('change', function() {
+            if (this.checked) {
+                radiusSettings.style.display = 'none';
+                zoneSettings.style.display = 'none';
+                municipalitySettings.style.display = 'block';
+                methodDesc.innerHTML = '<strong>Municipality Selection:</strong> Deliver to entire cities/municipalities';
+                
+                // Save current zone data
+                const currentZoneValue = document.getElementById('delivery-zone').value;
+                if (currentZoneValue && isGeoJSONFormat(currentZoneValue)) {
+                    persistentZoneData = currentZoneValue;
+                }
+                
+                // Hide draw control
+                if (draw) {
+                    draw.deleteAll();
+                }
+                
+                // Update selected count and validate
+                updateSelectedCount();
+                validateMunicipalitySelection();
+                
+                // Auto-save the delivery method
+                autoSaveDeliveryMethod('municipality');
+            }
+        });
         
         // Button handlers for drawing tools
         document.getElementById('draw-polygon-btn').addEventListener('click', function() {
@@ -1395,11 +1697,18 @@
             }
         });
         
+        // Clear button with flag
         document.getElementById('clear-zone-btn').addEventListener('click', function() {
             if (draw) {
                 draw.deleteAll();
                 document.getElementById('delivery-zone').value = '';
-                originalZoneValue = ''; // Clear the saved value too
+                persistentZoneData = null;
+                
+                // Set the clear flag to indicate explicit deletion
+                if (document.getElementById('clear-zone-flag')) {
+                    document.getElementById('clear-zone-flag').value = 'true';
+                }
+                
                 document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
                 showToast('Delivery zone cleared', 'info');
                 debug.log('Zone cleared');
@@ -1420,147 +1729,283 @@
             });
         }
         
-        // ===== VISUALIZATION BUTTONS =====
-        // Show Radius button
-        document.getElementById('show-radius-btn').addEventListener('click', function() {
-            const radius = parseFloat(document.getElementById('delivery-radius').value) || 15;
+        // ===== MUNICIPALITY SELECTION FUNCTIONS =====
+        let municipalityBoundaries = null;
+        
+        // Update selected count
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.municipality-check:checked');
+            document.getElementById('selected-count').textContent = checkboxes.length;
+        }
+        
+        // Get selected municipalities
+        function getSelectedMunicipalities() {
+            const checkboxes = document.querySelectorAll('.municipality-check:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+        
+        // Validate municipality selection contiguity
+        async function validateMunicipalitySelection() {
+            const selected = getSelectedMunicipalities();
+            const messageDiv = document.getElementById('municipality-validation-message');
             
-            if (!marker) {
-                showToast('Please set your store location first', 'info');
-                return;
+            if (selected.length === 0) {
+                messageDiv.style.display = 'block';
+                messageDiv.innerHTML = '⚠️ Please select at least one municipality';
+                messageDiv.style.borderLeftColor = '#f39c12';
+                return false;
             }
             
-            const center = marker.getLngLat();
-            debug.log('Showing radius:', radius, 'km at', center);
-            
-            // Remove existing radius visualization if any
-            if (map.getLayer('radius-circle')) {
-                map.removeLayer('radius-circle');
-                map.removeLayer('radius-label');
-                map.removeSource('radius-circle');
-                map.removeSource('radius-label');
+            if (selected.length === 1) {
+                messageDiv.style.display = 'block';
+                messageDiv.innerHTML = '✅ Single municipality selected (always valid)';
+                messageDiv.style.borderLeftColor = '#48bb78';
+                return true;
             }
             
-            // Add circle layer
-            map.addSource('radius-circle', {
-                'type': 'geojson',
-                'data': {
-                    'type': 'Feature',
-                    'geometry': {
-                        'type': 'Point',
-                        'coordinates': [center.lng, center.lat]
-                    }
+            // Check contiguity via API
+            try {
+                const response = await fetch('/api/municipality/check-contiguity', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        municipalities: selected,
+                        province: 'Laguna'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.contiguous) {
+                    messageDiv.style.display = 'block';
+                    messageDiv.innerHTML = '✅ Municipalities are adjacent! You can generate the delivery zone.';
+                    messageDiv.style.borderLeftColor = '#48bb78';
+                    return true;
+                } else {
+                    messageDiv.style.display = 'block';
+                    messageDiv.innerHTML = '❌ Selected municipalities are not adjacent. Please select areas that share borders.';
+                    messageDiv.style.borderLeftColor = '#c0392b';
+                    return false;
                 }
+            } catch (e) {
+                debug.error('Error checking contiguity:', e);
+                messageDiv.style.display = 'block';
+                messageDiv.innerHTML = '⚠️ Could not validate contiguity. Please try again.';
+                messageDiv.style.borderLeftColor = '#f39c12';
+                return false;
+            }
+        }
+        
+        // Municipality checkbox change handler
+        document.querySelectorAll('.municipality-check').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                updateSelectedCount();
+                validateMunicipalitySelection();
             });
-            
-            map.addLayer({
-                'id': 'radius-circle',
-                'type': 'circle',
-                'source': 'radius-circle',
-                'paint': {
-                    'circle-radius': {
-                        'stops': [
-                            [0, 0],
-                            [20, radius * 1000]
-                        ],
-                        'base': 2
-                    },
-                    'circle-color': '#B5445A',
-                    'circle-opacity': 0.15,
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#B5445A'
-                }
-            });
-            
-            // Add label
-            map.addSource('radius-label', {
-                'type': 'geojson',
-                'data': {
-                    'type': 'Feature',
-                    'geometry': {
-                        'type': 'Point',
-                        'coordinates': [center.lng + 0.01, center.lat + 0.01]
-                    },
-                    'properties': {
-                        'description': `${radius}km radius`
-                    }
-                }
-            });
-            
-            map.addLayer({
-                'id': 'radius-label',
-                'type': 'symbol',
-                'source': 'radius-label',
-                'layout': {
-                    'text-field': '{description}',
-                    'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
-                    'text-size': 12,
-                    'text-offset': [0, -1.5]
-                },
-                'paint': {
-                    'text-color': '#B5445A',
-                    'text-halo-color': '#fff',
-                    'text-halo-width': 2
-                }
-            });
-            
-            showToast(`📍 Showing ${radius}km radius in pink`, 'info');
-            
-            // Auto-hide after 10 seconds
-            setTimeout(() => {
-                if (map.getLayer('radius-circle')) {
-                    map.removeLayer('radius-circle');
-                    map.removeLayer('radius-label');
-                    map.removeSource('radius-circle');
-                    map.removeSource('radius-label');
-                }
-            }, 10000);
         });
-
-        // Show Zone button - USING GEOJSON FROM BACKEND
-        document.getElementById('show-zone-btn').addEventListener('click', function() {
-            // Get the GeoJSON version from the backend (for display)
-            const geojsonValue = document.getElementById('delivery-geojson').value;
-            
-            if (!geojsonValue) {
-                showToast('No delivery zone saved yet. Draw one first!', 'info');
-                return;
-            }
-            
-            debug.log('Showing saved zone from GeoJSON');
+        
+        // Load municipality boundaries button
+        document.getElementById('load-municipality-boundaries').addEventListener('click', async function() {
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Loading...';
+            btn.disabled = true;
             
             try {
-                const zoneGeoJSON = JSON.parse(geojsonValue);
-                debug.log('Parsed zone GeoJSON type:', zoneGeoJSON.type);
+                const response = await fetch('/api/municipality-boundaries?province=Laguna');
+                const data = await response.json();
                 
-                // Remove existing zone visualization if any
-                if (map.getLayer('saved-zone-fill')) {
-                    map.removeLayer('saved-zone-fill');
-                    map.removeLayer('saved-zone-outline');
-                    map.removeSource('saved-zone');
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
                 }
                 
-                // Remove the permanent display layer if we're showing a temporary one
+                municipalityBoundaries = data;
+                
+                // Add to map as a source for highlighting
+                if (map.getSource('municipality-boundaries')) {
+                    map.removeLayer('municipality-fill');
+                    map.removeLayer('municipality-outline');
+                    map.removeSource('municipality-boundaries');
+                }
+                
+                map.addSource('municipality-boundaries', {
+                    type: 'geojson',
+                    data: municipalityBoundaries
+                });
+                
+                map.addLayer({
+                    id: 'municipality-fill',
+                    type: 'fill',
+                    source: 'municipality-boundaries',
+                    paint: {
+                        'fill-color': '#627BC1',
+                        'fill-opacity': 0.1,
+                        'fill-outline-color': '#627BC1'
+                    }
+                });
+                
+                map.addLayer({
+                    id: 'municipality-outline',
+                    type: 'line',
+                    source: 'municipality-boundaries',
+                    paint: {
+                        'line-color': '#627BC1',
+                        'line-width': 1,
+                        'line-dasharray': [2, 1]
+                    }
+                });
+                
+                showToast(`Loaded ${data.count} municipality boundaries`, 'success');
+            } catch (e) {
+                debug.error('Error loading boundaries:', e);
+                showToast('Failed to load boundaries', 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+        
+        // Preview selected municipalities button
+        document.getElementById('preview-municipality-btn').addEventListener('click', async function() {
+            const selected = getSelectedMunicipalities();
+            
+            if (selected.length === 0) {
+                showToast('Please select at least one municipality', 'info');
+                return;
+            }
+            
+            if (!municipalityBoundaries) {
+                showToast('Please load boundaries first', 'info');
+                return;
+            }
+            
+            // Filter features for selected municipalities
+            const selectedFeatures = municipalityBoundaries.features.filter(f => 
+                selected.includes(f.properties.name)
+            );
+            
+            if (selectedFeatures.length === 0) {
+                showToast('No boundary data for selected municipalities', 'error');
+                return;
+            }
+            
+            // Remove existing highlight
+            if (map.getLayer('selected-municipality-fill')) {
+                map.removeLayer('selected-municipality-fill');
+                map.removeLayer('selected-municipality-outline');
+                map.removeSource('selected-municipalities');
+            }
+            
+            // Add highlight
+            map.addSource('selected-municipalities', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: selectedFeatures
+                }
+            });
+            
+            map.addLayer({
+                'id': 'selected-municipality-fill',
+                'type': 'fill',
+                'source': 'selected-municipalities',
+                'paint': {
+                    'fill-color': '#48bb78',
+                    'fill-opacity': 0.3,
+                    'fill-outline-color': '#48bb78'
+                }
+            });
+            
+            map.addLayer({
+                'id': 'selected-municipality-outline',
+                'type': 'line',
+                'source': 'selected-municipalities',
+                'paint': {
+                    'line-color': '#48bb78',
+                    'line-width': 3
+                }
+            });
+            
+            // Fit map to bounds
+            const bounds = new mapboxgl.LngLatBounds();
+            selectedFeatures.forEach(f => {
+                if (f.geometry.type === 'Polygon') {
+                    f.geometry.coordinates[0].forEach(coord => {
+                        bounds.extend(coord);
+                    });
+                } else if (f.geometry.type === 'MultiPolygon') {
+                    f.geometry.coordinates.forEach(poly => {
+                        poly[0].forEach(coord => {
+                            bounds.extend(coord);
+                        });
+                    });
+                }
+            });
+            map.fitBounds(bounds, { padding: 50 });
+        });
+        
+        // Generate delivery zone from selected municipalities
+        document.getElementById('generate-municipality-zone').addEventListener('click', async function() {
+            const selected = getSelectedMunicipalities();
+            
+            if (selected.length === 0) {
+                showToast('Please select at least one municipality', 'info');
+                return;
+            }
+            
+            // Validate contiguity
+            const isValid = await validateMunicipalitySelection();
+            
+            if (!isValid) {
+                showToast('Selected municipalities are not contiguous', 'error');
+                return;
+            }
+            
+            // Merge boundaries via API
+            try {
+                const response = await fetch('/api/municipality/merge-boundaries', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        municipalities: selected,
+                        province: 'Laguna'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    showToast('Failed to merge boundaries', 'error');
+                    return;
+                }
+                
+                // Convert to GeoJSON string
+                const zoneString = JSON.stringify(data.geometry);
+                
+                // Update hidden input and persistent storage
+                document.getElementById('delivery-zone').value = zoneString;
+                persistentZoneData = zoneString;
+                
+                // Show on map
                 if (map.getLayer('saved-zone-display-fill')) {
                     map.removeLayer('saved-zone-display-fill');
                     map.removeLayer('saved-zone-display-outline');
                     map.removeSource('saved-zone-display');
                 }
                 
-                // Add the saved zone
-                map.addSource('saved-zone', {
+                map.addSource('saved-zone-display', {
                     'type': 'geojson',
                     'data': {
                         'type': 'Feature',
-                        'geometry': zoneGeoJSON
+                        'geometry': data.geometry
                     }
                 });
                 
-                // Fill layer
                 map.addLayer({
-                    'id': 'saved-zone-fill',
+                    'id': 'saved-zone-display-fill',
                     'type': 'fill',
-                    'source': 'saved-zone',
+                    'source': 'saved-zone-display',
                     'paint': {
                         'fill-color': '#48bb78',
                         'fill-opacity': 0.2,
@@ -1568,84 +2013,279 @@
                     }
                 });
                 
-                // Outline layer
                 map.addLayer({
-                    'id': 'saved-zone-outline',
+                    'id': 'saved-zone-display-outline',
                     'type': 'line',
-                    'source': 'saved-zone',
+                    'source': 'saved-zone-display',
                     'paint': {
                         'line-color': '#48bb78',
-                        'line-width': 3,
-                        'line-dasharray': [2, 1]
+                        'line-width': 3
                     }
                 });
                 
-                // Fit map to show the entire zone
-                if (zoneGeoJSON.type === 'Polygon') {
-                    const coordinates = zoneGeoJSON.coordinates[0];
-                    const bounds = coordinates.reduce((bounds, coord) => {
-                        return bounds.extend(coord);
-                    }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
-                    
-                    map.fitBounds(bounds, {
-                        padding: 50,
-                        duration: 1000
-                    });
-                    debug.log('Map fitted to zone bounds');
+                showToast('✅ Delivery zone generated from selected municipalities!', 'success');
+                document.getElementById('zone-info').innerHTML = '✅ Delivery zone from municipality selection is ready';
+                
+            } catch (e) {
+                debug.error('Error merging boundaries:', e);
+                showToast('Failed to generate delivery zone', 'error');
+            }
+        });
+        
+        // ===== VISUALIZATION BUTTONS WITH DEBUG =====
+        // Show Radius button
+        const showRadiusBtn = document.getElementById('show-radius-btn');
+        if (showRadiusBtn) {
+            debug.log('Found show-radius-btn, attaching event listener');
+            showRadiusBtn.addEventListener('click', function() {
+                console.log('🟢 Show Radius button clicked');
+                console.log('📍 Marker exists:', marker ? 'Yes' : 'No');
+                
+                if (!marker) {
+                    showToast('Please set your store location first', 'info');
+                    return;
                 }
                 
-                showToast('✅ Saved delivery zone displayed in green', 'success');
+                const radius = parseFloat(document.getElementById('delivery-radius').value) || 15;
+                console.log('📏 Radius value:', radius);
+                
+                const center = marker.getLngLat();
+                debug.log('Showing radius:', radius, 'km at', center);
+                
+                // Remove existing radius visualization if any
+                if (map.getLayer('radius-circle')) {
+                    map.removeLayer('radius-circle');
+                    map.removeLayer('radius-label');
+                    map.removeSource('radius-circle');
+                    map.removeSource('radius-label');
+                }
+                
+                // Add circle layer
+                map.addSource('radius-circle', {
+                    'type': 'geojson',
+                    'data': {
+                        'type': 'Feature',
+                        'geometry': {
+                            'type': 'Point',
+                            'coordinates': [center.lng, center.lat]
+                        }
+                    }
+                });
+                
+                map.addLayer({
+                    'id': 'radius-circle',
+                    'type': 'circle',
+                    'source': 'radius-circle',
+                    'paint': {
+                        'circle-radius': {
+                            'stops': [
+                                [0, 0],
+                                [20, radius * 1000]
+                            ],
+                            'base': 2
+                        },
+                        'circle-color': '#B5445A',
+                        'circle-opacity': 0.15,
+                        'circle-stroke-width': 2,
+                        'circle-stroke-color': '#B5445A'
+                    }
+                });
+                
+                // Add label
+                map.addSource('radius-label', {
+                    'type': 'geojson',
+                    'data': {
+                        'type': 'Feature',
+                        'geometry': {
+                            'type': 'Point',
+                            'coordinates': [center.lng + 0.01, center.lat + 0.01]
+                        },
+                        'properties': {
+                            'description': `${radius}km radius`
+                        }
+                    }
+                });
+                
+                map.addLayer({
+                    'id': 'radius-label',
+                    'type': 'symbol',
+                    'source': 'radius-label',
+                    'layout': {
+                        'text-field': '{description}',
+                        'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+                        'text-size': 12,
+                        'text-offset': [0, -1.5]
+                    },
+                    'paint': {
+                        'text-color': '#B5445A',
+                        'text-halo-color': '#fff',
+                        'text-halo-width': 2
+                    }
+                });
+                
+                showToast(`📍 Showing ${radius}km radius in pink`, 'info');
                 
                 // Auto-hide after 10 seconds
                 setTimeout(() => {
+                    if (map.getLayer('radius-circle')) {
+                        map.removeLayer('radius-circle');
+                        map.removeLayer('radius-label');
+                        map.removeSource('radius-circle');
+                        map.removeSource('radius-label');
+                    }
+                }, 10000);
+            });
+        } else {
+            debug.error('show-radius-btn not found in DOM');
+        }
+
+        // Show Zone button - USING GEOJSON FROM BACKEND
+        const showZoneBtn = document.getElementById('show-zone-btn');
+        if (showZoneBtn) {
+            debug.log('Found show-zone-btn, attaching event listener');
+            showZoneBtn.addEventListener('click', function() {
+                console.log('🟢 Show Zone button clicked');
+                
+                // Get the GeoJSON version from the backend (for display)
+                const geojsonValue = document.getElementById('delivery-geojson').value;
+                
+                if (!geojsonValue) {
+                    showToast('No delivery zone saved yet. Draw one first!', 'info');
+                    return;
+                }
+                
+                console.log('📦 GeoJSON value exists:', geojsonValue ? 'Yes (length: ' + geojsonValue.length + ')' : 'No');
+                debug.log('Showing saved zone from GeoJSON');
+                
+                try {
+                    const zoneGeoJSON = JSON.parse(geojsonValue);
+                    debug.log('Parsed zone GeoJSON type:', zoneGeoJSON.type);
+                    
+                    // Remove existing zone visualization if any
                     if (map.getLayer('saved-zone-fill')) {
                         map.removeLayer('saved-zone-fill');
                         map.removeLayer('saved-zone-outline');
                         map.removeSource('saved-zone');
                     }
-                    // Restore the permanent display layer if it existed
-                    const permGeojson = document.getElementById('delivery-geojson').value;
-                    if (permGeojson) {
-                        try {
-                            const permZone = JSON.parse(permGeojson);
-                            map.addSource('saved-zone-display', {
-                                'type': 'geojson',
-                                'data': {
-                                    'type': 'Feature',
-                                    'geometry': permZone
-                                }
-                            });
-                            
-                            map.addLayer({
-                                'id': 'saved-zone-display-fill',
-                                'type': 'fill',
-                                'source': 'saved-zone-display',
-                                'paint': {
-                                    'fill-color': '#48bb78',
-                                    'fill-opacity': 0.1,
-                                    'fill-outline-color': '#48bb78'
-                                }
-                            });
-                            
-                            map.addLayer({
-                                'id': 'saved-zone-display-outline',
-                                'type': 'line',
-                                'source': 'saved-zone-display',
-                                'paint': {
-                                    'line-color': '#48bb78',
-                                    'line-width': 2,
-                                    'line-dasharray': [2, 1]
-                                }
-                            });
-                        } catch (e) {}
+                    
+                    // Remove the permanent display layer if we're showing a temporary one
+                    if (map.getLayer('saved-zone-display-fill')) {
+                        map.removeLayer('saved-zone-display-fill');
+                        map.removeLayer('saved-zone-display-outline');
+                        map.removeSource('saved-zone-display');
                     }
-                }, 10000);
-                
-            } catch (e) {
-                debug.error('Error parsing GeoJSON:', e);
-                showToast('Error displaying zone', 'error');
-            }
-        });
+                    
+                    // Add the saved zone
+                    map.addSource('saved-zone', {
+                        'type': 'geojson',
+                        'data': {
+                            'type': 'Feature',
+                            'geometry': zoneGeoJSON
+                        }
+                    });
+                    
+                    // Fill layer
+                    map.addLayer({
+                        'id': 'saved-zone-fill',
+                        'type': 'fill',
+                        'source': 'saved-zone',
+                        'paint': {
+                            'fill-color': '#48bb78',
+                            'fill-opacity': 0.2,
+                            'fill-outline-color': '#48bb78'
+                        }
+                    });
+                    
+                    // Outline layer
+                    map.addLayer({
+                        'id': 'saved-zone-outline',
+                        'type': 'line',
+                        'source': 'saved-zone',
+                        'paint': {
+                            'line-color': '#48bb78',
+                            'line-width': 3,
+                            'line-dasharray': [2, 1]
+                        }
+                    });
+                    
+                    // Fit map to show the entire zone
+                    if (zoneGeoJSON.type === 'Polygon') {
+                        const coordinates = zoneGeoJSON.coordinates[0];
+                        const bounds = coordinates.reduce((bounds, coord) => {
+                            return bounds.extend(coord);
+                        }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+                        
+                        map.fitBounds(bounds, {
+                            padding: 50,
+                            duration: 1000
+                        });
+                        debug.log('Map fitted to zone bounds');
+                    } else if (zoneGeoJSON.type === 'MultiPolygon') {
+                        // For MultiPolygon, extend bounds with all coordinates
+                        const bounds = new mapboxgl.LngLatBounds();
+                        zoneGeoJSON.coordinates.forEach(polygon => {
+                            polygon[0].forEach(coord => {
+                                bounds.extend(coord);
+                            });
+                        });
+                        map.fitBounds(bounds, { padding: 50, duration: 1000 });
+                    }
+                    
+                    showToast('✅ Saved delivery zone displayed in green', 'success');
+                    
+                    // Auto-hide after 10 seconds
+                    setTimeout(() => {
+                        if (map.getLayer('saved-zone-fill')) {
+                            map.removeLayer('saved-zone-fill');
+                            map.removeLayer('saved-zone-outline');
+                            map.removeSource('saved-zone');
+                        }
+                        // Restore the permanent display layer if it existed
+                        const permGeojson = document.getElementById('delivery-geojson').value;
+                        if (permGeojson) {
+                            try {
+                                const permZone = JSON.parse(permGeojson);
+                                map.addSource('saved-zone-display', {
+                                    'type': 'geojson',
+                                    'data': {
+                                        'type': 'Feature',
+                                        'geometry': permZone
+                                    }
+                                });
+                                
+                                map.addLayer({
+                                    'id': 'saved-zone-display-fill',
+                                    'type': 'fill',
+                                    'source': 'saved-zone-display',
+                                    'paint': {
+                                        'fill-color': '#48bb78',
+                                        'fill-opacity': 0.1,
+                                        'fill-outline-color': '#48bb78'
+                                    }
+                                });
+                                
+                                map.addLayer({
+                                    'id': 'saved-zone-display-outline',
+                                    'type': 'line',
+                                    'source': 'saved-zone-display',
+                                    'paint': {
+                                        'line-color': '#48bb78',
+                                        'line-width': 2,
+                                        'line-dasharray': [2, 1]
+                                    }
+                                });
+                            } catch (e) {}
+                        }
+                    }, 10000);
+                    
+                } catch (e) {
+                    debug.error('Error parsing GeoJSON:', e);
+                    showToast('Error displaying zone', 'error');
+                }
+            });
+        } else {
+            debug.error('show-zone-btn not found in DOM');
+        }
         
         // Reverse geocode
         async function reverseGeocode(lngLat) {
@@ -1687,36 +2327,93 @@
             statusBadge.innerHTML = '<i class="ri-check-line"></i> Location Set';
         }
         
-        // Save all settings
+        // Save all settings with clear flag and zone preservation
         document.getElementById('save-all-btn').addEventListener('click', async () => {
             const btn = document.getElementById('save-all-btn');
             const originalText = btn.innerHTML;
             btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
             btn.disabled = true;
             
-            // Get zone value - use originalZoneValue if current is empty but we're in zone mode
-            let zoneValue = document.getElementById('delivery-zone').value;
-            const deliveryMethod = document.querySelector('input[name="delivery-method"]:checked').value;
+            // Get the clear flag value
+            const clearZoneFlag = document.getElementById('clear-zone-flag') ? 
+                document.getElementById('clear-zone-flag').value === 'true' : false;
             
-            // If we're in zone mode but zone is empty, try to use originalZoneValue
-            if (deliveryMethod === 'zone' && !zoneValue && originalZoneValue) {
-                zoneValue = originalZoneValue;
-                document.getElementById('delivery-zone').value = zoneValue;
-                debug.log('Restored zone from backup for save');
+            // Reset the flag after reading it
+            if (document.getElementById('clear-zone-flag')) {
+                document.getElementById('clear-zone-flag').value = 'false';
             }
             
-            debug.log('🔍 DELIVERY ZONE VALUE:', zoneValue ? 'Present (length: ' + zoneValue.length + ')' : 'Empty');
+            // Get zone value from persistent storage FIRST
+            let zoneValue = persistentZoneData || document.getElementById('delivery-zone').value;
+            const deliveryMethod = document.querySelector('input[name="delivery-method"]:checked').value;
+            
+            // CRITICAL FIX: If we're in radius mode but we have persistent zone data and not clearing,
+            // we should STILL send it to the backend to preserve it
+            if (deliveryMethod === 'radius' && persistentZoneData && !clearZoneFlag) {
+                zoneValue = persistentZoneData;
+                debug.log('Preserving zone data even though in radius mode');
+            }
+            
+            // Update the hidden input with the persistent value
+            if (zoneValue) {
+                document.getElementById('delivery-zone').value = zoneValue;
+            }
+            
+            debug.log('🔍 DELIVERY ZONE VALUE (persistent):', zoneValue ? 'Present (length: ' + zoneValue.length + ')' : 'Empty');
             if (zoneValue) {
                 debug.log('🔍 ZONE PREVIEW:', zoneValue.substring(0, 100) + '...');
                 debug.log('🔍 ZONE IS GEOJSON:', isGeoJSONFormat(zoneValue));
             }
             
             debug.log('Selected delivery method:', deliveryMethod);
+            debug.log('Clear zone flag:', clearZoneFlag);
+            
+            // Get address components
+            const municipality = document.getElementById('municipality').value;
+            const barangay = document.getElementById('barangay').value;
+            const street = document.getElementById('street-address').value.trim();
+            
+            // Validate required fields
+            if (!municipality) {
+                showToast('Please select a municipality', 'error');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                return;
+            }
+            
+            if (!barangay) {
+                showToast('Please select a barangay', 'error');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                return;
+            }
+            
+            // Build full address
+            let fullAddress = '';
+            if (municipality && barangay) {
+                if (street) {
+                    fullAddress = `${street}, Barangay ${barangay}, ${municipality}, Laguna`;
+                } else {
+                    fullAddress = `Barangay ${barangay}, ${municipality}, Laguna`;
+                }
+            } else {
+                fullAddress = document.getElementById('preview-address').textContent || 'Address pending';
+            }
+            
+            // Get selected municipalities - ALWAYS get them, even if not in municipality mode
+            const selectedCheckboxes = document.querySelectorAll('.municipality-check:checked');
+            const selectedMunicipalities = Array.from(selectedCheckboxes).map(cb => cb.value);
+            
+            console.log('📋 Selected municipalities:', selectedMunicipalities);
+            console.log('📋 Delivery method:', deliveryMethod);
             
             const formData = {
                 // Basic info
                 name: document.getElementById('store-name').value.trim(),
-                address: document.getElementById('street-address').value.trim(),
+                address: fullAddress,
+                municipality: municipality,
+                barangay: barangay,
+                street: street,
                 contact_number: document.getElementById('contact-number').value.trim(),
                 description: document.getElementById('store-description').value.trim(),
                 status: document.getElementById('store-status').value,
@@ -1730,6 +2427,9 @@
                 // Delivery method
                 delivery_method: deliveryMethod,
                 
+                // Selected municipalities - ALWAYS send, even as empty array
+                selected_municipalities: selectedMunicipalities,
+                
                 // Delivery settings
                 delivery_radius_km: parseFloat(document.getElementById('delivery-radius').value) || 15,
                 max_delivery_distance: parseFloat(document.getElementById('max-distance').value) || 15,
@@ -1737,15 +2437,20 @@
                 delivery_rate_per_km: parseFloat(document.getElementById('rate-per-km').value) || 20,
                 free_delivery_minimum: parseFloat(document.getElementById('free-minimum').value) || 500,
                 
-                // Delivery zone (if any) - only send if it's GeoJSON format
-                delivery_area: (zoneValue && isGeoJSONFormat(zoneValue)) ? zoneValue : null
+                // Delivery zone - only send null if explicitly cleared
+                delivery_area: (zoneValue && isGeoJSONFormat(zoneValue) && !clearZoneFlag) ? zoneValue : null,
+                
+                // Add the clear flag to tell backend when to actually delete
+                clear_delivery_zone: clearZoneFlag
             };
             
             debug.log('📤 Sending formData with keys:', Object.keys(formData));
+            debug.log('📤 selected_municipalities:', formData.selected_municipalities);
             debug.log('📤 delivery_area present:', formData.delivery_area ? 'Yes (length: ' + formData.delivery_area.length + ')' : 'No');
+            debug.log('📤 clear_delivery_zone:', formData.clear_delivery_zone);
             
-            if (!formData.name || !formData.address) {
-                showToast('Store name and address are required', 'error');
+            if (!formData.name || !municipality || !barangay) {
+                showToast('Store name, municipality, and barangay are required', 'error');
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 return;
@@ -1774,19 +2479,24 @@
                     // Update storeData with new values
                     storeData = {...storeData, ...formData};
                     
-                    // Update originalZoneValue with what was saved
-                    if (zoneValue && isGeoJSONFormat(zoneValue)) {
-                        originalZoneValue = zoneValue;
+                    // Update persistentZoneData with what was saved (if not cleared)
+                    if (zoneValue && isGeoJSONFormat(zoneValue) && !clearZoneFlag) {
+                        persistentZoneData = zoneValue;
+                    } else if (clearZoneFlag) {
+                        persistentZoneData = null;
                     }
                     
                     debug.success('Store data updated');
                     
-                    // Show success message about needing to refresh to see zone
-                    showToast('Zone saved! Refresh page to see it displayed', 'info');
-                    
-                    // If we're in radius mode, keep zone hidden but preserve the value
-                    if (deliveryMethod === 'radius' && originalZoneValue) {
+                    // Update zone info message based on mode
+                    if (deliveryMethod === 'radius' && persistentZoneData) {
                         document.getElementById('zone-info').innerHTML = 'ℹ️ Zone saved but hidden (using radius mode)';
+                    } else if (deliveryMethod === 'zone' && persistentZoneData) {
+                        document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone is set';
+                    } else if (deliveryMethod === 'municipality') {
+                        document.getElementById('zone-info').innerHTML = '✅ Municipality selection saved';
+                    } else if (!persistentZoneData) {
+                        document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
                     }
                 } else {
                     debug.error('Save failed:', data.error);
@@ -1806,7 +2516,7 @@
             debug.log('Reset button clicked');
             
             document.getElementById('store-name').value = storeData.name;
-            document.getElementById('street-address').value = storeData.address;
+            document.getElementById('street-address').value = storeData.street || '';
             document.getElementById('contact-number').value = storeData.contact_number || '';
             document.getElementById('store-description').value = storeData.description || '';
             document.getElementById('store-status').value = storeData.status;
@@ -1816,6 +2526,43 @@
             document.getElementById('base-fee').value = storeData.base_delivery_fee;
             document.getElementById('rate-per-km').value = storeData.delivery_rate_per_km;
             document.getElementById('free-minimum').value = storeData.free_delivery_minimum;
+            
+            // Reset clear flag
+            if (document.getElementById('clear-zone-flag')) {
+                document.getElementById('clear-zone-flag').value = 'false';
+            }
+            
+            // Reset delivery method radio
+            if (storeData.delivery_method) {
+                const methodRadio = document.getElementById(`method-${storeData.delivery_method}`);
+                if (methodRadio) {
+                    methodRadio.checked = true;
+                    // Trigger change event to update UI
+                    methodRadio.dispatchEvent(new Event('change'));
+                }
+            } else {
+                // Default to radius if no method saved
+                document.getElementById('method-radius').checked = true;
+                document.getElementById('method-radius').dispatchEvent(new Event('change'));
+            }
+            
+            // Reset selected municipalities checkboxes
+            if (storeData.selected_municipalities) {
+                document.querySelectorAll('.municipality-check').forEach(cb => {
+                    cb.checked = storeData.selected_municipalities.includes(cb.value);
+                });
+            }
+            
+            // Reset address dropdowns
+            if (storeData.municipality) {
+                document.getElementById('municipality').value = storeData.municipality;
+                loadBarangays(storeData.municipality);
+                setTimeout(() => {
+                    if (storeData.barangay) {
+                        document.getElementById('barangay').value = storeData.barangay;
+                    }
+                }, 100);
+            }
             
             if (storeData.latitude && marker) {
                 marker.setLngLat([storeData.longitude, storeData.latitude]);
@@ -1834,32 +2581,32 @@
                 debug.log('Location reset to saved values');
             }
             
-            // Reset delivery zone
+            // Reset delivery zone - restore from storeData
             if (draw) {
                 draw.deleteAll();
-                // Restore the original zone from storeData if it exists
-                if (storeData.delivery_area && isGeoJSONFormat(storeData.delivery_area)) {
-                    try {
-                        const zoneGeoJSON = JSON.parse(storeData.delivery_area);
-                        draw.add(zoneGeoJSON);
-                        document.getElementById('delivery-zone').value = storeData.delivery_area;
-                        originalZoneValue = storeData.delivery_area;
-                        document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone restored (editable)';
-                        debug.log('Delivery zone restored from saved data');
-                    } catch (e) {
-                        debug.error('Failed to restore zone:', e);
-                        document.getElementById('delivery-zone').value = '';
-                        originalZoneValue = '';
-                        document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
-                    }
-                } else if (storeData.delivery_area) {
-                    // Zone exists but in database format
+                
+                if (storeData.delivery_area) {
+                    persistentZoneData = storeData.delivery_area;
                     document.getElementById('delivery-zone').value = storeData.delivery_area;
-                    originalZoneValue = storeData.delivery_area;
-                    document.getElementById('zone-info').innerHTML = '✅ Zone loaded from database (green outline on map)';
+                    
+                    if (isGeoJSONFormat(storeData.delivery_area)) {
+                        try {
+                            const zoneGeoJSON = JSON.parse(storeData.delivery_area);
+                            // Only load into draw if we're in zone mode
+                            if (document.querySelector('input[name="delivery-method"]:checked').value === 'zone') {
+                                draw.add(zoneGeoJSON);
+                            }
+                            document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone restored (editable)';
+                        } catch (e) {
+                            debug.error('Failed to restore zone:', e);
+                            document.getElementById('zone-info').innerHTML = '✅ Zone loaded from database';
+                        }
+                    } else {
+                        document.getElementById('zone-info').innerHTML = '✅ Zone loaded from database';
+                    }
                 } else {
+                    persistentZoneData = null;
                     document.getElementById('delivery-zone').value = '';
-                    originalZoneValue = '';
                     document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
                 }
             }
@@ -1869,6 +2616,14 @@
         
         // Initialize map
         initMap();
+        
+        // Initialize municipality checkbox states if in municipality mode
+        if (storeData.delivery_method === 'municipality' && storeData.selected_municipalities) {
+            setTimeout(() => {
+                updateSelectedCount();
+                validateMunicipalitySelection();
+            }, 500);
+        }
     });
 </script>
 {% endblock %}

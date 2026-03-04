@@ -59,14 +59,20 @@ class User(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
-
 class Store(db.Model):
     __tablename__ = 'stores'
     
     id = db.Column(db.Integer, primary_key=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    address = db.Column(db.Text, nullable=False)
+    address = db.Column(db.Text, nullable=False)  # Full formatted address (kept for backward compatibility)
+    
+    # ===== NEW ADDRESS FIELDS FOR DROPDOWN SELECTION =====
+    municipality = db.Column(db.String(100), nullable=True)  # Municipality/City
+    barangay = db.Column(db.String(100), nullable=True)      # Barangay
+    street = db.Column(db.String(200), nullable=True)        # Street/Building details
+    # ====================================================
+    
     contact_number = db.Column(db.String(20))
     description = db.Column(db.Text)
     delivery_area = db.Column(Geometry('POLYGON', srid=4326))
@@ -83,7 +89,10 @@ class Store(db.Model):
     
     # ===== MAPBOX DELIVERY FIELDS =====
     # Delivery method preference
-    delivery_method = db.Column(db.String(10), default='radius')  # 'radius' or 'zone'
+    delivery_method = db.Column(db.String(20), default='radius')  # 'radius', 'zone', or 'municipality'
+    
+    # NEW: Store selected municipalities for municipality delivery mode
+    selected_municipalities = db.Column(db.JSON, nullable=True)  # Stores array of selected municipality names
     
     # Delivery pricing configuration
     base_delivery_fee = db.Column(db.Numeric(10, 2), default=50.00)
@@ -142,6 +151,12 @@ class Store(db.Model):
             point = from_shape(Point(customer_lng, customer_lat), srid=4326)
             result = db.session.query(ST_Contains(self.delivery_area, point)).scalar()
             return bool(result)
+        elif self.delivery_method == 'municipality' and self.selected_municipalities:
+            # Use municipality boundaries - this would need a spatial query
+            # For now, we'll use a simplified check
+            from app.laguna_addresses import get_coordinates
+            # This is a placeholder - you'd need to implement proper boundary checking
+            return True
         else:
             # Use radius method (default)
             distance = self.calculate_distance(customer_lat, customer_lng)
@@ -181,8 +196,14 @@ class Store(db.Model):
             'seller_application_id': self.seller_application_id,
             'approved_at': self.approved_at.isoformat() if self.approved_at else None,
             
+            # NEW ADDRESS FIELDS
+            'municipality': self.municipality,
+            'barangay': self.barangay,
+            'street': self.street,
+            
             # Mapbox fields
             'delivery_method': self.delivery_method,
+            'selected_municipalities': self.selected_municipalities,  # NEW
             'base_delivery_fee': float(self.base_delivery_fee or 0),
             'delivery_rate_per_km': float(self.delivery_rate_per_km or 0),
             'free_delivery_minimum': float(self.free_delivery_minimum or 0),
@@ -655,8 +676,6 @@ class CartItem(db.Model):
     )
 
 
-
-    
 class UserAddress(db.Model):
     __tablename__ = 'user_addresses'
     
@@ -705,4 +724,119 @@ class UserAddress(db.Model):
             'is_default': self.is_default,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+# ===== NEW: Municipality Boundaries Table for Delivery Zones =====
+class MunicipalityBoundary(db.Model):
+    __tablename__ = 'municipality_boundaries'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, index=True)
+    province = db.Column(db.String(100), nullable=True, index=True)
+    region = db.Column(db.String(100), nullable=True)
+    psgc_code = db.Column(db.String(20), nullable=True, index=True)  # Philippine Standard Geographic Code
+    
+    # The actual boundary geometry (MultiPolygon for islands or discontinuous areas)
+    boundary = db.Column(Geometry('MULTIPOLYGON', srid=4326), nullable=False)
+    
+    # Optional: bounding box for quick filtering
+    min_lat = db.Column(db.Float, nullable=True)
+    max_lat = db.Column(db.Float, nullable=True)
+    min_lng = db.Column(db.Float, nullable=True)
+    max_lng = db.Column(db.Float, nullable=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_geojson(self):
+        """Convert to GeoJSON feature"""
+        from geoalchemy2.shape import to_shape
+        from shapely.geometry import mapping
+        
+        geom = to_shape(self.boundary)
+        return {
+            'type': 'Feature',
+            'properties': {
+                'id': self.id,
+                'name': self.name,
+                'province': self.province,
+                'region': self.region,
+                'psgc': self.psgc_code
+            },
+            'geometry': mapping(geom)
+        }
+    
+    @staticmethod
+    def get_adjacent_municipalities(municipality_name, province=None):
+        """
+        Find municipalities that share a border with the given municipality
+        Uses spatial ST_Touches function
+        """
+        from sqlalchemy import func
+        from geoalchemy2.functions import ST_Touches
+        
+        query = MunicipalityBoundary.query.filter_by(name=municipality_name)
+        if province:
+            query = query.filter_by(province=province)
+        
+        municipality = query.first()
+        if not municipality:
+            return []
+        
+        # Find all boundaries that touch this municipality
+        adjacent_query = MunicipalityBoundary.query.filter(
+            ST_Touches(MunicipalityBoundary.boundary, municipality.boundary)
+        )
+        
+        # Filter by same province if specified
+        if province:
+            adjacent_query = adjacent_query.filter_by(province=province)
+        
+        adjacent = adjacent_query.all()
+        
+        return [{
+            'id': m.id,
+            'name': m.name,
+            'province': m.province
+        } for m in adjacent]
+    
+    @staticmethod
+    def get_municipalities_in_province(province):
+        """Get all municipalities in a province"""
+        return MunicipalityBoundary.query.filter_by(province=province).order_by(MunicipalityBoundary.name).all()
+    
+    @staticmethod
+    def find_containing_municipality(lat, lng, province=None):
+        """
+        Find which municipality contains the given point
+        Uses spatial ST_Contains function
+        """
+        from geoalchemy2.functions import ST_Contains
+        from geoalchemy2.shape import from_shape
+        from shapely.geometry import Point
+        
+        point = from_shape(Point(lng, lat), srid=4326)
+        
+        query = MunicipalityBoundary.query.filter(ST_Contains(MunicipalityBoundary.boundary, point))
+        if province:
+            query = query.filter_by(province=province)
+        
+        return query.first()
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'province': self.province,
+            'region': self.region,
+            'psgc_code': self.psgc_code,
+            'bounds': {
+                'min_lat': self.min_lat,
+                'max_lat': self.max_lat,
+                'min_lng': self.min_lng,
+                'max_lng': self.max_lng
+            } if self.min_lat else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }

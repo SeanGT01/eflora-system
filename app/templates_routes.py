@@ -2,7 +2,7 @@
 from datetime import datetime
 from flask import Blueprint, app, flash, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import OrderItem, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial
+from app.models import MunicipalityBoundary, OrderItem, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -584,7 +584,6 @@ def change_password():
         print(f"Error changing password: {str(e)}")
         return jsonify({'error': 'Server error'}), 500
 
-
 @templates_bp.route('/my-account')
 def my_account():
     if not session.get('user_id'):
@@ -601,11 +600,18 @@ def my_account():
     # Convert to dict for template
     user_data = user.to_dict()
     
+    # Get Mapbox token from environment variables
+    mapbox_token = os.getenv('MAPBOX_PUBLIC_TOKEN', '')
+    
+    # DEBUG: Print token to console to verify it's loaded
+    print(f"🗺️ Mapbox token loaded for my-account: {mapbox_token[:15] if mapbox_token else 'NOT FOUND'}...")
+    
     # IMPORTANT: Render the template, don't return JSON!
     return render_template('my_account.html', 
                          user=user_data, 
                          active_page=page,
-                         initial_page=page)
+                         initial_page=page,
+                         mapbox_token=mapbox_token)  # ✅ Add this line
 
 
 
@@ -2602,8 +2608,6 @@ def store_detail(store_id):
 
 
 
-
-
 @templates_bp.route('/seller/store-settings')
 @seller_required
 def store_settings():
@@ -2612,6 +2616,12 @@ def store_settings():
         if not store:
             flash('Store not found.', 'error')
             return redirect(url_for('templates.seller_dashboard'))
+        
+        # Import the laguna_addresses functions
+        from app.laguna_addresses import get_municipalities, get_barangays
+        
+        # Get list of municipalities for the dropdown
+        municipalities = get_municipalities()
         
         # Convert delivery_area from WKB to GeoJSON for display
         delivery_geojson = None
@@ -2622,11 +2632,9 @@ def store_settings():
                 from shapely.geometry import mapping
                 
                 # Convert WKB hex to geometry
-                # Note: If store.delivery_area is already a WKBElement from GeoAlchemy2
                 if hasattr(store.delivery_area, 'data'):
                     wkb_bytes = bytes(store.delivery_area.data)
                 else:
-                    # If it's a hex string
                     wkb_bytes = bytes.fromhex(store.delivery_area)
                 
                 geometry = wkb.loads(wkb_bytes)
@@ -2640,11 +2648,14 @@ def store_settings():
                 import traceback
                 traceback.print_exc()
         
-        # DEBUG: Print store data
+        # DEBUG: Print store data including new fields
         print("\n" + "="*60)
         print("🔍 STORE SETTINGS PAGE LOADED")
         print(f"Store ID: {store.id}")
         print(f"Store Name: {store.name}")
+        print(f"Municipality: {store.municipality}")
+        print(f"Barangay: {store.barangay}")
+        print(f"Street: {store.street}")
         print(f"Has latitude: {store.latitude is not None}")
         print(f"Has longitude: {store.longitude is not None}")
         print(f"Has formatted_address: {store.formatted_address is not None}")
@@ -2654,6 +2665,8 @@ def store_settings():
         
         return render_template('store_settings.html', 
                              store=store,
+                             municipalities=municipalities,
+                             get_barangays=get_barangays,
                              delivery_geojson=delivery_geojson)
     
     except Exception as e:
@@ -2662,8 +2675,8 @@ def store_settings():
         traceback.print_exc()
         flash('Error loading page.', 'error')
         return redirect(url_for('templates.seller_dashboard'))
-
-
+    
+    
 @templates_bp.route('/api/seller/store/settings', methods=['POST'])
 @seller_required
 def update_store_settings():
@@ -2675,22 +2688,21 @@ def update_store_settings():
         data = request.get_json()
         print(f"📦 Received data keys: {list(data.keys())}")
         
-        # Check specifically for delivery_area
-        if 'delivery_area' in data:
-            print(f"📍 delivery_area present: {data['delivery_area'] is not None}")
-            if data['delivery_area']:
-                print(f"📍 delivery_area type: {type(data['delivery_area'])}")
-                print(f"📍 delivery_area length: {len(data['delivery_area'])}")
-                print(f"📍 delivery_area preview: {data['delivery_area'][:200]}...")
-            else:
-                print("📍 delivery_area is None or empty")
+        # DEBUG: Print the exact value of selected_municipalities
+        if 'selected_municipalities' in data:
+            print(f"🏙️ selected_municipalities value: {data['selected_municipalities']}")
+            print(f"🏙️ selected_municipalities type: {type(data['selected_municipalities'])}")
+            print(f"🏙️ selected_municipalities length: {len(data['selected_municipalities']) if data['selected_municipalities'] else 0}")
         else:
-            print("❌ delivery_area NOT in request data")
+            print("🏙️ selected_municipalities NOT in data")
         
         # Get seller's store
         store = Store.query.filter_by(seller_id=session['user_id']).first()
         if not store:
             return jsonify({'error': 'Store not found'}), 404
+        
+        # Store the original delivery area to check if it changed
+        original_delivery_area = store.delivery_area
         
         # NEW: Delivery method preference
         if 'delivery_method' in data:
@@ -2700,8 +2712,33 @@ def update_store_settings():
         # Update basic info
         if 'name' in data:
             store.name = data['name']
+        
+        # ===== NEW: Update address fields =====
+        if 'municipality' in data:
+            store.municipality = data['municipality']
+            print(f"✅ Updated municipality to: {store.municipality}")
+        
+        if 'barangay' in data:
+            store.barangay = data['barangay']
+            print(f"✅ Updated barangay to: {store.barangay}")
+        
+        if 'street' in data:
+            store.street = data['street']
+            print(f"✅ Updated street to: {store.street}")
+        
+        # Update the full address field (for backward compatibility)
         if 'address' in data:
             store.address = data['address']
+            print(f"✅ Updated full address")
+        else:
+            # Construct address from components if not provided
+            if store.municipality and store.barangay:
+                if store.street:
+                    store.address = f"{store.street}, Barangay {store.barangay}, {store.municipality}, Laguna"
+                else:
+                    store.address = f"Barangay {store.barangay}, {store.municipality}, Laguna"
+                print(f"✅ Constructed full address: {store.address}")
+        
         if 'contact_number' in data:
             store.contact_number = data['contact_number']
         if 'description' in data:
@@ -2741,49 +2778,79 @@ def update_store_settings():
         if 'free_delivery_minimum' in data:
             store.free_delivery_minimum = data['free_delivery_minimum']
         
-        # Update delivery zone (GeoJSON polygon)
-        if 'delivery_area' in data and data['delivery_area']:
-            try:
-                import json
-                from geoalchemy2.shape import from_shape
-                from shapely.geometry import shape
-                
-                print(f"🔄 Processing delivery_area...")
-                
-                # Parse the GeoJSON
-                zone_geojson = json.loads(data['delivery_area'])
-                print(f"✅ Parsed GeoJSON: {type(zone_geojson)}")
-                print(f"✅ GeoJSON type: {zone_geojson.get('type')}")
-                
-                # Convert to Shapely geometry
-                polygon = shape(zone_geojson)
-                print(f"✅ Created Shapely polygon with {len(polygon.exterior.coords)} points")
-                
-                # Save to PostGIS
-                store.delivery_area = from_shape(polygon, srid=4326)
-                print(f"✅ Saved delivery zone to database")
-                
-            except json.JSONDecodeError as e:
-                print(f"❌ JSON decode error: {e}")
-            except Exception as e:
-                print(f"⚠️ Error saving delivery zone: {e}")
-                import traceback
-                traceback.print_exc()
-        elif 'delivery_area' in data and data['delivery_area'] is None:
-            # Clear the delivery zone
+        # ===== CRITICAL FIX: Update selected municipalities =====
+        if 'selected_municipalities' in data:
+            # Always update, even if it's an empty array
+            store.selected_municipalities = data['selected_municipalities']
+            print(f"✅ Updated selected_municipalities to: {store.selected_municipalities}")
+        else:
+            print(f"⚠️ selected_municipalities not in data, keeping existing: {store.selected_municipalities}")
+        
+        # ===== FIXED: Update delivery zone with preservation logic =====
+        # Check for explicit clear flag first
+        if 'clear_delivery_zone' in data and data['clear_delivery_zone']:
+            # Explicitly clearing the zone
             store.delivery_area = None
-            print("✅ Cleared delivery zone")
+            print("✅ Cleared delivery zone (explicit)")
+        elif 'delivery_area' in data:
+            if data['delivery_area'] and data['delivery_area'] is not None:
+                try:
+                    import json
+                    from geoalchemy2.shape import from_shape
+                    from shapely.geometry import shape
+                    
+                    print(f"🔄 Processing delivery_area...")
+                    
+                    # Parse the GeoJSON
+                    zone_geojson = json.loads(data['delivery_area'])
+                    print(f"✅ Parsed GeoJSON: {type(zone_geojson)}")
+                    print(f"✅ GeoJSON type: {zone_geojson.get('type')}")
+                    
+                    # Convert to Shapely geometry
+                    polygon = shape(zone_geojson)
+                    print(f"✅ Created Shapely polygon with {len(polygon.exterior.coords)} points")
+                    
+                    # Save to PostGIS
+                    store.delivery_area = from_shape(polygon, srid=4326)
+                    print(f"✅ Saved delivery zone to database")
+                    
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON decode error: {e}")
+                except Exception as e:
+                    print(f"⚠️ Error saving delivery zone: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                # delivery_area is present but empty/null - only clear if it was explicitly intended
+                # Check if this is a radius mode save by looking at delivery_method
+                if 'delivery_method' in data and data['delivery_method'] == 'radius':
+                    # In radius mode, preserve existing zone data
+                    if original_delivery_area:
+                        print(f"⚠️ Radius mode save - preserving existing delivery zone")
+                        # Keep the original delivery area
+                        store.delivery_area = original_delivery_area
+                    else:
+                        print(f"ℹ️ No existing delivery zone to preserve")
+                else:
+                    # Not in radius mode and no zone data - only clear if we're sure
+                    print(f"⚠️ Received empty delivery_area, but preserving existing zone to be safe")
+                    # Uncomment the next line ONLY if you want to allow clearing without explicit flag
+                    # store.delivery_area = None
         
         store.updated_at = datetime.utcnow()
         db.session.commit()
         
         print("✅ Database commit successful")
+        print(f"📊 FINAL STORE DATA AFTER COMMIT:")
+        print(f"   delivery_method: {store.delivery_method}")
+        print(f"   selected_municipalities: {store.selected_municipalities}")
+        print(f"   type: {type(store.selected_municipalities)}")
         
         # Verify the zone was saved
         if store.delivery_area:
             print(f"✅ Verified: delivery_area is now set in database")
         else:
-            print(f"⚠️ Warning: delivery_area is still None after save")
+            print(f"ℹ️ Note: delivery_area is None after save")
         
         return jsonify({
             'success': True,
@@ -2873,7 +2940,6 @@ def reverse_geocode():
         print("="*60 + "\n")
         return jsonify({'error': str(e)}), 500
 
-
 # ADD THIS DEBUG ENDPOINT
 @templates_bp.route('/debug/mapbox-config')
 def debug_mapbox_config():
@@ -2936,6 +3002,7 @@ def get_user_addresses():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 @templates_bp.route('/api/account/addresses', methods=['POST'])
 def add_user_address():
     """Add a new address for the user"""
@@ -2945,14 +3012,11 @@ def add_user_address():
     try:
         data = request.get_json()
         
-        # Validate required fields
-        required = ['municipality', 'barangay', 'address_label']
+        # Validate required fields - including place_id (optional)
+        required = ['municipality', 'barangay', 'address_label', 'latitude', 'longitude']
         for field in required:
-            if not data.get(field):
+            if field not in data or data[field] is None:
                 return jsonify({'error': f'{field} is required'}), 400
-        
-        # Get coordinates for the municipality
-        coords = get_coordinates(data['municipality'])
         
         # Format the complete address
         address_line = format_address(
@@ -2969,7 +3033,7 @@ def add_user_address():
                 is_default=True
             ).update({'is_default': False})
         
-        # Create new address
+        # Create new address with EXACT coordinates and place_id from Mapbox
         address = UserAddress(
             user_id=session['user_id'],
             municipality=data['municipality'],
@@ -2977,8 +3041,9 @@ def add_user_address():
             street=data.get('street'),
             building_details=data.get('building_details'),
             address_line=address_line,
-            latitude=coords['lat'] if coords else None,
-            longitude=coords['lng'] if coords else None,
+            latitude=float(data['latitude']),    # EXACT from map
+            longitude=float(data['longitude']),  # EXACT from map
+            place_id=data.get('place_id'),        # Mapbox place_id (optional)
             address_label=data['address_label'],
             is_default=data.get('is_default', False)
         )
@@ -2996,6 +3061,7 @@ def add_user_address():
         db.session.rollback()
         print(f"Error adding address: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
 
 @templates_bp.route('/api/account/addresses/<int:address_id>', methods=['PUT'])
 def update_user_address(address_id):
@@ -3026,12 +3092,15 @@ def update_user_address(address_id):
         if 'address_label' in data:
             address.address_label = data['address_label']
         
-        # Update coordinates if municipality changed
-        if 'municipality' in data:
-            coords = get_coordinates(data['municipality'])
-            if coords:
-                address.latitude = coords['lat']
-                address.longitude = coords['lng']
+        # Update EXACT coordinates from Mapbox (if provided)
+        if 'latitude' in data and data['latitude'] is not None:
+            address.latitude = float(data['latitude'])
+        if 'longitude' in data and data['longitude'] is not None:
+            address.longitude = float(data['longitude'])
+        
+        # Update place_id (if provided)
+        if 'place_id' in data:
+            address.place_id = data['place_id']
         
         # Reformat address line
         address.address_line = format_address(
@@ -3064,6 +3133,7 @@ def update_user_address(address_id):
         db.session.rollback()
         print(f"Error updating address: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
 
 @templates_bp.route('/api/account/addresses/<int:address_id>', methods=['DELETE'])
 def delete_user_address(address_id):
@@ -3102,6 +3172,7 @@ def delete_user_address(address_id):
         print(f"Error deleting address: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
 @templates_bp.route('/api/account/addresses/<int:address_id>/set-default', methods=['POST'])
 def set_default_address(address_id):
     """Set an address as default"""
@@ -3135,4 +3206,159 @@ def set_default_address(address_id):
         
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+
+
+# ===== MUNICIPALITY BOUNDARY ENDPOINTS =====
+@templates_bp.route('/api/municipality-boundaries', methods=['GET'])
+def get_municipality_boundaries():
+    """Get all municipality boundaries as GeoJSON FeatureCollection"""
+    try:
+        # Check if the MunicipalityBoundary model exists
+        from app.models import MunicipalityBoundary
+        
+        # Optional: filter by province
+        province = request.args.get('province', 'Laguna')
+        
+        query = MunicipalityBoundary.query
+        if province:
+            query = query.filter(MunicipalityBoundary.province.ilike(f'%{province}%'))
+        
+        municipalities = query.order_by(MunicipalityBoundary.name).all()
+        
+        features = [m.to_geojson() for m in municipalities]
+        
+        return jsonify({
+            'type': 'FeatureCollection',
+            'features': features,
+            'count': len(features)
+        })
+    except ImportError:
+        return jsonify({'error': 'MunicipalityBoundary model not found'}), 500
+    except Exception as e:
+        print(f"Error getting boundaries: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@templates_bp.route('/api/municipality/check-contiguity', methods=['POST'])
+def check_municipality_contiguity():
+    """Check if a list of municipalities are contiguous"""
+    try:
+        from app.models import MunicipalityBoundary
+        from geoalchemy2.functions import ST_Touches
+        
+        data = request.get_json()
+        municipalities = data.get('municipalities', [])
+        province = data.get('province', 'Laguna')
+        
+        if not municipalities:
+            return jsonify({'contiguous': True, 'message': 'No municipalities selected'})
+        
+        if len(municipalities) <= 1:
+            return jsonify({'contiguous': True, 'message': 'Single municipality is always contiguous'})
+        
+        # Get all municipality boundaries for the selected names
+        boundaries = MunicipalityBoundary.query.filter(
+            MunicipalityBoundary.name.in_(municipalities),
+            MunicipalityBoundary.province.ilike(f'%{province}%')
+        ).all()
+        
+        if len(boundaries) != len(municipalities):
+            return jsonify({
+                'contiguous': False, 
+                'error': 'Some municipalities not found in database'
+            }), 404
+        
+        # Create name to id mapping
+        name_to_boundary = {b.name: b for b in boundaries}
+        
+        # BFS to check connectivity
+        visited = set()
+        queue = [municipalities[0]]
+        visited.add(municipalities[0])
+        
+        while queue:
+            current = queue.pop(0)
+            current_boundary = name_to_boundary[current]
+            
+            # Find all neighbors that are in our list and not visited
+            for neighbor_name in municipalities:
+                if neighbor_name in visited:
+                    continue
+                
+                neighbor_boundary = name_to_boundary[neighbor_name]
+                
+                # Check if they touch using SQL
+                from app.extensions import db
+                result = db.session.query(
+                    ST_Touches(current_boundary.boundary, neighbor_boundary.boundary)
+                ).scalar()
+                
+                if result:
+                    visited.add(neighbor_name)
+                    queue.append(neighbor_name)
+        
+        is_contiguous = len(visited) == len(municipalities)
+        
+        return jsonify({
+            'contiguous': is_contiguous,
+            'selected_count': len(municipalities),
+            'connected_count': len(visited),
+            'message': 'Municipalities are contiguous' if is_contiguous else 'Municipalities are not contiguous'
+        })
+        
+    except ImportError:
+        return jsonify({'error': 'MunicipalityBoundary model not found'}), 500
+    except Exception as e:
+        print(f"Error checking contiguity: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@templates_bp.route('/api/municipality/merge-boundaries', methods=['POST'])
+def merge_municipality_boundaries():
+    """Merge multiple municipality boundaries into one MultiPolygon"""
+    try:
+        from app.models import MunicipalityBoundary
+        from sqlalchemy import text
+        
+        data = request.get_json()
+        municipalities = data.get('municipalities', [])
+        province = data.get('province', 'Laguna')
+        
+        if not municipalities:
+            return jsonify({'error': 'No municipalities provided'}), 400
+        
+        # Use PostGIS ST_Union to merge boundaries
+        placeholders = ','.join([f"'{m}'" for m in municipalities])
+        query = text(f"""
+            SELECT ST_AsGeoJSON(ST_Union(boundary)) as geometry
+            FROM municipality_boundaries
+            WHERE name IN ({placeholders})
+            AND province ILIKE :province
+        """)
+        
+        from app.extensions import db
+        result = db.session.execute(query, {'province': f'%{province}%'}).fetchone()
+        
+        if not result or not result[0]:
+            return jsonify({'error': 'Could not merge boundaries'}), 404
+        
+        import json
+        geometry = json.loads(result[0])
+        
+        return jsonify({
+            'success': True,
+            'type': 'Feature',
+            'geometry': geometry,
+            'municipalities': municipalities
+        })
+        
+    except ImportError:
+        return jsonify({'error': 'MunicipalityBoundary model not found'}), 500
+    except Exception as e:
+        print(f"Error merging boundaries: {e}")
         return jsonify({'error': str(e)}), 500
