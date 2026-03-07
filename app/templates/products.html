@@ -11,10 +11,10 @@
         <h2 class="section-title">Products & Inventory</h2>
         <p style="color: var(--muted); margin-top: 0.5rem;">Add, edit, and organize your floral collection</p>
     </div>
-    <button class="btn btn-rose" onclick="showAddProductModal()">
+    <a href="{{ url_for('templates.add_product_page') }}" class="btn btn-rose">
         <i class="ri-add-line"></i>
         Add New Product
-    </button>
+    </a>
 </div>
 
 <!-- Filters Section -->
@@ -120,6 +120,13 @@
             <div class="price-tag">
                 ₱{{ "%.2f"|format(product.price) }}
             </div>
+            
+            <!-- Variant Badge (if product has variants) -->
+            {% if product.has_variants %}
+            <div class="variant-badge" title="Has variants">
+                <i class="ri-stack-line"></i>
+            </div>
+            {% endif %}
         </div>
         
         <!-- Product Info -->
@@ -165,10 +172,10 @@
         <i class="ri-leaf-line empty-state-icon"></i>
         <div class="empty-state-title">No Products Yet</div>
         <p class="empty-state-sub">Start by adding your first floral product to the store</p>
-        <button class="btn btn-rose" onclick="showAddProductModal()">
+        <a href="{{ url_for('templates.add_product_page') }}" class="btn btn-rose">
             <i class="ri-add-line"></i>
             Add First Product
-        </button>
+        </a>
     </div>
     {% endfor %}
 </div>
@@ -193,93 +200,6 @@
     </div>
 </div>
 {% endif %}
-
-<!-- Add/Edit Product Modal -->
-<div class="modal-overlay" id="productModal" style="display: none;">
-    <div class="modal modal-lg" style="max-width: 800px;">
-        <div class="modal-header">
-            <h3 id="modalTitle" class="modal-title">Add New Product</h3>
-            <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>
-        </div>
-        
-        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-            <form id="productForm" enctype="multipart/form-data">
-                <input type="hidden" id="productId" name="product_id">
-                
-                <!-- Multi-Image Upload Section -->
-                <div class="form-group">
-                    <label class="form-label">Product Images <span class="required-star">*</span> <span style="font-weight: normal; color: var(--muted); font-size: 11px;">(Upload up to 5 images, at least 1 required)</span></label>
-                    
-                    <div id="imagePreviewsContainer" class="image-previews-container">
-                        <!-- Image slots will be dynamically added here -->
-                    </div>
-                    
-                    <div style="display: flex; justify-content: flex-start; margin-top: 0.5rem;">
-                        <button type="button" id="addImageSlotBtn" class="btn btn-outline btn-sm" style="display: none;">
-                            <i class="ri-add-line"></i> Add Another Image
-                        </button>
-                    </div>
-                    <p class="form-hint">First image will be used as the main product thumbnail. Click on each slot to upload.</p>
-                </div>
-                
-                <div class="modal-form-grid" style="margin-top: 1.5rem;">
-                    <!-- Left Column -->
-                    <div class="modal-form-left">
-                        <div class="form-group">
-                            <label class="form-label">Product Name <span class="required-star">*</span></label>
-                            <input type="text" id="productName" name="name" class="form-control" placeholder="e.g., Red Rose Bouquet" required>
-                        </div>
-                        
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label class="form-label">Price (₱) <span class="required-star">*</span></label>
-                                <input type="number" id="productPrice" name="price" class="form-control" placeholder="0.00" step="0.01" min="0.01" required>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="form-label">Stock Qty <span class="required-star">*</span></label>
-                                <input type="number" id="productStock" name="stock_quantity" class="form-control" placeholder="0" min="0" required>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Right Column -->
-                    <div class="modal-form-right">
-                        <div class="form-group">
-                            <label class="form-label">Category <span class="required-star">*</span></label>
-                            <select id="productCategory" name="category" class="form-select" required>
-                                <option value="">Select Category</option>
-                                <option value="flowers">Fresh Flowers</option>
-                                <option value="plants">Potted Plants</option>
-                                <option value="bouquets">Bouquets</option>
-                                <option value="succulents">Succulents</option>
-                                <option value="seasonal">Seasonal</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Description</label>
-                            <textarea id="productDescription" name="description" class="form-control" rows="3" placeholder="Describe your product..."></textarea>
-                        </div>
-                        
-                        <label class="toggle-wrap">
-                            <input type="checkbox" class="toggle-input" name="is_available" checked>
-                            <span class="toggle-track"></span>
-                            <span class="toggle-label">Available for sale immediately</span>
-                        </label>
-                    </div>
-                </div>
-            </form>
-        </div>
-        
-        <div class="modal-footer">
-            <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-            <button type="button" id="submitBtn" class="btn btn-rose" onclick="submitProductForm()">
-                <i class="ri-save-line"></i> Add Product
-            </button>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_css %}
@@ -308,7 +228,6 @@
         border-color: var(--border-strong);
     }
     
-    /* UPDATED: Better image display for flowers */
     .product-img-wrap {
         position: relative;
         height: 180px;
@@ -394,6 +313,23 @@
         font-size: 14px;
     }
     
+    .variant-badge {
+        position: absolute;
+        bottom: 0.75rem;
+        right: 0.75rem;
+        background: var(--deep-rose);
+        color: white;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        box-shadow: var(--shadow-sm);
+        z-index: 2;
+    }
+    
     .product-card-body {
         padding: 1rem;
         flex: 1;
@@ -471,183 +407,6 @@
         color: var(--deep-rose);
     }
     
-    /* Modal Form Grid */
-    .modal-form-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
-        margin-bottom: 1rem;
-    }
-    
-    .modal-form-left,
-    .modal-form-right {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    
-    /* Image Preview Container */
-    .image-previews-container {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1rem;
-        margin-bottom: 1rem;
-    }
-    
-    /* Image Preview Slot */
-    .image-slot {
-        aspect-ratio: 1;
-        border-radius: var(--radius-md);
-        overflow: hidden;
-        background: linear-gradient(145deg, #f5ede6, #ede3d8);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: var(--transition);
-        border: 2px dashed var(--border-strong);
-        position: relative;
-    }
-    
-    .image-slot:hover {
-        border-color: var(--deep-rose);
-        background: rgba(181,68,90,0.02);
-    }
-    
-    .image-slot.has-image {
-        border: 2px solid var(--deep-rose);
-    }
-    
-    .image-slot img {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        background-color: var(--cream);
-        border-radius: calc(var(--radius-md) - 2px);
-    }
-    
-    .image-slot .slot-placeholder {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.5rem;
-        color: var(--muted);
-        font-size: 11px;
-        text-align: center;
-        padding: 0.5rem;
-    }
-    
-    .image-slot .slot-placeholder i {
-        font-size: 24px;
-        opacity: 0.3;
-    }
-    
-    .image-slot .remove-image-btn {
-        position: absolute;
-        top: 4px;
-        right: 4px;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        background: var(--deep-rose);
-        color: white;
-        border: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        font-size: 12px;
-        opacity: 0;
-        transition: opacity 0.2s ease;
-        z-index: 3;
-    }
-    
-    .image-slot:hover .remove-image-btn {
-        opacity: 1;
-    }
-    
-    .image-slot .remove-image-btn:hover {
-        background: #c0392b;
-        transform: scale(1.1);
-    }
-    
-    .image-slot .main-badge {
-        position: absolute;
-        bottom: 4px;
-        left: 4px;
-        background: var(--deep-rose);
-        color: white;
-        font-size: 9px;
-        padding: 2px 5px;
-        border-radius: 8px;
-        z-index: 3;
-    }
-    
-    /* Transparent Badge */
-    .transparent-badge {
-        position: absolute;
-        bottom: 4px;
-        right: 4px;
-        background: var(--deep-rose);
-        color: white;
-        font-size: 9px;
-        padding: 2px 5px;
-        border-radius: 8px;
-        z-index: 3;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        opacity: 0.9;
-        transition: var(--transition);
-    }
-    
-    .transparent-badge:hover {
-        opacity: 1;
-        transform: scale(1.05);
-    }
-    
-    /* Bulk Bar */
-    .bulk-bar {
-        background: var(--warm-white);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 1rem 1.25rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        flex-wrap: wrap;
-        margin-top: 2rem;
-    }
-    
-    .bulk-bar-label {
-        font-size: 12px;
-        color: var(--muted);
-        font-weight: 500;
-    }
-    
-    .bulk-bar-actions {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    
-    .bulk-bar-actions .btn-sm {
-        padding: 0.4rem 0.75rem;
-        font-size: 11px;
-        white-space: nowrap;
-    }
-    
-    /* Grid 2 helper */
-    .grid-2 {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.75rem;
-    }
-    
     /* Status Badges */
     .status-badge {
         display: inline-block;
@@ -717,6 +476,45 @@
         left: 18px;
     }
     
+    /* Bulk Bar */
+    .bulk-bar {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-top: 2rem;
+    }
+    
+    .bulk-bar-label {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 500;
+    }
+    
+    .bulk-bar-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .bulk-bar-actions .btn-sm {
+        padding: 0.4rem 0.75rem;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    
+    /* Grid 2 helper */
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+    
     /* Responsive Breakpoints */
     @media (max-width: 1200px) {
         .products-grid {
@@ -754,12 +552,6 @@
     }
     
     @media (max-width: 768px) {
-        .modal-form-grid {
-            grid-template-columns: 1fr;
-        }
-        .modal-form-right {
-            order: -1;
-        }
         .bulk-bar {
             flex-direction: column;
             align-items: flex-start;
@@ -850,7 +642,7 @@
         }
         
         .product-desc {
-            display: none; /* Hide description on very small screens */
+            display: none;
         }
         
         .stock-info {
@@ -866,7 +658,6 @@
             font-size: 11px;
         }
         
-        /* KEEP BUTTONS SIDE BY SIDE - NOT STACKED */
         .action-buttons {
             flex-direction: row;
             gap: 0.3rem;
@@ -900,11 +691,6 @@
         .bulk-bar-actions .btn-sm {
             width: 100%;
             min-width: auto;
-        }
-        
-        .image-previews-container {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.75rem;
         }
     }
     
@@ -940,15 +726,15 @@
         }
         
         .product-img-wrap {
-            height: 180px; /* Slightly larger when single column */
+            height: 180px;
         }
         
         .product-desc {
-            display: -webkit-box; /* Show description again */
+            display: -webkit-box;
         }
         
         .action-buttons {
-            flex-direction: row; /* Keep buttons side by side */
+            flex-direction: row;
             gap: 0.5rem;
         }
         
@@ -960,10 +746,6 @@
         .action-buttons .btn-icon {
             width: 36px;
         }
-        
-        .image-previews-container {
-            grid-template-columns: 1fr;
-        }
     }
 </style>
 {% endblock %}
@@ -971,673 +753,145 @@
 {% block extra_js %}
 <script>
     let selectedProducts = new Set();
-    let editingProductId = null;
-    let imageSlots = [];
-    const MAX_IMAGES = 5;
 
-    // Initialize image slots
-    function initializeImageSlots(existingImages = []) {
-        const container = document.getElementById('imagePreviewsContainer');
-        container.innerHTML = '';
-        imageSlots = [];
-        
-        // Determine how many slots to create initially
-        const initialSlotCount = Math.min(3, MAX_IMAGES);
-        
-        // Create slots based on existing images or initial slots
-        if (existingImages.length > 0) {
-            // Create slots for all existing images (up to MAX_IMAGES)
-            for (let i = 0; i < Math.min(existingImages.length, MAX_IMAGES); i++) {
-                createImageSlot(i, existingImages[i] || null);
-            }
-            
-            // If we have less than MAX_IMAGES images, create empty slots up to 3 or until MAX_IMAGES
-            if (existingImages.length < 3) {
-                for (let i = existingImages.length; i < Math.min(3, MAX_IMAGES); i++) {
-                    createImageSlot(i, null);
-                }
-            }
-        } else {
-            // No existing images - create initial 3 empty slots
-            for (let i = 0; i < initialSlotCount; i++) {
-                createImageSlot(i, null);
-            }
+    // ===== GET CSRF TOKEN =====
+    function getCsrfToken() {
+        // First try to get from meta tag
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag) {
+            return metaTag.getAttribute('content');
         }
         
-        // Show add button if we have less than MAX_IMAGES
-        updateAddButtonVisibility();
-    }
-
-    // Create a single image slot
-    function createImageSlot(index, imageData = null) {
-        const container = document.getElementById('imagePreviewsContainer');
-        const slot = document.createElement('div');
-        slot.className = 'image-slot';
-        slot.dataset.index = index;
-        
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = 'image/png,image/jpeg,image/jpg,image/gif';
-        fileInput.style.display = 'none';
-        fileInput.dataset.index = index;
-        fileInput.onchange = (e) => handleImageSelect(e, index);
-        
-        const img = document.createElement('img');
-        img.style.display = 'none';
-        img.style.objectFit = 'contain';
-        img.style.backgroundColor = 'var(--cream)';
-        
-        const placeholder = document.createElement('div');
-        placeholder.className = 'slot-placeholder';
-        placeholder.innerHTML = `
-            <i class="ri-image-add-line"></i>
-            <span>Click to upload</span>
-        `;
-        
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'remove-image-btn';
-        removeBtn.innerHTML = '<i class="ri-close-line"></i>';
-        removeBtn.onclick = (e) => removeImage(e, index);
-        removeBtn.style.display = 'none';
-        
-        const mainBadge = document.createElement('div');
-        mainBadge.className = 'main-badge';
-        mainBadge.textContent = 'Main';
-        mainBadge.style.display = 'none';
-        
-        slot.appendChild(fileInput);
-        slot.appendChild(img);
-        slot.appendChild(placeholder);
-        slot.appendChild(removeBtn);
-        slot.appendChild(mainBadge);
-        
-        slot.onclick = () => fileInput.click();
-        
-        container.appendChild(slot);
-        
-        // Store slot data with image ID if available
-        let imageId = null;
-        if (imageData && typeof imageData === 'object' && imageData.id) {
-            imageId = imageData.id;
+        // If you have a hidden input in the layout, you can get it from there
+        // This assumes you have a hidden input in your layout.html
+        const csrfInput = document.querySelector('input[name="csrf_token"]');
+        if (csrfInput) {
+            return csrfInput.value;
         }
         
-        imageSlots[index] = {
-            slot,
-            fileInput,
-            img,
-            placeholder,
-            removeBtn,
-            mainBadge,
-            file: null,
-            hasImage: false,
-            imageId: imageId
-        };
+        console.warn('CSRF token not found');
+        return '';
+    }
+
+    // ===== EDIT FUNCTION =====
+    function editProduct(productId) {
+        // Redirect to add_product.html with product ID as query parameter
+        window.location.href = `/seller/products/add?edit=${productId}`;
+    }
+
+    // ===== DELETE FUNCTION =====
+    function deleteProduct(productId) {
+        if (!confirm('Are you sure you want to delete this product?')) return;
         
-        // If there's existing image data
-        if (imageData) {
-            if (typeof imageData === 'string') {
-                // If it's just a URL (for backward compatibility)
-                img.src = imageData;
-                img.style.display = 'block';
-                img.style.objectFit = 'contain';
-                img.style.backgroundColor = 'var(--cream)';
-                placeholder.style.display = 'none';
-                slot.classList.add('has-image');
-                removeBtn.style.display = 'flex';
-                imageSlots[index].hasImage = true;
-                
-                // Mark first image as main
-                if (index === 0) {
-                    mainBadge.style.display = 'block';
-                }
-            } else if (typeof imageData === 'object' && imageData.image_url) {
-                // If it's an image object with id and url
-                img.src = imageData.image_url;
-                img.style.display = 'block';
-                img.style.objectFit = 'contain';
-                img.style.backgroundColor = 'var(--cream)';
-                placeholder.style.display = 'none';
-                slot.classList.add('has-image');
-                removeBtn.style.display = 'flex';
-                imageSlots[index].hasImage = true;
-                imageSlots[index].imageId = imageData.id;
-                
-                // Check if image is PNG (likely transparent) and add badge
-                if (imageData.image_url.toLowerCase().includes('.png') || 
-                    imageData.image_url.includes('no-bg') ||
-                    imageData.image_url.includes('processed')) {
-                    const transparentBadge = document.createElement('div');
-                    transparentBadge.className = 'transparent-badge';
-                    transparentBadge.innerHTML = '<i class="ri-artboard-line"></i>';
-                    transparentBadge.title = 'Transparent background';
-                    slot.appendChild(transparentBadge);
-                }
-                
-                // Mark first image as main
-                if (index === 0) {
-                    mainBadge.style.display = 'block';
-                }
+        const csrfToken = getCsrfToken();
+        
+        fetch(`/seller/products/${productId}`, { 
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
             }
-        }
-        
-        return slot;
-    }
-
-    // Add new image slot
-    function addImageSlot() {
-        if (imageSlots.length >= MAX_IMAGES) return;
-        
-        const newIndex = imageSlots.length;
-        createImageSlot(newIndex, null);
-        updateAddButtonVisibility();
-    }
-
-    // Handle image selection with optional background removal
-    async function handleImageSelect(event, index) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const slotData = imageSlots[index];
-        
-        // Show processing options modal or ask directly
-        const wantsBgRemoval = confirm('✨ Would you like to remove the background from this image?\n\n• Click OK to remove background (creates transparent PNG)\n• Click Cancel to keep original image');
-        
-        if (wantsBgRemoval) {
-            // Show loading state with animation
-            slotData.placeholder.innerHTML = `
-                <i class="ri-loader-4-line ri-spin" style="font-size: 28px;"></i>
-                <span style="margin-top: 0.5rem;">Removing background...</span>
-                <span style="font-size: 9px; opacity: 0.7;">This may take a few seconds</span>
-            `;
-            
-            try {
-                // Create form data
-                const formData = new FormData();
-                formData.append('image', file);
-                
-                // Call background removal API
-                const response = await fetch('/api/bg-removal/remove', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Convert base64 to blob
-                    const base64Data = data.image.split(',')[1];
-                    const blob = base64ToBlob(base64Data, 'image/png');
-                    
-                    // Create filename with -no-bg suffix
-                    const originalName = file.name;
-                    const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-                    const newFilename = `${nameWithoutExt}-no-bg.png`;
-                    
-                    const processedFile = new File([blob], newFilename, {
-                        type: 'image/png',
-                        lastModified: Date.now()
-                    });
-                    
-                    // Display the processed image
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        slotData.img.src = e.target.result;
-                        slotData.img.style.display = 'block';
-                        slotData.img.style.objectFit = 'contain';
-                        slotData.img.style.backgroundColor = 'var(--cream)';
-                        slotData.placeholder.style.display = 'none';
-                        slotData.slot.classList.add('has-image');
-                        slotData.removeBtn.style.display = 'flex';
-                        slotData.file = processedFile;
-                        slotData.hasImage = true;
-                        
-                        // Add a small badge to indicate transparent background
-                        const transparentBadge = document.createElement('div');
-                        transparentBadge.className = 'transparent-badge';
-                        transparentBadge.innerHTML = '<i class="ri-artboard-line"></i>';
-                        transparentBadge.title = 'Transparent background';
-                        
-                        // Remove any existing transparent badge
-                        const existingBadge = slotData.slot.querySelector('.transparent-badge');
-                        if (existingBadge) existingBadge.remove();
-                        
-                        slotData.slot.appendChild(transparentBadge);
-                        
-                        if (index === 0) {
-                            slotData.mainBadge.style.display = 'block';
-                        }
-                        
-                        window.showToast('✓ Background removed successfully!', 'success');
-                        updateAddButtonVisibility();
-                    };
-                    reader.readAsDataURL(processedFile);
-                } else {
-                    // Fallback to original
-                    handleOriginalUpload(file, index);
-                    window.showToast('Background removal failed, using original', 'error');
-                }
-            } catch (error) {
-                console.error('Background removal error:', error);
-                handleOriginalUpload(file, index);
-                window.showToast('Background removal failed, using original', 'error');
-            }
-        } else {
-            // Use original upload
-            handleOriginalUpload(file, index);
-        }
-    }
-
-    // Original upload function (fallback)
-    function handleOriginalUpload(file, index) {
-        const slotData = imageSlots[index];
-        
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            slotData.img.src = e.target.result;
-            slotData.img.style.display = 'block';
-            slotData.img.style.objectFit = 'contain';
-            slotData.img.style.backgroundColor = 'var(--cream)';
-            slotData.placeholder.style.display = 'none';
-            slotData.slot.classList.add('has-image');
-            slotData.removeBtn.style.display = 'flex';
-            slotData.file = file;
-            slotData.hasImage = true;
-            
-            // Remove any transparent badge if exists
-            const existingBadge = slotData.slot.querySelector('.transparent-badge');
-            if (existingBadge) existingBadge.remove();
-            
-            if (index === 0) {
-                slotData.mainBadge.style.display = 'block';
-            }
-            
-            updateAddButtonVisibility();
-        };
-        reader.readAsDataURL(file);
-    }
-
-    // Helper: Convert base64 to blob
-    function base64ToBlob(base64, type) {
-        const byteCharacters = atob(base64);
-        const byteNumbers = new Array(byteCharacters.length);
-        
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        
-        const byteArray = new Uint8Array(byteNumbers);
-        return new Blob([byteArray], { type: type });
-    }
-
-    // Remove image from slot
-    function removeImage(event, index) {
-        event.stopPropagation();
-        
-        const slotData = imageSlots[index];
-        if (!slotData) return;
-        
-        // If this is an existing image from the database (has imageId)
-        if (slotData.imageId && editingProductId) {
-            // Confirm deletion
-            if (!confirm('Are you sure you want to delete this image?')) {
-                return;
-            }
-            
-            // Show loading state
-            const originalText = slotData.removeBtn.innerHTML;
-            slotData.removeBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
-            slotData.removeBtn.disabled = true;
-            
-            // Call API to delete the image
-            fetch(`/seller/products/${editingProductId}/images/${slotData.imageId}`, {
-                method: 'DELETE',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
+        })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Remove the slot from UI
-                    slotData.fileInput.value = '';
-                    slotData.img.src = '';
-                    slotData.img.style.display = 'none';
-                    slotData.placeholder.style.display = 'flex';
-                    slotData.slot.classList.remove('has-image');
-                    slotData.removeBtn.style.display = 'none';
-                    slotData.mainBadge.style.display = 'none';
-                    
-                    // Remove transparent badge if exists
-                    const existingBadge = slotData.slot.querySelector('.transparent-badge');
-                    if (existingBadge) existingBadge.remove();
-                    
-                    slotData.file = null;
-                    slotData.hasImage = false;
-                    slotData.imageId = null;
-                    
-                    // If this was the main image, update main badge to next available image
-                    if (index === 0 || (index === 0 && !imageSlots[0].hasImage)) {
-                        for (let i = 1; i < imageSlots.length; i++) {
-                            if (imageSlots[i] && imageSlots[i].hasImage) {
-                                imageSlots[i].mainBadge.style.display = 'block';
-                                break;
-                            }
-                        }
+                    if (data.needs_choice) {
+                        showArchiveChoiceDialog(productId, data.product);
+                    } else if (data.archived) {
+                        window.showToast(data.message, 'info');
+                        setTimeout(() => location.reload(), 500);
+                    } else {
+                        window.showToast(data.message, 'success');
+                        setTimeout(() => location.reload(), 500);
                     }
-                    
-                    window.showToast('Image deleted successfully', 'success');
                 } else {
-                    window.showToast(data.error || 'Failed to delete image', 'error');
+                    window.showToast(data.error || 'Failed to delete product', 'error');
                 }
             })
             .catch(error => {
-                console.error('Error deleting image:', error);
-                window.showToast('Network error. Please try again.', 'error');
-            })
-            .finally(() => {
-                slotData.removeBtn.innerHTML = originalText;
-                slotData.removeBtn.disabled = false;
-            });
-        } else {
-            // This is a newly added image (not saved to DB yet)
-            slotData.fileInput.value = '';
-            slotData.img.src = '';
-            slotData.img.style.display = 'none';
-            slotData.placeholder.style.display = 'flex';
-            slotData.slot.classList.remove('has-image');
-            slotData.removeBtn.style.display = 'none';
-            slotData.mainBadge.style.display = 'none';
-            
-            // Remove transparent badge if exists
-            const existingBadge = slotData.slot.querySelector('.transparent-badge');
-            if (existingBadge) existingBadge.remove();
-            
-            slotData.file = null;
-            slotData.hasImage = false;
-            
-            // If this was the main image, update main badge to next available image
-            if (index === 0 || (index === 0 && !imageSlots[0].hasImage)) {
-                for (let i = 1; i < imageSlots.length; i++) {
-                    if (imageSlots[i] && imageSlots[i].hasImage) {
-                        imageSlots[i].mainBadge.style.display = 'block';
-                        break;
-                    }
-                }
-            }
-            
-            updateAddButtonVisibility();
-        }
-    }
-
-    // Update add button visibility
-    function updateAddButtonVisibility() {
-        const addBtn = document.getElementById('addImageSlotBtn');
-        // Only show add button if we have less than MAX_IMAGES total slots
-        if (imageSlots.length < MAX_IMAGES) {
-            addBtn.style.display = 'inline-flex';
-        } else {
-            addBtn.style.display = 'none';
-        }
-    }
-
-    // Get all image files
-    function getImageFiles() {
-        const files = [];
-        for (let i = 0; i < imageSlots.length; i++) {
-            if (imageSlots[i] && imageSlots[i].file) {
-                files.push(imageSlots[i].file);
-            }
-        }
-        return files;
-    }
-
-    // Validate at least one image
-    function validateImages() {
-        for (let i = 0; i < imageSlots.length; i++) {
-            if (imageSlots[i] && imageSlots[i].hasImage) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Modal functions
-    function showAddProductModal() {
-        document.getElementById('modalTitle').textContent = 'Add New Product';
-        document.getElementById('submitBtn').innerHTML = '<i class="ri-save-line"></i> Add Product';
-        document.getElementById('productForm').reset();
-        document.getElementById('productId').value = '';
-        
-        // Initialize image slots
-        initializeImageSlots();
-        
-        document.getElementById('productModal').style.display = 'flex';
-    }
-
-    function showEditProductModal(productId) {
-        editingProductId = productId;
-        
-        console.log('Fetching product with ID:', productId);
-        
-        fetch(`/seller/products/${productId}`)
-            .then(response => {
-                console.log('Response status:', response.status);
-                return response.json();
-            })
-            .then(data => {
-                console.log('Product data received:', data);
-                
-                if (data.product) {
-                    const product = data.product;
-                    
-                    document.getElementById('modalTitle').textContent = 'Edit Product';
-                    document.getElementById('submitBtn').innerHTML = '<i class="ri-save-line"></i> Update Product';
-                    document.getElementById('productId').value = product.id;
-                    document.getElementById('productName').value = product.name;
-                    document.getElementById('productCategory').value = product.category;
-                    document.getElementById('productPrice').value = product.price;
-                    document.getElementById('productStock').value = product.stock_quantity;
-                    document.getElementById('productDescription').value = product.description || '';
-                    
-                    // Initialize image slots with existing images (including IDs)
-                    const existingImages = [];
-                    if (product.images && product.images.length > 0) {
-                        // Sort images by sort_order
-                        const sortedImages = product.images.sort((a, b) => a.sort_order - b.sort_order);
-                        sortedImages.forEach(img => {
-                            // Pass the full image object with id and url
-                            existingImages.push({
-                                id: img.id,
-                                image_url: img.image_url
-                            });
-                        });
-                    }
-                    initializeImageSlots(existingImages);
-                    
-                    document.getElementById('productModal').style.display = 'flex';
-                } else {
-                    console.error('No product data received');
-                    window.showToast('Error loading product data', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching product:', error);
-                window.showToast('Error loading product data. Please try again.', 'error');
+                console.error('Error:', error);
+                window.showToast('Error deleting product', 'error');
             });
     }
 
-    function closeModal() {
-        document.getElementById('productModal').style.display = 'none';
-        editingProductId = null;
+    // ===== ARCHIVE CHOICE DIALOG =====
+    function showArchiveChoiceDialog(productId, product) {
+        let modal = document.getElementById('archiveChoiceModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.id = 'archiveChoiceModal';
+            modal.innerHTML = `
+                <div class="modal" style="max-width: 400px;">
+                    <div class="modal-header">
+                        <h3 class="modal-title">Delete or Archive?</h3>
+                        <button class="modal-close" onclick="closeArchiveModal()"><i class="ri-close-line"></i></button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="archiveChoiceMessage"></p>
+                        <div style="background: rgba(122, 158, 126, 0.1); padding: 1rem; border-radius: var(--radius-md); margin: 1rem 0;">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <i class="ri-information-line" style="font-size: 24px; color: var(--deep-sage);"></i>
+                                <div style="font-size: 13px; color: var(--charcoal);">
+                                    <strong>Archive:</strong> Hide from store, can restore later<br>
+                                    <strong>Delete:</strong> Permanently remove (cannot undo)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-outline" onclick="closeArchiveModal()">Cancel</button>
+                        <button class="btn btn-outline" onclick="submitArchiveChoice(${productId}, 'archive')">
+                            <i class="ri-archive-line"></i> Archive
+                        </button>
+                        <button class="btn btn-danger-outline" onclick="submitArchiveChoice(${productId}, 'delete')">
+                            <i class="ri-delete-bin-line"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        
+        document.getElementById('archiveChoiceMessage').innerHTML = 
+            `Product "<strong>${product.name}</strong>" is in <strong>${product.in_carts}</strong> customer cart(s).`;
+        
+        modal.style.display = 'flex';
     }
 
-    // Submit product form
-    function submitProductForm() {
-        const form = document.getElementById('productForm');
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
+    function closeArchiveModal() {
+        document.getElementById('archiveChoiceModal').style.display = 'none';
+    }
+
+    function submitArchiveChoice(productId, action) {
+        closeArchiveModal();
         
-        // Validate at least one image
-        if (!validateImages()) {
-            window.showToast('Please upload at least one product image', 'error');
-            return;
-        }
+        const csrfToken = getCsrfToken();
         
-        const productId = document.getElementById('productId').value;
-        const isEdit = !!productId;
-        
-        const formData = new FormData();
-        formData.append('name', document.getElementById('productName').value.trim());
-        formData.append('description', document.getElementById('productDescription').value.trim() || '');
-        formData.append('price', document.getElementById('productPrice').value);
-        formData.append('stock_quantity', document.getElementById('productStock').value);
-        formData.append('category', document.getElementById('productCategory').value);
-        
-        // Append all images
-        const imageFiles = getImageFiles();
-        imageFiles.forEach((file, index) => {
-            formData.append(`image_${index}`, file);
-        });
-        
-        // Use PUT for edits, POST for new products
-        const url = isEdit ? `/seller/products/${productId}` : '/seller/products/create';
-        const method = isEdit ? 'PUT' : 'POST';
-        
-        // Show loading
-        const submitBtn = document.getElementById('submitBtn');
-        const originalText = submitBtn.innerHTML;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
-        
-        fetch(url, {
-            method: method,
-            body: formData
+        fetch(`/seller/products/${productId}/archive-choice`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ action: action })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 window.showToast(data.message, 'success');
-                closeModal();
                 setTimeout(() => location.reload(), 500);
             } else {
-                window.showToast('Error: ' + (data.error || 'Something went wrong'), 'error');
+                window.showToast(data.error || 'Failed to process request', 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
             window.showToast('Network error. Please try again.', 'error');
-        })
-        .finally(() => {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
         });
     }
 
-    // Edit product
-    function editProduct(productId) {
-        showEditProductModal(productId);
-    }
-
-    // Delete product
-    function deleteProduct(productId) {
-    fetch(`/seller/products/${productId}`, { method: 'DELETE' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                if (data.needs_choice) {
-                    // Show choice dialog
-                    showArchiveChoiceDialog(productId, data.product);
-                } else if (data.archived) {
-                    window.showToast(data.message, 'info');
-                    setTimeout(() => location.reload(), 500);
-                } else {
-                    window.showToast(data.message, 'success');
-                    setTimeout(() => location.reload(), 500);
-                }
-            } else {
-                window.showToast(data.error || 'Failed to delete product', 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            window.showToast('Error deleting product', 'error');
-        });
-}
-
-function showArchiveChoiceDialog(productId, product) {
-    // Create modal if it doesn't exist
-    let modal = document.getElementById('archiveChoiceModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.id = 'archiveChoiceModal';
-        modal.innerHTML = `
-            <div class="modal" style="max-width: 400px;">
-                <div class="modal-header">
-                    <h3 class="modal-title">Delete or Archive?</h3>
-                    <button class="modal-close" onclick="closeArchiveModal()"><i class="ri-close-line"></i></button>
-                </div>
-                <div class="modal-body">
-                    <p id="archiveChoiceMessage"></p>
-                    <div style="background: rgba(122, 158, 126, 0.1); padding: 1rem; border-radius: var(--radius-md); margin: 1rem 0;">
-                        <div style="display: flex; align-items: center; gap: 1rem;">
-                            <i class="ri-information-line" style="font-size: 24px; color: var(--deep-sage);"></i>
-                            <div style="font-size: 13px; color: var(--charcoal);">
-                                <strong>Archive:</strong> Hide from store, can restore later<br>
-                                <strong>Delete:</strong> Permanently remove (cannot undo)
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-outline" onclick="closeArchiveModal()">Cancel</button>
-                    <button class="btn btn-outline" onclick="submitArchiveChoice(${productId}, 'archive')">
-                        <i class="ri-archive-line"></i> Archive
-                    </button>
-                    <button class="btn btn-danger-outline" onclick="submitArchiveChoice(${productId}, 'delete')">
-                        <i class="ri-delete-bin-line"></i> Delete
-                    </button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
-    
-    document.getElementById('archiveChoiceMessage').innerHTML = 
-        `Product "<strong>${product.name}</strong>" is in <strong>${product.in_carts}</strong> customer cart(s).`;
-    
-    modal.style.display = 'flex';
-}
-
-function closeArchiveModal() {
-    document.getElementById('archiveChoiceModal').style.display = 'none';
-}
-
-function submitArchiveChoice(productId, action) {
-    closeArchiveModal();
-    
-    fetch(`/seller/products/${productId}/archive-choice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: action })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            window.showToast(data.message, 'success');
-            setTimeout(() => location.reload(), 500);
-        } else {
-            window.showToast(data.error || 'Failed to process request', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        window.showToast('Network error. Please try again.', 'error');
-    });
-}
-    // Filter products
+    // ===== FILTER FUNCTION =====
     function filterProducts() {
         const searchText = document.getElementById('searchInput').value.toLowerCase();
         const category = document.getElementById('categoryFilter').value;
@@ -1703,7 +957,7 @@ function submitArchiveChoice(productId, action) {
         }
     }
 
-    // Bulk Actions
+    // ===== BULK ACTIONS =====
     document.getElementById('selectAllBtn')?.addEventListener('click', function() {
         const visibleCards = Array.from(document.querySelectorAll('.product-card'))
             .filter(c => c.style.display !== 'none');
@@ -1743,10 +997,15 @@ function submitArchiveChoice(productId, action) {
         if (!selectedProducts.size) return;
         
         if (confirm(`Mark ${selectedProducts.size} product(s) as available?`)) {
+            const csrfToken = getCsrfToken();
+            
             for (const id of selectedProducts) {
                 await fetch(`/seller/products/${id}/availability`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
                     body: JSON.stringify({ is_available: true })
                 });
             }
@@ -1759,10 +1018,15 @@ function submitArchiveChoice(productId, action) {
         if (!selectedProducts.size) return;
         
         if (confirm(`Mark ${selectedProducts.size} product(s) as unavailable?`)) {
+            const csrfToken = getCsrfToken();
+            
             for (const id of selectedProducts) {
                 await fetch(`/seller/products/${id}/availability`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
                     body: JSON.stringify({ is_available: false })
                 });
             }
@@ -1775,27 +1039,20 @@ function submitArchiveChoice(productId, action) {
         if (!selectedProducts.size) return;
         
         if (confirm(`Delete ${selectedProducts.size} product(s)? This cannot be undone.`)) {
+            const csrfToken = getCsrfToken();
+            
             for (const id of selectedProducts) {
-                await fetch(`/seller/products/${id}`, { method: 'DELETE' });
+                await fetch(`/seller/products/${id}`, { 
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
             }
             window.showToast(`✓  ${selectedProducts.size} product(s) deleted`, 'success');
             setTimeout(() => location.reload(), 800);
         }
-    });
-
-    // Close modal when clicking overlay
-    document.getElementById('productModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeModal();
-        }
-    });
-
-    // Add image slot button
-    document.getElementById('addImageSlotBtn').addEventListener('click', addImageSlot);
-
-    // Initialize
-    document.addEventListener('DOMContentLoaded', function() {
-        updateBulkButtons();
     });
 
     // ===== AVAILABILITY TOGGLE =====
@@ -1805,21 +1062,20 @@ function submitArchiveChoice(productId, action) {
         const id = e.target.dataset.productId;
         const val = e.target.checked;
         const originalState = !val;
-        
-        console.log(`🔄 Toggling product ${id} availability to: ${val}`);
+        const csrfToken = getCsrfToken();
         
         try {
             const response = await fetch(`/seller/products/${id}/availability`, {
                 method: 'PUT',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
                 },
                 body: JSON.stringify({ is_available: val })
             });
             
             const data = await response.json();
-            console.log('📡 Response:', data);
             
             if (data.success) {
                 window.showToast(data.message || (val ? '✓ Product available' : 'Product unavailable'), 'success');
@@ -1834,12 +1090,87 @@ function submitArchiveChoice(productId, action) {
         }
     });
 
+    // ===== ADD CSRF META TAG TO LAYOUT =====
+    // Add this to your layout.html if not already present
+    function addCsrfMetaTag() {
+        if (!document.querySelector('meta[name="csrf-token"]')) {
+            const csrfInput = document.querySelector('input[name="csrf_token"]');
+            if (csrfInput) {
+                const meta = document.createElement('meta');
+                meta.name = 'csrf-token';
+                meta.content = csrfInput.value;
+                document.head.appendChild(meta);
+            }
+        }
+    }
+
+    // ===== INIT =====
+    document.addEventListener('DOMContentLoaded', function() {
+        addCsrfMetaTag();
+        updateBulkButtons();
+    });
+
+    // ===== CLOSE MODAL WHEN CLICKING OVERLAY =====
+    document.addEventListener('click', function(e) {
+        const modal = document.getElementById('archiveChoiceModal');
+        if (modal && e.target === modal) {
+            closeArchiveModal();
+        }
+    });
+
+    // ===== TOAST NOTIFICATION =====
+    window.showToast = function(message, type = 'info') {
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+            `;
+            document.body.appendChild(toastContainer);
+        }
+
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            background: ${type === 'error' ? '#f44336' : type === 'success' ? '#4CAF50' : '#333'};
+            color: white;
+            padding: 12px 24px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        `;
+        toast.textContent = message;
+
+        const slideInStyle = document.createElement('style');
+        slideInStyle.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(slideInStyle);
+
+        toastContainer.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    };
+
     // Make functions globally available
-    window.showAddProductModal = showAddProductModal;
     window.editProduct = editProduct;
     window.deleteProduct = deleteProduct;
-    window.closeModal = closeModal;
-    window.submitProductForm = submitProductForm;
     window.filterProducts = filterProducts;
+    window.closeArchiveModal = closeArchiveModal;
+    window.submitArchiveChoice = submitArchiveChoice;
 </script>
 {% endblock %}

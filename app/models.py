@@ -5,6 +5,8 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from decimal import Decimal
+from sqlalchemy.dialects.postgresql import JSON
+
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -59,24 +61,68 @@ class User(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# GCASH QR CODE MODEL (NEW)
+# ═════════════════════════════════════════════════════════════════════════════
+class GCashQR(db.Model):
+    __tablename__ = 'gcash_qrs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id', ondelete='CASCADE'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    is_primary = db.Column(db.Boolean, default=False)
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    store = db.relationship('Store', back_populates='gcash_qr_images')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'store_id': self.store_id,
+            'filename': self.filename,
+            'url': f'/static/uploads/gcash_qr/{self.filename}',
+            'is_primary': self.is_primary,
+            'sort_order': self.sort_order,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 class Store(db.Model):
     __tablename__ = 'stores'
     
     id = db.Column(db.Integer, primary_key=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    address = db.Column(db.Text, nullable=False)  # Full formatted address (kept for backward compatibility)
+    address = db.Column(db.Text, nullable=False)
     
-    # ===== NEW ADDRESS FIELDS FOR DROPDOWN SELECTION =====
-    municipality = db.Column(db.String(100), nullable=True)  # Municipality/City
-    barangay = db.Column(db.String(100), nullable=True)      # Barangay
-    street = db.Column(db.String(200), nullable=True)        # Street/Building details
+    # ===== ADDRESS FIELDS FOR DROPDOWN SELECTION =====
+    municipality = db.Column(db.String(100), nullable=True)
+    barangay = db.Column(db.String(100), nullable=True)
+    street = db.Column(db.String(200), nullable=True)
     # ====================================================
     
     contact_number = db.Column(db.String(20))
     description = db.Column(db.Text)
+    
+    # Current active delivery area (changes based on selected method)
     delivery_area = db.Column(Geometry('POLYGON', srid=4326))
+    
+    # ===== STORAGE FOR ALL DELIVERY METHODS =====
+    # Store the drawn zone polygon (when in zone mode)
+    zone_delivery_area = db.Column(Geometry('POLYGON', srid=4326), nullable=True)
+    
+    # Store the municipality selection (when in municipality mode)
+    selected_municipalities = db.Column(db.JSON, nullable=True)
+    
+    # Store the generated municipality polygon (for quick queries)
+    municipality_delivery_area = db.Column(Geometry('MULTIPOLYGON', srid=4326), nullable=True)
+    # =============================================
+    
+    # Radius settings (always stored)
     delivery_radius_km = db.Column(db.Float, default=5.0)
+    
     location = db.Column(Geometry('POINT', srid=4326))
     status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -88,25 +134,19 @@ class Store(db.Model):
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     
     # ===== MAPBOX DELIVERY FIELDS =====
-    # Delivery method preference
-    delivery_method = db.Column(db.String(20), default='radius')  # 'radius', 'zone', or 'municipality'
-    
-    # NEW: Store selected municipalities for municipality delivery mode
-    selected_municipalities = db.Column(db.JSON, nullable=True)  # Stores array of selected municipality names
-    
-    # Delivery pricing configuration
+    delivery_method = db.Column(db.String(20), default='radius')
     base_delivery_fee = db.Column(db.Numeric(10, 2), default=50.00)
     delivery_rate_per_km = db.Column(db.Numeric(10, 2), default=20.00)
     free_delivery_minimum = db.Column(db.Numeric(10, 2), default=500.00)
     max_delivery_distance = db.Column(db.Float, default=15.0)
-    
-    # Store coordinates (simple floats for easy calculations)
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
-    
-    # Formatted address from reverse geocoding
     formatted_address = db.Column(db.String(500), nullable=True)
     place_id = db.Column(db.String(100), nullable=True)
+    # ==================================
+    
+    # ===== GCASH INSTRUCTIONS =====
+    gcash_instructions = db.Column(db.Text, nullable=True)
     # ==================================
     
     # Relationships
@@ -117,50 +157,82 @@ class Store(db.Model):
     testimonials = db.relationship('Testimonial', backref='store', lazy=True)
     analytics = db.relationship('OrderAnalytics', backref='store', lazy=True)
     
-    # FIXED: Relationships for seller approval - unique backref names
+    # GCash QR relationship
+    gcash_qr_images = db.relationship('GCashQR', back_populates='store', 
+                                      cascade='all, delete-orphan', 
+                                      order_by='GCashQR.sort_order')
+    
     seller_application = db.relationship('SellerApplication', foreign_keys=[seller_application_id], backref='approved_store_record', lazy=True)
     approved_by_user = db.relationship('User', foreign_keys=[approved_by], backref='stores_approved', lazy=True)
     
     def calculate_delivery_fee(self, distance_km, subtotal):
         """Calculate delivery fee based on distance and order subtotal"""
-        from decimal import Decimal
-        
-        # Free delivery for orders above threshold
         if subtotal >= self.free_delivery_minimum:
             return Decimal('0')
         
-        # Calculate fee: base fee + (distance * rate per km)
         fee = Decimal(str(self.base_delivery_fee or 0)) + \
               (Decimal(str(self.delivery_rate_per_km or 0)) * Decimal(str(distance_km)))
         
-        # Ensure minimum fee
         min_fee = Decimal('30.00')
         if fee < min_fee:
             fee = min_fee
         
         return fee
     
+    def generate_radius_polygon(self):
+        """Generate a circular polygon around the store location based on delivery radius"""
+        if not self.latitude or not self.longitude or not self.delivery_radius_km:
+            return None
+        
+        try:
+            from shapely.geometry import Point
+            import math
+            
+            # Create a point at store location
+            center = Point(self.longitude, self.latitude)
+            
+            # Convert radius from km to degrees (approximate)
+            # 1 degree of latitude ≈ 111 km
+            radius_degrees = self.delivery_radius_km / 111.0
+            
+            # Create a circle by buffering the point
+            circle = center.buffer(radius_degrees)
+            
+            return circle
+            
+        except Exception as e:
+            print(f"⚠️ Error generating radius polygon: {e}")
+            return None
+    
+    def update_delivery_area_from_method(self):
+        """Update the active delivery_area based on the current delivery_method"""
+        if self.delivery_method == 'radius':
+            # Generate fresh radius polygon
+            circle = self.generate_radius_polygon()
+            if circle:
+                from geoalchemy2.shape import from_shape
+                self.delivery_area = from_shape(circle, srid=4326)
+                
+        elif self.delivery_method == 'zone':
+            # Use the saved zone polygon
+            self.delivery_area = self.zone_delivery_area
+            
+        elif self.delivery_method == 'municipality':
+            # Use the saved municipality polygon
+            self.delivery_area = self.municipality_delivery_area
+    
     def can_deliver_to(self, customer_lat, customer_lng):
         """Check if customer is within delivery area based on selected method"""
-        if self.delivery_method == 'zone' and self.delivery_area:
-            # Use custom zone
-            from geoalchemy2.functions import ST_Contains
-            from geoalchemy2.shape import from_shape
-            from shapely.geometry import Point
+        if not self.delivery_area:
+            return False
             
-            point = from_shape(Point(customer_lng, customer_lat), srid=4326)
-            result = db.session.query(ST_Contains(self.delivery_area, point)).scalar()
-            return bool(result)
-        elif self.delivery_method == 'municipality' and self.selected_municipalities:
-            # Use municipality boundaries - this would need a spatial query
-            # For now, we'll use a simplified check
-            from app.laguna_addresses import get_coordinates
-            # This is a placeholder - you'd need to implement proper boundary checking
-            return True
-        else:
-            # Use radius method (default)
-            distance = self.calculate_distance(customer_lat, customer_lng)
-            return distance <= self.delivery_radius_km
+        from geoalchemy2.functions import ST_Contains
+        from geoalchemy2.shape import from_shape
+        from shapely.geometry import Point
+        
+        point = from_shape(Point(customer_lng, customer_lat), srid=4326)
+        result = db.session.query(ST_Contains(self.delivery_area, point)).scalar()
+        return bool(result)
     
     def calculate_distance(self, lat2, lng2):
         """Calculate distance between store and customer (Haversine formula)"""
@@ -169,20 +241,62 @@ class Store(db.Model):
         if not self.latitude or not self.longitude:
             return float('inf')
         
-        # Convert to radians
         lat1, lng1 = radians(self.latitude), radians(self.longitude)
         lat2, lng2 = radians(lat2), radians(lng2)
         
-        # Haversine formula
         dlat = lat2 - lat1
         dlng = lng2 - lng1
         a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlng/2)**2
         c = 2 * atan2(sqrt(a), sqrt(1-a))
         
-        # Earth radius in kilometers (6371 km)
         return 6371 * c
     
     def to_dict(self):
+        # Generate current radius GeoJSON if in radius mode
+        radius_geojson = None
+        if self.delivery_method == 'radius' and self.latitude and self.longitude:
+            circle = self.generate_radius_polygon()
+            if circle:
+                from shapely.geometry import mapping
+                import json
+                radius_geojson = json.dumps(mapping(circle))
+        
+        # Convert zone_delivery_area to GeoJSON if it exists
+        zone_geojson = None
+        if self.zone_delivery_area:
+            try:
+                from shapely import wkb
+                from shapely.geometry import mapping
+                import json
+                
+                if hasattr(self.zone_delivery_area, 'data'):
+                    wkb_bytes = bytes(self.zone_delivery_area.data)
+                else:
+                    wkb_bytes = bytes.fromhex(self.zone_delivery_area)
+                
+                geometry = wkb.loads(wkb_bytes)
+                zone_geojson = json.dumps(mapping(geometry))
+            except:
+                pass
+        
+        # Convert municipality_delivery_area to GeoJSON if it exists
+        municipality_geojson = None
+        if self.municipality_delivery_area:
+            try:
+                from shapely import wkb
+                from shapely.geometry import mapping
+                import json
+                
+                if hasattr(self.municipality_delivery_area, 'data'):
+                    wkb_bytes = bytes(self.municipality_delivery_area.data)
+                else:
+                    wkb_bytes = bytes.fromhex(self.municipality_delivery_area)
+                
+                geometry = wkb.loads(wkb_bytes)
+                municipality_geojson = json.dumps(mapping(geometry))
+            except:
+                pass
+        
         return {
             'id': self.id,
             'name': self.name,
@@ -195,15 +309,11 @@ class Store(db.Model):
             'logo_path': self.seller_application.store_logo_path if self.seller_application else None,
             'seller_application_id': self.seller_application_id,
             'approved_at': self.approved_at.isoformat() if self.approved_at else None,
-            
-            # NEW ADDRESS FIELDS
             'municipality': self.municipality,
             'barangay': self.barangay,
             'street': self.street,
-            
-            # Mapbox fields
             'delivery_method': self.delivery_method,
-            'selected_municipalities': self.selected_municipalities,  # NEW
+            'selected_municipalities': self.selected_municipalities,
             'base_delivery_fee': float(self.base_delivery_fee or 0),
             'delivery_rate_per_km': float(self.delivery_rate_per_km or 0),
             'free_delivery_minimum': float(self.free_delivery_minimum or 0),
@@ -211,34 +321,52 @@ class Store(db.Model):
             'latitude': self.latitude,
             'longitude': self.longitude,
             'formatted_address': self.formatted_address,
-            'place_id': self.place_id
+            'place_id': self.place_id,
+            # Delivery area data for all methods
+            'radius_geojson': radius_geojson,
+            'zone_geojson': zone_geojson,
+            'municipality_geojson': municipality_geojson,
+            'current_delivery_geojson': self._get_current_delivery_geojson(),
+            # GCash fields
+            'gcash_qr_codes': [qr.to_dict() for qr in self.gcash_qr_images],
+            'gcash_instructions': self.gcash_instructions
         }
-
+    
+    def _get_current_delivery_geojson(self):
+        """Get GeoJSON for the current active delivery area"""
+        if not self.delivery_area:
+            return None
+        
+        try:
+            from shapely import wkb
+            from shapely.geometry import mapping
+            import json
+            
+            if hasattr(self.delivery_area, 'data'):
+                wkb_bytes = bytes(self.delivery_area.data)
+            else:
+                wkb_bytes = bytes.fromhex(self.delivery_area)
+            
+            geometry = wkb.loads(wkb_bytes)
+            return json.dumps(mapping(geometry))
+        except:
+            return None
 
 class SellerApplication(db.Model):
     __tablename__ = 'seller_applications'
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
-    # Store Information
     store_name = db.Column(db.String(100), nullable=False)
     store_description = db.Column(db.Text)
-    store_logo_path = db.Column(db.String(500))  # Path to uploaded logo
-    
-    # Documents
-    government_id_path = db.Column(db.String(500))  # Path to uploaded ID
-    
-    # Status and Tracking
-    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
-    admin_notes = db.Column(db.Text)  # Notes from admin about rejection/approval
-    
-    # Timestamps
+    store_logo_path = db.Column(db.String(500))
+    government_id_path = db.Column(db.String(500))
+    status = db.Column(db.String(20), default='pending')
+    admin_notes = db.Column(db.Text)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_at = db.Column(db.DateTime, nullable=True)
     reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     
-    # Relationships
     applicant = db.relationship('User', foreign_keys=[user_id], back_populates='seller_applications')
     reviewer = db.relationship('User', foreign_keys=[reviewed_by], back_populates='reviewed_seller_applications')
     
@@ -271,7 +399,6 @@ class Rider(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
     user = db.relationship('User', backref='rider_profile', lazy=True)
     orders = db.relationship('Order', backref='assigned_rider', lazy=True)
     locations = db.relationship('RiderLocation', backref='rider', lazy=True)
@@ -311,10 +438,9 @@ class Product(db.Model):
     
     # Relationships
     images = db.relationship('ProductImage', back_populates='product', lazy=True, cascade='all, delete-orphan', order_by='ProductImage.sort_order')
+    variants = db.relationship('ProductVariant', back_populates='product', lazy=True, cascade='all, delete-orphan', order_by='ProductVariant.sort_order')
     order_items = db.relationship('OrderItem', backref='product', lazy=True)
     pos_order_items = db.relationship('POSOrderItem', backref='product', lazy=True)
-    
-    # Relationship for archived_by
     archived_by_user = db.relationship('User', foreign_keys=[archived_by], backref='archived_products')
     
     def archive(self, user_id):
@@ -335,6 +461,9 @@ class Product(db.Model):
         sorted_images = sorted(self.images, key=lambda x: x.sort_order)
         primary_image = next((img for img in sorted_images if img.is_primary), sorted_images[0] if sorted_images else None)
         
+        # Sort variants by sort_order
+        sorted_variants = sorted(self.variants, key=lambda v: v.sort_order)
+        
         data = {
             'id': self.id,
             'store_id': self.store_id,
@@ -351,6 +480,10 @@ class Product(db.Model):
             'is_archived': self.is_archived,
             'archived_at': self.archived_at.isoformat() if self.archived_at else None,
             'archived_by': self.archived_by,
+            
+            # Variant support
+            'has_variants': len(self.variants) > 0,
+            'variants': [variant.to_dict() for variant in sorted_variants]
         }
         
         return data
@@ -376,6 +509,58 @@ class ProductImage(db.Model):
             'image_url': f'/static/uploads/products/{self.filename}',
             'is_primary': self.is_primary,
             'sort_order': self.sort_order
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PRODUCT VARIANT MODEL
+# ═════════════════════════════════════════════════════════════════════════════
+class ProductVariant(db.Model):
+    __tablename__ = 'product_variants'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
+    
+    # Variant details
+    name = db.Column(db.String(100), nullable=False)  # e.g., "Small", "Red Rose", "12 Stems"
+    price = db.Column(db.Numeric(10, 2), nullable=False)  # Variant-specific price
+    stock_quantity = db.Column(db.Integer, default=0)
+    sku = db.Column(db.String(50), nullable=True)  # Stock Keeping Unit
+    
+    # Variant image (optional - if not provided, uses product's main image)
+    image_filename = db.Column(db.String(255), nullable=True)
+    
+    # Variant attributes (can be used for filtering/display)
+    # e.g., {"color": "red", "size": "small", "stems": 12}
+    attributes = db.Column(db.JSON, nullable=True)
+    
+    # Display order
+    sort_order = db.Column(db.Integer, default=0)
+    
+    # Availability
+    is_available = db.Column(db.Boolean, default=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product = db.relationship('Product', back_populates='variants')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'name': self.name,
+            'price': float(self.price) if self.price else 0,
+            'stock_quantity': self.stock_quantity,
+            'sku': self.sku,
+            'image_url': f'/static/uploads/product_variants/{self.image_filename}' if self.image_filename else None,
+            'attributes': self.attributes,
+            'sort_order': self.sort_order,
+            'is_available': self.is_available,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 
@@ -430,24 +615,18 @@ class Order(db.Model):
             'rider_id': self.rider_id,
             'order_type': self.order_type,
             'status': self.status,
-            
             'subtotal_amount': float(self.subtotal_amount or 0),
             'delivery_fee': float(self.delivery_fee or 0),
             'distance_km': self.distance_km,
             'total_amount': float(self.total_amount or 0),
-            
             'payment_method': self.payment_method,
             'payment_status': self.payment_status,
             'payment_proof_url': f'/static/uploads/payments/{self.payment_proof}' if self.payment_proof else None,
-            
             'delivery_address': self.delivery_address,
             'delivery_notes': self.delivery_notes,
-            
-            # Mapbox fields
             'customer_latitude': self.customer_latitude,
             'customer_longitude': self.customer_longitude,
             'mapbox_place_id': self.mapbox_place_id,
-            
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'customer_name': self.customer.full_name if self.customer else None,
             'store_name': self.store.name if self.store else None,
@@ -462,8 +641,11 @@ class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
     quantity = db.Column(db.Integer, default=1)
     price = db.Column(db.Numeric(10, 2))
+    
+    variant = db.relationship('ProductVariant', backref='order_items', lazy=True)
     
     def to_dict(self):
         product = self.product
@@ -471,15 +653,26 @@ class OrderItem(db.Model):
         if product and product.images:
             primary_image = next((img for img in product.images if img.is_primary), product.images[0])
         
+        # Use variant image if variant is selected
+        image_filename = primary_image.filename if primary_image else None
+        variant_name = None
+        
+        if self.variant:
+            if self.variant.image_filename:
+                image_filename = self.variant.image_filename
+            variant_name = self.variant.name
+        
         return {
             'id': self.id,
             'order_id': self.order_id,
             'product_id': self.product_id,
+            'variant_id': self.variant_id,
+            'variant_name': variant_name,
             'quantity': self.quantity,
             'price': float(self.price) if self.price else 0,
             'total': float(self.quantity * self.price) if self.price else 0,
             'product_name': product.name if product else None,
-            'product_image': primary_image.filename if primary_image else None
+            'product_image': image_filename
         }
 
 
@@ -531,24 +724,38 @@ class POSOrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     pos_order_id = db.Column(db.Integer, db.ForeignKey('pos_orders.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
     quantity = db.Column(db.Integer, default=1)
     price = db.Column(db.Numeric(10, 2))
+    
+    variant = db.relationship('ProductVariant', backref='pos_order_items', lazy=True)
     
     def to_dict(self):
         product = self.product
         primary_image = None
         if product and product.images:
             primary_image = next((img for img in product.images if img.is_primary), product.images[0])
-            
+        
+        # Use variant image if variant is selected
+        image_filename = primary_image.filename if primary_image else None
+        variant_name = None
+        
+        if self.variant:
+            if self.variant.image_filename:
+                image_filename = self.variant.image_filename
+            variant_name = self.variant.name
+        
         return {
             'id': self.id,
             'pos_order_id': self.pos_order_id,
             'product_id': self.product_id,
+            'variant_id': self.variant_id,
+            'variant_name': variant_name,
             'quantity': self.quantity,
             'price': float(self.price) if self.price else 0,
             'total': float(self.quantity * self.price) if self.price else 0,
             'product_name': product.name if product else None,
-            'product_image': primary_image.filename if primary_image else None
+            'product_image': image_filename
         }
 
 
@@ -559,7 +766,7 @@ class Testimonial(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'))
-    rating = db.Column(db.Integer, nullable=False)  # 1-5
+    rating = db.Column(db.Integer, nullable=False)
     comment = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -597,7 +804,6 @@ class OrderAnalytics(db.Model):
         }
 
 
-# Event listener to update analytics
 @event.listens_for(Order.status, 'set')
 def update_analytics(target, value, oldvalue, initiator):
     if value == 'delivered' and oldvalue != 'delivered':
@@ -649,22 +855,32 @@ class CartItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cart_id = db.Column(db.Integer, db.ForeignKey('carts.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='CASCADE'), nullable=True)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     product = db.relationship('Product', backref=db.backref('cart_items', lazy='dynamic', passive_deletes=True))
+    variant = db.relationship('ProductVariant', backref='cart_items', lazy=True)
     
     @property
     def subtotal(self):
+        # Use variant price if variant is selected, otherwise product price
+        if self.variant:
+            return self.variant.price * self.quantity
         return self.product.price * self.quantity if self.product else 0
     
     def to_dict(self):
+        product_dict = self.product.to_dict() if self.product else None
+        variant_dict = self.variant.to_dict() if self.variant else None
+        
         return {
             'id': self.id,
             'cart_id': self.cart_id,
             'product_id': self.product_id,
-            'product': self.product.to_dict() if self.product else None,
+            'variant_id': self.variant_id,
+            'product': product_dict,
+            'variant': variant_dict,
             'quantity': self.quantity,
             'subtotal': float(self.subtotal),
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -672,7 +888,7 @@ class CartItem(db.Model):
         }
     
     __table_args__ = (
-        db.UniqueConstraint('cart_id', 'product_id', name='unique_cart_product'),
+        db.UniqueConstraint('cart_id', 'product_id', 'variant_id', name='unique_cart_product_variant'),
     )
 
 
@@ -681,30 +897,16 @@ class UserAddress(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
-    # Laguna-specific address fields
-    municipality = db.Column(db.String(100), nullable=False)  # Municipality/City
+    municipality = db.Column(db.String(100), nullable=False)
     barangay = db.Column(db.String(100), nullable=False)
-    street = db.Column(db.String(200), nullable=True)  # Optional street name/number
-    building_details = db.Column(db.String(200), nullable=True)  # House/Unit number, landmarks
-    
-    # Full formatted address
+    street = db.Column(db.String(200), nullable=True)
+    building_details = db.Column(db.String(200), nullable=True)
     address_line = db.Column(db.String(500), nullable=False)
-    
-    # Coordinates (can be approximate for barangay center)
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
-    
-    # Mapbox reference (optional)
     place_id = db.Column(db.String(100), nullable=True)
-    
-    # Address type/label
-    address_label = db.Column(db.String(50), default='Home')  # Home, Work, Other
-    
-    # Is this the default address?
+    address_label = db.Column(db.String(50), default='Home')
     is_default = db.Column(db.Boolean, default=False)
-    
-    # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -727,7 +929,6 @@ class UserAddress(db.Model):
         }
 
 
-# ===== NEW: Municipality Boundaries Table for Delivery Zones =====
 class MunicipalityBoundary(db.Model):
     __tablename__ = 'municipality_boundaries'
     
@@ -735,23 +936,16 @@ class MunicipalityBoundary(db.Model):
     name = db.Column(db.String(100), nullable=False, index=True)
     province = db.Column(db.String(100), nullable=True, index=True)
     region = db.Column(db.String(100), nullable=True)
-    psgc_code = db.Column(db.String(20), nullable=True, index=True)  # Philippine Standard Geographic Code
-    
-    # The actual boundary geometry (MultiPolygon for islands or discontinuous areas)
+    psgc_code = db.Column(db.String(20), nullable=True, index=True)
     boundary = db.Column(Geometry('MULTIPOLYGON', srid=4326), nullable=False)
-    
-    # Optional: bounding box for quick filtering
     min_lat = db.Column(db.Float, nullable=True)
     max_lat = db.Column(db.Float, nullable=True)
     min_lng = db.Column(db.Float, nullable=True)
     max_lng = db.Column(db.Float, nullable=True)
-    
-    # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     def to_geojson(self):
-        """Convert to GeoJSON feature"""
         from geoalchemy2.shape import to_shape
         from shapely.geometry import mapping
         
@@ -770,10 +964,6 @@ class MunicipalityBoundary(db.Model):
     
     @staticmethod
     def get_adjacent_municipalities(municipality_name, province=None):
-        """
-        Find municipalities that share a border with the given municipality
-        Uses spatial ST_Touches function
-        """
         from sqlalchemy import func
         from geoalchemy2.functions import ST_Touches
         
@@ -785,12 +975,10 @@ class MunicipalityBoundary(db.Model):
         if not municipality:
             return []
         
-        # Find all boundaries that touch this municipality
         adjacent_query = MunicipalityBoundary.query.filter(
             ST_Touches(MunicipalityBoundary.boundary, municipality.boundary)
         )
         
-        # Filter by same province if specified
         if province:
             adjacent_query = adjacent_query.filter_by(province=province)
         
@@ -804,15 +992,10 @@ class MunicipalityBoundary(db.Model):
     
     @staticmethod
     def get_municipalities_in_province(province):
-        """Get all municipalities in a province"""
         return MunicipalityBoundary.query.filter_by(province=province).order_by(MunicipalityBoundary.name).all()
     
     @staticmethod
     def find_containing_municipality(lat, lng, province=None):
-        """
-        Find which municipality contains the given point
-        Uses spatial ST_Contains function
-        """
         from geoalchemy2.functions import ST_Contains
         from geoalchemy2.shape import from_shape
         from shapely.geometry import Point

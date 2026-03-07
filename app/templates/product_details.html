@@ -438,6 +438,55 @@
 
     .delivery-field-clear:hover { background: rgba(181, 68, 90, 0.16); }
 
+    /* ===== VARIANT STYLES ===== */
+    .variants-label {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 0.6rem;
+        display: block;
+    }
+
+    .variant-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.625rem;
+    }
+
+    .variant-btn {
+        padding: 0.625rem 1.25rem;
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--radius-pill);
+        background: var(--warm-white);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--charcoal);
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .variant-btn:hover {
+        border-color: var(--dusty-rose);
+        color: var(--deep-rose);
+    }
+
+    .variant-btn.active {
+        border-color: var(--deep-rose);
+        background: var(--deep-rose);
+        color: white;
+        box-shadow: 0 0 0 2px rgba(181, 68, 90, 0.15);
+    }
+
+    .variant-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        border-color: var(--border-strong);
+        color: var(--muted);
+    }
+
     /* Quantity control */
     .qty-label {
         font-size: 11px;
@@ -856,7 +905,7 @@
             </div>
         </div>
 
-        <!-- Gallery Description Section (MOVED HERE) -->
+        <!-- Gallery Description Section -->
         <div class="gallery-description-section">
             <div class="gallery-accordion-item open" id="gallery-acc-desc">
                 <button class="gallery-accordion-trigger" onclick="toggleGalleryAccordion('gallery-acc-desc')">
@@ -921,7 +970,7 @@
         </div>
     </div>
 
-    <!-- ── Info Column (unchanged) ── -->
+    <!-- ── Info Column ── -->
     <div class="info-col">
 
         <!-- Eyebrow + Name -->
@@ -954,10 +1003,10 @@
 
         <!-- Price -->
         <div class="price-block">
-            <div class="price-current">₱{{ "%.0f"|format(product.price) }}</div>
+            <div class="price-current" id="currentPrice">₱{{ "%.0f"|format(product.price) }}</div>
             {% if product.price > 500 %}
-           <div class="price-original">₱{{ "%.0f"|format(product.price|float * 1.2) }}</div>
-            <div class="price-discount-badge">-17%</div>
+           <div class="price-original" id="originalPrice" style="display: none;">₱{{ "%.0f"|format(product.price|float * 1.2) }}</div>
+            <div class="price-discount-badge" id="discountBadge" style="display: none;">-17%</div>
             {% endif %}
         </div>
 
@@ -977,6 +1026,40 @@
             </div>
         </div>
 
+            <!-- ===== VARIANTS SECTION ===== -->
+            {% if product.variants and product.variants|length > 0 %}
+            <div>
+                <span class="variants-label">Select Option</span>
+                <div class="variant-buttons" id="variantButtons">
+                    <!-- Main Product Button (always first) -->
+                    <button class="variant-btn active" 
+                            data-variant-id="main"
+                            data-variant-name="Standard"
+                            data-variant-price="{{ product.price }}"
+                            data-variant-stock="{{ product.stock_quantity }}"
+                            data-variant-image="{% if product.images and product.images[0] %}/static/uploads/products/{{ product.images[0].filename }}{% endif %}"
+                            onclick="selectVariant(this)">
+                        Standard
+                    </button>
+                    
+                    <!-- Variant Buttons -->
+                    {% for variant in product.variants %}
+                    <button class="variant-btn" 
+                            data-variant-id="{{ variant.id }}"
+                            data-variant-name="{{ variant.name }}"
+                            data-variant-price="{{ variant.price }}"
+                            data-variant-stock="{{ variant.stock_quantity }}"
+                            data-variant-image="{% if variant.image_url %}{{ variant.image_url }}{% endif %}"
+                            onclick="selectVariant(this)"
+                            {% if variant.stock_quantity <= 0 %}disabled{% endif %}>
+                        {{ variant.name }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+            <hr class="info-divider">
+            {% endif %}
+
         <!-- Quantity -->
         <div>
             <span class="qty-label">Quantity</span>
@@ -989,6 +1072,13 @@
                     <i class="ri-add-line"></i>
                 </button>
             </div>
+            <small id="stockDisplay" style="display: block; margin-top: 0.5rem; color: var(--muted);">
+                {% if product.variants and product.variants|length > 0 %}
+                    {{ product.variants[0].stock_quantity }} available
+                {% else %}
+                    {{ product.stock_quantity }} available
+                {% endif %}
+            </small>
         </div>
 
         <hr class="info-divider">
@@ -1067,14 +1157,7 @@
         <!-- CTA Buttons -->
         {% if product.stock_quantity > 0 and product.is_available %}
         <div class="cta-row">
-            <button class="btn btn-outline" onclick='addToCart({
-                id: {{ product.id }},
-                name: {{ product.name | tojson }},
-                price: {{ product.price }},
-                store_id: {{ product.store_id }},
-                store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
-                image_url: "{{ ('/static/uploads/products/' + product.images[0].filename) if product.images else '' }}"
-            })'>
+            <button class="btn btn-outline" onclick="addToCartWithVariant()">
                 <i class="ri-shopping-bag-line"></i> Add to Bag
             </button>
             <button class="btn btn-rose" onclick="buyNow()">
@@ -1181,19 +1264,132 @@
 {% block extra_js %}
 <script>
     /* ════════════════════════════════
+       VARIABLE DECLARATIONS
+    ════════════════════════════════ */
+    let selectedVariant = null;
+    let currentPrice = {{ product.price }};
+    let currentStock = {{ product.stock_quantity }};
+    let currentImage = null;
+    
+    /* Variant data from server */
+    const variants = [
+        {% if product.variants %}
+            {% for variant in product.variants %}
+            {
+                id: {{ variant.id }},
+                name: {{ variant.name | tojson }},
+                price: {{ variant.price }},
+                stock: {{ variant.stock_quantity }},
+                image_url: {{ variant.image_url | tojson if variant.image_url else 'null' }},
+                attributes: {{ variant.attributes | tojson if variant.attributes else 'null' }}
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        {% endif %}
+    ];
+
+    /* ════════════════════════════════
        GALLERY
     ════════════════════════════════ */
     const images = [
         {% if product.images %}
             {% for img in product.images %}
-                { src: '/static/uploads/products/{{ img.filename }}', alt: '{{ product.name }}' }{% if not loop.last %},{% endif %}
+                { 
+                    src: '/static/uploads/products/{{ img.filename }}', 
+                    alt: '{{ product.name }}',
+                    filename: '{{ img.filename }}',
+                    is_primary: {{ 'true' if img.is_primary else 'false' }}
+                }{% if not loop.last %},{% endif %}
             {% endfor %}
         {% endif %}
     ];
 
     let currentImageIndex = 0;
 
-    function setMainImage(index) {
+    /* ════════════════════════════════
+       VARIANT FUNCTIONS
+    ════════════════════════════════ */
+    function selectVariant(btn) {
+        // Remove active class from all variant buttons
+        document.querySelectorAll('.variant-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        const variantId = btn.dataset.variantId;
+        const variantPrice = parseFloat(btn.dataset.variantPrice);
+        const variantStock = parseInt(btn.dataset.variantStock);
+        const variantImage = btn.dataset.variantImage;
+        const variantName = btn.dataset.variantName;
+        
+        if (variantId === 'main') {
+            // Main product selected
+            selectedVariant = null;
+            currentPrice = {{ product.price }};
+            currentStock = {{ product.stock_quantity }};
+            
+            // Update price display
+            document.getElementById('currentPrice').textContent = '₱' + Math.round({{ product.price }}).toLocaleString();
+            
+            // Update stock display
+            document.getElementById('stockDisplay').textContent = '{{ product.stock_quantity }} available';
+            
+            // Show first product image
+            setMainImage(0);
+        } else {
+            // Variant selected
+            selectedVariant = {
+                id: variantId,
+                name: variantName,
+                price: variantPrice,
+                stock: variantStock,
+                image_url: variantImage
+            };
+            
+            // Update price display
+            currentPrice = variantPrice;
+            document.getElementById('currentPrice').textContent = '₱' + Math.round(variantPrice).toLocaleString();
+            
+            // Update stock display
+            document.getElementById('stockDisplay').textContent = variantStock + ' available';
+            currentStock = variantStock;
+            
+            // Update main image if variant has specific image
+            if (variantImage && variantImage !== 'null' && variantImage !== '') {
+                const mainImage = document.getElementById('mainImage');
+                if (mainImage) {
+                    mainImage.style.opacity = '0';
+                    setTimeout(() => {
+                        mainImage.src = variantImage;
+                        mainImage.style.opacity = '1';
+                    }, 150);
+                }
+                
+                // Remove active class from thumbnails
+                document.querySelectorAll('.gallery-thumb').forEach(thumb => {
+                    thumb.classList.remove('active');
+                });
+            } else {
+                // If no variant image, show first product image
+                setMainImage(0);
+            }
+        }
+        
+        // Update quantity based on new stock
+        const qtyDisplay = document.getElementById('qtyDisplay');
+        let currentQty = parseInt(qtyDisplay.textContent);
+        if (currentQty > currentStock) {
+            qtyDisplay.textContent = currentStock;
+            changeQty(0);
+        }
+        document.getElementById('qtyPlus').disabled = currentQty >= currentStock;
+        document.getElementById('qtyMinus').disabled = currentQty <= 1;
+        
+        // Update total
+        updateTotal();
+    }
+
+    /* ════════════════════════════════
+       GALLERY FUNCTIONS
+    ════════════════════════════════ */
+    function setMainImage(index) {    
         if (index < 0 || index >= images.length) return;
         currentImageIndex = index;
 
@@ -1203,6 +1399,24 @@
             setTimeout(() => {
                 mainImg.src = images[index].src;
                 mainImg.style.opacity = '1';
+                
+                // Check if this image belongs to a variant
+                const imageFilename = images[index].src.split('/').pop();
+                const variantForImage = findVariantByImage(imageFilename);
+                
+                if (variantForImage) {
+                    // Select the corresponding variant
+                    const variantBtn = document.querySelector(`.variant-btn[data-variant-id="${variantForImage.id}"]`);
+                    if (variantBtn) {
+                        selectVariant(variantBtn);
+                    }
+                } else {
+                    // If it's a product image, select main product
+                    const mainBtn = document.querySelector('.variant-btn[data-variant-id="main"]');
+                    if (mainBtn && !mainBtn.classList.contains('active')) {
+                        selectVariant(mainBtn);
+                    }
+                }
             }, 150);
         }
 
@@ -1229,6 +1443,25 @@
     });
 
     /* ════════════════════════════════
+       VARIANT HELPER FUNCTIONS
+    ════════════════════════════════ */
+    function findVariantByImage(filename) {
+        // Extract just the filename from the path
+        const imageFilename = filename.split('/').pop();
+        
+        // Check each variant's image_url to see if it matches
+        for (const variant of variants) {
+            if (variant.image_url) {
+                const variantFilename = variant.image_url.split('/').pop();
+                if (variantFilename === imageFilename) {
+                    return variant;
+                }
+            }
+        }
+        return null;
+    }
+
+    /* ════════════════════════════════
        GALLERY ACCORDION
     ════════════════════════════════ */
     function toggleGalleryAccordion(id) {
@@ -1240,13 +1473,15 @@
        QUANTITY
     ════════════════════════════════ */
     let qty = 1;
-    const maxQty = {{ product.stock_quantity }};
 
     function changeQty(delta) {
-        qty = Math.max(1, Math.min(maxQty, qty + delta));
+        const newQty = Math.max(1, Math.min(currentStock, qty + delta));
+        if (newQty === qty) return;
+        
+        qty = newQty;
         document.getElementById('qtyDisplay').textContent = qty;
         document.getElementById('qtyMinus').disabled = qty <= 1;
-        document.getElementById('qtyPlus').disabled = qty >= maxQty;
+        document.getElementById('qtyPlus').disabled = qty >= currentStock;
         updateTotal();
     }
 
@@ -1362,7 +1597,6 @@
         calDiv.className = 'date-option';
         calDiv.innerHTML = `<div class="date-option-cal"><i class="ri-calendar-2-line"></i><span>CALENDAR</span></div>`;
         calDiv.addEventListener('click', () => {
-            // Could open a date picker
             showToast('Date picker coming soon!');
         });
         container.appendChild(calDiv);
@@ -1386,12 +1620,75 @@
     /* ════════════════════════════════
        TOTAL CALCULATION
     ════════════════════════════════ */
-    const basePrice = {{ product.price }};
-
     function updateTotal() {
-        let total = basePrice * qty;
+        let total = currentPrice * qty;
         selectedAddons.forEach(addon => { total += addon.price; });
         document.getElementById('orderTotal').textContent = '₱' + Math.round(total).toLocaleString();
+    }
+
+    /* ════════════════════════════════
+       CART FUNCTIONS
+    ════════════════════════════════ */
+    function addToCartWithVariant() {
+        if (selectedVariant) {
+            addToCart({
+                id: {{ product.id }},
+                variant_id: selectedVariant.id,
+                name: selectedVariant.name + ' ' + {{ product.name | tojson }},
+                price: selectedVariant.price,
+                store_id: {{ product.store_id }},
+                store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
+                image_url: selectedVariant.image_url || "{{ ('/static/uploads/products/' + product.images[0].filename) if product.images else '' }}",
+                quantity: qty
+            });
+        } else {
+            addToCart({
+                id: {{ product.id }},
+                name: {{ product.name | tojson }},
+                price: {{ product.price }},
+                store_id: {{ product.store_id }},
+                store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
+                image_url: "{{ ('/static/uploads/products/' + product.images[0].filename) if product.images else '' }}",
+                quantity: qty
+            });
+        }
+    }
+
+    function addToCart(product) {
+        // Get current cart from localStorage or initialize empty array
+        let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+        
+        // Check if product already in cart
+        const existingItem = cart.find(item => 
+            item.id === product.id && 
+            (item.variant_id === product.variant_id || (!item.variant_id && !product.variant_id))
+        );
+        
+        if (existingItem) {
+            existingItem.quantity = (existingItem.quantity || 1) + (product.quantity || 1);
+        } else {
+            cart.push({
+                id: product.id,
+                variant_id: product.variant_id,
+                name: product.name,
+                price: product.price,
+                store_id: product.store_id,
+                store_name: product.store_name,
+                image_url: product.image_url,
+                quantity: product.quantity || 1
+            });
+        }
+        
+        localStorage.setItem('cart', JSON.stringify(cart));
+        showToast('✓ Added to bag!', 'success');
+        
+        // Update cart count in header if exists
+        const cartCount = document.querySelector('.cart-count');
+        if (cartCount) {
+            const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+            cartCount.textContent = totalItems;
+            cartCount.style.display = totalItems > 0 ? 'flex' : 'none';
+        }
     }
 
     /* ════════════════════════════════
@@ -1400,7 +1697,6 @@
     function buyNow() {
         const delivery = document.getElementById('deliveryInput').value;
         if (!delivery) {
-            // Shake the delivery field
             const field = document.getElementById('deliveryField');
             field.style.borderColor = 'var(--deep-rose)';
             field.style.animation = 'shake .3s ease';
@@ -1414,15 +1710,8 @@
             return;
         }
 
-        // Add main product to cart then redirect to checkout
-        addToCart({
-            id: {{ product.id }},
-            name: {{ product.name | tojson }},
-            price: {{ product.price }},
-            store_id: {{ product.store_id }},
-            store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
-            image_url: "{{ ('/static/uploads/products/' + product.images[0].filename) if product.images else '' }}"
-        });
+        // Add to cart then redirect to checkout
+        addToCartWithVariant();
 
         showToast('✓ Added to bag! Redirecting to checkout…', 'success');
         setTimeout(() => {
@@ -1453,12 +1742,62 @@
     document.head.appendChild(shakeStyle);
 
     /* ════════════════════════════════
+       TOAST NOTIFICATION
+    ════════════════════════════════ */
+    function showToast(message, type = 'info') {
+        // Create toast container if it doesn't exist
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+            `;
+            document.body.appendChild(toastContainer);
+        }
+
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            background: ${type === 'error' ? '#f44336' : type === 'success' ? '#4CAF50' : '#333'};
+            color: white;
+            padding: 12px 24px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        `;
+        toast.textContent = message;
+
+        const slideInStyle = document.createElement('style');
+        slideInStyle.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(slideInStyle);
+
+        toastContainer.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    /* ════════════════════════════════
        INIT
     ════════════════════════════════ */
     document.addEventListener('DOMContentLoaded', function() {
         buildDateOptions();
         setMainImage(0);
         updateTotal();
+        
+        // Main product button is already active by default (has 'active' class)
+        // No need to auto-select anything
     });
 </script>
 {% endblock %}

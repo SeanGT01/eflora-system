@@ -1,10 +1,26 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import os
 import mimetypes
 
 # Import extensions from the new extensions module
 from app.extensions import db, migrate, jwt
+
+# ====================================================
+# ADD CSRF AND RATE LIMITING IMPORTS
+# ====================================================
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+# Initialize extensions at module level
+csrf = CSRFProtect()
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+    strategy="fixed-window"
+)
 
 def create_app(config_class='default'):
     app = Flask(__name__)
@@ -21,82 +37,75 @@ def create_app(config_class='default'):
     app.config.from_object(config[config_class])
     
     # ====================================================
-    # ADD MAPBOX TOKEN TO APP CONFIG (if not already there)
+    # ADD MAPBOX TOKEN TO APP CONFIG
     # ====================================================
-    # Make sure MAPBOX_PUBLIC_TOKEN is set in your .env file
-    # and loaded in config.py
     if 'MAPBOX_PUBLIC_TOKEN' not in app.config:
-        # Fallback to environment variable
         app.config['MAPBOX_PUBLIC_TOKEN'] = os.getenv('MAPBOX_PUBLIC_TOKEN', '')
+    
+    # ====================================================
+    # CSRF CONFIGURATION
+    # ====================================================
+    app.config['WTF_CSRF_ENABLED'] = True
+    app.config['WTF_CSRF_CHECK_DEFAULT'] = False  # Don't check all requests by default
+    app.config['WTF_CSRF_SSL_STRICT'] = False if app.debug else True
+    app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour
+    app.config['SECRET_KEY'] = app.config.get('SECRET_KEY', os.urandom(24))
+    app.config['WTF_CSRF_SECRET_KEY'] = app.config.get('SECRET_KEY')
+    
+    # ====================================================
+    # SESSION SECURITY CONFIGURATION
+    # ====================================================
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_SECURE'] = not app.debug
+    app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+    app.config['REMEMBER_COOKIE_SECURE'] = not app.debug
+    app.config['REMEMBER_COOKIE_DURATION'] = 86400 * 30
     
     print(f"🗺️ Mapbox token loaded: {app.config['MAPBOX_PUBLIC_TOKEN'][:15] if app.config['MAPBOX_PUBLIC_TOKEN'] else 'NOT FOUND'}...")
     
-    # Initialize extensions
+    # ====================================================
+    # INITIALIZE EXTENSIONS WITH APP
+    # ====================================================
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    csrf.init_app(app)  # Initialize CSRF with the app
+    limiter.init_app(app)
     
     # ====================================================
     # ADD JWT USER LOADER CALLBACK
     # ====================================================
     @jwt.user_lookup_loader
     def user_lookup_callback(_jwt_header, jwt_data):
-        """
-        This callback is used to load a user from the database
-        based on the identity in the JWT.
-        It handles both 'sub' and 'user_id' claims.
-        """
-        # Try to get identity from 'sub' claim first (standard)
-        identity = jwt_data.get('sub')
-        
-        # If no 'sub', try 'user_id' (for backward compatibility)
-        if identity is None:
-            identity = jwt_data.get('user_id')
-            if identity is not None:
-                print(f"🔑 Using 'user_id' claim instead of 'sub'")
-        
-        if identity is not None:
-            # Convert to int if it's a string (for database lookup)
+        identity = jwt_data.get('sub') or jwt_data.get('user_id')
+        if identity:
             if isinstance(identity, str) and identity.isdigit():
                 identity = int(identity)
-            elif isinstance(identity, str):
-                print(f"⚠️ Identity is string but not numeric: {identity}")
-            
-            print(f"🔍 Looking up user with identity: {identity}")
-            
-            # Import here to avoid circular imports
             from app.models import User
-            user = User.query.get(identity)
-            
-            if user:
-                print(f"✅ User found: {user.id} - {user.email}")
-                return user
-            else:
-                print(f"❌ User not found for identity: {identity}")
-        else:
-            print("❌ No valid identity found in token")
-            print(f"📋 Available claims: {list(jwt_data.keys())}")
-        
+            return User.query.get(identity)
         return None
     
-    # FIXED: CORS for both API and static routes
+    # ====================================================
+    # CORS CONFIGURATION
+    # ====================================================
     CORS(app, 
          resources={
              r"/api/*": {"origins": "*"},
-             r"/static/*": {"origins": "*"}  # Important for images
+             r"/static/*": {"origins": "*"}
          },
-         allow_headers=["Content-Type", "Authorization"],
+         allow_headers=["Content-Type", "Authorization", "X-CSRFToken"],
          expose_headers=["Authorization", "Content-Type"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         supports_credentials=True)
     
     # Create upload folders
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    
-    # Create seller application upload folders
     os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'seller_logos'), exist_ok=True)
     os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'govt_ids'), exist_ok=True)
     os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'products'), exist_ok=True)
     os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'avatars'), exist_ok=True)
+    os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'gcash_qr'), exist_ok=True)
     
     # Import models here to ensure they're registered with SQLAlchemy
     from app import models
@@ -128,16 +137,54 @@ def create_app(config_class='default'):
     # ====================================================
     @app.context_processor
     def inject_mapbox_token():
-        """Make Mapbox token available to all templates"""
         return dict(mapbox_public_token=app.config.get('MAPBOX_PUBLIC_TOKEN', ''))
     
-    # Add response headers for all static files
+    # ====================================================
+    # ADD SECURITY HEADERS TO ALL RESPONSES
+    # ====================================================
     @app.after_request
-    def add_cors_headers(response):
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+    def add_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
+        if not app.debug:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        
         return response
+    
+    # ====================================================
+    # CSRF PROTECTION - ADD THIS BACK!
+    # ====================================================
+    @app.before_request
+    def csrf_protect():
+        """Protect state-changing methods with CSRF"""
+        # Define routes that should be exempt from CSRF protection
+        exempt_routes = [
+            '/webhook',  # Example webhook
+            '/api/public/endpoint',  # Public API endpoints
+        ]
+        
+        # Skip CSRF for exempt routes
+        if request.path in exempt_routes:
+            return
+            
+        # Skip CSRF for GET, HEAD, OPTIONS, TRACE methods
+        if request.method in ["GET", "HEAD", "OPTIONS", "TRACE"]:
+            return
+            
+        # Skip CSRF check for API routes (they use JWT)
+        if request.path.startswith('/api/'):
+            return
+            
+        # For all other state-changing requests, check CSRF token
+        try:
+            csrf.protect()
+        except Exception as e:
+            # Log the error but don't expose details
+            app.logger.error(f"CSRF protection error: {str(e)}")
+            return jsonify({'error': 'CSRF token missing or invalid'}), 400
     
     # Error handlers
     @app.errorhandler(404)
@@ -148,4 +195,14 @@ def create_app(config_class='default'):
     def internal_error(error):
         return render_template('500.html'), 500
     
+    @app.errorhandler(429)
+    def ratelimit_handler(error):
+        return jsonify({
+            'error': 'Rate limit exceeded',
+            'message': 'Too many requests. Please try again later.'
+        }), 429
+    
     return app
+
+# Make extensions available for import from app
+__all__ = ['db', 'migrate', 'jwt', 'csrf', 'limiter', 'create_app']

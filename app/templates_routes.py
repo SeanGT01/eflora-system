@@ -1,8 +1,8 @@
 # app/templates_routes.py - FIXED VERSION
 from datetime import datetime
-from flask import Blueprint, app, flash, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
+from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary, GCashQR
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -17,6 +17,11 @@ from flask import send_file
 from app.laguna_addresses import get_municipalities, get_barangays, get_coordinates, format_address, LAGUNA_ADDRESSES
 from app.models import UserAddress
 
+# app/templates_routes.py - Add these imports at the top
+from flask_wtf.csrf import generate_csrf
+
+# Import the extensions from app (they're initialized in __init__.py)
+from app import limiter
 templates_bp = Blueprint('templates', __name__)
 
 # Define upload folder relative to the app root
@@ -34,9 +39,34 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# In templates_routes.py, make sure you have this context processor
+@templates_bp.context_processor
+def inject_csrf_token():
+    """Inject CSRF token into all templates"""
+    from flask_wtf.csrf import generate_csrf
+    return dict(csrf_token=generate_csrf)
 
+
+# Or if you prefer to use PIL for MIME checking (no extra dependency):
+def get_image_mime(file_path):
+    """Get MIME type of an image file using PIL"""
+    try:
+        from PIL import Image
+        with Image.open(file_path) as img:
+            format_to_mime = {
+                'JPEG': 'image/jpeg',
+                'PNG': 'image/png',
+                'GIF': 'image/gif',
+                'WEBP': 'image/webp',
+                'BMP': 'image/bmp',
+                'TIFF': 'image/tiff'
+            }
+            return format_to_mime.get(img.format, 'application/octet-stream')
+    except:
+        return None
     
 @templates_bp.route('/')
+@limiter.limit("5 per minute")
 def index():
     """Show the e-commerce landing page to everyone"""
     try:
@@ -1159,8 +1189,11 @@ def generate_short_filename(original_filename, product_id, index):
     
     return short_filename
 
+
 @templates_bp.route('/seller/products/create', methods=['POST'])
+@seller_required
 def create_product():
+    """Create a new product with variants"""
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
     
@@ -1170,12 +1203,21 @@ def create_product():
         if not store:
             return jsonify({'error': 'Store not found. Please create a store first.'}), 404
         
+        print("\n" + "="*60)
+        print("📝 CREATE PRODUCT REQUEST")
+        print(f"Form keys: {list(request.form.keys())}")
+        print(f"File keys: {list(request.files.keys())}")
+        
         # Get form data
         name = request.form.get('name')
         description = request.form.get('description')
         price = request.form.get('price')
         stock_quantity = request.form.get('stock_quantity')
         category = request.form.get('category')
+        is_available = request.form.get('is_available', 'false').lower() == 'true'
+        has_variants = request.form.get('has_variants', 'false').lower() == 'true'
+        
+        print(f"📦 Product data: name={name}, category={category}, has_variants={has_variants}")
         
         # Validate required fields
         if not name or not name.strip():
@@ -1184,8 +1226,6 @@ def create_product():
             return jsonify({'error': 'Price is required'}), 400
         if not stock_quantity:
             return jsonify({'error': 'Stock quantity is required'}), 400
-        if not category:
-            return jsonify({'error': 'Category is required'}), 400
         
         # Convert price and stock quantity
         try:
@@ -1202,7 +1242,7 @@ def create_product():
         except ValueError:
             return jsonify({'error': 'Invalid stock quantity format'}), 400
         
-        # Create new product first (without images)
+        # Create new product
         product = Product(
             store_id=store.id,
             name=name.strip(),
@@ -1210,54 +1250,105 @@ def create_product():
             price=price_float,
             stock_quantity=stock_int,
             category=category,
-            is_available=True
+            is_available=is_available
         )
         
         db.session.add(product)
-        db.session.flush()  # Get product ID without committing yet
+        db.session.flush()  # Get product ID
         
-        # Handle multiple image uploads
-        image_filenames = []
+        print(f"✅ Product created with ID: {product.id}")
+        
+        # Handle product images
         upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
         os.makedirs(upload_path, exist_ok=True)
         
-        # Look for image fields (image_0, image_1, image_2, etc.)
-        for key in request.files:
+        image_count = 0
+        for key in sorted(request.files.keys()):
             if key.startswith('image_'):
                 file = request.files[key]
                 if file and file.filename and allowed_file(file.filename):
-                    # FIXED: Generate SHORT filename instead of long one
                     short_filename = generate_short_filename(
                         file.filename, 
                         product.id, 
-                        len(image_filenames)
+                        image_count
                     )
                     
-                    # Save file with short name
                     filepath = os.path.join(upload_path, short_filename)
                     file.save(filepath)
                     
-                    # Determine if this is the primary image (first one)
-                    is_primary = (len(image_filenames) == 0)
+                    is_primary = (image_count == 0)
                     
-                    # Create ProductImage record with short filename
                     product_image = ProductImage(
                         product_id=product.id,
                         filename=short_filename,
                         is_primary=is_primary,
-                        sort_order=len(image_filenames)
+                        sort_order=image_count
                     )
                     db.session.add(product_image)
-                    image_filenames.append(short_filename)
+                    image_count += 1
                     
-                    print(f"📸 Saved image: {short_filename}")
+                    print(f"📸 Saved product image {image_count}: {short_filename}")
         
-        # Validate at least one image was uploaded
-        if not image_filenames:
+        if image_count == 0:
             db.session.rollback()
             return jsonify({'error': 'At least one product image is required'}), 400
         
+        # Handle variants if enabled
+        if has_variants:
+            variants_json = request.form.get('variants')
+            if variants_json:
+                try:
+                    variants_data = json.loads(variants_json)
+                    print(f"🎯 Processing {len(variants_data)} variants")
+                    
+                    variant_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants')
+                    os.makedirs(variant_upload_path, exist_ok=True)
+                    
+                    for idx, variant_data in enumerate(variants_data):
+                        if variant_data.get('_delete'):
+                            continue  # Skip deleted variants (shouldn't happen on create)
+                        
+                        print(f"  Variant {idx}: {variant_data.get('name')}")
+                        
+                        variant = ProductVariant(
+                            product_id=product.id,
+                            name=variant_data.get('name'),
+                            price=Decimal(str(variant_data.get('price'))),
+                            stock_quantity=int(variant_data.get('stock_quantity', 0)),
+                            sku=variant_data.get('sku'),
+                            attributes=variant_data.get('attributes'),
+                            sort_order=idx,
+                            is_available=True
+                        )
+                        
+                        # Handle variant image
+                        variant_image_key = f'variant_image_{idx}'
+                        if variant_image_key in request.files:
+                            file = request.files[variant_image_key]
+                            if file and file.filename and allowed_file(file.filename):
+                                variant_filename = generate_short_filename(
+                                    file.filename,
+                                    product.id,
+                                    idx
+                                )
+                                variant_filename = f"var_{variant_filename}"
+                                
+                                variant_filepath = os.path.join(variant_upload_path, variant_filename)
+                                file.save(variant_filepath)
+                                
+                                variant.image_filename = variant_filename
+                                print(f"    📸 Variant image saved: {variant_filename}")
+                        
+                        db.session.add(variant)
+                    
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON decode error: {e}")
+                    db.session.rollback()
+                    return jsonify({'error': 'Invalid variants data'}), 400
+        
         db.session.commit()
+        print(f"✅ Product {product.id} created successfully with {image_count} images")
+        print("="*60 + "\n")
         
         return jsonify({
             'success': True,
@@ -1267,11 +1358,12 @@ def create_product():
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error creating product: {str(e)}")
+        print(f"❌ Error creating product: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Server error: {str(e)}'}), 500
     
+
 
 @templates_bp.route('/seller/products/<int:product_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_product(product_id):
@@ -1289,117 +1381,303 @@ def manage_product(product_id):
 
         # ── GET ───────────────────────────────────────────────────────────────
         if request.method == 'GET':
-            return jsonify({'product': product.to_dict()})
+            print(f"\n📖 GET Product {product_id}")
+            product_dict = product.to_dict()
+            print(f"✅ Returning product with {len(product_dict.get('variants', []))} variants")
+            return jsonify({'success': True, 'product': product_dict})
 
         # ── PUT (UPDATE) ──────────────────────────────────────────────────────
         elif request.method == 'PUT':
+            print("\n" + "="*60)
+            print(f"📝 UPDATE PRODUCT {product_id}")
+            print(f"Form keys: {list(request.form.keys())}")
+            print(f"File keys: {list(request.files.keys())}")
 
-            # FormData (includes file uploads)
-            if request.content_type and 'multipart/form-data' in request.content_type:
-                if 'name' in request.form:
-                    product.name = request.form['name'].strip()
-                if 'description' in request.form:
-                    product.description = request.form['description'].strip() or None
-                if 'price' in request.form:
+            # Update basic fields
+            if 'name' in request.form:
+                product.name = request.form['name'].strip()
+            if 'description' in request.form:
+                product.description = request.form['description'].strip() or None
+            if 'price' in request.form:
+                try:
+                    product.price = float(request.form['price'])
+                except ValueError:
+                    return jsonify({'error': 'Invalid price format'}), 400
+            if 'stock_quantity' in request.form:
+                try:
+                    product.stock_quantity = int(request.form['stock_quantity'])
+                except ValueError:
+                    return jsonify({'error': 'Invalid stock quantity format'}), 400
+            if 'category' in request.form:
+                product.category = request.form['category']
+            if 'is_available' in request.form:
+                is_avail_str = request.form['is_available']
+                product.is_available = is_avail_str.lower() in ['true', '1', 'yes']
+
+            # Handle product images
+            upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
+            os.makedirs(upload_path, exist_ok=True)
+
+            # Get images to keep/delete
+            images_to_keep = []
+            images_to_delete = []
+            
+            if 'images_to_keep' in request.form:
+                try:
+                    images_to_keep = json.loads(request.form['images_to_keep'])
+                    print(f"📌 Images to keep: {images_to_keep}")
+                except:
+                    pass
+            
+            if 'images_to_delete' in request.form:
+                try:
+                    images_to_delete = json.loads(request.form['images_to_delete'])
+                    print(f"🗑️ Images to delete: {images_to_delete}")
+                except:
+                    pass
+
+            # Delete marked images
+            for img_id in images_to_delete:
+                img = ProductImage.query.filter_by(id=img_id, product_id=product.id).first()
+                if img:
+                    img_path = os.path.join(upload_path, img.filename)
+                    if os.path.exists(img_path):
+                        os.remove(img_path)
+                    db.session.delete(img)
+                    print(f"  🗑️ Deleted image {img_id}")
+
+            # Add new images
+            current_images = ProductImage.query.filter_by(product_id=product.id).all()
+            next_sort_order = len(current_images)
+
+            for key in sorted(request.files.keys()):
+                if key.startswith('image_'):
+                    file = request.files[key]
+                    if file and file.filename and allowed_file(file.filename):
+                        short_filename = generate_short_filename(
+                            file.filename, product.id, next_sort_order
+                        )
+                        file.save(os.path.join(upload_path, short_filename))
+                        
+                        is_primary = (len(current_images) == 0 and next_sort_order == 0)
+                        
+                        db.session.add(ProductImage(
+                            product_id=product.id,
+                            filename=short_filename,
+                            is_primary=is_primary,
+                            sort_order=next_sort_order
+                        ))
+                        next_sort_order += 1
+                        print(f"  📸 Added new image: {short_filename}")
+
+            # ══════════════════════════════════════════════════════════════════
+            # HANDLE VARIANTS UPDATE
+            # ══════════════════════════════════════════════════════════════════
+            has_variants = request.form.get('has_variants', 'false').lower() == 'true'
+            print(f"🎯 Has variants: {has_variants}")
+
+            if has_variants:
+                variants_json = request.form.get('variants')
+                if variants_json:
                     try:
-                        product.price = float(request.form['price'])
-                    except ValueError:
-                        return jsonify({'error': 'Invalid price format'}), 400
-                if 'stock_quantity' in request.form:
-                    try:
-                        product.stock_quantity = int(request.form['stock_quantity'])
-                    except ValueError:
-                        return jsonify({'error': 'Invalid stock quantity format'}), 400
-                if 'category' in request.form:
-                    product.category = request.form['category']
-                if 'is_available' in request.form:
-                    product.is_available = request.form['is_available'].lower() == 'true'
+                        variants_data = json.loads(variants_json)
+                        print(f"📦 Variants data received: {len(variants_data)} variants")
+                        
+                        variant_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants')
+                        os.makedirs(variant_upload_path, exist_ok=True)
 
-                # Add new images (keep existing ones)
-                upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
-                os.makedirs(upload_path, exist_ok=True)
-                current_images = ProductImage.query.filter_by(product_id=product.id).all()
-                next_sort_order = len(current_images)
-                new_filenames = []
+                        # Track which variant IDs we're keeping
+                        kept_variant_ids = []
 
-                for key in request.files:
-                    if key.startswith('image_'):
-                        file = request.files[key]
-                        if file and file.filename and allowed_file(file.filename):
-                            short_filename = generate_short_filename(
-                                file.filename, product.id, next_sort_order
-                            )
-                            file.save(os.path.join(upload_path, short_filename))
-                            is_primary = (len(current_images) == 0 and len(new_filenames) == 0)
-                            db.session.add(ProductImage(
-                                product_id=product.id,
-                                filename=short_filename,
-                                is_primary=is_primary,
-                                sort_order=next_sort_order
-                            ))
-                            new_filenames.append(short_filename)
-                            next_sort_order += 1
-                            print(f"📸 Added image to product {product.id}: {short_filename}")
+                        for idx, variant_data in enumerate(variants_data):
+                            variant_id = variant_data.get('id')
+                            
+                            print(f"\n  Variant {idx}:")
+                            print(f"    ID: {variant_id}")
+                            print(f"    Name: {variant_data.get('name')}")
+                            print(f"    Delete: {variant_data.get('_delete')}")
+                            print(f"    Remove image: {variant_data.get('_remove_image')}")
 
-                product.updated_at = datetime.utcnow()
-                db.session.commit()
-                return jsonify({
-                    'success': True,
-                    'message': 'Product updated successfully',
-                    'product': product.to_dict()
-                })
+                            # Handle deletion
+                            if variant_data.get('_delete') and variant_id:
+                                variant = ProductVariant.query.filter_by(
+                                    id=variant_id, 
+                                    product_id=product.id
+                                ).first()
+                                
+                                if variant:
+                                    # Delete variant image if exists
+                                    if variant.image_filename:
+                                        variant_img_path = os.path.join(
+                                            variant_upload_path, 
+                                            variant.image_filename
+                                        )
+                                        if os.path.exists(variant_img_path):
+                                            os.remove(variant_img_path)
+                                    
+                                    db.session.delete(variant)
+                                    print(f"    ✅ Deleted variant {variant_id}")
+                                continue
 
-            # JSON (no files)
+                            # Update existing or create new variant
+                            if variant_id:
+                                # Update existing
+                                variant = ProductVariant.query.filter_by(
+                                    id=variant_id, 
+                                    product_id=product.id
+                                ).first()
+                                
+                                if variant:
+                                    variant.name = variant_data.get('name')
+                                    variant.price = Decimal(str(variant_data.get('price')))
+                                    variant.stock_quantity = int(variant_data.get('stock_quantity', 0))
+                                    variant.sku = variant_data.get('sku')
+                                    variant.attributes = variant_data.get('attributes')
+                                    variant.sort_order = idx
+                                    variant.updated_at = datetime.utcnow()
+                                    
+                                    print(f"    ✅ Updated existing variant {variant_id}")
+                                    
+                                    # Handle variant image removal
+                                    if variant_data.get('_remove_image'):
+                                        if variant.image_filename:
+                                            img_path = os.path.join(
+                                                variant_upload_path, 
+                                                variant.image_filename
+                                            )
+                                            if os.path.exists(img_path):
+                                                os.remove(img_path)
+                                            variant.image_filename = None
+                                            print(f"      🗑️ Removed variant image")
+                                    
+                                    # Handle new variant image
+                                    variant_image_key = f'variant_image_{idx}'
+                                    if variant_image_key in request.files:
+                                        file = request.files[variant_image_key]
+                                        if file and file.filename and allowed_file(file.filename):
+                                            # Delete old image
+                                            if variant.image_filename:
+                                                old_path = os.path.join(
+                                                    variant_upload_path, 
+                                                    variant.image_filename
+                                                )
+                                                if os.path.exists(old_path):
+                                                    os.remove(old_path)
+                                            
+                                            # Save new image
+                                            variant_filename = generate_short_filename(
+                                                file.filename, product.id, idx
+                                            )
+                                            variant_filename = f"var_{variant_filename}"
+                                            
+                                            file.save(os.path.join(
+                                                variant_upload_path, 
+                                                variant_filename
+                                            ))
+                                            variant.image_filename = variant_filename
+                                            print(f"      📸 Updated variant image: {variant_filename}")
+                                    
+                                    kept_variant_ids.append(variant_id)
+                            else:
+                                # Create new variant
+                                variant = ProductVariant(
+                                    product_id=product.id,
+                                    name=variant_data.get('name'),
+                                    price=Decimal(str(variant_data.get('price'))),
+                                    stock_quantity=int(variant_data.get('stock_quantity', 0)),
+                                    sku=variant_data.get('sku'),
+                                    attributes=variant_data.get('attributes'),
+                                    sort_order=idx,
+                                    is_available=True
+                                )
+                                
+                                # Handle variant image for new variant
+                                variant_image_key = f'variant_image_{idx}'
+                                if variant_image_key in request.files:
+                                    file = request.files[variant_image_key]
+                                    if file and file.filename and allowed_file(file.filename):
+                                        variant_filename = generate_short_filename(
+                                            file.filename, product.id, idx
+                                        )
+                                        variant_filename = f"var_{variant_filename}"
+                                        
+                                        file.save(os.path.join(
+                                            variant_upload_path, 
+                                            variant_filename
+                                        ))
+                                        variant.image_filename = variant_filename
+                                        print(f"      📸 Saved variant image: {variant_filename}")
+                                
+                                db.session.add(variant)
+                                db.session.flush()
+                                kept_variant_ids.append(variant.id)
+                                print(f"    ✅ Created new variant {variant.id}")
+
+                        # Delete variants that were not included in the update
+                        # (these are variants that existed but were removed from the form)
+                        existing_variants = ProductVariant.query.filter_by(
+                            product_id=product.id
+                        ).all()
+                        
+                        for existing_variant in existing_variants:
+                            if existing_variant.id not in kept_variant_ids:
+                                # This variant was removed
+                                if existing_variant.image_filename:
+                                    img_path = os.path.join(
+                                        variant_upload_path, 
+                                        existing_variant.image_filename
+                                    )
+                                    if os.path.exists(img_path):
+                                        os.remove(img_path)
+                                
+                                db.session.delete(existing_variant)
+                                print(f"    🗑️ Removed orphaned variant {existing_variant.id}")
+
+                    except json.JSONDecodeError as e:
+                        print(f"❌ JSON decode error: {e}")
+                        db.session.rollback()
+                        return jsonify({'error': 'Invalid variants data'}), 400
             else:
-                data = request.get_json() or {}
-                if 'name' in data:
-                    product.name = data['name'].strip()
-                if 'description' in data:
-                    product.description = data['description'].strip() if data['description'] else None
-                if 'price' in data:
-                    try:
-                        product.price = float(data['price'])
-                    except ValueError:
-                        return jsonify({'error': 'Invalid price format'}), 400
-                if 'stock_quantity' in data:
-                    try:
-                        product.stock_quantity = int(data['stock_quantity'])
-                    except ValueError:
-                        return jsonify({'error': 'Invalid stock quantity format'}), 400
-                if 'category' in data:
-                    product.category = data['category']
-                if 'is_available' in data:
-                    if isinstance(data['is_available'], bool):
-                        product.is_available = data['is_available']
-                    else:
-                        product.is_available = str(data['is_available']).lower() == 'true'
+                # If has_variants is false, delete all variants
+                print("🗑️ Deleting all variants (has_variants=false)")
+                variant_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants')
+                
+                for variant in product.variants:
+                    if variant.image_filename:
+                        img_path = os.path.join(variant_upload_path, variant.image_filename)
+                        if os.path.exists(img_path):
+                            os.remove(img_path)
+                    db.session.delete(variant)
 
-                product.updated_at = datetime.utcnow()
-                db.session.commit()
-                return jsonify({
-                    'success': True,
-                    'message': 'Product updated successfully',
-                    'product': product.to_dict()
-                })
+            product.updated_at = datetime.utcnow()
+            db.session.commit()
+            
+            print(f"✅ Product {product_id} updated successfully")
+            print("="*60 + "\n")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Product updated successfully',
+                'product': product.to_dict()
+            })
 
         # ── DELETE ────────────────────────────────────────────────────────────
         elif request.method == 'DELETE':
             carts_with_product = CartItem.query.filter_by(product_id=product_id).count()
 
-            # Always show the choice dialog — never auto-delete
             return jsonify({
-                'success':      True,
+                'success': True,
                 'needs_choice': True,
-                'message':      'Choose action:',
-                'product':      product.to_dict(),
-                'in_carts':     carts_with_product,
+                'message': 'Choose action:',
+                'product': product.to_dict(),
+                'in_carts': carts_with_product,
             }), 200
 
         return jsonify({'error': 'Method not allowed'}), 405
 
     except Exception as e:
         db.session.rollback()
-        print(f"DEBUG: Exception in manage_product: {str(e)}")
+        print(f"❌ Exception in manage_product: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -1811,12 +2089,13 @@ def logout():
     return redirect(url_for('templates.login'))
 
 
-
-
-
 @templates_bp.route('/products/<int:product_id>')
 def product_details(product_id):
     product = Product.query.get_or_404(product_id)
+    
+    # Convert product to dict to include variants with image_url
+    product_dict = product.to_dict()
+    
     # Add-ons: other products from same store, different category
     addon_products = Product.query.filter(
         Product.store_id == product.store_id,
@@ -1824,17 +2103,24 @@ def product_details(product_id):
         Product.is_available == True,
         Product.stock_quantity > 0
     ).limit(8).all()
+    
+    # Convert addon products to dict as well
+    addon_dicts = [p.to_dict() for p in addon_products]
+    
     # Related: same category, different store or same store
     related_products = Product.query.filter(
         Product.category == product.category,
         Product.id != product_id,
         Product.is_available == True
     ).limit(8).all()
+    
+    # Convert related products to dict
+    related_dicts = [p.to_dict() for p in related_products]
+    
     return render_template('product_details.html',
-        product=product,
-        addon_products=addon_products,
-        related_products=related_products)
-
+        product=product_dict,
+        addon_products=addon_dicts,
+        related_products=related_dicts)
 
 
 @templates_bp.route('/checkout')
@@ -2233,7 +2519,7 @@ def debug_check_image(filename):
             'filename': filename
         }), 500
     
-
+'''
 @templates_bp.route('/api/product-image/<path:filename>')
 def get_resized_product_image(filename):
     """Return a resized version of a product image with proper headers"""
@@ -2338,6 +2624,197 @@ def get_resized_product_image(filename):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+'''
+
+@templates_bp.route('/api/product-image/<path:filename>')
+@limiter.limit("100 per minute")
+def get_resized_product_image(filename):
+    """Return a resized version of a product image with proper headers and security"""
+    try:
+        # ===== ENHANCED SECURITY: Multiple layers of path validation =====
+        from werkzeug.utils import secure_filename
+        import os
+        import magic  # For MIME type validation (install: pip install python-magic-bin)
+        
+        # Layer 1: Basic path traversal prevention
+        if '..' in filename or filename.startswith('/') or filename.startswith('\\'):
+            print(f"❌ Blocked path traversal attempt: {filename}")
+            return jsonify({'error': 'Invalid filename'}), 400
+        
+        # Layer 2: Use secure_filename to get safe basename
+        safe_filename = secure_filename(os.path.basename(filename))
+        if safe_filename != filename:
+            print(f"❌ Filename sanitization changed: {filename} -> {safe_filename}")
+            return jsonify({'error': 'Invalid filename characters'}), 400
+        
+        # Layer 3: Validate file extension
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        ext = safe_filename.rsplit('.', 1)[1].lower() if '.' in safe_filename else ''
+        if ext not in allowed_extensions:
+            print(f"❌ Blocked invalid extension: {ext}")
+            return jsonify({'error': 'Invalid file type'}), 400
+        
+        # Construct paths
+        upload_folder = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
+        
+        # Layer 4: Path resolution to prevent symlink attacks
+        real_upload_folder = os.path.realpath(upload_folder)
+        file_path = os.path.join(real_upload_folder, safe_filename)
+        real_file_path = os.path.realpath(file_path)
+        
+        # Layer 5: Verify the resolved path is still within upload folder
+        if not real_file_path.startswith(real_upload_folder):
+            print(f"❌ Path escape attempt: {real_file_path}")
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Check if file exists
+        if not os.path.exists(real_file_path):
+            print(f"❌ Image not found: {safe_filename}")
+            return jsonify({'error': 'Image not found'}), 404
+        
+        # Layer 6: Validate file is actually an image (MIME type check)
+        try:
+            file_mime = magic.from_file(real_file_path, mime=True)
+            if not file_mime.startswith('image/'):
+                print(f"❌ Not an image file: {file_mime}")
+                return jsonify({'error': 'Invalid image file'}), 400
+        except Exception as e:
+            print(f"⚠️ MIME check failed: {e}")
+            # Fallback to PIL validation
+        
+        # Get requested size from query parameters
+        width = request.args.get('w', 150, type=int)
+        height = request.args.get('h', 150, type=int)
+        
+        # Layer 7: Limit dimensions to prevent DoS
+        MAX_DIMENSION = 800
+        width = min(max(width, 16), MAX_DIMENSION)  # Min 16px, max 800px
+        height = min(max(height, 16), MAX_DIMENSION)
+        
+        print(f"🖼️ Serving image: {safe_filename} ({width}x{height})")
+        
+        # Check cache
+        cache_folder = os.path.join(real_upload_folder, 'cache')
+        os.makedirs(cache_folder, mode=0o755, exist_ok=True)  # Secure permissions
+        
+        # Layer 8: Sanitize cache filename
+        cache_filename = f"{width}x{height}_{safe_filename}"
+        cache_filename = secure_filename(cache_filename)
+        cache_path = os.path.join(cache_folder, cache_filename)
+        
+        # Serve cached version if available
+        if os.path.exists(cache_path) and os.path.getmtime(cache_path) > os.path.getmtime(real_file_path):
+            print(f"📦 Serving cached version: {cache_filename}")
+            
+            # Layer 9: Validate cached file
+            try:
+                cache_mime = magic.from_file(cache_path, mime=True)
+                if not cache_mime.startswith('image/'):
+                    os.remove(cache_path)  # Delete corrupted cache
+                    print(f"🗑️ Removed invalid cache: {cache_filename}")
+                else:
+                    return send_file(
+                        cache_path,
+                        mimetype=cache_mime,
+                        as_attachment=False,
+                        download_name=f'thumb_{safe_filename}',
+                        max_age=86400
+                    )
+            except:
+                pass  # Proceed to regenerate
+        
+        # Open and validate image with PIL
+        try:
+            img = Image.open(real_file_path)
+            img.verify()  # Verify it's a valid image
+            img = Image.open(real_file_path)  # Reopen after verify
+        except Exception as e:
+            print(f"❌ Error opening image: {e}")
+            return jsonify({'error': 'Corrupted image file'}), 500
+        
+        # Layer 10: Limit image size to prevent memory DoS
+        MAX_PIXELS = 4000 * 4000  # 16 megapixels
+        if img.size[0] * img.size[1] > MAX_PIXELS:
+            print(f"❌ Image too large: {img.size[0]}x{img.size[1]}")
+            return jsonify({'error': 'Image too large'}), 400
+        
+        # CREAM COLOR for background
+        CREAM_BG = (245, 237, 230)
+        
+        # Handle different image modes
+        try:
+            if img.mode == 'RGBA':
+                # Create cream background
+                background = Image.new('RGBA', img.size, CREAM_BG + (255,))
+                background.paste(img, (0, 0), img)
+                img = background.convert('RGB')
+            elif img.mode in ('RGBA', 'LA', 'P'):  # Handle palette images
+                img = img.convert('RGBA')
+                background = Image.new('RGBA', img.size, CREAM_BG + (255,))
+                background.paste(img, (0, 0), img)
+                img = background.convert('RGB')
+            else:
+                img = img.convert('RGB')
+        except Exception as e:
+            print(f"❌ Error processing image: {e}")
+            return jsonify({'error': 'Image processing failed'}), 500
+        
+        # Resize with high-quality algorithm
+        img.thumbnail((width, height), Image.Resampling.LANCZOS)
+        
+        # Save to cache with secure permissions
+        try:
+            if ext in ('jpg', 'jpeg'):
+                img.save(cache_path, format='JPEG', quality=85, optimize=True)
+                mimetype = 'image/jpeg'
+            else:
+                img.save(cache_path, format='PNG', optimize=True)
+                mimetype = 'image/png'
+            
+            # Set secure file permissions
+            os.chmod(cache_path, 0o644)
+            
+        except Exception as e:
+            print(f"❌ Error saving cache: {e}")
+            return jsonify({'error': 'Failed to process image'}), 500
+        
+        print(f"✅ Image cached: {cache_path} ({os.path.getsize(cache_path)} bytes)")
+        
+        # Send response with security headers
+        response = send_file(
+            cache_path,
+            mimetype=mimetype,
+            as_attachment=False,
+            download_name=f'thumb_{safe_filename}',
+            max_age=86400
+        )
+        
+        # Layer 11: Security headers
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Content-Security-Policy'] = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+        response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+        
+        # Cache control
+        response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
+        
+        # CORS - restrict to your domains in production
+        if app.debug:
+            response.headers['Access-Control-Allow-Origin'] = '*'
+        else:
+            # Replace with your actual domains
+            response.headers['Access-Control-Allow-Origin'] = 'https://yourdomain.com'
+        
+        return response
+        
+    except Exception as e:
+        print(f"❌ Error in get_resized_product_image: {e}")
+        import traceback
+        traceback.print_exc()
+        # Don't expose internal errors to client
+        return jsonify({'error': 'An error occurred processing the image'}), 500
 
 @templates_bp.route('/debug/images', methods=['GET'])
 def debug_images():
@@ -2604,10 +3081,6 @@ def store_detail(store_id):
 
 
 
-
-
-
-
 @templates_bp.route('/seller/store-settings')
 @seller_required
 def store_settings():
@@ -2623,51 +3096,37 @@ def store_settings():
         # Get list of municipalities for the dropdown
         municipalities = get_municipalities()
         
-        # Convert delivery_area from WKB to GeoJSON for display
-        delivery_geojson = None
-        if store.delivery_area:
-            try:
-                import json
-                from shapely import wkb
-                from shapely.geometry import mapping
-                
-                # Convert WKB hex to geometry
-                if hasattr(store.delivery_area, 'data'):
-                    wkb_bytes = bytes(store.delivery_area.data)
-                else:
-                    wkb_bytes = bytes.fromhex(store.delivery_area)
-                
-                geometry = wkb.loads(wkb_bytes)
-                
-                # Convert to GeoJSON
-                geojson_dict = mapping(geometry)
-                delivery_geojson = json.dumps(geojson_dict)
-                print(f"✅ Converted WKB to GeoJSON for display")
-            except Exception as e:
-                print(f"⚠️ Could not convert delivery_area to GeoJSON: {e}")
-                import traceback
-                traceback.print_exc()
+        # Process GCash QR codes for template
+        gcash_qr_data = []
+        if store.gcash_qr_images:
+            sorted_qrs = sorted(store.gcash_qr_images, key=lambda x: x.sort_order)
+            for qr in sorted_qrs:
+                gcash_qr_data.append({
+                    'id': qr.id,
+                    'filename': qr.filename,
+                    'url': f'/static/uploads/gcash_qr/{qr.filename}',
+                    'is_primary': qr.is_primary,
+                    'sort_order': qr.sort_order
+                })
         
-        # DEBUG: Print store data including new fields
+        # DEBUG: Print store data
         print("\n" + "="*60)
         print("🔍 STORE SETTINGS PAGE LOADED")
         print(f"Store ID: {store.id}")
         print(f"Store Name: {store.name}")
         print(f"Municipality: {store.municipality}")
         print(f"Barangay: {store.barangay}")
-        print(f"Street: {store.street}")
-        print(f"Has latitude: {store.latitude is not None}")
-        print(f"Has longitude: {store.longitude is not None}")
-        print(f"Has formatted_address: {store.formatted_address is not None}")
-        print(f"Has delivery_area: {store.delivery_area is not None}")
-        print(f"Has delivery_geojson: {delivery_geojson is not None}")
+        print(f"Delivery Method: {store.delivery_method}")
+        print(f"Has zone_delivery_area: {store.zone_delivery_area is not None}")
+        print(f"Has selected_municipalities: {store.selected_municipalities is not None}")
+        print(f"Has municipality_delivery_area: {store.municipality_delivery_area is not None}")
         print("="*60 + "\n")
         
         return render_template('store_settings.html', 
                              store=store,
                              municipalities=municipalities,
                              get_barangays=get_barangays,
-                             delivery_geojson=delivery_geojson)
+                             gcash_qr_data=gcash_qr_data)
     
     except Exception as e:
         print(f"❌ Error in store_settings: {str(e)}")
@@ -2675,69 +3134,55 @@ def store_settings():
         traceback.print_exc()
         flash('Error loading page.', 'error')
         return redirect(url_for('templates.seller_dashboard'))
-    
-    
+
+
 @templates_bp.route('/api/seller/store/settings', methods=['POST'])
 @seller_required
 def update_store_settings():
-    """Update all store settings at once"""
+    """Update all store settings at once including GCash QR codes"""
     print("\n" + "="*60)
     print("📥 RECEIVED UPDATE STORE SETTINGS REQUEST")
     
+    import json
+    
     try:
-        data = request.get_json()
-        print(f"📦 Received data keys: {list(data.keys())}")
-        
-        # DEBUG: Print the exact value of selected_municipalities
-        if 'selected_municipalities' in data:
-            print(f"🏙️ selected_municipalities value: {data['selected_municipalities']}")
-            print(f"🏙️ selected_municipalities type: {type(data['selected_municipalities'])}")
-            print(f"🏙️ selected_municipalities length: {len(data['selected_municipalities']) if data['selected_municipalities'] else 0}")
-        else:
-            print("🏙️ selected_municipalities NOT in data")
-        
-        # Get seller's store
         store = Store.query.filter_by(seller_id=session['user_id']).first()
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
-        # Store the original delivery area to check if it changed
-        original_delivery_area = store.delivery_area
+        # Handle form data
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            data = request.form
+            files = request.files
+            print(f"📦 Processing multipart form data with {len(files)} files")
+        else:
+            data = request.get_json() or {}
+            files = {}
+            print(f"📦 Processing JSON data")
         
-        # NEW: Delivery method preference
-        if 'delivery_method' in data:
-            store.delivery_method = data['delivery_method']
-            print(f"✅ Updated delivery_method to: {store.delivery_method}")
+        print(f"📋 Form data keys: {list(data.keys())}")
         
-        # Update basic info
+        # ===== BASIC INFO =====
         if 'name' in data:
             store.name = data['name']
         
-        # ===== NEW: Update address fields =====
+        # ===== ADDRESS FIELDS =====
         if 'municipality' in data:
             store.municipality = data['municipality']
-            print(f"✅ Updated municipality to: {store.municipality}")
-        
         if 'barangay' in data:
             store.barangay = data['barangay']
-            print(f"✅ Updated barangay to: {store.barangay}")
-        
         if 'street' in data:
             store.street = data['street']
-            print(f"✅ Updated street to: {store.street}")
         
-        # Update the full address field (for backward compatibility)
+        # Update full address
         if 'address' in data:
             store.address = data['address']
-            print(f"✅ Updated full address")
         else:
-            # Construct address from components if not provided
             if store.municipality and store.barangay:
                 if store.street:
                     store.address = f"{store.street}, Barangay {store.barangay}, {store.municipality}, Laguna"
                 else:
                     store.address = f"Barangay {store.barangay}, {store.municipality}, Laguna"
-                print(f"✅ Constructed full address: {store.address}")
         
         if 'contact_number' in data:
             store.contact_number = data['contact_number']
@@ -2746,96 +3191,196 @@ def update_store_settings():
         if 'status' in data:
             store.status = data['status']
         
-        # Update location
+        # ===== LOCATION FIELDS =====
         if 'latitude' in data and data['latitude']:
-            store.latitude = data['latitude']
+            try:
+                store.latitude = float(data['latitude'])
+            except:
+                pass
         if 'longitude' in data and data['longitude']:
-            store.longitude = data['longitude']
+            try:
+                store.longitude = float(data['longitude'])
+            except:
+                pass
         if 'formatted_address' in data:
             store.formatted_address = data['formatted_address']
         if 'place_id' in data:
             store.place_id = data['place_id']
         
-        # Update PostGIS geometry for store location
+        # Update PostGIS location
         if store.latitude and store.longitude:
             try:
                 from geoalchemy2.shape import from_shape
                 from shapely.geometry import Point
                 store.location = from_shape(Point(store.longitude, store.latitude), srid=4326)
-                print("✅ Updated PostGIS location")
             except Exception as e:
                 print(f"⚠️ Could not update PostGIS location: {e}")
         
-        # Update delivery settings
+        # ===== DELIVERY SETTINGS =====
+        old_method = store.delivery_method
+        if 'delivery_method' in data:
+            store.delivery_method = data['delivery_method']
+            print(f"✅ Updated delivery_method from {old_method} to {store.delivery_method}")
+        
         if 'delivery_radius_km' in data:
-            store.delivery_radius_km = data['delivery_radius_km']
+            try:
+                store.delivery_radius_km = float(data['delivery_radius_km'])
+            except:
+                pass
         if 'max_delivery_distance' in data:
-            store.max_delivery_distance = data['max_delivery_distance']
+            try:
+                store.max_delivery_distance = float(data['max_delivery_distance'])
+            except:
+                pass
         if 'base_delivery_fee' in data:
-            store.base_delivery_fee = data['base_delivery_fee']
+            try:
+                store.base_delivery_fee = float(data['base_delivery_fee'])
+            except:
+                pass
         if 'delivery_rate_per_km' in data:
-            store.delivery_rate_per_km = data['delivery_rate_per_km']
+            try:
+                store.delivery_rate_per_km = float(data['delivery_rate_per_km'])
+            except:
+                pass
         if 'free_delivery_minimum' in data:
-            store.free_delivery_minimum = data['free_delivery_minimum']
+            try:
+                store.free_delivery_minimum = float(data['free_delivery_minimum'])
+            except:
+                pass
         
-        # ===== CRITICAL FIX: Update selected municipalities =====
-        if 'selected_municipalities' in data:
-            # Always update, even if it's an empty array
-            store.selected_municipalities = data['selected_municipalities']
-            print(f"✅ Updated selected_municipalities to: {store.selected_municipalities}")
-        else:
-            print(f"⚠️ selected_municipalities not in data, keeping existing: {store.selected_municipalities}")
-        
-        # ===== FIXED: Update delivery zone with preservation logic =====
-        # Check for explicit clear flag first
-        if 'clear_delivery_zone' in data and data['clear_delivery_zone']:
-            # Explicitly clearing the zone
-            store.delivery_area = None
-            print("✅ Cleared delivery zone (explicit)")
-        elif 'delivery_area' in data:
-            if data['delivery_area'] and data['delivery_area'] is not None:
+        # ===== ZONE DELIVERY AREA (always save when provided) =====
+        if 'zone_delivery_area' in data:
+            zone_value = data['zone_delivery_area']
+            if zone_value and zone_value != 'null' and zone_value != 'None':
                 try:
-                    import json
                     from geoalchemy2.shape import from_shape
                     from shapely.geometry import shape
                     
-                    print(f"🔄 Processing delivery_area...")
-                    
-                    # Parse the GeoJSON
-                    zone_geojson = json.loads(data['delivery_area'])
-                    print(f"✅ Parsed GeoJSON: {type(zone_geojson)}")
-                    print(f"✅ GeoJSON type: {zone_geojson.get('type')}")
-                    
-                    # Convert to Shapely geometry
+                    zone_geojson = json.loads(zone_value)
                     polygon = shape(zone_geojson)
-                    print(f"✅ Created Shapely polygon with {len(polygon.exterior.coords)} points")
-                    
-                    # Save to PostGIS
-                    store.delivery_area = from_shape(polygon, srid=4326)
-                    print(f"✅ Saved delivery zone to database")
-                    
-                except json.JSONDecodeError as e:
-                    print(f"❌ JSON decode error: {e}")
+                    store.zone_delivery_area = from_shape(polygon, srid=4326)
+                    print(f"✅ Saved zone_delivery_area to database")
                 except Exception as e:
-                    print(f"⚠️ Error saving delivery zone: {e}")
-                    import traceback
-                    traceback.print_exc()
-            else:
-                # delivery_area is present but empty/null - only clear if it was explicitly intended
-                # Check if this is a radius mode save by looking at delivery_method
-                if 'delivery_method' in data and data['delivery_method'] == 'radius':
-                    # In radius mode, preserve existing zone data
-                    if original_delivery_area:
-                        print(f"⚠️ Radius mode save - preserving existing delivery zone")
-                        # Keep the original delivery area
-                        store.delivery_area = original_delivery_area
+                    print(f"⚠️ Error saving zone_delivery_area: {e}")
+        
+        # ===== MUNICIPALITY SELECTION (always save when provided) =====
+        if 'selected_municipalities' in data:
+            selected_muni = data['selected_municipalities']
+            
+            # Parse and save selected municipalities
+            if isinstance(selected_muni, str):
+                if selected_muni and selected_muni.strip():
+                    if selected_muni.strip().startswith('['):
+                        try:
+                            store.selected_municipalities = json.loads(selected_muni)
+                        except:
+                            store.selected_municipalities = []
+                    elif ',' in selected_muni:
+                        store.selected_municipalities = [m.strip() for m in selected_muni.split(',') if m.strip()]
                     else:
-                        print(f"ℹ️ No existing delivery zone to preserve")
+                        store.selected_municipalities = [selected_muni.strip()] if selected_muni.strip() else []
                 else:
-                    # Not in radius mode and no zone data - only clear if we're sure
-                    print(f"⚠️ Received empty delivery_area, but preserving existing zone to be safe")
-                    # Uncomment the next line ONLY if you want to allow clearing without explicit flag
-                    # store.delivery_area = None
+                    store.selected_municipalities = []
+            elif isinstance(selected_muni, list):
+                store.selected_municipalities = selected_muni
+            else:
+                store.selected_municipalities = []
+            print(f"✅ Saved selected_municipalities: {store.selected_municipalities}")
+        
+        # ===== MUNICIPALITY DELIVERY AREA (when generated) =====
+        if 'municipality_delivery_area' in data:
+            muni_value = data['municipality_delivery_area']
+            if muni_value and muni_value != 'null' and muni_value != 'None':
+                try:
+                    from geoalchemy2.shape import from_shape
+                    from shapely.geometry import shape
+                    
+                    muni_geojson = json.loads(muni_value)
+                    polygon = shape(muni_geojson)
+                    store.municipality_delivery_area = from_shape(polygon, srid=4326)
+                    print(f"✅ Saved municipality_delivery_area to database")
+                except Exception as e:
+                    print(f"⚠️ Error saving municipality_delivery_area: {e}")
+        
+        # ===== UPDATE ACTIVE DELIVERY AREA BASED ON CURRENT METHOD =====
+        store.update_delivery_area_from_method()
+        
+        # ===== GCASH QR CODE HANDLING =====
+        print("\n📱 Processing GCash QR codes...")
+
+        gcash_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'gcash_qr')
+        os.makedirs(gcash_upload_path, exist_ok=True)
+
+        # Get QR IDs to keep and delete
+        qr_ids_to_keep = []
+        if 'gcash_qr_ids_to_keep' in data:
+            keep_str = data['gcash_qr_ids_to_keep']
+            if keep_str:
+                try:
+                    qr_ids_to_keep = json.loads(keep_str)
+                except:
+                    qr_ids_to_keep = []
+
+        qr_ids_to_delete = []
+        if 'gcash_qr_ids_to_delete' in data:
+            delete_str = data['gcash_qr_ids_to_delete']
+            if delete_str:
+                try:
+                    qr_ids_to_delete = json.loads(delete_str)
+                except:
+                    qr_ids_to_delete = []
+
+        # Delete marked QR codes
+        for qr_id in qr_ids_to_delete:
+            qr = GCashQR.query.get(qr_id)
+            if qr and qr.store_id == store.id:
+                file_path = os.path.join(gcash_upload_path, qr.filename)
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                    except:
+                        pass
+                db.session.delete(qr)
+                print(f"   ✅ Deleted QR record ID: {qr_id}")
+
+        # Process new QR code uploads
+        current_qr_count = GCashQR.query.filter_by(store_id=store.id).count()
+        next_sort_order = current_qr_count
+
+        for key in files:
+            if key.startswith('gcash_qr_'):
+                file = files[key]
+                if file and file.filename and allowed_file(file.filename):
+                    timestamp = str(int(time.time()))
+                    random_str = uuid.uuid4().hex[:8]
+                    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+                    filename = f"store_{store.id}_gcash_{timestamp}_{random_str}.{ext}"
+                    
+                    filepath = os.path.join(gcash_upload_path, filename)
+                    file.save(filepath)
+                    
+                    is_primary = (next_sort_order == 0)
+                    
+                    new_qr = GCashQR(
+                        store_id=store.id,
+                        filename=filename,
+                        is_primary=is_primary,
+                        sort_order=next_sort_order
+                    )
+                    db.session.add(new_qr)
+                    next_sort_order += 1
+                    print(f"   ✅ Created new QR record: {filename}")
+
+        # Update sort_order for kept QRs
+        if qr_ids_to_keep:
+            kept_qrs = GCashQR.query.filter(GCashQR.id.in_(qr_ids_to_keep)).all()
+            for i, qr in enumerate(kept_qrs):
+                qr.sort_order = i
+                qr.is_primary = (i == 0)
+
+        # Update GCash instructions
+        if 'gcash_instructions' in data:
+            store.gcash_instructions = data['gcash_instructions']
         
         store.updated_at = datetime.utcnow()
         db.session.commit()
@@ -2843,14 +3388,9 @@ def update_store_settings():
         print("✅ Database commit successful")
         print(f"📊 FINAL STORE DATA AFTER COMMIT:")
         print(f"   delivery_method: {store.delivery_method}")
+        print(f"   has zone_delivery_area: {store.zone_delivery_area is not None}")
         print(f"   selected_municipalities: {store.selected_municipalities}")
-        print(f"   type: {type(store.selected_municipalities)}")
-        
-        # Verify the zone was saved
-        if store.delivery_area:
-            print(f"✅ Verified: delivery_area is now set in database")
-        else:
-            print(f"ℹ️ Note: delivery_area is None after save")
+        print(f"   has municipality_delivery_area: {store.municipality_delivery_area is not None}")
         
         return jsonify({
             'success': True,
@@ -2864,7 +3404,8 @@ def update_store_settings():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
+    
+    
 @templates_bp.route('/api/seller/store/geocode', methods=['POST'])
 @seller_required
 def reverse_geocode():
@@ -2939,7 +3480,7 @@ def reverse_geocode():
         traceback.print_exc()
         print("="*60 + "\n")
         return jsonify({'error': str(e)}), 500
-
+'''
 # ADD THIS DEBUG ENDPOINT
 @templates_bp.route('/debug/mapbox-config')
 def debug_mapbox_config():
@@ -2951,7 +3492,7 @@ def debug_mapbox_config():
         'token_length': len(mapbox_token) if mapbox_token else 0,
         'env_keys': list(os.environ.keys())  # BE CAREFUL - this exposes all env vars!
     })
-
+'''
 
 
 
@@ -3362,3 +3903,516 @@ def merge_municipality_boundaries():
     except Exception as e:
         print(f"Error merging boundaries: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ===== PRODUCT VARIANT ROUTES =====
+@templates_bp.route('/api/seller/products/<int:product_id>/variants', methods=['GET'])
+@seller_required
+def get_product_variants(product_id):
+    """Get all variants for a product"""
+    try:
+        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        product = Product.query.filter_by(id=product_id, store_id=store.id).first()
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+        
+        variants = [v.to_dict() for v in product.variants]
+        
+        return jsonify({
+            'success': True,
+            'variants': variants
+        })
+        
+    except Exception as e:
+        print(f"Error getting variants: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@templates_bp.route('/api/seller/variants/<int:variant_id>', methods=['GET'])
+@seller_required
+def get_variant(variant_id):
+    """Get a single variant by ID"""
+    try:
+        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        variant = ProductVariant.query.get(variant_id)
+        if not variant:
+            return jsonify({'error': 'Variant not found'}), 404
+        
+        # Verify product belongs to seller's store
+        if variant.product.store_id != store.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        return jsonify({
+            'success': True,
+            'variant': variant.to_dict()
+        })
+        
+    except Exception as e:
+        print(f"Error getting variant: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@templates_bp.route('/api/seller/variants/create', methods=['POST'])
+@seller_required
+def create_variant():
+    """Create a new product variant"""
+    print("\n" + "="*60)
+    print("📥 CREATE VARIANT REQUEST RECEIVED")
+    
+    try:
+        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        if not store:
+            print("❌ Store not found")
+            return jsonify({'error': 'Store not found'}), 404
+        
+        # Debug: Print all form data
+        print(f"📋 Form data keys: {list(request.form.keys())}")
+        print(f"📋 Form data values:")
+        for key in request.form.keys():
+            print(f"   {key}: {request.form.get(key)}")
+        
+        print(f"📎 Files: {list(request.files.keys())}")
+        
+        product_id = request.form.get('product_id')
+        if not product_id:
+            print("❌ Product ID is missing")
+            return jsonify({'error': 'Product ID is required'}), 400
+        
+        try:
+            product_id = int(product_id)
+        except ValueError:
+            print(f"❌ Invalid product_id format: {product_id}")
+            return jsonify({'error': 'Invalid product ID format'}), 400
+        
+        product = Product.query.filter_by(id=product_id, store_id=store.id).first()
+        if not product:
+            print(f"❌ Product {product_id} not found in store {store.id}")
+            return jsonify({'error': 'Product not found'}), 404
+        
+        name = request.form.get('name')
+        price = request.form.get('price')
+        stock_quantity = request.form.get('stock_quantity')
+        
+        print(f"📝 Variant data - Name: {name}, Price: {price}, Stock: {stock_quantity}")
+        
+        if not name:
+            print("❌ Name is missing")
+            return jsonify({'error': 'Variant name is required'}), 400
+        if not price:
+            print("❌ Price is missing")
+            return jsonify({'error': 'Price is required'}), 400
+        if not stock_quantity:
+            print("❌ Stock quantity is missing")
+            return jsonify({'error': 'Stock quantity is required'}), 400
+        
+        try:
+            price_float = float(price)
+            if price_float < 0:
+                print(f"❌ Price cannot be negative: {price_float}")
+                return jsonify({'error': 'Price cannot be negative'}), 400
+        except ValueError as e:
+            print(f"❌ Invalid price format: {price} - {e}")
+            return jsonify({'error': 'Invalid price format'}), 400
+        
+        try:
+            stock_int = int(stock_quantity)
+            if stock_int < 0:
+                print(f"❌ Stock cannot be negative: {stock_int}")
+                return jsonify({'error': 'Stock quantity cannot be negative'}), 400
+        except ValueError as e:
+            print(f"❌ Invalid stock format: {stock_quantity} - {e}")
+            return jsonify({'error': 'Invalid stock quantity format'}), 400
+        
+        # Parse attributes JSON if provided
+        attributes = None
+        attributes_str = request.form.get('attributes')
+        if attributes_str:
+            print(f"📋 Attributes string: {attributes_str}")
+            try:
+                attributes = json.loads(attributes_str)
+                print(f"✅ Parsed attributes: {attributes}")
+            except json.JSONDecodeError as e:
+                print(f"❌ Invalid attributes JSON: {e}")
+                return jsonify({'error': 'Invalid attributes JSON'}), 400
+        
+        # Handle variant image upload
+        image_filename = None
+        if 'image' in request.files:
+            file = request.files['image']
+            print(f"📸 Image file received: {file.filename if file.filename else 'None'}")
+            
+            if file and file.filename and allowed_file(file.filename):
+                # Create variant images directory if it doesn't exist
+                variant_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants')
+                os.makedirs(variant_upload_path, exist_ok=True)
+                
+                # Generate filename
+                ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+                timestamp = str(int(time.time()))[-6:]
+                random_str = uuid.uuid4().hex[:8]
+                image_filename = f"v{product_id}_{timestamp}_{random_str}.{ext}"
+                
+                filepath = os.path.join(variant_upload_path, image_filename)
+                file.save(filepath)
+                print(f"✅ Saved variant image: {image_filename}")
+            else:
+                print(f"⚠️ Invalid file or not allowed: {file.filename if file.filename else 'No file'}")
+        
+        # Get max sort order
+        max_sort = db.session.query(db.func.max(ProductVariant.sort_order)).filter_by(product_id=product.id).scalar() or 0
+        print(f"📊 Max sort order: {max_sort}, new sort order: {max_sort + 1}")
+        
+        is_available = request.form.get('is_available', 'true').lower()
+        print(f"🔘 is_available: {is_available}")
+        
+        variant = ProductVariant(
+            product_id=product.id,
+            name=name.strip(),
+            price=price_float,
+            stock_quantity=stock_int,
+            sku=request.form.get('sku') or None,
+            image_filename=image_filename,
+            attributes=attributes,
+            sort_order=max_sort + 1,
+            is_available=is_available == 'true'
+        )
+        
+        db.session.add(variant)
+        db.session.commit()
+        
+        print(f"✅ Variant created successfully with ID: {variant.id}")
+        print("="*60 + "\n")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Variant created successfully',
+            'variant': variant.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error creating variant: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print("="*60 + "\n")
+        return jsonify({'error': str(e)}), 500
+
+
+@templates_bp.route('/api/seller/variants/<int:variant_id>', methods=['PUT'])
+@seller_required
+def update_variant(variant_id):
+    """Update a product variant"""
+    try:
+        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        variant = ProductVariant.query.get(variant_id)
+        if not variant:
+            return jsonify({'error': 'Variant not found'}), 404
+        
+        # Verify product belongs to seller's store
+        if variant.product.store_id != store.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Update fields
+        if request.form.get('name'):
+            variant.name = request.form.get('name').strip()
+        
+        if request.form.get('price'):
+            try:
+                variant.price = float(request.form.get('price'))
+            except ValueError:
+                return jsonify({'error': 'Invalid price format'}), 400
+        
+        if request.form.get('stock_quantity'):
+            try:
+                variant.stock_quantity = int(request.form.get('stock_quantity'))
+            except ValueError:
+                return jsonify({'error': 'Invalid stock quantity format'}), 400
+        
+        if request.form.get('sku') is not None:
+            variant.sku = request.form.get('sku') or None
+        
+        if request.form.get('attributes'):
+            try:
+                variant.attributes = json.loads(request.form.get('attributes'))
+            except:
+                return jsonify({'error': 'Invalid attributes JSON'}), 400
+        elif 'attributes' in request.form:
+            variant.attributes = None
+        
+        if request.form.get('is_available') is not None:
+            variant.is_available = request.form.get('is_available').lower() == 'true'
+        
+        # Handle variant image upload
+        if 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename and allowed_file(file.filename):
+                # Delete old image if exists
+                if variant.image_filename:
+                    old_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants', variant.image_filename)
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+                
+                # Save new image
+                variant_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants')
+                os.makedirs(variant_upload_path, exist_ok=True)
+                
+                ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+                timestamp = str(int(time.time()))[-6:]
+                random_str = uuid.uuid4().hex[:8]
+                image_filename = f"v{variant.product_id}_{timestamp}_{random_str}.{ext}"
+                
+                filepath = os.path.join(variant_upload_path, image_filename)
+                file.save(filepath)
+                variant.image_filename = image_filename
+                print(f"📸 Updated variant image: {image_filename}")
+        
+        variant.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Variant updated successfully',
+            'variant': variant.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating variant: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@templates_bp.route('/api/seller/variants/<int:variant_id>', methods=['DELETE'])
+@seller_required
+def delete_variant(variant_id):
+    """Delete a product variant"""
+    try:
+        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        variant = ProductVariant.query.get(variant_id)
+        if not variant:
+            return jsonify({'error': 'Variant not found'}), 404
+        
+        # Verify product belongs to seller's store
+        if variant.product.store_id != store.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Check if variant is in any carts or orders
+        cart_count = CartItem.query.filter_by(variant_id=variant_id).count()
+        order_count = OrderItem.query.filter_by(variant_id=variant_id).count()
+        pos_count = POSOrderItem.query.filter_by(variant_id=variant_id).count()
+        
+        if cart_count > 0 or order_count > 0 or pos_count > 0:
+            return jsonify({
+                'error': f'Cannot delete. Variant is in {cart_count} carts and {order_count + pos_count} orders.'
+            }), 400
+        
+        # Delete image file if exists
+        if variant.image_filename:
+            image_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants', variant.image_filename)
+            if os.path.exists(image_path):
+                os.remove(image_path)
+        
+        db.session.delete(variant)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Variant deleted successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting variant: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@templates_bp.route('/api/seller/variants/reorder', methods=['POST'])
+@seller_required
+def reorder_variants():
+    """Reorder variants for a product"""
+    try:
+        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        data = request.get_json()
+        product_id = data.get('product_id')
+        variant_order = data.get('variant_order', [])  # List of variant IDs in desired order
+        
+        if not product_id or not variant_order:
+            return jsonify({'error': 'Product ID and variant order required'}), 400
+        
+        product = Product.query.filter_by(id=product_id, store_id=store.id).first()
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+        
+        for index, variant_id in enumerate(variant_order):
+            variant = ProductVariant.query.get(variant_id)
+            if variant and variant.product_id == product.id:
+                variant.sort_order = index
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Variants reordered successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error reordering variants: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+
+
+@templates_bp.route('/seller/products/add')
+@seller_required
+def add_product_page():
+    """Render the add/edit product page"""
+    product_id = request.args.get('edit')
+    is_edit = bool(product_id)
+    product = None
+    
+    if is_edit:
+        store = _get_seller_store()
+        if not store:
+            flash('Store not found', 'error')
+            return redirect(url_for('templates.seller_products'))
+        
+        product = Product.query.filter_by(id=product_id, store_id=store.id).first()
+        if not product:
+            flash('Product not found', 'error')
+            return redirect(url_for('templates.seller_products'))
+    
+    return render_template('add_product.html', 
+                         is_edit=is_edit, 
+                         product=product)
+
+
+
+
+
+
+
+
+
+
+
+
+@templates_bp.route('/api/store/<int:store_id>/gcash-qrs', methods=['GET'])
+def get_store_gcash_qrs(store_id):
+    """Get GCash QR codes for a store (for checkout page)"""
+    try:
+        store = Store.query.get_or_404(store_id)
+        
+        # Build QR code URLs
+        qr_codes = []
+        if store.gcash_qr_codes:
+            qr_codes_list = store.gcash_qr_codes
+            if isinstance(qr_codes_list, str):
+                try:
+                    qr_codes_list = json.loads(qr_codes_list)
+                except:
+                    qr_codes_list = []
+            
+            for i, filename in enumerate(qr_codes_list):
+                if filename:
+                    qr_codes.append({
+                        'url': f'/static/uploads/gcash_qr/{filename}',
+                        'is_primary': (i == 0)
+                    })
+        
+        return jsonify({
+            'success': True,
+            'qr_codes': qr_codes,
+            'instructions': store.gcash_instructions
+        })
+        
+    except Exception as e:
+        print(f"Error getting GCash QR codes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+
+
+
+@templates_bp.route('/api/seller/store/gcash-qr/<path:filename>', methods=['DELETE'])
+@seller_required
+def delete_gcash_qr(filename):
+    """Delete a specific GCash QR code"""
+    try:
+        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        # Security: Prevent directory traversal
+        if '..' in filename or filename.startswith('/'):
+            return jsonify({'error': 'Invalid filename'}), 400
+        
+        # Check if QR code exists in store's list
+        qr_codes = store.gcash_qr_codes or []
+        if isinstance(qr_codes, str):
+            try:
+                qr_codes = json.loads(qr_codes)
+            except:
+                qr_codes = []
+        
+        if filename not in qr_codes:
+            return jsonify({'error': 'QR code not found'}), 404
+        
+        # Delete file
+        gcash_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'gcash_qr')
+        file_path = os.path.join(gcash_upload_path, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"🗑️ Deleted QR code file: {filename}")
+        
+        # Remove from list
+        qr_codes.remove(filename)
+        store.gcash_qr_codes = qr_codes
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'QR code deleted successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting QR code: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+
+

@@ -129,7 +129,7 @@
         border-radius: var(--radius-lg);
         overflow: hidden;
         border: 1px solid var(--border);
-        background: #f0f0f0; /* Fallback color */
+        background: #f0f0f0;
     }
     
     #map {
@@ -378,6 +378,143 @@
         top: 13px !important;
     }
     
+    /* ─── QR Gallery Styles ─── */
+    .qr-gallery {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .qr-slot {
+        aspect-ratio: 1;
+        border: 2px dashed var(--border-strong);
+        border-radius: var(--radius-md);
+        background: var(--cream);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: var(--transition);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .qr-slot:hover {
+        border-color: var(--deep-rose);
+        background: rgba(181, 68, 90, 0.02);
+    }
+    
+    .qr-slot.has-image {
+        border: 2px solid var(--deep-rose);
+    }
+    
+    .qr-slot img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        background: white;
+    }
+    
+    .qr-slot .slot-placeholder {
+        text-align: center;
+        color: var(--muted);
+        padding: 1rem;
+    }
+    
+    .qr-slot .slot-placeholder i {
+        font-size: 32px;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    
+    .qr-slot .slot-placeholder span {
+        font-size: 11px;
+    }
+    
+    .qr-slot .remove-image {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--deep-rose);
+        color: white;
+        border: none;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 14px;
+        z-index: 2;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+    
+    .qr-slot:hover .remove-image {
+        opacity: 1;
+    }
+    
+    .qr-slot .remove-image:hover {
+        background: #c0392b;
+        transform: scale(1.1);
+    }
+    
+    .qr-slot .primary-badge {
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+        background: var(--deep-rose);
+        color: white;
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 12px;
+        z-index: 2;
+        display: none;
+    }
+    
+    .qr-preview-container {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        min-height: 100px;
+    }
+    
+    .qr-preview-item {
+        width: 80px;
+        height: 80px;
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        border: 2px solid var(--border);
+        position: relative;
+    }
+    
+    .qr-preview-item.primary {
+        border-color: var(--deep-rose);
+    }
+    
+    .qr-preview-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: white;
+    }
+    
+    .qr-preview-badge {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        background: var(--deep-rose);
+        color: white;
+        font-size: 8px;
+        padding: 2px 4px;
+        border-radius: 4px;
+    }
+    
     /* ─── Action Buttons ─── */
     .action-buttons {
         display: flex;
@@ -507,6 +644,10 @@
         
         .action-buttons {
             flex-direction: column;
+        }
+        
+        .qr-gallery {
+            grid-template-columns: repeat(2, 1fr);
         }
     }
 </style>
@@ -754,7 +895,7 @@
                             </div>
                         </form>
                         
-                        <!-- RADIUS VISUALIZATION BUTTON (only shown in radius mode) -->
+                        <!-- RADIUS VISUALIZATION BUTTON -->
                         <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                             <button type="button" class="zone-btn" id="show-radius-btn">
                                 <i class="ri-radar-line"></i> Show Radius
@@ -808,7 +949,7 @@
                             </div>
                         </div>
                         
-                        <!-- ZONE VISUALIZATION BUTTON (only shown in zone mode) -->
+                        <!-- ZONE VISUALIZATION BUTTON -->
                         <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                             <button type="button" class="zone-btn" id="show-zone-btn">
                                 <i class="ri-map-pin-line"></i> Show Zone
@@ -893,6 +1034,52 @@
                 </div>
             </div>
             
+            <!-- GCash Payment Settings Card -->
+            <div class="settings-card">
+                <div class="card-header">
+                    <div class="card-header-left">
+                        <div class="card-header-icon"><i class="ri-smartphone-line"></i></div>
+                        <div>
+                            <div class="card-header-title">GCash Payment</div>
+                            <div class="card-header-subtitle">Upload GCash QR codes for customer payments</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- QR Code Gallery -->
+                    <div class="form-group">
+                        <label class="form-label">GCash QR Codes <span class="form-hint" style="margin-left: 0.5rem;">(Upload up to 3 QR codes)</span></label>
+                        
+                        <div class="qr-gallery" id="qrGallery">
+                            <!-- QR slots will be generated here -->
+                        </div>
+                        
+                        <div class="image-upload-tips" style="margin-top: 1rem;">
+                            <i class="ri-information-line"></i>
+                            <span>First QR code will be used as the primary payment QR. Customers can choose between multiple GCash accounts. Supported formats: PNG, JPG up to 2MB each.</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Payment Instructions -->
+                    <div class="form-group">
+                        <label class="form-label">Payment Instructions</label>
+                        <textarea id="gcashInstructions" class="form-control" rows="3" placeholder="e.g., Please send exact amount and include your order number in the message...">{{ store.gcash_instructions or '' }}</textarea>
+                        <div class="form-hint">These instructions will be shown to customers when they choose GCash payment</div>
+                    </div>
+                    
+                    <!-- Preview how it looks to customers -->
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: var(--cream); border-radius: var(--radius-lg);">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                            <i class="ri-eye-line" style="color: var(--deep-rose);"></i>
+                            <span style="font-weight: 600;">Customer Preview</span>
+                        </div>
+                        <div id="qrPreview" class="qr-preview-container">
+                            <!-- Preview will be updated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Action Buttons -->
             <div class="settings-card">
                 <div class="card-body">
@@ -918,11 +1105,9 @@
 <!-- Hidden inputs for data -->
 <input type="hidden" id="mapbox-token" value="{{ mapbox_public_token }}">
 <input type="hidden" id="store-id" value="{{ store.id }}">
-<input type="hidden" id="delivery-zone" name="delivery_zone" value="{{ store.delivery_area or '' }}">
-<input type="hidden" id="delivery-geojson" value="{{ delivery_geojson or '' }}">
-<!-- Clear zone flag -->
+<input type="hidden" id="zone-delivery-area" name="zone_delivery_area" value="{{ store.to_dict().zone_geojson or '' }}">
+<input type="hidden" id="municipality-delivery-area" name="municipality_delivery_area" value="{{ store.to_dict().municipality_geojson or '' }}">
 <input type="hidden" id="clear-zone-flag" value="false">
-
 <!-- Store data as JSON -->
 <script id="store-data" type="application/json">
 {
@@ -940,16 +1125,20 @@
     "barangay": {{ store.barangay|tojson if store.barangay else 'null' }},
     "street": {{ store.street|tojson if store.street else 'null' }},
     "delivery_method": {{ store.delivery_method|tojson if store.delivery_method else '"radius"' }},
-    "selected_municipalities": {{ store.selected_municipalities|tojson if store.selected_municipalities else 'null' }},
+    "selected_municipalities": {{ store.selected_municipalities|tojson if store.selected_municipalities is not none else '[]' }},
     "delivery_radius_km": {{ store.delivery_radius_km if store.delivery_radius_km is not none else 15 }},
     "base_delivery_fee": {{ store.base_delivery_fee if store.base_delivery_fee is not none else 50 }},
     "delivery_rate_per_km": {{ store.delivery_rate_per_km if store.delivery_rate_per_km is not none else 20 }},
     "free_delivery_minimum": {{ store.free_delivery_minimum if store.free_delivery_minimum is not none else 500 }},
     "max_delivery_distance": {{ store.max_delivery_distance if store.max_delivery_distance is not none else 15 }},
-    "delivery_area": {{ delivery_geojson|tojson if delivery_geojson else 'null' }}
+    "radius_geojson": {{ store.to_dict().radius_geojson|tojson if store.to_dict().radius_geojson else 'null' }},
+    "zone_geojson": {{ store.to_dict().zone_geojson|tojson if store.to_dict().zone_geojson else 'null' }},
+    "municipality_geojson": {{ store.to_dict().municipality_geojson|tojson if store.to_dict().municipality_geojson else 'null' }},
+    "current_delivery_geojson": {{ store.to_dict().current_delivery_geojson|tojson if store.to_dict().current_delivery_geojson else 'null' }},
+    "gcash_qr_data": {{ gcash_qr_data|tojson if gcash_qr_data else '[]' }},
+    "gcash_instructions": {{ store.gcash_instructions|tojson if store.gcash_instructions else 'null' }}
 }
 </script>
-
 <!-- Toast notification placeholder -->
 <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;"></div>
 
@@ -965,6 +1154,7 @@
     }
 </style>
 {% endblock %}
+
 
 {% block extra_js %}
 <script>
@@ -1076,20 +1266,502 @@
         let opacity = 0.3;
         const interval = setInterval(() => {
             opacity -= 0.05;
-            if (map.getLayer('laguna-boundary-fill')) {
+            if (map && map.getLayer('laguna-boundary-fill')) {
                 map.setPaintProperty('laguna-boundary-fill', 'fill-opacity', opacity);
             }
             if (opacity <= 0.1) {
                 clearInterval(interval);
-                if (map.getLayer('laguna-boundary-fill')) {
+                if (map && map.getLayer('laguna-boundary-fill')) {
                     map.setPaintProperty('laguna-boundary-fill', 'fill-opacity', 0.1);
                 }
             }
         }, 50);
     }
 
+    // ===== GCASH QR CODE HANDLING =====
+    let qrSlots = [];
+    const MAX_QR = 3;
+
+    // Initialize QR slots on page load
+    function initializeQRSlots() {
+        const gallery = document.getElementById('qrGallery');
+        if (!gallery) return;
+        
+        gallery.innerHTML = '';
+        qrSlots = [];
+        
+        // Get store data
+        let storeData;
+        try {
+            const storeDataElement = document.getElementById('store-data');
+            storeData = JSON.parse(storeDataElement.textContent);
+            debug.log('Store data for QR:', storeData);
+        } catch (e) {
+            debug.error('Failed to parse store data for QR:', e);
+            storeData = { gcash_qr_data: [] };
+        }
+        
+        // Get the QR data from storeData - should be an array of QR objects
+        let existingQRs = storeData.gcash_qr_data || [];
+        debug.log('QR data from database:', existingQRs);
+        
+        for (let i = 0; i < MAX_QR; i++) {
+            // Pass the QR object if it exists at this index
+            const qrData = existingQRs[i] || null;
+            createQRSlot(i, qrData);
+        }
+        
+        updateQRPreview();
+    }
+
+    function createQRSlot(index, qrData = null) {
+        const gallery = document.getElementById('qrGallery');
+        
+        const slot = document.createElement('div');
+        slot.className = 'qr-slot';
+        slot.dataset.index = index;
+        
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/png,image/jpeg,image/jpg';
+        fileInput.style.display = 'none';
+        fileInput.dataset.index = index;
+        fileInput.onchange = (e) => handleQRSelect(e, index);
+        
+        const img = document.createElement('img');
+        img.style.display = 'none';
+        
+        const placeholder = document.createElement('div');
+        placeholder.className = 'slot-placeholder';
+        
+        if (index === 0) {
+            placeholder.innerHTML = '<i class="ri-qr-code-line"></i><span>Primary QR</span>';
+        } else {
+            placeholder.innerHTML = '<i class="ri-qr-code-line"></i><span>Add QR</span>';
+        }
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove-image';
+        removeBtn.innerHTML = '<i class="ri-close-line"></i>';
+        removeBtn.onclick = (e) => {
+            e.stopPropagation();
+            removeQR(index);
+        };
+        
+        const primaryBadge = document.createElement('div');
+        primaryBadge.className = 'primary-badge';
+        primaryBadge.textContent = 'Primary';
+        
+        slot.appendChild(fileInput);
+        slot.appendChild(img);
+        slot.appendChild(placeholder);
+        slot.appendChild(removeBtn);
+        slot.appendChild(primaryBadge);
+        
+        slot.onclick = () => fileInput.click();
+        
+        slot.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            slot.style.borderColor = 'var(--deep-rose)';
+            slot.style.background = 'rgba(181, 68, 90, 0.02)';
+        });
+        
+        slot.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            slot.style.borderColor = 'var(--border-strong)';
+            slot.style.background = 'var(--cream)';
+        });
+        
+        slot.addEventListener('drop', (e) => {
+            e.preventDefault();
+            slot.style.borderColor = 'var(--border-strong)';
+            slot.style.background = 'var(--cream)';
+            
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                handleQRFile(file, index);
+            }
+        });
+        
+        gallery.appendChild(slot);
+        
+        // Store QR data in the slot
+        qrSlots[index] = {
+            slot,
+            fileInput,
+            img,
+            placeholder,
+            removeBtn,
+            primaryBadge,
+            file: null,
+            hasImage: false,
+            qrId: qrData ? qrData.id : null,
+            filename: qrData ? qrData.filename : null,
+            isPrimary: qrData ? qrData.is_primary : (index === 0),
+            markedForDeletion: false
+        };
+        
+        // If there's existing QR data, load the image
+        if (qrData && qrData.url) {
+            const imageUrl = qrData.url;
+            debug.log(`Loading QR image for slot ${index}: ${imageUrl}`);
+            
+            // Test if the image loads successfully
+            const testImg = new Image();
+            testImg.onload = () => {
+                // Image loaded successfully
+                img.src = imageUrl;
+                img.style.display = 'block';
+                placeholder.style.display = 'none';
+                slot.classList.add('has-image');
+                slot.style.border = '2px solid var(--deep-rose)';
+                removeBtn.style.display = 'flex';
+                qrSlots[index].hasImage = true;
+                
+                if (qrData.is_primary || index === 0) {
+                    primaryBadge.style.display = 'block';
+                }
+                
+                debug.log(`✅ QR image loaded for slot ${index}`);
+                updateQRPreview();
+            };
+            
+            testImg.onerror = () => {
+                debug.error(`❌ Failed to load QR image for slot ${index}: ${imageUrl}`);
+                // Keep the placeholder visible
+            };
+            
+            testImg.src = imageUrl;
+        }
+    }
+
+    function handleQRSelect(event, index) {
+        const file = event.target.files[0];
+        if (!file) return;
+        handleQRFile(file, index);
+    }
+
+    function handleQRFile(file, index) {
+        // Validate file type
+        if (!file.type.match('image.*')) {
+            showToast('Please upload an image file', 'error');
+            return;
+        }
+        
+        // Validate file size (max 2MB)
+        if (file.size > 2 * 1024 * 1024) {
+            showToast('File size must be less than 2MB', 'error');
+            return;
+        }
+        
+        const slotData = qrSlots[index];
+        
+        // Show loading
+        slotData.placeholder.innerHTML = '<i class="ri-loader-4-line ri-spin" style="font-size: 32px;"></i><span style="font-size: 11px; margin-top: 0.5rem;">Processing...</span>';
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            slotData.img.src = e.target.result;
+            slotData.img.style.display = 'block';
+            slotData.placeholder.style.display = 'none';
+            slotData.slot.classList.add('has-image');
+            slotData.slot.style.border = '2px solid var(--deep-rose)';
+            slotData.removeBtn.style.display = 'flex';
+            slotData.file = file;
+            slotData.hasImage = true;
+            
+            // If this was an existing QR code, mark it for deletion
+            if (slotData.qrId) {
+                slotData.markedForDeletion = true;
+                console.log(`🔄 Replacing existing QR ID ${slotData.qrId} with new file`);
+            }
+            
+            // Update primary badge
+            if (index === 0) {
+                slotData.primaryBadge.style.display = 'block';
+                slotData.isPrimary = true;
+            } else {
+                // Check if this is the first image (if slot 0 is empty, this becomes primary)
+                if (!qrSlots[0] || !qrSlots[0].hasImage) {
+                    qrSlots.forEach((slot, i) => {
+                        if (slot && slot.primaryBadge) {
+                            const shouldShow = (i === index);
+                            slot.primaryBadge.style.display = shouldShow ? 'block' : 'none';
+                            slot.isPrimary = shouldShow;
+                        }
+                    });
+                }
+            }
+            
+            updateQRPreview();
+            showToast('QR code added', 'success');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function removeQR(index) {
+        const slotData = qrSlots[index];
+        if (!slotData) return;
+        
+        // Only confirm if there's an existing QR code
+        if (slotData.qrId && slotData.hasImage) {
+            if (!confirm('Are you sure you want to remove this QR code?')) {
+                return;
+            }
+            slotData.markedForDeletion = true;
+            console.log(`🗑️ Marked QR ID ${slotData.qrId} for deletion`);
+        }
+        
+        // Clear the slot
+        slotData.fileInput.value = '';
+        slotData.img.src = '';
+        slotData.img.style.display = 'none';
+        slotData.placeholder.innerHTML = index === 0 ? 
+            '<i class="ri-qr-code-line"></i><span>Primary QR</span>' : 
+            '<i class="ri-qr-code-line"></i><span>Add QR</span>';
+        slotData.placeholder.style.display = 'flex';
+        slotData.slot.classList.remove('has-image');
+        slotData.slot.style.border = '2px dashed var(--border-strong)';
+        slotData.removeBtn.style.display = 'none';
+        slotData.primaryBadge.style.display = 'none';
+        slotData.file = null;
+        slotData.hasImage = false;
+        // Keep qrId and filename to track deletion
+        
+        // Update primary badge for remaining images
+        for (let i = 0; i < qrSlots.length; i++) {
+            if (qrSlots[i] && qrSlots[i].hasImage) {
+                qrSlots[i].primaryBadge.style.display = i === 0 ? 'block' : 'none';
+                qrSlots[i].isPrimary = (i === 0);
+                break;
+            }
+        }
+        
+        updateQRPreview();
+    }
+
+    function updateQRPreview() {
+        const preview = document.getElementById('qrPreview');
+        if (!preview) return;
+        
+        preview.innerHTML = '';
+        
+        let hasImages = false;
+        qrSlots.forEach((slot, index) => {
+            if (slot && slot.hasImage && slot.img && slot.img.src) {
+                hasImages = true;
+                const previewItem = document.createElement('div');
+                previewItem.className = `qr-preview-item ${index === 0 ? 'primary' : ''}`;
+                previewItem.innerHTML = `
+                    <img src="${slot.img.src}" alt="GCash QR ${index + 1}">
+                    ${index === 0 ? '<div class="qr-preview-badge">Primary</div>' : ''}
+                `;
+                preview.appendChild(previewItem);
+            }
+        });
+        
+        if (!hasImages) {
+            preview.innerHTML = '<p style="color: var(--muted); text-align: center; padding: 1rem;">No QR codes uploaded yet</p>';
+        }
+    }
+
+    // ===== ADDRESS DROPDOWN FUNCTIONS USING API =====
+    function loadBarangays(municipality) {
+        const barangaySelect = document.getElementById('barangay');
+        
+        if (!barangaySelect) return;
+        
+        // Disable and show loading
+        barangaySelect.innerHTML = '<option value="">Loading...</option>';
+        barangaySelect.disabled = true;
+        
+        if (!municipality) {
+            barangaySelect.innerHTML = '<option value="">Select Municipality first</option>';
+            return;
+        }
+        
+        // Fetch barangays from API
+        fetch(`/api/laguna/barangays/${encodeURIComponent(municipality)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.barangays && data.barangays.length > 0) {
+                    barangaySelect.innerHTML = '<option value="">Select Barangay</option>';
+                    data.barangays.forEach(barangay => {
+                        const option = document.createElement('option');
+                        option.value = barangay;
+                        option.textContent = barangay;
+                        
+                        // Get store data for pre-selection
+                        const storeDataElement = document.getElementById('store-data');
+                        if (storeDataElement) {
+                            try {
+                                const storeData = JSON.parse(storeDataElement.textContent);
+                                if (storeData.barangay && barangay === storeData.barangay) {
+                                    option.selected = true;
+                                }
+                            } catch (e) {
+                                // Ignore parse errors
+                            }
+                        }
+                        
+                        barangaySelect.appendChild(option);
+                    });
+                    barangaySelect.disabled = false;
+                } else {
+                    barangaySelect.innerHTML = '<option value="">No barangays found</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading barangays:', error);
+                barangaySelect.innerHTML = '<option value="">Error loading barangays</option>';
+                showToast('Failed to load barangays', 'error');
+            });
+    }
+
+    // Debug function to check form data before sending
+    function debugFormData(formData) {
+        console.log('📤 FormData contents:');
+        for (let pair of formData.entries()) {
+            if (pair[0] === 'selected_municipalities') {
+                console.log(`   ${pair[0]}: ${pair[1]} (${typeof pair[1]})`);
+                try {
+                    const parsed = JSON.parse(pair[1]);
+                    console.log(`   Parsed:`, parsed);
+                } catch (e) {
+                    console.log(`   Not valid JSON: ${e.message}`);
+                }
+            } else if (pair[0].includes('image') || pair[0].includes('gcash')) {
+                console.log(`   ${pair[0]}: [FILE: ${pair[1].name}]`);
+            } else {
+                console.log(`   ${pair[0]}: ${pair[1]}`);
+            }
+        }
+    }
+
+    // Municipality initialization function
+    function initializeMunicipalityCheckboxes(storeData) {
+        console.log('📍 Initializing municipality checkboxes with store data:', storeData.selected_municipalities);
+        
+        if (storeData.selected_municipalities && storeData.selected_municipalities.length > 0) {
+            // Make sure it's an array
+            let selectedList = storeData.selected_municipalities;
+            if (typeof selectedList === 'string') {
+                try {
+                    selectedList = JSON.parse(selectedList);
+                } catch (e) {
+                    selectedList = [];
+                }
+            }
+            
+            console.log('📍 Selected municipalities to check:', selectedList);
+            
+            document.querySelectorAll('.municipality-check').forEach(checkbox => {
+                if (selectedList.includes(checkbox.value)) {
+                    checkbox.checked = true;
+                    console.log(`  ✅ Checked: ${checkbox.value}`);
+                } else {
+                    checkbox.checked = false;
+                }
+            });
+            
+            // Update the count display
+            updateSelectedCount();
+            
+            // If we're in municipality mode, validate
+            if (storeData.delivery_method === 'municipality') {
+                validateMunicipalitySelection();
+            }
+        } else {
+            console.log('📍 No saved municipalities to initialize');
+            // Uncheck all checkboxes
+            document.querySelectorAll('.municipality-check').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            updateSelectedCount();
+        }
+    }
+
+    // Function to display municipality polygon on map
+    function displayMunicipalityPolygon(geojson) {
+        if (!map || !geojson) return;
+        
+        try {
+            const muniGeoJSON = typeof geojson === 'string' ? JSON.parse(geojson) : geojson;
+            
+            // Remove existing display layer if any
+            if (map.getLayer('saved-zone-display-fill')) {
+                map.removeLayer('saved-zone-display-fill');
+                map.removeLayer('saved-zone-display-outline');
+                map.removeSource('saved-zone-display');
+            }
+            
+            // Add the municipality polygon
+            map.addSource('saved-zone-display', {
+                'type': 'geojson',
+                'data': {
+                    'type': 'Feature',
+                    'geometry': muniGeoJSON
+                }
+            });
+            
+            map.addLayer({
+                'id': 'saved-zone-display-fill',
+                'type': 'fill',
+                'source': 'saved-zone-display',
+                'paint': {
+                    'fill-color': '#48bb78',
+                    'fill-opacity': 0.1,
+                    'fill-outline-color': '#48bb78'
+                }
+            });
+            
+            map.addLayer({
+                'id': 'saved-zone-display-outline',
+                'type': 'line',
+                'source': 'saved-zone-display',
+                'paint': {
+                    'line-color': '#48bb78',
+                    'line-width': 2,
+                    'line-dasharray': [2, 1]
+                }
+            });
+            
+            // Fit map to show the polygon
+            const bounds = new mapboxgl.LngLatBounds();
+            if (muniGeoJSON.type === 'Polygon') {
+                muniGeoJSON.coordinates[0].forEach(coord => {
+                    bounds.extend(coord);
+                });
+            } else if (muniGeoJSON.type === 'MultiPolygon') {
+                muniGeoJSON.coordinates.forEach(polygon => {
+                    polygon[0].forEach(coord => {
+                        bounds.extend(coord);
+                    });
+                });
+            }
+            map.fitBounds(bounds, { padding: 50, duration: 1000 });
+            
+            document.getElementById('zone-info').innerHTML = '✅ Municipality delivery zone loaded';
+        } catch (e) {
+            debug.error('Failed to display municipality zone:', e);
+        }
+    }
+
+    // Main initialization when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
         debug.log('Page loaded, initializing...');
+        
+        // Initialize QR slots
+        initializeQRSlots();
+        
+        // Initialize municipality dropdown
+        const municipalitySelect = document.getElementById('municipality');
+        if (municipalitySelect) {
+            // Add change event listener
+            municipalitySelect.addEventListener('change', function() {
+                loadBarangays(this.value);
+            });
+        }
         
         // Get Mapbox token
         const mapboxToken = document.getElementById('mapbox-token').value;
@@ -1097,7 +1769,10 @@
         
         if (!mapboxToken || mapboxToken === 'None' || mapboxToken === '') {
             debug.error('Mapbox token is missing or invalid');
-            document.getElementById('map').innerHTML = '<div class="map-error">Mapbox is not configured. Token missing.</div>';
+            const mapElement = document.getElementById('map');
+            if (mapElement) {
+                mapElement.innerHTML = '<div class="map-error">Mapbox is not configured. Token missing.</div>';
+            }
             return;
         }
         
@@ -1133,77 +1808,18 @@
         let locationChanged = false;
         let boundaryVisible = true;
         
-        // ===== PERSISTENT ZONE STORAGE =====
-        // Store zone data separately from what's in the draw control
-        let persistentZoneData = document.getElementById('delivery-zone').value || storeData.delivery_area || null;
-        debug.log('Persistent zone data loaded:', persistentZoneData ? 'Yes (length: ' + persistentZoneData.length + ')' : 'None');
+        // ===== PERSISTENT STORAGE FOR ALL DELIVERY METHODS =====
+        let zoneDeliveryData = document.getElementById('zone-delivery-area')?.value || null;
+        let municipalityDeliveryData = document.getElementById('municipality-delivery-area')?.value || null;
         
-        // Check if the zone is in GeoJSON format or database format
+        debug.log('Zone delivery data loaded:', zoneDeliveryData ? 'Yes (length: ' + zoneDeliveryData.length + ')' : 'None');
+        debug.log('Municipality delivery data loaded:', municipalityDeliveryData ? 'Yes (length: ' + municipalityDeliveryData.length + ')' : 'None');
+        
+        // Check if data is in GeoJSON format
         function isGeoJSONFormat(value) {
             if (!value) return false;
-            // Check if it starts with { or [ (JSON format)
             const trimmed = value.trim();
             return trimmed.startsWith('{') || trimmed.startsWith('[');
-        }
-        
-        // ===== ADDRESS DROPDOWN FUNCTIONS USING API =====
-        function loadBarangays(municipality) {
-            const barangaySelect = document.getElementById('barangay');
-            
-            if (!barangaySelect) return;
-            
-            // Disable and show loading
-            barangaySelect.innerHTML = '<option value="">Loading...</option>';
-            barangaySelect.disabled = true;
-            
-            if (!municipality) {
-                barangaySelect.innerHTML = '<option value="">Select Municipality first</option>';
-                return;
-            }
-            
-            // Fetch barangays from API
-            fetch(`/api/laguna/barangays/${encodeURIComponent(municipality)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.barangays && data.barangays.length > 0) {
-                        barangaySelect.innerHTML = '<option value="">Select Barangay</option>';
-                        data.barangays.forEach(barangay => {
-                            const option = document.createElement('option');
-                            option.value = barangay;
-                            option.textContent = barangay;
-                            
-                            // Pre-select if this matches the store's barangay
-                            if (storeData.barangay && barangay === storeData.barangay) {
-                                option.selected = true;
-                            }
-                            
-                            barangaySelect.appendChild(option);
-                        });
-                        barangaySelect.disabled = false;
-                        
-                        // Update map with municipality coordinates if available
-                        if (data.coordinates && typeof initializeMapWithCoords === 'function') {
-                            initializeMapWithCoords(data.coordinates.lat, data.coordinates.lng);
-                        }
-                    } else {
-                        barangaySelect.innerHTML = '<option value="">No barangays found</option>';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading barangays:', error);
-                    barangaySelect.innerHTML = '<option value="">Error loading barangays</option>';
-                    showToast('Failed to load barangays', 'error');
-                });
-        }
-
-        // Initialize municipality dropdown
-        const municipalitySelect = document.getElementById('municipality');
-        
-        if (municipalitySelect) {
-            // Add change event listener
-            municipalitySelect.addEventListener('change', function() {
-                loadBarangays(this.value);
-            });
         }
         
         // Initialize map
@@ -1224,7 +1840,7 @@
                     container: 'map',
                     style: 'mapbox://styles/mapbox/streets-v12',
                     center: [currentLocation.lng, currentLocation.lat],
-                    zoom: 10 // Zoomed out a bit to show Laguna
+                    zoom: 10
                 });
                 
                 map.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -1241,7 +1857,6 @@
                         }
                     });
 
-                    // Add fill layer (very transparent)
                     map.addLayer({
                         'id': 'laguna-boundary-fill',
                         'type': 'fill',
@@ -1252,7 +1867,6 @@
                         }
                     });
 
-                    // Add outline layer
                     map.addLayer({
                         'id': 'laguna-boundary-outline',
                         'type': 'line',
@@ -1261,21 +1875,6 @@
                             'line-color': '#3b82f6',
                             'line-width': 2,
                             'line-dasharray': [2, 1]
-                        }
-                    });
-
-                    // Add label
-                    map.addSource('laguna-label', {
-                        'type': 'geojson',
-                        'data': {
-                            'type': 'Feature',
-                            'geometry': {
-                                'type': 'Point',
-                                'coordinates': [121.3, 14.3] // Center of Laguna
-                            },
-                            'properties': {
-                                'title': 'Laguna Province'
-                            }
                         }
                     });
 
@@ -1343,120 +1942,64 @@
                     
                     map.addControl(draw);
                     
-                    // Load existing delivery zone into draw tool if we're in zone mode
+                    // Load existing zone data if we're in zone mode
                     const deliveryMethod = document.querySelector('input[name="delivery-method"]:checked').value;
-                    if (deliveryMethod === 'zone' && persistentZoneData && isGeoJSONFormat(persistentZoneData)) {
+                    if (deliveryMethod === 'zone' && zoneDeliveryData && isGeoJSONFormat(zoneDeliveryData)) {
                         try {
-                            const zoneGeoJSON = JSON.parse(persistentZoneData);
+                            const zoneGeoJSON = JSON.parse(zoneDeliveryData);
                             draw.add(zoneGeoJSON);
-                            debug.success('Loaded existing delivery zone into draw tool');
+                            document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone loaded';
+                            debug.success('Loaded existing zone delivery area');
                         } catch (e) {
-                            debug.error('Failed to parse persistent zone:', e);
+                            debug.error('Failed to parse zone delivery data:', e);
                         }
                     }
                     
-                    // ===== DISPLAY SAVED ZONE FROM GEOJSON (FOR VIEWING) =====
-                    const geojsonValue = document.getElementById('delivery-geojson').value;
-                    if (geojsonValue) {
-                        try {
-                            const zoneGeoJSON = JSON.parse(geojsonValue);
-                            debug.log('Displaying saved zone from GeoJSON, type:', zoneGeoJSON.type);
-                            
-                            // Add the saved zone as a semi-transparent overlay
-                            map.addSource('saved-zone-display', {
-                                'type': 'geojson',
-                                'data': {
-                                    'type': 'Feature',
-                                    'geometry': zoneGeoJSON
-                                }
-                            });
-                            
-                            map.addLayer({
-                                'id': 'saved-zone-display-fill',
-                                'type': 'fill',
-                                'source': 'saved-zone-display',
-                                'paint': {
-                                    'fill-color': '#48bb78',
-                                    'fill-opacity': 0.1,
-                                    'fill-outline-color': '#48bb78'
-                                }
-                            });
-                            
-                            map.addLayer({
-                                'id': 'saved-zone-display-outline',
-                                'type': 'line',
-                                'source': 'saved-zone-display',
-                                'paint': {
-                                    'line-color': '#48bb78',
-                                    'line-width': 2,
-                                    'line-dasharray': [2, 1]
-                                }
-                            });
-                            
-                            debug.success('Displayed saved zone on map');
-                            if (document.querySelector('input[name="delivery-method"]:checked').value === 'zone') {
-                                document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone is displayed on map (green outline)';
-                            }
-                        } catch (e) {
-                            debug.error('Failed to display zone from GeoJSON:', e);
-                        }
+                    // Display municipality polygon if we're in municipality mode
+                    if (deliveryMethod === 'municipality' && municipalityDeliveryData && isGeoJSONFormat(municipalityDeliveryData)) {
+                        displayMunicipalityPolygon(municipalityDeliveryData);
                     }
                     
-                    // ===== ZONE CREATION WITH LAGUNA VALIDATION =====
+                    // ===== ZONE CREATION =====
                     map.on('draw.create', function(e) {
                         const zone = e.features[0];
                         
-                        // Check if the drawn polygon is within Laguna
+                        // Check if within Laguna
                         if (!isPolygonInLaguna(zone.geometry.coordinates)) {
-                            // Remove the invalid polygon
                             draw.delete(zone.id);
                             showToast('❌ Delivery zone must be within Laguna province', 'error');
-                            
-                            // Flash the boundary to draw attention
                             flashBoundary();
                             return;
                         }
                         
                         const zoneString = JSON.stringify(zone.geometry);
-                        debug.log('✅ Zone created, geometry type:', zone.geometry.type);
-                        debug.log('✅ Zone stringified length:', zoneString.length);
-                        
-                        // Update both the input and persistent storage
-                        document.getElementById('delivery-zone').value = zoneString;
-                        persistentZoneData = zoneString;
-                        
+                        zoneDeliveryData = zoneString;
+                        document.getElementById('zone-delivery-area').value = zoneString;
                         document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone saved (within Laguna)';
                         showToast('Delivery zone created within Laguna!', 'success');
                     });
                     
-                    // ===== ZONE UPDATES WITH LAGUNA VALIDATION =====
+                    // ===== ZONE UPDATES =====
                     map.on('draw.update', function(e) {
                         const zone = e.features[0];
                         
-                        // Check if the updated polygon is within Laguna
                         if (!isPolygonInLaguna(zone.geometry.coordinates)) {
-                            // Revert to previous version
                             showToast('❌ Cannot expand zone outside Laguna province', 'error');
                             flashBoundary();
                             return;
                         }
                         
                         const zoneString = JSON.stringify(zone.geometry);
-                        debug.log('🔄 Zone updated, length:', zoneString.length);
-                        
-                        // Update both the input and persistent storage
-                        document.getElementById('delivery-zone').value = zoneString;
-                        persistentZoneData = zoneString;
-                        
+                        zoneDeliveryData = zoneString;
+                        document.getElementById('zone-delivery-area').value = zoneString;
                         document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone updated (within Laguna)';
                         showToast('Delivery zone updated!', 'success');
                     });
                     
                     // Handle zone deletion
                     map.on('draw.delete', function() {
-                        debug.log('🗑️ Zone deleted');
-                        document.getElementById('delivery-zone').value = '';
-                        persistentZoneData = null; // Clear persistent data when explicitly deleted
+                        zoneDeliveryData = null;
+                        document.getElementById('zone-delivery-area').value = '';
                         document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
                         showToast('Delivery zone cleared', 'info');
                     });
@@ -1508,30 +2051,7 @@
             }
         }
         
-        // ===== MAP INITIALIZATION WITH COORDINATES =====
-        function initializeMapWithCoords(lat, lng) {
-            if (map && marker) {
-                map.flyTo({
-                    center: [lng, lat],
-                    zoom: 15,
-                    duration: 1000
-                });
-                marker.setLngLat([lng, lat]);
-                
-                // Update hidden inputs if they exist
-                const exactLat = document.getElementById('exactLat');
-                const exactLng = document.getElementById('exactLng');
-                if (exactLat && exactLng) {
-                    exactLat.value = lat;
-                    exactLng.value = lng;
-                }
-                
-                // Optionally reverse geocode to get exact address
-                reverseGeocode({ lat, lng });
-            }
-        }
-        
-        // ===== DELIVERY METHOD TOGGLE WITH PERSISTENT ZONE DATA AND AUTO-SAVE =====
+        // ===== DELIVERY METHOD TOGGLE WITH PRESERVED DATA =====
         const methodRadius = document.getElementById('method-radius');
         const methodZone = document.getElementById('method-zone');
         const methodMunicipality = document.getElementById('method-municipality');
@@ -1550,7 +2070,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         delivery_method: method,
-                        // Include current values to prevent overwriting
                         name: document.getElementById('store-name').value.trim(),
                         municipality: document.getElementById('municipality').value,
                         barangay: document.getElementById('barangay').value,
@@ -1567,9 +2086,7 @@
                         base_delivery_fee: parseFloat(document.getElementById('base-fee').value) || 50,
                         delivery_rate_per_km: parseFloat(document.getElementById('rate-per-km').value) || 20,
                         free_delivery_minimum: parseFloat(document.getElementById('free-minimum').value) || 500,
-                        // Preserve existing data
-                        selected_municipalities: storeData.selected_municipalities || [],
-                        delivery_area: persistentZoneData
+                        selected_municipalities: storeData.selected_municipalities || []
                     })
                 });
                 
@@ -1578,8 +2095,6 @@
                 if (data.success) {
                     console.log('✅ Delivery method auto-saved successfully');
                     showToast(`Switched to ${method} mode`, 'success', 2000);
-                    
-                    // Update storeData with new method
                     storeData.delivery_method = method;
                 } else {
                     console.error('❌ Auto-save failed:', data.error);
@@ -1591,138 +2106,145 @@
             }
         }
 
-        // Radius mode change handler - with auto-save
-        methodRadius.addEventListener('change', function() {
-            if (this.checked) {
-                radiusSettings.style.display = 'block';
-                zoneSettings.style.display = 'none';
-                municipalitySettings.style.display = 'none';
-                methodDesc.innerHTML = '<strong>Simple Radius:</strong> Deliver in a circle around your store';
-                
-                // IMPORTANT: Save the current zone value to persistent storage before clearing display
-                const currentZoneValue = document.getElementById('delivery-zone').value;
-                if (currentZoneValue && isGeoJSONFormat(currentZoneValue)) {
-                    persistentZoneData = currentZoneValue;
-                    debug.log('Saved zone to persistent storage before switching to radius');
-                }
-                
-                // Hide zone from map but KEEP the persistent data
-                if (draw) {
-                    draw.deleteAll(); // This only clears the visual representation
-                }
-                
-                document.getElementById('zone-info').innerHTML = 'ℹ️ Zone data preserved (hidden in radius mode)';
-                debug.log('Switched to radius - zone data preserved:', persistentZoneData ? 'Yes (length: ' + persistentZoneData.length + ')' : 'No');
-                
-                // Auto-save the delivery method
-                autoSaveDeliveryMethod('radius');
-            }
-        });
-
-        // Zone mode change handler - with auto-save
-        methodZone.addEventListener('change', function() {
-            if (this.checked) {
-                radiusSettings.style.display = 'none';
-                zoneSettings.style.display = 'block';
-                municipalitySettings.style.display = 'none';
-                methodDesc.innerHTML = '<strong>Custom Zone:</strong> Deliver only inside the area you draw';
-                
-                // Restore the zone data from persistent storage
-                if (persistentZoneData) {
-                    document.getElementById('delivery-zone').value = persistentZoneData;
+        // Radius mode change handler
+        if (methodRadius) {
+            methodRadius.addEventListener('change', function() {
+                if (this.checked) {
+                    radiusSettings.style.display = 'block';
+                    zoneSettings.style.display = 'none';
+                    municipalitySettings.style.display = 'none';
+                    methodDesc.innerHTML = '<strong>Simple Radius:</strong> Deliver in a circle around your store';
                     
-                    // Only try to load in draw if it's GeoJSON format
-                    if (isGeoJSONFormat(persistentZoneData)) {
+                    // Hide any displayed polygons
+                    if (draw) {
+                        draw.deleteAll();
+                    }
+                    if (map && map.getLayer('saved-zone-display-fill')) {
+                        map.removeLayer('saved-zone-display-fill');
+                        map.removeLayer('saved-zone-display-outline');
+                        map.removeSource('saved-zone-display');
+                    }
+                    
+                    document.getElementById('zone-info').innerHTML = 'ℹ️ Using radius-based delivery';
+                    
+                    autoSaveDeliveryMethod('radius');
+                }
+            });
+        }
+
+        // Zone mode change handler
+        if (methodZone) {
+            methodZone.addEventListener('change', function() {
+                if (this.checked) {
+                    radiusSettings.style.display = 'none';
+                    zoneSettings.style.display = 'block';
+                    municipalitySettings.style.display = 'none';
+                    methodDesc.innerHTML = '<strong>Custom Zone:</strong> Deliver only inside the area you draw';
+                    
+                    // Hide municipality polygon
+                    if (map && map.getLayer('saved-zone-display-fill')) {
+                        map.removeLayer('saved-zone-display-fill');
+                        map.removeLayer('saved-zone-display-outline');
+                        map.removeSource('saved-zone-display');
+                    }
+                    
+                    // Restore zone data
+                    if (zoneDeliveryData && isGeoJSONFormat(zoneDeliveryData)) {
                         try {
-                            const zoneGeoJSON = JSON.parse(persistentZoneData);
                             if (draw) {
                                 draw.deleteAll();
+                                const zoneGeoJSON = JSON.parse(zoneDeliveryData);
                                 draw.add(zoneGeoJSON);
+                                document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone restored (editable)';
                             }
-                            document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone restored (editable)';
-                            debug.success('Restored saved zone to draw control, length:', persistentZoneData.length);
                         } catch (e) {
-                            debug.error('Failed to restore zone to draw:', e);
-                            document.getElementById('zone-info').innerHTML = '✅ Zone data exists but needs to be redrawn';
+                            debug.error('Failed to restore zone:', e);
+                            document.getElementById('zone-info').innerHTML = '⚠️ Could not restore zone, please redraw';
                         }
                     } else {
-                        // Zone exists but not in GeoJSON format (database format)
-                        document.getElementById('zone-info').innerHTML = '✅ Zone loaded from database (green outline on map)';
+                        document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
                     }
-                } else {
-                    document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
+                    
+                    autoSaveDeliveryMethod('zone');
                 }
-                debug.log('Switched to zone method - persistent data:', persistentZoneData ? 'Yes' : 'No');
-                
-                // Auto-save the delivery method
-                autoSaveDeliveryMethod('zone');
-            }
-        });
+            });
+        }
 
-        // Municipality mode change handler - with auto-save
-        methodMunicipality.addEventListener('change', function() {
-            if (this.checked) {
-                radiusSettings.style.display = 'none';
-                zoneSettings.style.display = 'none';
-                municipalitySettings.style.display = 'block';
-                methodDesc.innerHTML = '<strong>Municipality Selection:</strong> Deliver to entire cities/municipalities';
-                
-                // Save current zone data
-                const currentZoneValue = document.getElementById('delivery-zone').value;
-                if (currentZoneValue && isGeoJSONFormat(currentZoneValue)) {
-                    persistentZoneData = currentZoneValue;
+        // Municipality mode change handler
+        if (methodMunicipality) {
+            methodMunicipality.addEventListener('change', function() {
+                if (this.checked) {
+                    radiusSettings.style.display = 'none';
+                    zoneSettings.style.display = 'none';
+                    municipalitySettings.style.display = 'block';
+                    methodDesc.innerHTML = '<strong>Municipality Selection:</strong> Deliver to entire cities/municipalities';
+                    
+                    // Hide draw control
+                    if (draw) {
+                        draw.deleteAll();
+                    }
+                    
+                    // Initialize checkboxes
+                    setTimeout(() => {
+                        initializeMunicipalityCheckboxes(storeData);
+                    }, 100);
+                    
+                    // Display municipality polygon if it exists
+                    if (municipalityDeliveryData && isGeoJSONFormat(municipalityDeliveryData)) {
+                        displayMunicipalityPolygon(municipalityDeliveryData);
+                    } else {
+                        if (map && map.getLayer('saved-zone-display-fill')) {
+                            map.removeLayer('saved-zone-display-fill');
+                            map.removeLayer('saved-zone-display-outline');
+                            map.removeSource('saved-zone-display');
+                        }
+                    }
+                    
+                    updateSelectedCount();
+                    validateMunicipalitySelection();
+                    
+                    autoSaveDeliveryMethod('municipality');
                 }
-                
-                // Hide draw control
-                if (draw) {
-                    draw.deleteAll();
-                }
-                
-                // Update selected count and validate
-                updateSelectedCount();
-                validateMunicipalitySelection();
-                
-                // Auto-save the delivery method
-                autoSaveDeliveryMethod('municipality');
-            }
-        });
+            });
+        }
         
         // Button handlers for drawing tools
-        document.getElementById('draw-polygon-btn').addEventListener('click', function() {
-            if (draw) {
-                draw.changeMode('draw_polygon');
-                this.classList.add('active');
-                setTimeout(() => this.classList.remove('active'), 1000);
-                debug.log('Draw polygon mode activated');
-            }
-        });
-        
-        // Clear button with flag
-        document.getElementById('clear-zone-btn').addEventListener('click', function() {
-            if (draw) {
-                draw.deleteAll();
-                document.getElementById('delivery-zone').value = '';
-                persistentZoneData = null;
-                
-                // Set the clear flag to indicate explicit deletion
-                if (document.getElementById('clear-zone-flag')) {
-                    document.getElementById('clear-zone-flag').value = 'true';
+        const drawPolygonBtn = document.getElementById('draw-polygon-btn');
+        if (drawPolygonBtn) {
+            drawPolygonBtn.addEventListener('click', function() {
+                if (draw) {
+                    draw.changeMode('draw_polygon');
+                    this.classList.add('active');
+                    setTimeout(() => this.classList.remove('active'), 1000);
+                    debug.log('Draw polygon mode activated');
                 }
-                
-                document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
-                showToast('Delivery zone cleared', 'info');
-                debug.log('Zone cleared');
-            }
-        });
+            });
+        }
+        
+        // Clear button
+        const clearZoneBtn = document.getElementById('clear-zone-btn');
+        if (clearZoneBtn) {
+            clearZoneBtn.addEventListener('click', function() {
+                if (draw) {
+                    draw.deleteAll();
+                    zoneDeliveryData = null;
+                    document.getElementById('zone-delivery-area').value = '';
+                    document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
+                    showToast('Delivery zone cleared', 'info');
+                }
+            });
+        }
 
         // Toggle boundary visibility button
         const toggleBoundaryBtn = document.getElementById('toggle-boundary-btn');
         if (toggleBoundaryBtn) {
             toggleBoundaryBtn.addEventListener('click', function() {
                 boundaryVisible = !boundaryVisible;
-                map.setLayoutProperty('laguna-boundary-fill', 'visibility', boundaryVisible ? 'visible' : 'none');
-                map.setLayoutProperty('laguna-boundary-outline', 'visibility', boundaryVisible ? 'visible' : 'none');
-                map.setLayoutProperty('laguna-label', 'visibility', boundaryVisible ? 'visible' : 'none');
+                if (map) {
+                    map.setLayoutProperty('laguna-boundary-fill', 'visibility', boundaryVisible ? 'visible' : 'none');
+                    map.setLayoutProperty('laguna-boundary-outline', 'visibility', boundaryVisible ? 'visible' : 'none');
+                    map.setLayoutProperty('laguna-label', 'visibility', boundaryVisible ? 'visible' : 'none');
+                }
                 this.innerHTML = boundaryVisible ? 
                     '<i class="ri-eye-off-line"></i> Hide Boundary' : 
                     '<i class="ri-eye-line"></i> Show Boundary';
@@ -1732,22 +2254,24 @@
         // ===== MUNICIPALITY SELECTION FUNCTIONS =====
         let municipalityBoundaries = null;
         
-        // Update selected count
         function updateSelectedCount() {
             const checkboxes = document.querySelectorAll('.municipality-check:checked');
-            document.getElementById('selected-count').textContent = checkboxes.length;
+            const countElement = document.getElementById('selected-count');
+            if (countElement) {
+                countElement.textContent = checkboxes.length;
+            }
         }
         
-        // Get selected municipalities
         function getSelectedMunicipalities() {
             const checkboxes = document.querySelectorAll('.municipality-check:checked');
             return Array.from(checkboxes).map(cb => cb.value);
         }
         
-        // Validate municipality selection contiguity
         async function validateMunicipalitySelection() {
             const selected = getSelectedMunicipalities();
             const messageDiv = document.getElementById('municipality-validation-message');
+            
+            if (!messageDiv) return false;
             
             if (selected.length === 0) {
                 messageDiv.style.display = 'block';
@@ -1763,7 +2287,6 @@
                 return true;
             }
             
-            // Check contiguity via API
             try {
                 const response = await fetch('/api/municipality/check-contiguity', {
                     method: 'POST',
@@ -1796,263 +2319,305 @@
             }
         }
         
-        // Municipality checkbox change handler
-        document.querySelectorAll('.municipality-check').forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
-                updateSelectedCount();
-                validateMunicipalitySelection();
+        // Municipality checkbox initialization
+        setTimeout(() => {
+            const checkboxes = document.querySelectorAll('.municipality-check');
+            debug.log(`Found ${checkboxes.length} municipality checkboxes`);
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    updateSelectedCount();
+                    validateMunicipalitySelection();
+                });
             });
-        });
+            
+            initializeMunicipalityCheckboxes(storeData);
+        }, 500);
         
         // Load municipality boundaries button
-        document.getElementById('load-municipality-boundaries').addEventListener('click', async function() {
-            const btn = this;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Loading...';
-            btn.disabled = true;
-            
-            try {
-                const response = await fetch('/api/municipality-boundaries?province=Laguna');
-                const data = await response.json();
+        const loadBoundariesBtn = document.getElementById('load-municipality-boundaries');
+        if (loadBoundariesBtn) {
+            loadBoundariesBtn.addEventListener('click', async function() {
+                const btn = this;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Loading...';
+                btn.disabled = true;
                 
-                if (data.error) {
-                    showToast(data.error, 'error');
+                try {
+                    const response = await fetch('/api/municipality-boundaries?province=Laguna');
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        showToast(data.error, 'error');
+                        return;
+                    }
+                    
+                    municipalityBoundaries = data;
+                    
+                    if (map) {
+                        if (map.getSource('municipality-boundaries')) {
+                            map.removeLayer('municipality-fill');
+                            map.removeLayer('municipality-outline');
+                            map.removeSource('municipality-boundaries');
+                        }
+                        
+                        map.addSource('municipality-boundaries', {
+                            type: 'geojson',
+                            data: municipalityBoundaries
+                        });
+                        
+                        map.addLayer({
+                            id: 'municipality-fill',
+                            type: 'fill',
+                            source: 'municipality-boundaries',
+                            paint: {
+                                'fill-color': '#627BC1',
+                                'fill-opacity': 0.1,
+                                'fill-outline-color': '#627BC1'
+                            }
+                        });
+                        
+                        map.addLayer({
+                            id: 'municipality-outline',
+                            type: 'line',
+                            source: 'municipality-boundaries',
+                            paint: {
+                                'line-color': '#627BC1',
+                                'line-width': 1,
+                                'line-dasharray': [2, 1]
+                            }
+                        });
+                    }
+                    
+                    showToast(`Loaded ${data.count} municipality boundaries`, 'success');
+                } catch (e) {
+                    debug.error('Error loading boundaries:', e);
+                    showToast('Failed to load boundaries', 'error');
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            });
+        }
+
+        // ===== FIXED: Preview selected municipalities button =====
+        const previewBtn = document.getElementById('preview-municipality-btn');
+        if (previewBtn) {
+            previewBtn.addEventListener('click', async function() {
+                const selected = getSelectedMunicipalities();
+                
+                if (selected.length === 0) {
+                    showToast('Please select at least one municipality', 'info');
                     return;
                 }
                 
-                municipalityBoundaries = data;
-                
-                // Add to map as a source for highlighting
-                if (map.getSource('municipality-boundaries')) {
-                    map.removeLayer('municipality-fill');
-                    map.removeLayer('municipality-outline');
-                    map.removeSource('municipality-boundaries');
+                if (!municipalityBoundaries) {
+                    showToast('Please load boundaries first', 'info');
+                    return;
                 }
                 
-                map.addSource('municipality-boundaries', {
-                    type: 'geojson',
-                    data: municipalityBoundaries
-                });
+                // Filter features for selected municipalities
+                const selectedFeatures = municipalityBoundaries.features.filter(f => 
+                    selected.includes(f.properties.name)
+                );
                 
-                map.addLayer({
-                    id: 'municipality-fill',
-                    type: 'fill',
-                    source: 'municipality-boundaries',
-                    paint: {
-                        'fill-color': '#627BC1',
-                        'fill-opacity': 0.1,
-                        'fill-outline-color': '#627BC1'
+                if (selectedFeatures.length === 0) {
+                    showToast('No boundary data for selected municipalities', 'error');
+                    return;
+                }
+                
+                // Remove existing highlight
+                if (map) {
+                    if (map.getLayer('selected-municipality-fill')) {
+                        map.removeLayer('selected-municipality-fill');
+                        map.removeLayer('selected-municipality-outline');
+                        map.removeSource('selected-municipalities');
                     }
-                });
-                
-                map.addLayer({
-                    id: 'municipality-outline',
-                    type: 'line',
-                    source: 'municipality-boundaries',
-                    paint: {
-                        'line-color': '#627BC1',
-                        'line-width': 1,
-                        'line-dasharray': [2, 1]
-                    }
-                });
-                
-                showToast(`Loaded ${data.count} municipality boundaries`, 'success');
-            } catch (e) {
-                debug.error('Error loading boundaries:', e);
-                showToast('Failed to load boundaries', 'error');
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        });
-        
-        // Preview selected municipalities button
-        document.getElementById('preview-municipality-btn').addEventListener('click', async function() {
-            const selected = getSelectedMunicipalities();
-            
-            if (selected.length === 0) {
-                showToast('Please select at least one municipality', 'info');
-                return;
-            }
-            
-            if (!municipalityBoundaries) {
-                showToast('Please load boundaries first', 'info');
-                return;
-            }
-            
-            // Filter features for selected municipalities
-            const selectedFeatures = municipalityBoundaries.features.filter(f => 
-                selected.includes(f.properties.name)
-            );
-            
-            if (selectedFeatures.length === 0) {
-                showToast('No boundary data for selected municipalities', 'error');
-                return;
-            }
-            
-            // Remove existing highlight
-            if (map.getLayer('selected-municipality-fill')) {
-                map.removeLayer('selected-municipality-fill');
-                map.removeLayer('selected-municipality-outline');
-                map.removeSource('selected-municipalities');
-            }
-            
-            // Add highlight
-            map.addSource('selected-municipalities', {
-                type: 'geojson',
-                data: {
-                    type: 'FeatureCollection',
-                    features: selectedFeatures
-                }
-            });
-            
-            map.addLayer({
-                'id': 'selected-municipality-fill',
-                'type': 'fill',
-                'source': 'selected-municipalities',
-                'paint': {
-                    'fill-color': '#48bb78',
-                    'fill-opacity': 0.3,
-                    'fill-outline-color': '#48bb78'
-                }
-            });
-            
-            map.addLayer({
-                'id': 'selected-municipality-outline',
-                'type': 'line',
-                'source': 'selected-municipalities',
-                'paint': {
-                    'line-color': '#48bb78',
-                    'line-width': 3
-                }
-            });
-            
-            // Fit map to bounds
-            const bounds = new mapboxgl.LngLatBounds();
-            selectedFeatures.forEach(f => {
-                if (f.geometry.type === 'Polygon') {
-                    f.geometry.coordinates[0].forEach(coord => {
-                        bounds.extend(coord);
+                    
+                    // Add highlight for selected municipalities
+                    map.addSource('selected-municipalities', {
+                        type: 'geojson',
+                        data: {
+                            type: 'FeatureCollection',
+                            features: selectedFeatures
+                        }
                     });
-                } else if (f.geometry.type === 'MultiPolygon') {
-                    f.geometry.coordinates.forEach(poly => {
-                        poly[0].forEach(coord => {
-                            bounds.extend(coord);
+                    
+                    map.addLayer({
+                        'id': 'selected-municipality-fill',
+                        'type': 'fill',
+                        'source': 'selected-municipalities',
+                        'paint': {
+                            'fill-color': '#48bb78',
+                            'fill-opacity': 0.3,
+                            'fill-outline-color': '#48bb78'
+                        }
+                    });
+                    
+                    map.addLayer({
+                        'id': 'selected-municipality-outline',
+                        'type': 'line',
+                        'source': 'selected-municipalities',
+                        'paint': {
+                            'line-color': '#48bb78',
+                            'line-width': 3
+                        }
+                    });
+                    
+                    // Fit map to show all selected municipalities
+                    const bounds = new mapboxgl.LngLatBounds();
+                    selectedFeatures.forEach(f => {
+                        if (f.geometry.type === 'Polygon') {
+                            f.geometry.coordinates[0].forEach(coord => {
+                                bounds.extend(coord);
+                            });
+                        } else if (f.geometry.type === 'MultiPolygon') {
+                            f.geometry.coordinates.forEach(poly => {
+                                poly[0].forEach(coord => {
+                                    bounds.extend(coord);
+                                });
+                            });
+                        }
+                    });
+                    
+                    if (!bounds.isEmpty()) {
+                        map.fitBounds(bounds, { 
+                            padding: 50, 
+                            duration: 1000,
+                            maxZoom: 12
                         });
-                    });
+                    }
+                    
+                    showToast(`Previewing ${selected.length} selected municipalities`, 'success');
                 }
             });
-            map.fitBounds(bounds, { padding: 50 });
-        });
+        }
         
         // Generate delivery zone from selected municipalities
-        document.getElementById('generate-municipality-zone').addEventListener('click', async function() {
-            const selected = getSelectedMunicipalities();
-            
-            if (selected.length === 0) {
-                showToast('Please select at least one municipality', 'info');
-                return;
-            }
-            
-            // Validate contiguity
-            const isValid = await validateMunicipalitySelection();
-            
-            if (!isValid) {
-                showToast('Selected municipalities are not contiguous', 'error');
-                return;
-            }
-            
-            // Merge boundaries via API
-            try {
-                const response = await fetch('/api/municipality/merge-boundaries', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        municipalities: selected,
-                        province: 'Laguna'
-                    })
-                });
+        const generateBtn = document.getElementById('generate-municipality-zone');
+        if (generateBtn) {
+            generateBtn.addEventListener('click', async function() {
+                const selected = getSelectedMunicipalities();
                 
-                const data = await response.json();
-                
-                if (!data.success) {
-                    showToast('Failed to merge boundaries', 'error');
+                if (selected.length === 0) {
+                    showToast('Please select at least one municipality', 'info');
                     return;
                 }
                 
-                // Convert to GeoJSON string
-                const zoneString = JSON.stringify(data.geometry);
+                const isValid = await validateMunicipalitySelection();
                 
-                // Update hidden input and persistent storage
-                document.getElementById('delivery-zone').value = zoneString;
-                persistentZoneData = zoneString;
-                
-                // Show on map
-                if (map.getLayer('saved-zone-display-fill')) {
-                    map.removeLayer('saved-zone-display-fill');
-                    map.removeLayer('saved-zone-display-outline');
-                    map.removeSource('saved-zone-display');
+                if (!isValid) {
+                    showToast('Selected municipalities are not contiguous', 'error');
+                    return;
                 }
                 
-                map.addSource('saved-zone-display', {
-                    'type': 'geojson',
-                    'data': {
-                        'type': 'Feature',
-                        'geometry': data.geometry
+                try {
+                    const response = await fetch('/api/municipality/merge-boundaries', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            municipalities: selected,
+                            province: 'Laguna'
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!data.success) {
+                        showToast('Failed to merge boundaries', 'error');
+                        return;
                     }
-                });
-                
-                map.addLayer({
-                    'id': 'saved-zone-display-fill',
-                    'type': 'fill',
-                    'source': 'saved-zone-display',
-                    'paint': {
-                        'fill-color': '#48bb78',
-                        'fill-opacity': 0.2,
-                        'fill-outline-color': '#48bb78'
-                    }
-                });
-                
-                map.addLayer({
-                    'id': 'saved-zone-display-outline',
-                    'type': 'line',
-                    'source': 'saved-zone-display',
-                    'paint': {
-                        'line-color': '#48bb78',
-                        'line-width': 3
-                    }
-                });
-                
-                showToast('✅ Delivery zone generated from selected municipalities!', 'success');
-                document.getElementById('zone-info').innerHTML = '✅ Delivery zone from municipality selection is ready';
-                
-            } catch (e) {
-                debug.error('Error merging boundaries:', e);
-                showToast('Failed to generate delivery zone', 'error');
-            }
-        });
+                    
+                    const zoneString = JSON.stringify(data.geometry);
+                    municipalityDeliveryData = zoneString;
+                    document.getElementById('municipality-delivery-area').value = zoneString;
+                    
+                    displayMunicipalityPolygon(data.geometry);
+                    
+                    showToast('✅ Delivery zone generated from selected municipalities!', 'success');
+                    document.getElementById('zone-info').innerHTML = '✅ Delivery zone from municipality selection is ready';
+                    
+                } catch (e) {
+                    debug.error('Error merging boundaries:', e);
+                    showToast('Failed to generate delivery zone', 'error');
+                }
+            });
+        }
         
-        // ===== VISUALIZATION BUTTONS WITH DEBUG =====
+        // ===== VISUALIZATION BUTTONS =====
         // Show Radius button
         const showRadiusBtn = document.getElementById('show-radius-btn');
         if (showRadiusBtn) {
-            debug.log('Found show-radius-btn, attaching event listener');
             showRadiusBtn.addEventListener('click', function() {
-                console.log('🟢 Show Radius button clicked');
-                console.log('📍 Marker exists:', marker ? 'Yes' : 'No');
+                if (!map) return;
+                
+                const radiusGeojson = storeData.radius_geojson;
+                
+                if (radiusGeojson && radiusGeojson !== 'null') {
+                    try {
+                        const radiusGeoJSON = JSON.parse(radiusGeojson);
+                        
+                        if (map.getLayer('radius-circle')) {
+                            map.removeLayer('radius-circle');
+                            map.removeLayer('radius-label');
+                            map.removeSource('radius-circle');
+                            map.removeSource('radius-label');
+                        }
+                        
+                        map.addSource('radius-circle', {
+                            'type': 'geojson',
+                            'data': {
+                                'type': 'Feature',
+                                'geometry': radiusGeoJSON
+                            }
+                        });
+                        
+                        map.addLayer({
+                            'id': 'radius-circle',
+                            'type': 'fill',
+                            'source': 'radius-circle',
+                            'paint': {
+                                'fill-color': '#B5445A',
+                                'fill-opacity': 0.15,
+                                'fill-outline-color': '#B5445A'
+                            }
+                        });
+                        
+                        const radius = storeData.delivery_radius_km || 15;
+                        
+                        const bounds = new mapboxgl.LngLatBounds();
+                        if (radiusGeoJSON.type === 'Polygon') {
+                            radiusGeoJSON.coordinates[0].forEach(coord => {
+                                bounds.extend(coord);
+                            });
+                            map.fitBounds(bounds, { padding: 50, duration: 1000 });
+                        }
+                        
+                        showToast(`📍 Showing ${radius}km radius polygon`, 'info');
+                        
+                        setTimeout(() => {
+                            if (map && map.getLayer('radius-circle')) {
+                                map.removeLayer('radius-circle');
+                                map.removeLayer('radius-label');
+                                map.removeSource('radius-circle');
+                                map.removeSource('radius-label');
+                            }
+                        }, 10000);
+                        
+                        return;
+                    } catch (e) {
+                        debug.error('Error parsing radius GeoJSON:', e);
+                    }
+                }
                 
                 if (!marker) {
                     showToast('Please set your store location first', 'info');
                     return;
                 }
                 
-                const radius = parseFloat(document.getElementById('delivery-radius').value) || 15;
-                console.log('📏 Radius value:', radius);
-                
+                const radius = parseFloat(document.getElementById('delivery-radius').value) || storeData.delivery_radius_km || 15;
                 const center = marker.getLngLat();
-                debug.log('Showing radius:', radius, 'km at', center);
                 
-                // Remove existing radius visualization if any
                 if (map.getLayer('radius-circle')) {
                     map.removeLayer('radius-circle');
                     map.removeLayer('radius-label');
@@ -2060,7 +2625,6 @@
                     map.removeSource('radius-label');
                 }
                 
-                // Add circle layer
                 map.addSource('radius-circle', {
                     'type': 'geojson',
                     'data': {
@@ -2091,43 +2655,10 @@
                     }
                 });
                 
-                // Add label
-                map.addSource('radius-label', {
-                    'type': 'geojson',
-                    'data': {
-                        'type': 'Feature',
-                        'geometry': {
-                            'type': 'Point',
-                            'coordinates': [center.lng + 0.01, center.lat + 0.01]
-                        },
-                        'properties': {
-                            'description': `${radius}km radius`
-                        }
-                    }
-                });
-                
-                map.addLayer({
-                    'id': 'radius-label',
-                    'type': 'symbol',
-                    'source': 'radius-label',
-                    'layout': {
-                        'text-field': '{description}',
-                        'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
-                        'text-size': 12,
-                        'text-offset': [0, -1.5]
-                    },
-                    'paint': {
-                        'text-color': '#B5445A',
-                        'text-halo-color': '#fff',
-                        'text-halo-width': 2
-                    }
-                });
-                
                 showToast(`📍 Showing ${radius}km radius in pink`, 'info');
                 
-                // Auto-hide after 10 seconds
                 setTimeout(() => {
-                    if (map.getLayer('radius-circle')) {
+                    if (map && map.getLayer('radius-circle')) {
                         map.removeLayer('radius-circle');
                         map.removeLayer('radius-label');
                         map.removeSource('radius-circle');
@@ -2135,47 +2666,28 @@
                     }
                 }, 10000);
             });
-        } else {
-            debug.error('show-radius-btn not found in DOM');
         }
 
-        // Show Zone button - USING GEOJSON FROM BACKEND
+        // Show Zone button
         const showZoneBtn = document.getElementById('show-zone-btn');
         if (showZoneBtn) {
-            debug.log('Found show-zone-btn, attaching event listener');
             showZoneBtn.addEventListener('click', function() {
-                console.log('🟢 Show Zone button clicked');
+                if (!map) return;
                 
-                // Get the GeoJSON version from the backend (for display)
-                const geojsonValue = document.getElementById('delivery-geojson').value;
-                
-                if (!geojsonValue) {
+                if (!zoneDeliveryData || !isGeoJSONFormat(zoneDeliveryData)) {
                     showToast('No delivery zone saved yet. Draw one first!', 'info');
                     return;
                 }
                 
-                console.log('📦 GeoJSON value exists:', geojsonValue ? 'Yes (length: ' + geojsonValue.length + ')' : 'No');
-                debug.log('Showing saved zone from GeoJSON');
-                
                 try {
-                    const zoneGeoJSON = JSON.parse(geojsonValue);
-                    debug.log('Parsed zone GeoJSON type:', zoneGeoJSON.type);
+                    const zoneGeoJSON = JSON.parse(zoneDeliveryData);
                     
-                    // Remove existing zone visualization if any
                     if (map.getLayer('saved-zone-fill')) {
                         map.removeLayer('saved-zone-fill');
                         map.removeLayer('saved-zone-outline');
                         map.removeSource('saved-zone');
                     }
                     
-                    // Remove the permanent display layer if we're showing a temporary one
-                    if (map.getLayer('saved-zone-display-fill')) {
-                        map.removeLayer('saved-zone-display-fill');
-                        map.removeLayer('saved-zone-display-outline');
-                        map.removeSource('saved-zone-display');
-                    }
-                    
-                    // Add the saved zone
                     map.addSource('saved-zone', {
                         'type': 'geojson',
                         'data': {
@@ -2184,7 +2696,6 @@
                         }
                     });
                     
-                    // Fill layer
                     map.addLayer({
                         'id': 'saved-zone-fill',
                         'type': 'fill',
@@ -2196,7 +2707,6 @@
                         }
                     });
                     
-                    // Outline layer
                     map.addLayer({
                         'id': 'saved-zone-outline',
                         'type': 'line',
@@ -2208,89 +2718,34 @@
                         }
                     });
                     
-                    // Fit map to show the entire zone
+                    const bounds = new mapboxgl.LngLatBounds();
                     if (zoneGeoJSON.type === 'Polygon') {
-                        const coordinates = zoneGeoJSON.coordinates[0];
-                        const bounds = coordinates.reduce((bounds, coord) => {
-                            return bounds.extend(coord);
-                        }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
-                        
-                        map.fitBounds(bounds, {
-                            padding: 50,
-                            duration: 1000
-                        });
-                        debug.log('Map fitted to zone bounds');
-                    } else if (zoneGeoJSON.type === 'MultiPolygon') {
-                        // For MultiPolygon, extend bounds with all coordinates
-                        const bounds = new mapboxgl.LngLatBounds();
-                        zoneGeoJSON.coordinates.forEach(polygon => {
-                            polygon[0].forEach(coord => {
-                                bounds.extend(coord);
-                            });
+                        zoneGeoJSON.coordinates[0].forEach(coord => {
+                            bounds.extend(coord);
                         });
                         map.fitBounds(bounds, { padding: 50, duration: 1000 });
                     }
                     
                     showToast('✅ Saved delivery zone displayed in green', 'success');
                     
-                    // Auto-hide after 10 seconds
                     setTimeout(() => {
-                        if (map.getLayer('saved-zone-fill')) {
+                        if (map && map.getLayer('saved-zone-fill')) {
                             map.removeLayer('saved-zone-fill');
                             map.removeLayer('saved-zone-outline');
                             map.removeSource('saved-zone');
                         }
-                        // Restore the permanent display layer if it existed
-                        const permGeojson = document.getElementById('delivery-geojson').value;
-                        if (permGeojson) {
-                            try {
-                                const permZone = JSON.parse(permGeojson);
-                                map.addSource('saved-zone-display', {
-                                    'type': 'geojson',
-                                    'data': {
-                                        'type': 'Feature',
-                                        'geometry': permZone
-                                    }
-                                });
-                                
-                                map.addLayer({
-                                    'id': 'saved-zone-display-fill',
-                                    'type': 'fill',
-                                    'source': 'saved-zone-display',
-                                    'paint': {
-                                        'fill-color': '#48bb78',
-                                        'fill-opacity': 0.1,
-                                        'fill-outline-color': '#48bb78'
-                                    }
-                                });
-                                
-                                map.addLayer({
-                                    'id': 'saved-zone-display-outline',
-                                    'type': 'line',
-                                    'source': 'saved-zone-display',
-                                    'paint': {
-                                        'line-color': '#48bb78',
-                                        'line-width': 2,
-                                        'line-dasharray': [2, 1]
-                                    }
-                                });
-                            } catch (e) {}
-                        }
                     }, 10000);
                     
                 } catch (e) {
-                    debug.error('Error parsing GeoJSON:', e);
+                    debug.error('Error parsing zone GeoJSON:', e);
                     showToast('Error displaying zone', 'error');
                 }
             });
-        } else {
-            debug.error('show-zone-btn not found in DOM');
         }
         
         // Reverse geocode
         async function reverseGeocode(lngLat) {
             try {
-                debug.log('Reverse geocoding:', lngLat);
                 const response = await fetch('/api/seller/store/geocode', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2300,7 +2755,6 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    debug.log('Geocode success:', data.address);
                     updateLocationDisplay({
                         lat: lngLat.lat,
                         lng: lngLat.lng,
@@ -2318,312 +2772,290 @@
             currentLocation = location;
             locationChanged = true;
             
-            document.getElementById('preview-lat').textContent = location.lat.toFixed(6);
-            document.getElementById('preview-lng').textContent = location.lng.toFixed(6);
-            document.getElementById('preview-address').textContent = location.address || 'Not set';
-            
+            const previewLat = document.getElementById('preview-lat');
+            const previewLng = document.getElementById('preview-lng');
+            const previewAddress = document.getElementById('preview-address');
             const statusBadge = document.getElementById('location-status');
-            statusBadge.className = 'location-status active';
-            statusBadge.innerHTML = '<i class="ri-check-line"></i> Location Set';
+            
+            if (previewLat) previewLat.textContent = location.lat.toFixed(6);
+            if (previewLng) previewLng.textContent = location.lng.toFixed(6);
+            if (previewAddress) previewAddress.textContent = location.address || 'Not set';
+            
+            if (statusBadge) {
+                statusBadge.className = 'location-status active';
+                statusBadge.innerHTML = '<i class="ri-check-line"></i> Location Set';
+            }
         }
         
-        // Save all settings with clear flag and zone preservation
-        document.getElementById('save-all-btn').addEventListener('click', async () => {
-            const btn = document.getElementById('save-all-btn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
-            btn.disabled = true;
-            
-            // Get the clear flag value
-            const clearZoneFlag = document.getElementById('clear-zone-flag') ? 
-                document.getElementById('clear-zone-flag').value === 'true' : false;
-            
-            // Reset the flag after reading it
-            if (document.getElementById('clear-zone-flag')) {
-                document.getElementById('clear-zone-flag').value = 'false';
-            }
-            
-            // Get zone value from persistent storage FIRST
-            let zoneValue = persistentZoneData || document.getElementById('delivery-zone').value;
-            const deliveryMethod = document.querySelector('input[name="delivery-method"]:checked').value;
-            
-            // CRITICAL FIX: If we're in radius mode but we have persistent zone data and not clearing,
-            // we should STILL send it to the backend to preserve it
-            if (deliveryMethod === 'radius' && persistentZoneData && !clearZoneFlag) {
-                zoneValue = persistentZoneData;
-                debug.log('Preserving zone data even though in radius mode');
-            }
-            
-            // Update the hidden input with the persistent value
-            if (zoneValue) {
-                document.getElementById('delivery-zone').value = zoneValue;
-            }
-            
-            debug.log('🔍 DELIVERY ZONE VALUE (persistent):', zoneValue ? 'Present (length: ' + zoneValue.length + ')' : 'Empty');
-            if (zoneValue) {
-                debug.log('🔍 ZONE PREVIEW:', zoneValue.substring(0, 100) + '...');
-                debug.log('🔍 ZONE IS GEOJSON:', isGeoJSONFormat(zoneValue));
-            }
-            
-            debug.log('Selected delivery method:', deliveryMethod);
-            debug.log('Clear zone flag:', clearZoneFlag);
-            
-            // Get address components
-            const municipality = document.getElementById('municipality').value;
-            const barangay = document.getElementById('barangay').value;
-            const street = document.getElementById('street-address').value.trim();
-            
-            // Validate required fields
-            if (!municipality) {
-                showToast('Please select a municipality', 'error');
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                return;
-            }
-            
-            if (!barangay) {
-                showToast('Please select a barangay', 'error');
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                return;
-            }
-            
-            // Build full address
-            let fullAddress = '';
-            if (municipality && barangay) {
-                if (street) {
-                    fullAddress = `${street}, Barangay ${barangay}, ${municipality}, Laguna`;
-                } else {
-                    fullAddress = `Barangay ${barangay}, ${municipality}, Laguna`;
+        // Save all settings
+        const saveBtn = document.getElementById('save-all-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                const btn = document.getElementById('save-all-btn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
+                btn.disabled = true;
+                
+                const clearZoneFlag = document.getElementById('clear-zone-flag') ? 
+                    document.getElementById('clear-zone-flag').value === 'true' : false;
+                
+                if (document.getElementById('clear-zone-flag')) {
+                    document.getElementById('clear-zone-flag').value = 'false';
                 }
-            } else {
-                fullAddress = document.getElementById('preview-address').textContent || 'Address pending';
-            }
-            
-            // Get selected municipalities - ALWAYS get them, even if not in municipality mode
-            const selectedCheckboxes = document.querySelectorAll('.municipality-check:checked');
-            const selectedMunicipalities = Array.from(selectedCheckboxes).map(cb => cb.value);
-            
-            console.log('📋 Selected municipalities:', selectedMunicipalities);
-            console.log('📋 Delivery method:', deliveryMethod);
-            
-            const formData = {
-                // Basic info
-                name: document.getElementById('store-name').value.trim(),
-                address: fullAddress,
-                municipality: municipality,
-                barangay: barangay,
-                street: street,
-                contact_number: document.getElementById('contact-number').value.trim(),
-                description: document.getElementById('store-description').value.trim(),
-                status: document.getElementById('store-status').value,
                 
-                // Location
-                latitude: currentLocation.lat,
-                longitude: currentLocation.lng,
-                formatted_address: currentLocation.address,
-                place_id: currentLocation.place_id,
+                const deliveryMethod = document.querySelector('input[name="delivery-method"]:checked').value;
                 
-                // Delivery method
-                delivery_method: deliveryMethod,
+                const municipality = document.getElementById('municipality').value;
+                const barangay = document.getElementById('barangay').value;
+                const street = document.getElementById('street-address').value.trim();
                 
-                // Selected municipalities - ALWAYS send, even as empty array
-                selected_municipalities: selectedMunicipalities,
+                if (!municipality) {
+                    showToast('Please select a municipality', 'error');
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    return;
+                }
                 
-                // Delivery settings
-                delivery_radius_km: parseFloat(document.getElementById('delivery-radius').value) || 15,
-                max_delivery_distance: parseFloat(document.getElementById('max-distance').value) || 15,
-                base_delivery_fee: parseFloat(document.getElementById('base-fee').value) || 50,
-                delivery_rate_per_km: parseFloat(document.getElementById('rate-per-km').value) || 20,
-                free_delivery_minimum: parseFloat(document.getElementById('free-minimum').value) || 500,
+                if (!barangay) {
+                    showToast('Please select a barangay', 'error');
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    return;
+                }
                 
-                // Delivery zone - only send null if explicitly cleared
-                delivery_area: (zoneValue && isGeoJSONFormat(zoneValue) && !clearZoneFlag) ? zoneValue : null,
+                let fullAddress = '';
+                if (municipality && barangay) {
+                    if (street) {
+                        fullAddress = `${street}, Barangay ${barangay}, ${municipality}, Laguna`;
+                    } else {
+                        fullAddress = `Barangay ${barangay}, ${municipality}, Laguna`;
+                    }
+                } else {
+                    fullAddress = document.getElementById('preview-address').textContent || 'Address pending';
+                }
                 
-                // Add the clear flag to tell backend when to actually delete
-                clear_delivery_zone: clearZoneFlag
-            };
-            
-            debug.log('📤 Sending formData with keys:', Object.keys(formData));
-            debug.log('📤 selected_municipalities:', formData.selected_municipalities);
-            debug.log('📤 delivery_area present:', formData.delivery_area ? 'Yes (length: ' + formData.delivery_area.length + ')' : 'No');
-            debug.log('📤 clear_delivery_zone:', formData.clear_delivery_zone);
-            
-            if (!formData.name || !municipality || !barangay) {
-                showToast('Store name, municipality, and barangay are required', 'error');
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                return;
-            }
-            
-            try {
-                debug.log('Sending save request...');
-                const response = await fetch('/api/seller/store/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
+                const selectedCheckboxes = document.querySelectorAll('.municipality-check:checked');
+                const selectedMunicipalities = Array.from(selectedCheckboxes).map(cb => cb.value);
+                
+                // Collect GCash QR data
+                const qrFiles = [];
+                const qrIdsToKeep = [];
+                const qrIdsToDelete = [];
+
+                qrSlots.forEach((slot, index) => {
+                    if (slot.file) {
+                        qrFiles.push({
+                            file: slot.file,
+                            index: index
+                        });
+                    }
+                    
+                    if (slot.qrId && !slot.markedForDeletion && !slot.file && slot.hasImage) {
+                        qrIdsToKeep.push(slot.qrId);
+                    }
+                    
+                    if (slot.qrId && (slot.markedForDeletion || (slot.file && slot.markedForDeletion))) {
+                        qrIdsToDelete.push(slot.qrId);
+                    }
+                });
+
+                const gcashInstructions = document.getElementById('gcashInstructions').value;
+                
+                const formData = new FormData();
+                
+                formData.append('name', document.getElementById('store-name').value.trim());
+                formData.append('address', fullAddress);
+                formData.append('municipality', municipality);
+                formData.append('barangay', barangay);
+                formData.append('street', street);
+                formData.append('contact_number', document.getElementById('contact-number').value.trim());
+                formData.append('description', document.getElementById('store-description').value.trim());
+                formData.append('status', document.getElementById('store-status').value);
+                formData.append('latitude', currentLocation.lat);
+                formData.append('longitude', currentLocation.lng);
+                formData.append('formatted_address', currentLocation.address);
+                formData.append('place_id', currentLocation.place_id);
+                formData.append('delivery_method', deliveryMethod);
+                formData.append('selected_municipalities', JSON.stringify(selectedMunicipalities));
+                formData.append('delivery_radius_km', parseFloat(document.getElementById('delivery-radius').value) || 15);
+                formData.append('max_delivery_distance', parseFloat(document.getElementById('max-distance').value) || 15);
+                formData.append('base_delivery_fee', parseFloat(document.getElementById('base-fee').value) || 50);
+                formData.append('delivery_rate_per_km', parseFloat(document.getElementById('rate-per-km').value) || 20);
+                formData.append('free_delivery_minimum', parseFloat(document.getElementById('free-minimum').value) || 500);
+                
+                // Add zone delivery data if it exists
+                if (zoneDeliveryData && isGeoJSONFormat(zoneDeliveryData)) {
+                    formData.append('zone_delivery_area', zoneDeliveryData);
+                }
+                
+                // Add municipality delivery data if it exists
+                if (municipalityDeliveryData && isGeoJSONFormat(municipalityDeliveryData)) {
+                    formData.append('municipality_delivery_area', municipalityDeliveryData);
+                }
+                
+                formData.append('clear_delivery_zone', clearZoneFlag);
+                
+                formData.append('gcash_qr_ids_to_keep', JSON.stringify(qrIdsToKeep));
+                formData.append('gcash_qr_ids_to_delete', JSON.stringify(qrIdsToDelete));
+                formData.append('gcash_instructions', gcashInstructions);
+                
+                qrFiles.forEach(item => {
+                    formData.append(`gcash_qr_${item.index}`, item.file);
                 });
                 
-                debug.log('Save response status:', response.status);
-                const data = await response.json();
-                debug.log('Save response data:', data);
-                
-                if (data.success) {
-                    const successMsg = document.getElementById('success-message');
-                    successMsg.classList.remove('hide');
-                    setTimeout(() => successMsg.classList.add('hide'), 3000);
+                try {
+                    const response = await fetch('/api/seller/store/settings', {
+                        method: 'POST',
+                        body: formData
+                    });
                     
-                    showToast('✓ Store settings saved successfully!', 'success');
-                    locationChanged = false;
+                    const data = await response.json();
                     
-                    // Update storeData with new values
-                    storeData = {...storeData, ...formData};
-                    
-                    // Update persistentZoneData with what was saved (if not cleared)
-                    if (zoneValue && isGeoJSONFormat(zoneValue) && !clearZoneFlag) {
-                        persistentZoneData = zoneValue;
-                    } else if (clearZoneFlag) {
-                        persistentZoneData = null;
+                    if (data.success) {
+                        const successMsg = document.getElementById('success-message');
+                        if (successMsg) {
+                            successMsg.classList.remove('hide');
+                            setTimeout(() => successMsg.classList.add('hide'), 3000);
+                        }
+                        
+                        showToast('✓ Store settings saved successfully!', 'success');
+                        
+                        storeData = {...storeData, ...{
+                            name: formData.get('name'),
+                            address: formData.get('address'),
+                            municipality: formData.get('municipality'),
+                            barangay: formData.get('barangay'),
+                            street: formData.get('street'),
+                            delivery_method: deliveryMethod,
+                            selected_municipalities: selectedMunicipalities,
+                            gcash_instructions: gcashInstructions
+                        }};
+                        
+                        qrSlots.forEach(slot => {
+                            if (slot) {
+                                slot.markedForDeletion = false;
+                                if (slot.file) {
+                                    slot.file = null;
+                                }
+                            }
+                        });
+                        
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                        
+                    } else {
+                        showToast('Error: ' + (data.error || 'Failed to save'), 'error');
                     }
-                    
-                    debug.success('Store data updated');
-                    
-                    // Update zone info message based on mode
-                    if (deliveryMethod === 'radius' && persistentZoneData) {
-                        document.getElementById('zone-info').innerHTML = 'ℹ️ Zone saved but hidden (using radius mode)';
-                    } else if (deliveryMethod === 'zone' && persistentZoneData) {
-                        document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone is set';
-                    } else if (deliveryMethod === 'municipality') {
-                        document.getElementById('zone-info').innerHTML = '✅ Municipality selection saved';
-                    } else if (!persistentZoneData) {
-                        document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
-                    }
-                } else {
-                    debug.error('Save failed:', data.error);
-                    showToast('Error: ' + (data.error || 'Failed to save'), 'error');
+                } catch (error) {
+                    showToast('Network error. Please try again.', 'error');
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
                 }
-            } catch (error) {
-                debug.error('Save network error:', error);
-                showToast('Network error. Please try again.', 'error');
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        });
+            });
+        }
         
         // Reset button
-        document.getElementById('reset-btn').addEventListener('click', () => {
-            debug.log('Reset button clicked');
-            
-            document.getElementById('store-name').value = storeData.name;
-            document.getElementById('street-address').value = storeData.street || '';
-            document.getElementById('contact-number').value = storeData.contact_number || '';
-            document.getElementById('store-description').value = storeData.description || '';
-            document.getElementById('store-status').value = storeData.status;
-            
-            document.getElementById('delivery-radius').value = storeData.delivery_radius_km;
-            document.getElementById('max-distance').value = storeData.max_delivery_distance;
-            document.getElementById('base-fee').value = storeData.base_delivery_fee;
-            document.getElementById('rate-per-km').value = storeData.delivery_rate_per_km;
-            document.getElementById('free-minimum').value = storeData.free_delivery_minimum;
-            
-            // Reset clear flag
-            if (document.getElementById('clear-zone-flag')) {
-                document.getElementById('clear-zone-flag').value = 'false';
-            }
-            
-            // Reset delivery method radio
-            if (storeData.delivery_method) {
-                const methodRadio = document.getElementById(`method-${storeData.delivery_method}`);
-                if (methodRadio) {
-                    methodRadio.checked = true;
-                    // Trigger change event to update UI
-                    methodRadio.dispatchEvent(new Event('change'));
+        const resetBtn = document.getElementById('reset-btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                debug.log('Reset button clicked');
+                
+                document.getElementById('store-name').value = storeData.name;
+                document.getElementById('street-address').value = storeData.street || '';
+                document.getElementById('contact-number').value = storeData.contact_number || '';
+                document.getElementById('store-description').value = storeData.description || '';
+                document.getElementById('store-status').value = storeData.status;
+                
+                document.getElementById('delivery-radius').value = storeData.delivery_radius_km;
+                document.getElementById('max-distance').value = storeData.max_delivery_distance;
+                document.getElementById('base-fee').value = storeData.base_delivery_fee;
+                document.getElementById('rate-per-km').value = storeData.delivery_rate_per_km;
+                document.getElementById('free-minimum').value = storeData.free_delivery_minimum;
+                
+                if (document.getElementById('clear-zone-flag')) {
+                    document.getElementById('clear-zone-flag').value = 'false';
                 }
-            } else {
-                // Default to radius if no method saved
-                document.getElementById('method-radius').checked = true;
-                document.getElementById('method-radius').dispatchEvent(new Event('change'));
-            }
-            
-            // Reset selected municipalities checkboxes
-            if (storeData.selected_municipalities) {
-                document.querySelectorAll('.municipality-check').forEach(cb => {
-                    cb.checked = storeData.selected_municipalities.includes(cb.value);
-                });
-            }
-            
-            // Reset address dropdowns
-            if (storeData.municipality) {
-                document.getElementById('municipality').value = storeData.municipality;
-                loadBarangays(storeData.municipality);
-                setTimeout(() => {
-                    if (storeData.barangay) {
-                        document.getElementById('barangay').value = storeData.barangay;
-                    }
-                }, 100);
-            }
-            
-            if (storeData.latitude && marker) {
-                marker.setLngLat([storeData.longitude, storeData.latitude]);
-                map.flyTo({ center: [storeData.longitude, storeData.latitude], zoom: 15 });
                 
-                currentLocation = {
-                    lat: storeData.latitude,
-                    lng: storeData.longitude,
-                    address: storeData.formatted_address || '',
-                    place_id: storeData.place_id || ''
-                };
-                
-                document.getElementById('preview-lat').textContent = storeData.latitude.toFixed(6);
-                document.getElementById('preview-lng').textContent = storeData.longitude.toFixed(6);
-                document.getElementById('preview-address').textContent = storeData.formatted_address || 'Not set';
-                debug.log('Location reset to saved values');
-            }
-            
-            // Reset delivery zone - restore from storeData
-            if (draw) {
-                draw.deleteAll();
-                
-                if (storeData.delivery_area) {
-                    persistentZoneData = storeData.delivery_area;
-                    document.getElementById('delivery-zone').value = storeData.delivery_area;
-                    
-                    if (isGeoJSONFormat(storeData.delivery_area)) {
-                        try {
-                            const zoneGeoJSON = JSON.parse(storeData.delivery_area);
-                            // Only load into draw if we're in zone mode
-                            if (document.querySelector('input[name="delivery-method"]:checked').value === 'zone') {
-                                draw.add(zoneGeoJSON);
-                            }
-                            document.getElementById('zone-info').innerHTML = '✅ Custom delivery zone restored (editable)';
-                        } catch (e) {
-                            debug.error('Failed to restore zone:', e);
-                            document.getElementById('zone-info').innerHTML = '✅ Zone loaded from database';
-                        }
-                    } else {
-                        document.getElementById('zone-info').innerHTML = '✅ Zone loaded from database';
+                if (storeData.delivery_method) {
+                    const methodRadio = document.getElementById(`method-${storeData.delivery_method}`);
+                    if (methodRadio) {
+                        methodRadio.checked = true;
+                        methodRadio.dispatchEvent(new Event('change'));
                     }
                 } else {
-                    persistentZoneData = null;
-                    document.getElementById('delivery-zone').value = '';
-                    document.getElementById('zone-info').innerHTML = 'ℹ️ No zone drawn yet - click "Draw Zone" to create one';
+                    document.getElementById('method-radius').checked = true;
+                    document.getElementById('method-radius').dispatchEvent(new Event('change'));
                 }
-            }
-            
-            showToast('Form reset to last saved values', 'info');
-        });
+                
+                if (storeData.selected_municipalities && storeData.selected_municipalities.length > 0) {
+                    let selectedList = storeData.selected_municipalities;
+                    if (typeof selectedList === 'string') {
+                        try {
+                            selectedList = JSON.parse(selectedList);
+                        } catch (e) {
+                            selectedList = [];
+                        }
+                    }
+                    
+                    document.querySelectorAll('.municipality-check').forEach(cb => {
+                        cb.checked = selectedList.includes(cb.value);
+                    });
+                } else {
+                    document.querySelectorAll('.municipality-check').forEach(cb => {
+                        cb.checked = false;
+                    });
+                }
+                
+                updateSelectedCount();
+                if (storeData.delivery_method === 'municipality') {
+                    validateMunicipalitySelection();
+                }
+                
+                if (storeData.municipality) {
+                    document.getElementById('municipality').value = storeData.municipality;
+                    loadBarangays(storeData.municipality);
+                    setTimeout(() => {
+                        if (storeData.barangay) {
+                            document.getElementById('barangay').value = storeData.barangay;
+                        }
+                    }, 100);
+                }
+                
+                initializeQRSlots();
+                
+                if (storeData.latitude && marker) {
+                    marker.setLngLat([storeData.longitude, storeData.latitude]);
+                    map.flyTo({ center: [storeData.longitude, storeData.latitude], zoom: 15 });
+                    
+                    currentLocation = {
+                        lat: storeData.latitude,
+                        lng: storeData.longitude,
+                        address: storeData.formatted_address || '',
+                        place_id: storeData.place_id || ''
+                    };
+                    
+                    document.getElementById('preview-lat').textContent = storeData.latitude.toFixed(6);
+                    document.getElementById('preview-lng').textContent = storeData.longitude.toFixed(6);
+                    document.getElementById('preview-address').textContent = storeData.formatted_address || 'Not set';
+                }
+                
+                if (draw) {
+                    draw.deleteAll();
+                }
+                
+                showToast('Form reset to last saved values', 'info');
+            });
+        }
         
         // Initialize map
         initMap();
         
-        // Initialize municipality checkbox states if in municipality mode
-        if (storeData.delivery_method === 'municipality' && storeData.selected_municipalities) {
-            setTimeout(() => {
-                updateSelectedCount();
-                validateMunicipalitySelection();
-            }, 500);
-        }
+        // Initialize municipality checkbox states
+        setTimeout(() => {
+            initializeMunicipalityCheckboxes(storeData);
+        }, 600);
     });
 </script>
 {% endblock %}
