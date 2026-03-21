@@ -185,7 +185,7 @@
         z-index: 2;
     }
 
-    /* Gallery Description Section (NEW) */
+    /* Gallery Description Section */
     .gallery-description-section {
         background: var(--warm-white);
         border-radius: var(--radius-xl);
@@ -839,10 +839,21 @@
     </a>
     <a href="{{ url_for('templates.index') }}">Homepage</a>
     <span class="breadcrumb-sep"><i class="ri-arrow-right-s-line"></i></span>
-    {% if product.category %}
-    <a href="{{ url_for('templates.category', category_id=product.category) }}">{{ product.category|capitalize }}</a>
+    
+    {% if product.main_category %}
+    <a href="{{ url_for('templates.category', category_identifier=product.main_category.id) }}">
+    {{ product.main_category.name }}
+</a>
     <span class="breadcrumb-sep"><i class="ri-arrow-right-s-line"></i></span>
     {% endif %}
+    
+    {% if product.store_category %}
+    <a href="{{ url_for('templates.store_category', store_id=product.store_id, category_id=product.store_category.id) }}">
+        {{ product.store_category.name }}
+    </a>
+    <span class="breadcrumb-sep"><i class="ri-arrow-right-s-line"></i></span>
+    {% endif %}
+    
     <span class="breadcrumb-current">{{ product.name }}</span>
 </nav>
 
@@ -860,7 +871,7 @@
                     <div class="gallery-thumb {% if loop.first %}active{% endif %}"
                          data-index="{{ loop.index0 }}"
                          onclick="setMainImage({{ loop.index0 }})">
-                        <img src="/static/uploads/products/{{ img.filename }}" alt="{{ product.name }}"
+                        <img src="{{ img.image_url }}" alt="{{ product.name }}"
                              onerror="this.parentElement.style.background='linear-gradient(145deg,#f5ede6,#ede3d8)'">
                     </div>
                     {% endfor %}
@@ -887,7 +898,7 @@
 
                 {% if product.images and product.images|length > 0 %}
                     <img class="gallery-main-img" id="mainImage"
-                         src="/static/uploads/products/{{ product.images[0].filename }}"
+                         src="{{ product.images[0].image_url }}"
                          alt="{{ product.name }}">
                     {% if product.images|length > 1 %}
                     <button class="gallery-arrow prev" id="galleryPrev" onclick="shiftImage(-1)">
@@ -973,14 +984,20 @@
     <!-- ── Info Column ── -->
     <div class="info-col">
 
-        <!-- Eyebrow + Name -->
-        <div>
-            <div class="product-eyebrow">
-                <span class="product-eyebrow-dot"></span>
-                {{ product.category|capitalize if product.category else 'Flower Collection' }}
-            </div>
-            <h1 class="product-name">{{ product.name }}</h1>
-        </div>
+           <!-- Eyebrow + Name -->
+<div>
+    <div class="product-eyebrow">
+        <span class="product-eyebrow-dot"></span>
+        {% if product.store_category %}
+            <span>{{ product.main_category.name if product.main_category else 'Collection' }} / {{ product.store_category.name }}</span>
+        {% elif product.main_category %}
+            <span>{{ product.main_category.name }}</span>
+        {% else %}
+            <span>Flower Collection</span>
+        {% endif %}
+    </div>
+    <h1 class="product-name">{{ product.name }}</h1>
+</div>
 
         <!-- Rating + Store -->
         <div class="rating-row">
@@ -1037,7 +1054,7 @@
                             data-variant-name="Standard"
                             data-variant-price="{{ product.price }}"
                             data-variant-stock="{{ product.stock_quantity }}"
-                            data-variant-image="{% if product.images and product.images[0] %}/static/uploads/products/{{ product.images[0].filename }}{% endif %}"
+                            data-variant-image="{% if product.images and product.images[0] %}{{ product.images[0].image_url }}{% endif %}"
                             onclick="selectVariant(this)">
                         Standard
                     </button>
@@ -1083,54 +1100,53 @@
 
         <hr class="info-divider">
 
-        <!-- Add-ons -->
-        {% if addon_products and addon_products|length > 0 %}
-        <div>
-            <span class="addons-label">Choose more products</span>
+    <!-- Add-ons -->
+{% if addon_products and addon_products|length > 0 %}
+<div>
+    <span class="addons-label">You might also like</span>
 
-            <div class="addon-filters" id="addonFilters">
-                <button class="addon-filter-btn active" data-filter="all" onclick="filterAddons('all', this)">All</button>
-                {% set addon_cats = [] %}
-                {% for ap in addon_products %}
-                    {% if ap.category and ap.category not in addon_cats %}
-                        {% set _ = addon_cats.append(ap.category) %}
-                        <button class="addon-filter-btn" data-filter="{{ ap.category }}"
-                                onclick="filterAddons('{{ ap.category }}', this)">
-                            {{ ap.category|capitalize }}
-                        </button>
-                    {% endif %}
-                {% endfor %}
-            </div>
+    <div class="addon-filters" id="addonFilters">
+        <button class="addon-filter-btn active" data-filter="all" onclick="filterAddons('all', this)">All</button>
+        {% set addon_cats = [] %}
+        {% for ap in addon_products %}
+            {% if ap.main_category and ap.main_category.name not in addon_cats %}
+                {% set _ = addon_cats.append(ap.main_category.name) %}
+                <button class="addon-filter-btn" data-filter="{{ ap.main_category.name }}"
+                        onclick="filterAddons('{{ ap.main_category.name }}', this)">
+                    {{ ap.main_category.name }}
+                </button>
+            {% endif %}
+        {% endfor %}
+    </div>
 
-            <div class="addons-grid" id="addonsGrid">
-                {% for ap in addon_products %}
-                <div class="addon-card" data-id="{{ ap.id }}" data-price="{{ ap.price }}"
-                     data-name="{{ ap.name }}" data-cat="{{ ap.category or 'other' }}"
-                     onclick="toggleAddon(this)">
-                    {% set ap_primary = ap.images[0] if ap.images else None %}
-                    {% if ap_primary %}
-                    <img class="addon-card-img"
-                         src="/static/uploads/products/{{ ap_primary.filename }}"
-                         alt="{{ ap.name }}"
-                         onerror="this.style.display='none'">
-                    {% else %}
-                    <div class="addon-card-img" style="display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#f5ede6,#ede3d8);font-size:24px;color:rgba(107,76,59,0.15);">
-                        <i class="ri-gift-line"></i>
-                    </div>
-                    {% endif %}
-                    <div class="addon-card-name">{{ ap.name }}</div>
-                    <div class="addon-card-price">₱{{ "%.0f"|format(ap.price) }}</div>
-                    <div class="addon-check"><i class="ri-check-line"></i></div>
-                    <button class="addon-info-btn" onclick="event.stopPropagation(); showAddonInfo({{ ap.id }})">
-                        <i class="ri-information-line"></i>
-                    </button>
-                </div>
-                {% endfor %}
+    <div class="addons-grid" id="addonsGrid">
+        {% for ap in addon_products %}
+        <div class="addon-card" data-id="{{ ap.id }}" data-price="{{ ap.price }}"
+             data-name="{{ ap.name }}" data-cat="{{ ap.main_category.name if ap.main_category else 'other' }}"
+             onclick="toggleAddon(this)">
+            {% if ap.images and ap.images[0] %}
+            <img class="addon-card-img"
+                 src="{{ ap.images[0].image_url }}"
+                 alt="{{ ap.name }}"
+                 onerror="this.style.display='none'">
+            {% else %}
+            <div class="addon-card-img" style="display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#f5ede6,#ede3d8);font-size:24px;color:rgba(107,76,59,0.15);">
+                <i class="ri-gift-line"></i>
             </div>
+            {% endif %}
+            <div class="addon-card-name">{{ ap.name }}</div>
+            <div class="addon-card-price">₱{{ "%.0f"|format(ap.price) }}</div>
+            <div class="addon-check"><i class="ri-check-line"></i></div>
+            <button class="addon-info-btn" onclick="event.stopPropagation(); showAddonInfo({{ ap.id }})">
+                <i class="ri-information-line"></i>
+            </button>
         </div>
+        {% endfor %}
+    </div>
+</div>
 
-        <hr class="info-divider">
-        {% endif %}
+<hr class="info-divider">
+{% endif %}
 
         <!-- Delivery Date -->
         <div>
@@ -1158,7 +1174,7 @@
         {% if product.stock_quantity > 0 and product.is_available %}
         <div class="cta-row">
             <button class="btn btn-outline" onclick="addToCartWithVariant()">
-                <i class="ri-shopping-bag-line"></i> Add to Bag
+                <i class="ri-shopping-bag-line"></i> Add to Basket
             </button>
             <button class="btn btn-rose" onclick="buyNow()">
                 <i class="ri-secure-payment-line"></i> Buy Now
@@ -1186,11 +1202,17 @@
     </div>
 </div>
 
-<!-- ─── Related Products ─── (moved outside the layout) -->
+<!-- Related Products -->
 {% if related_products and related_products|length > 0 %}
 <section class="related-section">
     <div style="margin-bottom:2rem;">
-        <div class="section-label" style="font-size:10px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--dusty-rose);margin-bottom:0.4rem;">More from this collection</div>
+        <div class="section-label" style="font-size:10px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--dusty-rose);margin-bottom:0.4rem;">
+            {% if product.main_category %}
+                More {{ product.main_category.name }}
+            {% else %}
+                More from this store
+            {% endif %}
+        </div>
         <h2 style="font-family:var(--font-display);font-size:clamp(24px,3vw,34px);font-weight:400;color:var(--charcoal);">You May Also Like</h2>
     </div>
     <div class="related-grid">
@@ -1201,9 +1223,8 @@
             {% endif %}
 
             <div class="product-image">
-                {% set rp_img = rp.images[0] if rp.images else None %}
-                {% if rp_img %}
-                <img src="/static/uploads/products/{{ rp_img.filename }}" alt="{{ rp.name }}"
+                {% if rp.images and rp.images[0] %}
+                <img src="{{ rp.images[0].image_url }}" alt="{{ rp.name }}"
                      onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;opacity:0.15\'><i class=\'ri-image-line\'></i></div>';">
                 {% else %}
                 <div style="font-size:48px;opacity:0.15"><i class="ri-image-line"></i></div>
@@ -1218,13 +1239,13 @@
                     {% if rp.stock_quantity > 0 and rp.is_available %}
                     <button class="btn btn-primary" onclick='addToCart({
                         id: {{ rp.id }},
-                        name: {{ rp.name | tojson }},
+                        name: "{{ rp.name|replace('"', '\\"')|safe }}",
                         price: {{ rp.price }},
                         store_id: {{ rp.store_id }},
-                        store_name: {{ (rp.store.name if rp.store else "Flower Shop") | tojson }},
-                        image_url: "{{ ('/static/uploads/products/' + rp.images[0].filename) if rp.images else '' }}"
+                        store_name: "{{ (rp.store.name if rp.store else 'Flower Shop')|replace('"', '\\"')|safe }}",
+                        image_url: "{{ rp.images[0].image_url if rp.images and rp.images[0] else '' }}"
                     })'>
-                        <i class="ri-shopping-bag-line"></i> Add to Bag
+                        <i class="ri-shopping-bag-line"></i> Add to Basket
                     </button>
                     <button class="btn btn-outline btn-icon" onclick="viewProduct({{ rp.id }})">
                         <i class="ri-eye-line"></i>
@@ -1266,538 +1287,487 @@
     /* ════════════════════════════════
        VARIABLE DECLARATIONS
     ════════════════════════════════ */
-    let selectedVariant = null;
-    let currentPrice = {{ product.price }};
-    let currentStock = {{ product.stock_quantity }};
-    let currentImage = null;
-    
-    /* Variant data from server */
-    const variants = [
-        {% if product.variants %}
-            {% for variant in product.variants %}
-            {
-                id: {{ variant.id }},
-                name: {{ variant.name | tojson }},
-                price: {{ variant.price }},
-                stock: {{ variant.stock_quantity }},
-                image_url: {{ variant.image_url | tojson if variant.image_url else 'null' }},
-                attributes: {{ variant.attributes | tojson if variant.attributes else 'null' }}
-            }{% if not loop.last %},{% endif %}
-            {% endfor %}
-        {% endif %}
-    ];
+   let selectedVariant = null;  // ✅ Will be { id, name, price, stock, image_url }
+let currentPrice = {{ product.price }};
+let currentStock = {{ product.stock_quantity }};
+let currentImage = null;
+let qty = 1;
+ 
+// Store main product data
+const mainProduct = {
+    id: {{ product.id }},
+    name: {{ product.name | tojson }},
+    price: {{ product.price }},
+    stock: {{ product.stock_quantity }},
+    store_id: {{ product.store_id }},
+    store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
+    image_url: "{{ product.images[0].image_url if product.images and product.images[0] else '' }}",
+     main_category_id: {{ product.main_category_id if product.main_category_id else 'null' }},
+    main_category_name: {{ product.main_category.name | tojson if product.main_category else 'null' }},
+    store_category_id: {{ product.store_category_id if product.store_category_id else 'null' }},
+    store_category_name: {{ product.store_category.name | tojson if product.store_category else 'null' }},
+    category_path: {{ product.category_path | tojson if product.category_path else 'null' }}
+};
+ 
+/* Variant data from server */
+const variants = [
+    {% if product.variants %}
+        {% for variant in product.variants %}
+        {
+            id: {{ variant.id }},
+            name: {{ variant.name | tojson }},
+            price: {{ variant.price }},
+            stock: {{ variant.stock_quantity }},
+            image_url: {{ variant.image_url | tojson if variant.image_url else 'null' }},
+            attributes: {{ variant.attributes | tojson if variant.attributes else 'null' }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    {% endif %}
+];
+ 
 
     /* ════════════════════════════════
        GALLERY
     ════════════════════════════════ */
-    const images = [
-        {% if product.images %}
-            {% for img in product.images %}
-                { 
-                    src: '/static/uploads/products/{{ img.filename }}', 
-                    alt: '{{ product.name }}',
-                    filename: '{{ img.filename }}',
-                    is_primary: {{ 'true' if img.is_primary else 'false' }}
-                }{% if not loop.last %},{% endif %}
-            {% endfor %}
-        {% endif %}
-    ];
+  const images = [
+    {% if product.images %}
+        {% for img in product.images %}
+            { 
+                src: {{ img.image_url | tojson }}, 
+                alt: {{ product.name | tojson }},
+                filename: {{ img.filename | tojson }},
+                is_primary: {{ 'true' if img.is_primary else 'false' }}
+            }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    {% endif %}
+];
+ 
+let currentImageIndex = 0;
+ 
 
-    let currentImageIndex = 0;
-
-    /* ════════════════════════════════
-       VARIANT FUNCTIONS
-    ════════════════════════════════ */
     function selectVariant(btn) {
-        // Remove active class from all variant buttons
-        document.querySelectorAll('.variant-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+    console.group('🔄 SELECT VARIANT');
+    
+    // Remove active class from all variant buttons
+    document.querySelectorAll('.variant-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    const variantId = btn.dataset.variantId;
+    const variantPrice = parseFloat(btn.dataset.variantPrice);
+    const variantStock = parseInt(btn.dataset.variantStock);
+    const variantImage = btn.dataset.variantImage;
+    const variantName = btn.dataset.variantName;
+    
+    console.log('Button clicked:', { variantId, variantName, variantPrice, variantStock });
+    
+    // ═══════════════════════════════════════════════════════════
+    // MAIN PRODUCT SELECTED
+    // ═══════════════════════════════════════════════════════════
+    if (variantId === 'main') {
+        console.log('✅ Main product selected');
         
-        const variantId = btn.dataset.variantId;
-        const variantPrice = parseFloat(btn.dataset.variantPrice);
-        const variantStock = parseInt(btn.dataset.variantStock);
-        const variantImage = btn.dataset.variantImage;
-        const variantName = btn.dataset.variantName;
+        selectedVariant = null;  // ✅ CLEAR VARIANT
+        currentPrice = mainProduct.price;
+        currentStock = mainProduct.stock;
         
-        if (variantId === 'main') {
-            // Main product selected
-            selectedVariant = null;
-            currentPrice = {{ product.price }};
-            currentStock = {{ product.stock_quantity }};
-            
-            // Update price display
-            document.getElementById('currentPrice').textContent = '₱' + Math.round({{ product.price }}).toLocaleString();
-            
-            // Update stock display
-            document.getElementById('stockDisplay').textContent = '{{ product.stock_quantity }} available';
-            
-            // Show first product image
-            setMainImage(0);
-        } else {
-            // Variant selected
-            selectedVariant = {
-                id: variantId,
-                name: variantName,
-                price: variantPrice,
-                stock: variantStock,
-                image_url: variantImage
-            };
-            
-            // Update price display
-            currentPrice = variantPrice;
-            document.getElementById('currentPrice').textContent = '₱' + Math.round(variantPrice).toLocaleString();
-            
-            // Update stock display
-            document.getElementById('stockDisplay').textContent = variantStock + ' available';
-            currentStock = variantStock;
-            
-            // Update main image if variant has specific image
-            if (variantImage && variantImage !== 'null' && variantImage !== '') {
-                const mainImage = document.getElementById('mainImage');
-                if (mainImage) {
-                    mainImage.style.opacity = '0';
-                    setTimeout(() => {
-                        mainImage.src = variantImage;
-                        mainImage.style.opacity = '1';
-                    }, 150);
-                }
-                
-                // Remove active class from thumbnails
-                document.querySelectorAll('.gallery-thumb').forEach(thumb => {
-                    thumb.classList.remove('active');
-                });
-            } else {
-                // If no variant image, show first product image
-                setMainImage(0);
+        // Update price display
+        document.getElementById('currentPrice').textContent = '₱' + Math.round(mainProduct.price).toLocaleString();
+        
+        // Update stock display
+        document.getElementById('stockDisplay').textContent = mainProduct.stock + ' available';
+        
+        // Show first product image
+        setMainImage(0);
+        
+    } else {
+        // ═══════════════════════════════════════════════════════════
+        // VARIANT SELECTED
+        // ═══════════════════════════════════════════════════════════
+        console.log('✅ Variant selected:', variantId);
+        
+        // ✅ STORE VARIANT DATA CORRECTLY
+        selectedVariant = {
+            id: parseInt(variantId),
+            name: variantName,
+            price: variantPrice,
+            stock: variantStock,
+            image_url: variantImage && variantImage !== 'null' ? variantImage : null
+        };
+        
+        console.log('✅ Stored selectedVariant:', selectedVariant);
+        
+        currentPrice = variantPrice;
+        currentStock = variantStock;
+        
+        // Update price display
+        document.getElementById('currentPrice').textContent = '₱' + Math.round(variantPrice).toLocaleString();
+        
+        // Update stock display
+        document.getElementById('stockDisplay').textContent = variantStock + ' available';
+        
+        // Update main image if variant has specific image
+        if (variantImage && variantImage !== 'null' && variantImage !== '') {
+            const mainImage = document.getElementById('mainImage');
+            if (mainImage) {
+                mainImage.style.opacity = '0';
+                setTimeout(() => {
+                    mainImage.src = variantImage;
+                    mainImage.style.opacity = '1';
+                }, 150);
             }
+            
+            // Remove active class from thumbnails
+            document.querySelectorAll('.gallery-thumb').forEach(thumb => {
+                thumb.classList.remove('active');
+            });
+        } else {
+            // If no variant image, show first product image
+            setMainImage(0);
         }
-        
-        // Update quantity based on new stock
-        const qtyDisplay = document.getElementById('qtyDisplay');
-        let currentQty = parseInt(qtyDisplay.textContent);
-        if (currentQty > currentStock) {
-            qtyDisplay.textContent = currentStock;
-            changeQty(0);
-        }
-        document.getElementById('qtyPlus').disabled = currentQty >= currentStock;
-        document.getElementById('qtyMinus').disabled = currentQty <= 1;
-        
-        // Update total
-        updateTotal();
     }
+    
+    // ═══════════════════════════════════════════════════════════
+    // UPDATE QUANTITY BASED ON NEW STOCK
+    // ═══════════════════════════════════════════════════════════
+    const qtyDisplay = document.getElementById('qtyDisplay');
+    let currentQty = parseInt(qtyDisplay.textContent);
+    if (currentQty > currentStock) {
+        qtyDisplay.textContent = currentStock;
+        qty = currentStock;
+    }
+    document.getElementById('qtyPlus').disabled = qty >= currentStock;
+    document.getElementById('qtyMinus').disabled = qty <= 1;
+    
+    // ═══════════════════════════════════════════════════════════
+    // UPDATE TOTAL
+    // ═══════════════════════════════════════════════════════════
+    updateTotal();
+    
+    console.groupEnd();
+}
 
     /* ════════════════════════════════
        GALLERY FUNCTIONS
     ════════════════════════════════ */
     function setMainImage(index) {    
-        if (index < 0 || index >= images.length) return;
-        currentImageIndex = index;
-
-        const mainImg = document.getElementById('mainImage');
-        if (mainImg && images[index]) {
-            mainImg.style.opacity = '0';
-            setTimeout(() => {
-                mainImg.src = images[index].src;
-                mainImg.style.opacity = '1';
-                
-                // Check if this image belongs to a variant
-                const imageFilename = images[index].src.split('/').pop();
-                const variantForImage = findVariantByImage(imageFilename);
-                
-                if (variantForImage) {
-                    // Select the corresponding variant
-                    const variantBtn = document.querySelector(`.variant-btn[data-variant-id="${variantForImage.id}"]`);
-                    if (variantBtn) {
-                        selectVariant(variantBtn);
-                    }
-                } else {
-                    // If it's a product image, select main product
-                    const mainBtn = document.querySelector('.variant-btn[data-variant-id="main"]');
-                    if (mainBtn && !mainBtn.classList.contains('active')) {
-                        selectVariant(mainBtn);
-                    }
-                }
-            }, 150);
-        }
-
-        // Update thumbs
-        document.querySelectorAll('.gallery-thumb').forEach((t, i) => {
-            t.classList.toggle('active', i === index);
-        });
-
-        // Update arrows
-        const prev = document.getElementById('galleryPrev');
-        const next = document.getElementById('galleryNext');
-        if (prev) prev.disabled = index === 0;
-        if (next) next.disabled = index === images.length - 1;
+    if (index < 0 || index >= images.length) return;
+    currentImageIndex = index;
+ 
+    const mainImg = document.getElementById('mainImage');
+    if (mainImg && images[index]) {
+        mainImg.style.opacity = '0';
+        setTimeout(() => {
+            mainImg.src = images[index].src;
+            mainImg.style.opacity = '1';
+        }, 150);
     }
-
-    function shiftImage(dir) {
-        setMainImage(currentImageIndex + dir);
-    }
-
-    // Keyboard navigation
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'ArrowLeft') shiftImage(-1);
-        if (e.key === 'ArrowRight') shiftImage(1);
+ 
+    // Update thumbs
+    document.querySelectorAll('.gallery-thumb').forEach((t, i) => {
+        t.classList.toggle('active', i === index);
     });
-
-    /* ════════════════════════════════
-       VARIANT HELPER FUNCTIONS
-    ════════════════════════════════ */
-    function findVariantByImage(filename) {
-        // Extract just the filename from the path
-        const imageFilename = filename.split('/').pop();
-        
-        // Check each variant's image_url to see if it matches
-        for (const variant of variants) {
-            if (variant.image_url) {
-                const variantFilename = variant.image_url.split('/').pop();
-                if (variantFilename === imageFilename) {
-                    return variant;
-                }
-            }
-        }
-        return null;
-    }
+ 
+    // Update arrows
+    const prev = document.getElementById('galleryPrev');
+    const next = document.getElementById('galleryNext');
+    if (prev) prev.disabled = index === 0;
+    if (next) next.disabled = index === images.length - 1;
+}
+ 
+function shiftImage(dir) {
+    setMainImage(currentImageIndex + dir);
+}
+ 
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft') shiftImage(-1);
+    if (e.key === 'ArrowRight') shiftImage(1);
+});
 
     /* ════════════════════════════════
        GALLERY ACCORDION
     ════════════════════════════════ */
-    function toggleGalleryAccordion(id) {
-        const item = document.getElementById(id);
-        item.classList.toggle('open');
-    }
-
+   function toggleGalleryAccordion(id) {
+    const item = document.getElementById(id);
+    item.classList.toggle('open');
+}
     /* ════════════════════════════════
        QUANTITY
     ════════════════════════════════ */
-    let qty = 1;
-
     function changeQty(delta) {
-        const newQty = Math.max(1, Math.min(currentStock, qty + delta));
-        if (newQty === qty) return;
-        
-        qty = newQty;
-        document.getElementById('qtyDisplay').textContent = qty;
-        document.getElementById('qtyMinus').disabled = qty <= 1;
-        document.getElementById('qtyPlus').disabled = qty >= currentStock;
-        updateTotal();
-    }
-
+    const newQty = Math.max(1, Math.min(currentStock, qty + delta));
+    if (newQty === qty) return;
+    
+    qty = newQty;
+    document.getElementById('qtyDisplay').textContent = qty;
+    document.getElementById('qtyMinus').disabled = qty <= 1;
+    document.getElementById('qtyPlus').disabled = qty >= currentStock;
+    updateTotal();
+}
+ 
     /* ════════════════════════════════
        DELIVERY FIELD
     ════════════════════════════════ */
-    function updateDeliveryField() {
-        const val = document.getElementById('deliveryInput').value;
-        document.getElementById('deliveryClear').style.display = val ? 'flex' : 'none';
-        document.getElementById('deliveryField').style.borderColor = val ? 'var(--deep-rose)' : '';
-    }
-
-    function clearDelivery() {
-        document.getElementById('deliveryInput').value = '';
-        document.getElementById('deliveryClear').style.display = 'none';
-        document.getElementById('deliveryField').style.borderColor = '';
-    }
+   
+function updateDeliveryField() {
+    const val = document.getElementById('deliveryInput').value;
+    document.getElementById('deliveryClear').style.display = val ? 'flex' : 'none';
+    document.getElementById('deliveryField').style.borderColor = val ? 'var(--deep-rose)' : '';
+}
+ 
+function clearDelivery() {
+    document.getElementById('deliveryInput').value = '';
+    document.getElementById('deliveryClear').style.display = 'none';
+    document.getElementById('deliveryField').style.borderColor = '';
+}
+ 
 
     /* ════════════════════════════════
        ADD-ONS
     ════════════════════════════════ */
     const selectedAddons = new Map(); // id -> {name, price}
-    let addonInfoTarget = null;
-
-    function toggleAddon(card) {
-        const id    = card.dataset.id;
-        const price = parseFloat(card.dataset.price);
-        const name  = card.dataset.name;
-
-        if (card.classList.contains('selected')) {
-            card.classList.remove('selected');
-            selectedAddons.delete(id);
-        } else {
-            card.classList.add('selected');
-            selectedAddons.set(id, { name, price });
-        }
-        updateTotal();
+let addonInfoTarget = null;
+ 
+function toggleAddon(card) {
+    const id    = card.dataset.id;
+    const price = parseFloat(card.dataset.price);
+    const name  = card.dataset.name;
+ 
+    if (card.classList.contains('selected')) {
+        card.classList.remove('selected');
+        selectedAddons.delete(id);
+    } else {
+        card.classList.add('selected');
+        selectedAddons.set(id, { name, price });
     }
-
-    function filterAddons(cat, btn) {
-        document.querySelectorAll('.addon-filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        document.querySelectorAll('.addon-card').forEach(card => {
-            const cardCat = card.dataset.cat || 'other';
-            card.style.display = (cat === 'all' || cardCat === cat) ? '' : 'none';
-        });
-    }
-
+    updateTotal();
+}
+ 
+function filterAddons(cat, btn) {
+    document.querySelectorAll('.addon-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+ 
+    document.querySelectorAll('.addon-card').forEach(card => {
+        const cardCat = card.dataset.cat || 'other';
+        card.style.display = (cat === 'all' || cardCat === cat) ? '' : 'none';
+    });
+}
+    
     function showAddonInfo(addonId) {
-        const card = document.querySelector(`.addon-card[data-id="${addonId}"]`);
-        if (!card) return;
-        addonInfoTarget = card;
-
-        document.getElementById('addonInfoTitle').textContent = card.dataset.name;
-        document.getElementById('addonInfoBody').innerHTML = `
-            <div style="display:flex;gap:1rem;align-items:flex-start;">
-                <div style="width:90px;height:90px;border-radius:var(--radius-md);overflow:hidden;flex-shrink:0;background:linear-gradient(145deg,#f5ede6,#ede3d8);">
-                    ${card.querySelector('img') ? `<img src="${card.querySelector('img').src}" style="width:100%;height:100%;object-fit:cover;">` : ''}
-                </div>
-                <div>
-                    <div style="font-family:var(--font-display);font-size:20px;margin-bottom:.4rem;">${card.dataset.name}</div>
-                    <div style="font-family:var(--font-display);font-size:22px;color:var(--deep-rose);font-weight:600;">₱${parseFloat(card.dataset.price).toFixed(0)}</div>
-                    <div style="font-size:13px;color:var(--muted);margin-top:.5rem;">Perfect add-on to complement your order.</div>
-                </div>
-            </div>`;
-
-        document.getElementById('addonInfoAddBtn').onclick = () => {
-            if (addonInfoTarget && !addonInfoTarget.classList.contains('selected')) {
-                toggleAddon(addonInfoTarget);
-            }
-            document.getElementById('addonInfoModal').classList.remove('active');
-            document.body.style.overflow = '';
-        };
-
-        document.getElementById('addonInfoModal').classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
+    const card = document.querySelector(`.addon-card[data-id="${addonId}"]`);
+    if (!card) return;
+    addonInfoTarget = card;
+ 
+    document.getElementById('addonInfoTitle').textContent = card.dataset.name;
+    document.getElementById('addonInfoBody').innerHTML = `
+        <div style="display:flex;gap:1rem;align-items:flex-start;">
+            <div style="width:90px;height:90px;border-radius:var(--radius-md);overflow:hidden;flex-shrink:0;background:linear-gradient(145deg,#f5ede6,#ede3d8);">
+                ${card.querySelector('img') ? `<img src="${card.querySelector('img').src}" style="width:100%;height:100%;object-fit:cover;">` : ''}
+            </div>
+            <div>
+                <div style="font-family:var(--font-display);font-size:20px;margin-bottom:.4rem;">${card.dataset.name}</div>
+                <div style="font-family:var(--font-display);font-size:22px;color:var(--deep-rose);font-weight:600;">₱${parseFloat(card.dataset.price).toFixed(0)}</div>
+                <div style="font-size:13px;color:var(--muted);margin-top:.5rem;">Perfect add-on to complement your order.</div>
+            </div>
+        </div>`;
+ 
+    document.getElementById('addonInfoAddBtn').onclick = () => {
+        if (addonInfoTarget && !addonInfoTarget.classList.contains('selected')) {
+            toggleAddon(addonInfoTarget);
+        }
+        document.getElementById('addonInfoModal').classList.remove('active');
+        document.body.style.overflow = '';
+    };
+ 
+    document.getElementById('addonInfoModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+ 
 
     /* ════════════════════════════════
        DELIVERY DATES
     ════════════════════════════════ */
-    let selectedDate = null;
-
-    function buildDateOptions() {
-        const container = document.getElementById('dateOptions');
-        const today = new Date();
-        const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-        const days   = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
-
-        container.innerHTML = '';
-
-        for (let i = 0; i < 3; i++) {
-            const d = new Date(today);
-            d.setDate(today.getDate() + i);
-
-            const div = document.createElement('div');
-            div.className = 'date-option' + (i === 0 ? ' selected' : '');
-            div.dataset.date = d.toISOString().split('T')[0];
-
-            const label = i === 0 ? 'TODAY' : i === 1 ? 'TOMORROW' : days[d.getDay()];
-            div.innerHTML = `
-                <div class="date-option-month">${months[d.getMonth()]}</div>
-                <div class="date-option-day">${String(d.getDate()).padStart(2,'0')}</div>
-                <div class="date-option-label">${label}</div>`;
-
-            div.addEventListener('click', () => selectDate(div));
-            container.appendChild(div);
-        }
-
-        // Calendar option
-        const calDiv = document.createElement('div');
-        calDiv.className = 'date-option';
-        calDiv.innerHTML = `<div class="date-option-cal"><i class="ri-calendar-2-line"></i><span>CALENDAR</span></div>`;
-        calDiv.addEventListener('click', () => {
-            showToast('Date picker coming soon!');
-        });
-        container.appendChild(calDiv);
-
-        // Default select today
-        selectDate(container.children[0]);
+   let selectedDate = null;
+ 
+function buildDateOptions() {
+    const container = document.getElementById('dateOptions');
+    const today = new Date();
+    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const days   = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+ 
+    container.innerHTML = '';
+ 
+    for (let i = 0; i < 3; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+ 
+        const div = document.createElement('div');
+        div.className = 'date-option' + (i === 0 ? ' selected' : '');
+        div.dataset.date = d.toISOString().split('T')[0];
+ 
+        const label = i === 0 ? 'TODAY' : i === 1 ? 'TOMORROW' : days[d.getDay()];
+        div.innerHTML = `
+            <div class="date-option-month">${months[d.getMonth()]}</div>
+            <div class="date-option-day">${String(d.getDate()).padStart(2,'0')}</div>
+            <div class="date-option-label">${label}</div>`;
+ 
+        div.addEventListener('click', () => selectDate(div));
+        container.appendChild(div);
     }
-
-    function selectDate(el) {
-        document.querySelectorAll('.date-option').forEach(d => d.classList.remove('selected'));
-        el.classList.add('selected');
-        selectedDate = el.dataset.date;
-
-        if (selectedDate) {
-            document.getElementById('timeNote').innerHTML =
-                `<i class="ri-time-line" style="color:var(--sage);"></i>
-                 Available time slots: <strong>8:00 AM – 6:00 PM</strong> — Same-day delivery before 2 PM.`;
-        }
+ 
+    // Calendar option
+    const calDiv = document.createElement('div');
+    calDiv.className = 'date-option';
+    calDiv.innerHTML = `<div class="date-option-cal"><i class="ri-calendar-2-line"></i><span>CALENDAR</span></div>`;
+    calDiv.addEventListener('click', () => {
+        showToast('Date picker coming soon!');
+    });
+    container.appendChild(calDiv);
+ 
+    // Default select today
+    selectDate(container.children[0]);
+}
+ 
+function selectDate(el) {
+    document.querySelectorAll('.date-option').forEach(d => d.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedDate = el.dataset.date;
+ 
+    if (selectedDate) {
+        document.getElementById('timeNote').innerHTML =
+            `<i class="ri-time-line" style="color:var(--sage);"></i>
+             Available time slots: <strong>8:00 AM – 6:00 PM</strong> — Same-day delivery before 2 PM.`;
     }
+}
 
     /* ════════════════════════════════
        TOTAL CALCULATION
     ════════════════════════════════ */
-    function updateTotal() {
-        let total = currentPrice * qty;
-        selectedAddons.forEach(addon => { total += addon.price; });
-        document.getElementById('orderTotal').textContent = '₱' + Math.round(total).toLocaleString();
-    }
-
+    
+function updateTotal() {
+    let total = currentPrice * qty;
+    selectedAddons.forEach(addon => { total += addon.price; });
+    document.getElementById('orderTotal').textContent = '₱' + Math.round(total).toLocaleString();
+}
     /* ════════════════════════════════
-       CART FUNCTIONS
+       CART FUNCTIONS - MATCHING STORE_DETAIL.HTML
     ════════════════════════════════ */
-    function addToCartWithVariant() {
-        if (selectedVariant) {
-            addToCart({
-                id: {{ product.id }},
-                variant_id: selectedVariant.id,
-                name: selectedVariant.name + ' ' + {{ product.name | tojson }},
-                price: selectedVariant.price,
-                store_id: {{ product.store_id }},
-                store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
-                image_url: selectedVariant.image_url || "{{ ('/static/uploads/products/' + product.images[0].filename) if product.images else '' }}",
-                quantity: qty
-            });
-        } else {
-            addToCart({
-                id: {{ product.id }},
-                name: {{ product.name | tojson }},
-                price: {{ product.price }},
-                store_id: {{ product.store_id }},
-                store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
-                image_url: "{{ ('/static/uploads/products/' + product.images[0].filename) if product.images else '' }}",
-                quantity: qty
-            });
-        }
-    }
+   
 
-    function addToCart(product) {
-        // Get current cart from localStorage or initialize empty array
-        let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+    // In product_details.html, update addToCartWithVariant function:
+async function addToCartWithVariant() {
+    const button = event.currentTarget;
+    const originalHtml = button.innerHTML;
+    
+    button.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+    button.disabled = true;
+    
+    try {
+        let product;
         
-        // Check if product already in cart
-        const existingItem = cart.find(item => 
-            item.id === product.id && 
-            (item.variant_id === product.variant_id || (!item.variant_id && !product.variant_id))
-        );
-        
-        if (existingItem) {
-            existingItem.quantity = (existingItem.quantity || 1) + (product.quantity || 1);
+        if (selectedVariant) {
+            // Variant selected - send main product ID as id, variant_id separately
+            product = {
+                id: mainProduct.id,                    // ✅ Main product ID (required)
+                variant_id: selectedVariant.id,        // ✅ Variant ID (required)
+                name: selectedVariant.name + ' ' + mainProduct.name,  // Combined name for display
+                price: selectedVariant.price,          // ✅ Variant price
+                store_id: mainProduct.store_id,
+                store_name: mainProduct.store_name,
+                image_url: selectedVariant.image_url || mainProduct.image_url,
+                quantity: qty
+            };
+            console.log('🔄 Adding VARIANT to cart:', product);
         } else {
-            cart.push({
-                id: product.id,
-                variant_id: product.variant_id,
-                name: product.name,
-                price: product.price,
-                store_id: product.store_id,
-                store_name: product.store_name,
-                image_url: product.image_url,
-                quantity: product.quantity || 1
-            });
+            // Main product selected - no variant_id
+            product = {
+                id: mainProduct.id,                    // ✅ Main product ID only
+                name: mainProduct.name,
+                price: mainProduct.price,
+                store_id: mainProduct.store_id,
+                store_name: mainProduct.store_name,
+                image_url: mainProduct.image_url,
+                quantity: qty
+            };
+            console.log('🔄 Adding MAIN PRODUCT to cart:', product);
         }
         
-        localStorage.setItem('cart', JSON.stringify(cart));
-        showToast('✓ Added to bag!', 'success');
-        
-        // Update cart count in header if exists
-        const cartCount = document.querySelector('.cart-count');
-        if (cartCount) {
-            const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
-            cartCount.textContent = totalItems;
-            cartCount.style.display = totalItems > 0 ? 'flex' : 'none';
+        if (typeof window.addToCart === 'function') {
+            await window.addToCart(product);
+            showToast(`✓ ${product.name} added to basket`);
+        } else {
+            console.error('❌ addToCart function not found');
+            showToast('Error adding to cart. Please try again.', 'error');
         }
+    } catch (error) {
+        console.error('❌ Error adding to cart:', error);
+        showToast('Network error — please try again');
+    } finally {
+        setTimeout(() => {
+            button.innerHTML = originalHtml;
+            button.disabled = false;
+        }, 500);
     }
+}
 
     /* ════════════════════════════════
        BUY NOW
     ════════════════════════════════ */
-    function buyNow() {
-        const delivery = document.getElementById('deliveryInput').value;
-        if (!delivery) {
-            const field = document.getElementById('deliveryField');
-            field.style.borderColor = 'var(--deep-rose)';
-            field.style.animation = 'shake .3s ease';
-            setTimeout(() => field.style.animation = '', 300);
-            document.getElementById('deliveryInput').focus();
-            showToast('Please enter your delivery location first.', 'error');
-            return;
-        }
-        if (!selectedDate) {
-            showToast('Please select a delivery date.', 'error');
-            return;
-        }
-
-        // Add to cart then redirect to checkout
-        addToCartWithVariant();
-
-        showToast('✓ Added to bag! Redirecting to checkout…', 'success');
-        setTimeout(() => {
-            window.location.href = "{{ url_for('templates.checkout') }}";
-        }, 800);
+   function buyNow() {
+    const delivery = document.getElementById('deliveryInput').value;
+    if (!delivery) {
+        const field = document.getElementById('deliveryField');
+        field.style.borderColor = 'var(--deep-rose)';
+        field.style.animation = 'shake .3s ease';
+        setTimeout(() => field.style.animation = '', 300);
+        document.getElementById('deliveryInput').focus();
+        showToast('Please enter your delivery location first.', 'error');
+        return;
     }
-
-    /* ════════════════════════════════
-       VIEW PRODUCT
-    ════════════════════════════════ */
-    function viewProduct(productId) {
-        window.location.href = "{{ url_for('templates.product_detail', product_id=0) }}".replace('0', productId);
+    if (!selectedDate) {
+        showToast('Please select a delivery date.', 'error');
+        return;
     }
+ 
+    // Add to cart then redirect to checkout
+    addToCartWithVariant();
+ 
+    showToast('✓ Added to basket! Redirecting to checkout…', 'success');
+    setTimeout(() => {
+        window.location.href = "{{ url_for('templates.checkout') }}";
+    }, 800);
+}
+   /* ════════════════════════════════
+   VIEW PRODUCT
+════════════════════════════════ */
+ 
+function viewProduct(productId) {
+    window.location.href = "{{ url_for('templates.product_detail', product_id=0) }}".replace('0', productId);
+}
 
-    /* ════════════════════════════════
-       SHAKE ANIMATION
-    ════════════════════════════════ */
-    const shakeStyle = document.createElement('style');
-    shakeStyle.textContent = `
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            20% { transform: translateX(-6px); }
-            40% { transform: translateX(6px); }
-            60% { transform: translateX(-4px); }
-            80% { transform: translateX(4px); }
-        }
-    `;
-    document.head.appendChild(shakeStyle);
-
-    /* ════════════════════════════════
-       TOAST NOTIFICATION
-    ════════════════════════════════ */
-    function showToast(message, type = 'info') {
-        // Create toast container if it doesn't exist
-        let toastContainer = document.getElementById('toast-container');
-        if (!toastContainer) {
-            toastContainer = document.createElement('div');
-            toastContainer.id = 'toast-container';
-            toastContainer.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 9999;
-            `;
-            document.body.appendChild(toastContainer);
-        }
-
-        const toast = document.createElement('div');
-        toast.style.cssText = `
-            background: ${type === 'error' ? '#f44336' : type === 'success' ? '#4CAF50' : '#333'};
-            color: white;
-            padding: 12px 24px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            animation: slideIn 0.3s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        `;
-        toast.textContent = message;
-
-        const slideInStyle = document.createElement('style');
-        slideInStyle.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-        `;
-        document.head.appendChild(slideInStyle);
-
-        toastContainer.appendChild(toast);
-
-        setTimeout(() => {
-            toast.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
+/* ════════════════════════════════
+   INITIALIZATION
+════════════════════════════════ */
+ 
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('✅ Product details page loaded');
+    
+    buildDateOptions();
+    setMainImage(0);
+    updateTotal();
+    
+    // Ensure main product button is active
+    const mainBtn = document.querySelector('.variant-btn[data-variant-id="main"]');
+    if (mainBtn && !mainBtn.classList.contains('active')) {
+        mainBtn.classList.add('active');
+        selectedVariant = null;
+        console.log('✅ Main product button activated');
     }
-
-    /* ════════════════════════════════
-       INIT
-    ════════════════════════════════ */
-    document.addEventListener('DOMContentLoaded', function() {
-        buildDateOptions();
-        setMainImage(0);
-        updateTotal();
-        
-        // Main product button is already active by default (has 'active' class)
-        // No need to auto-select anything
-    });
+    
+    // Verify addToCart exists
+    if (typeof window.addToCart !== 'function') {
+        console.warn('⚠️ addToCart function not found in global scope');
+    }
+});
 </script>
 {% endblock %}

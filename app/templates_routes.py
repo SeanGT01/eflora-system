@@ -1,8 +1,8 @@
 # app/templates_routes.py - FIXED VERSION
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary, GCashQR
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary, GCashQR, StockReduction
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -17,6 +17,7 @@ from flask import send_file
 from app.laguna_addresses import get_municipalities, get_barangays, get_coordinates, format_address, LAGUNA_ADDRESSES
 from app.models import UserAddress
 
+from app.utils.cloudinary_helper import upload_to_cloudinary
 # app/templates_routes.py - Add these imports at the top
 from flask_wtf.csrf import generate_csrf
 
@@ -24,20 +25,10 @@ from flask_wtf.csrf import generate_csrf
 from app import limiter
 templates_bp = Blueprint('templates', __name__)
 
-# Define upload folder relative to the app root
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
-
-# Or if you want it at the project root (where your app folder is)
-PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, '..'))
-UPLOAD_FOLDER_ALT = os.path.join(PROJECT_ROOT, 'uploads', 'products')
-
 
 # Configure upload folder
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # In templates_routes.py, make sure you have this context processor
 @templates_bp.context_processor
@@ -47,29 +38,15 @@ def inject_csrf_token():
     return dict(csrf_token=generate_csrf)
 
 
-# Or if you prefer to use PIL for MIME checking (no extra dependency):
-def get_image_mime(file_path):
-    """Get MIME type of an image file using PIL"""
-    try:
-        from PIL import Image
-        with Image.open(file_path) as img:
-            format_to_mime = {
-                'JPEG': 'image/jpeg',
-                'PNG': 'image/png',
-                'GIF': 'image/gif',
-                'WEBP': 'image/webp',
-                'BMP': 'image/bmp',
-                'TIFF': 'image/tiff'
-            }
-            return format_to_mime.get(img.format, 'application/octet-stream')
-    except:
-        return None
-    
 @templates_bp.route('/')
 @limiter.limit("5 per minute")
 def index():
     """Show the e-commerce landing page to everyone"""
     try:
+        # Get all main categories from database for the navigation
+        from app.models import Category
+        main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+        
         # Get products for the landing page - only from active stores with stock
         products = Product.query\
             .join(Store, Product.store_id == Store.id)\
@@ -87,6 +64,10 @@ def index():
         print(f"Raw products count: {len(products)}")
         for p in products:
             print(f"Product ID: {p.id}, Name: {p.name}, Store ID: {p.store_id}, Store: {p.store.name if p.store else 'None'}")
+            if p.main_category:
+                print(f"  Main Category: {p.main_category.name}")
+            if p.store_category:
+                print(f"  Store Category: {p.store_category.name}")
         
         # Convert products to dict and add store_name
         product_list = []
@@ -99,6 +80,23 @@ def index():
             else:
                 product_dict['store_name'] = 'Unknown Store'
                 print(f"WARNING: Product '{product.name}' has no associated store!")
+            
+            # Add main category info
+            if product.main_category:
+                product_dict['main_category'] = {
+                    'id': product.main_category.id,
+                    'name': product.main_category.name,
+                    'slug': product.main_category.slug
+                }
+            
+            # Add store category info
+            if product.store_category:
+                product_dict['store_category'] = {
+                    'id': product.store_category.id,
+                    'name': product.store_category.name,
+                    'slug': product.store_category.slug
+                }
+            
             product_list.append(product_dict)
         
         # Get active stores
@@ -114,22 +112,29 @@ def index():
         
         store_list = [store.to_dict() for store in stores]
         
+        # Format categories for the template (for featured categories section)
+        featured_categories = []
+        for cat in main_categories:
+            featured_categories.append({
+                'id': cat.id,
+                'name': cat.name,
+                'slug': cat.slug,
+                'icon': cat.icon or 'flower-line',  # Default icon if none
+                'description': cat.description,
+                'image_url': cat.image_url
+            })
+        
         print(f"\nFinal product_list count: {len(product_list)}")
         print(f"Final store_list count: {len(store_list)}")
+        print(f"Main categories count: {len(main_categories)}")
         print("=== END DEBUG ===\n")
-        
-        categories = [
-            {'id': 'flowers', 'name': 'Fresh Flowers', 'icon': 'flower-line'},
-            {'id': 'plants', 'name': 'Potted Plants', 'icon': 'plant-line'},
-            {'id': 'bouquets', 'name': 'Bouquets', 'icon': 'bouquet-line'},
-            {'id': 'succulents', 'name': 'Succulents', 'icon': 'cactus-line'},
-        ]
         
         return render_template(
             'index.html',
             products=product_list,
             stores=store_list,
-            categories=categories
+            categories=featured_categories,  # For featured categories section
+            main_categories=main_categories   # For navigation menu
         )
     except Exception as e:
         print(f"ERROR loading landing page: {str(e)}")
@@ -138,7 +143,8 @@ def index():
         return render_template('index.html', 
                              products=[], 
                              stores=[], 
-                             categories=[])
+                             categories=[],
+                             main_categories=[])
     
 
 
@@ -187,19 +193,28 @@ def product_archive_choice(product_id):
                     'error': f'Cannot delete. Product is in {carts_count} carts. Archive it instead.'
                 }), 400
             
-            # Delete images
-            from app.templates_routes import BASE_DIR
-            upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
-            for image in product.images:
-                image_path = os.path.join(upload_path, image.filename)
-                if os.path.exists(image_path):
-                    os.remove(image_path)
+            # ===== FIX: DELETE FROM CLOUDINARY FIRST =====
+            from app.utils.cloudinary_helper import delete_from_cloudinary
             
+            # Delete product images from Cloudinary
+            for image in product.images:
+                if image.public_id:
+                    delete_from_cloudinary(image.public_id)
+                    print(f"🗑️ Deleted Cloudinary image: {image.public_id}")
+            
+            # Delete variant images from Cloudinary
+            for variant in product.variants:
+                if variant.image_public_id:
+                    delete_from_cloudinary(variant.image_public_id)
+                    print(f"🗑️ Deleted variant Cloudinary image: {variant.image_public_id}")
+            
+            # Now delete from database
             db.session.delete(product)
             db.session.commit()
+            
             return jsonify({
                 'success': True,
-                'message': 'Product permanently deleted'
+                'message': 'Product permanently deleted from database and Cloudinary'
             }), 200
             
         else:  # cancel
@@ -210,6 +225,9 @@ def product_archive_choice(product_id):
             
     except Exception as e:
         db.session.rollback()
+        print(f"❌ Error in archive choice: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     
 # ===== HELPER FUNCTIONS =====
@@ -229,18 +247,6 @@ def _get_primary_image(product):
     img = primary or product.images[0]
     return f'/static/uploads/products/{img.filename}'
 
-def generate_short_filename(original_filename, product_id, index):
-    """Generate a short, safe filename for images"""
-    if '.' in original_filename:
-        ext = original_filename.rsplit('.', 1)[1].lower()
-    else:
-        ext = 'jpg'
-    
-    timestamp = str(int(time.time()))[-6:]
-    random_str = uuid.uuid4().hex[:8]
-    short_filename = f"p{product_id}_{index}_{timestamp}_{random_str}.{ext}"
-    return short_filename
-    
 
 
 # Add context processor to make user available to all templates
@@ -255,26 +261,39 @@ def inject_user():
     return dict(user=user)
 
 
-# NEW: Seller Application Routes
 @templates_bp.route('/seller/apply', methods=['POST'])
 def seller_apply():
-    """Handle seller application form submission"""
+    """Handle seller application form submission with Cloudinary"""
     if 'user_id' not in session:
         return jsonify({'error': 'Please login first'}), 401
     
     try:
-        # Get the user from database (optional, just to verify they exist)
+        # Get the user from database
         user = User.query.get(session['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        # Get form data - NO name fields!
+        # Get form data
         store_name = request.form.get('store_name')
         store_description = request.form.get('store_description')
+        agree_terms = request.form.get('agree_terms')
         
         # Validate required fields
         if not store_name or not store_description:
             return jsonify({'error': 'Please fill in all required fields'}), 400
+        
+        # Get Cloudinary data from form (uploaded by frontend)
+        store_logo_public_id = request.form.get('store_logo_public_id')
+        store_logo_url = request.form.get('store_logo_url')
+        government_id_public_id = request.form.get('government_id_public_id')
+        government_id_url = request.form.get('government_id_url')
+        
+        # Validate Cloudinary data
+        if not store_logo_public_id or not store_logo_url:
+            return jsonify({'error': 'Store logo upload failed. Please try again.'}), 400
+        
+        if not government_id_public_id or not government_id_url:
+            return jsonify({'error': 'Government ID upload failed. Please try again.'}), 400
         
         # Check if user already has a pending application
         existing = SellerApplication.query.filter_by(
@@ -283,54 +302,21 @@ def seller_apply():
         ).first()
         
         if existing:
+            # If there's an existing application, clean up the newly uploaded images
+            from app.utils.cloudinary_helper import delete_from_cloudinary
+            delete_from_cloudinary(store_logo_public_id)
+            delete_from_cloudinary(government_id_public_id)
             return jsonify({'error': 'You already have a pending application'}), 400
         
-        # Handle store logo upload
-        store_logo_filename = None
-        if 'store_logo' in request.files:
-            file = request.files['store_logo']
-            if file and file.filename and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                # Add timestamp to make filename unique
-                import time
-                timestamp = str(int(time.time()))
-                store_logo_filename = f"{timestamp}_{filename}"
-                
-                # Get upload path from config
-                upload_path = current_app.config['SELLER_LOGO_UPLOAD_FOLDER']
-                os.makedirs(upload_path, exist_ok=True)
-                
-                # Save file
-                filepath = os.path.join(upload_path, store_logo_filename)
-                file.save(filepath)
-        
-        # Handle government ID upload
-        govt_id_filename = None
-        if 'government_id' in request.files:
-            file = request.files['government_id']
-            if file and file.filename and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                # Add timestamp to make filename unique
-                import time
-                timestamp = str(int(time.time()))
-                govt_id_filename = f"{timestamp}_{filename}"
-                
-                # Get upload path from config
-                upload_path = current_app.config['SELLER_ID_UPLOAD_FOLDER']
-                os.makedirs(upload_path, exist_ok=True)
-                
-                # Save file
-                filepath = os.path.join(upload_path, govt_id_filename)
-                file.save(filepath)
-        
-        # Create seller application - NO name fields!
+        # Create seller application with Cloudinary data
         application = SellerApplication(
             user_id=session['user_id'],
-            # first_name and last_name are GONE!
             store_name=store_name,
             store_description=store_description,
-            store_logo_path=store_logo_filename,
-            government_id_path=govt_id_filename,
+            store_logo_public_id=store_logo_public_id,
+            store_logo_url=store_logo_url,
+            government_id_public_id=government_id_public_id,
+            government_id_url=government_id_url,
             status='pending'
         )
         
@@ -400,7 +386,7 @@ def account_content(page):
 # ============================================
 @templates_bp.route('/api/account/profile/update', methods=['POST'])
 def update_profile():
-    """Update user profile information"""
+    """Update user profile information with Cloudinary avatar"""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     
@@ -414,7 +400,6 @@ def update_profile():
         print("📝 PROFILE UPDATE REQUEST RECEIVED")
         print(f"👤 User ID: {user.id}")
         print(f"📋 Form data keys: {list(request.form.keys())}")
-        print(f"📎 File keys: {list(request.files.keys())}")
         
         # Get form data
         first_name = request.form.get('first_name', '').strip()
@@ -440,88 +425,24 @@ def update_profile():
         if gender:
             user.gender = gender
         
-        # Handle avatar upload
-        if 'avatar' in request.files:
-            file = request.files['avatar']
-            print(f"📸 Avatar file received: {file.filename}")
-            print(f"📸 Content type: {file.content_type}")
+        # Handle avatar update from Cloudinary
+        avatar_public_id = request.form.get('avatar_public_id')
+        avatar_url = request.form.get('avatar_url')
+        
+        if avatar_public_id and avatar_url:
+            print(f"📸 Avatar Cloudinary data received: public_id={avatar_public_id}")
             
-            # Check file size
-            file.seek(0, os.SEEK_END)
-            file_size = file.tell()
-            file.seek(0)  # Reset file pointer
-            print(f"📸 File size: {file_size} bytes ({file_size/1024:.2f} KB)")
+            # Delete old avatar from Cloudinary if exists
+            if user.avatar_public_id:
+                from app.utils.cloudinary_helper import delete_from_cloudinary
+                delete_from_cloudinary(user.avatar_public_id)
+                print(f"🗑️ Deleted old avatar: {user.avatar_public_id}")
             
-            # Check file extension
-            if file.filename:
-                file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'none'
-                print(f"📸 File extension: {file_ext}")
-                print(f"📸 Allowed extensions: {ALLOWED_EXTENSIONS}")
-                print(f"📸 Is allowed: {file_ext in ALLOWED_EXTENSIONS}")
-            
-            if file and file.filename and allowed_file(file.filename):
-                print(f"✅ File is allowed, processing...")
-                
-                filename = secure_filename(file.filename)
-                print(f"🔒 Secure filename: {filename}")
-                
-                # Add timestamp to make filename unique
-                import time
-                timestamp = str(int(time.time()))
-                avatar_filename = f"{timestamp}_{filename}"
-                print(f"🏷️ Final filename: {avatar_filename}")
-                
-                # Use config UPLOAD_FOLDER
-                upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'avatars')
-                print(f"📁 Upload path from config: {upload_path}")
-                print(f"📁 Config UPLOAD_FOLDER: {current_app.config['UPLOAD_FOLDER']}")
-                
-                # Make sure directory exists
-                os.makedirs(upload_path, exist_ok=True)
-                print(f"✅ Ensured directory exists: {os.path.exists(upload_path)}")
-                
-                # Save file
-                filepath = os.path.join(upload_path, avatar_filename)
-                print(f"💾 Saving to: {filepath}")
-                file.save(filepath)
-                
-                # Check if file was saved
-                if os.path.exists(filepath):
-                    saved_size = os.path.getsize(filepath)
-                    print(f"✅ File saved successfully! Size: {saved_size} bytes")
-                    print(f"📁 Absolute path: {os.path.abspath(filepath)}")
-                    
-                    # List directory contents
-                    print(f"📁 Files in avatars folder:")
-                    try:
-                        files = os.listdir(upload_path)
-                        for f in files[-5:]:  # Show last 5 files
-                            f_size = os.path.getsize(os.path.join(upload_path, f))
-                            print(f"   - {f} ({f_size} bytes)")
-                    except Exception as e:
-                        print(f"   Error listing directory: {e}")
-                else:
-                    print(f"❌ File not found after save!")
-                
-                # Delete old avatar if exists
-                if user.avatar_filename:
-                    old_path = os.path.join(upload_path, user.avatar_filename)
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-                        print(f"🗑️ Deleted old avatar: {old_path}")
-                
-                user.avatar_filename = avatar_filename
-                print(f"✅ Updated user.avatar_filename to: {avatar_filename}")
-            else:
-                print(f"❌ Invalid file or not allowed")
-                if file:
-                    print(f"   File exists: {bool(file)}")
-                    print(f"   Filename exists: {bool(file.filename)}")
-                    if file.filename:
-                        print(f"   Extension: {file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'none'}")
-                        print(f"   Allowed: {allowed_file(file.filename)}")
-        else:
-            print("📭 No avatar file in request")
+            # Update user with new Cloudinary data
+            user.avatar_public_id = avatar_public_id
+            user.avatar_url = avatar_url
+            # Keep filename for reference (optional)
+            user.avatar_filename = f"avatar_{avatar_public_id}.jpg"
         
         user.updated_at = datetime.utcnow()
         db.session.commit()
@@ -618,25 +539,25 @@ def change_password():
 def my_account():
     if not session.get('user_id'):
         return redirect(url_for('templates.login'))
-    
-    # Get the page parameter from URL (default to 'profile')
+
+#Get the page parameter from URL (default to 'profile')
     page = request.args.get('page', 'profile')
-    
-    # Get user data from database
+
+#Get user data from database
     user = User.query.get(session['user_id'])
     if not user:
         return redirect(url_for('templates.logout'))
-    
-    # Convert to dict for template
+
+#Convert to dict for template
     user_data = user.to_dict()
-    
-    # Get Mapbox token from environment variables
+
+#Get Mapbox token from environment variables
     mapbox_token = os.getenv('MAPBOX_PUBLIC_TOKEN', '')
-    
-    # DEBUG: Print token to console to verify it's loaded
+
+#DEBUG: Print token to console to verify it's loaded
     print(f"🗺️ Mapbox token loaded for my-account: {mapbox_token[:15] if mapbox_token else 'NOT FOUND'}...")
-    
-    # IMPORTANT: Render the template, don't return JSON!
+
+#IMPORTANT: Render the template, don't return JSON!
     return render_template('my_account.html', 
                          user=user_data, 
                          active_page=page,
@@ -888,32 +809,65 @@ def orders():
                          status=status)
 
 
-
-
-@templates_bp.route('/category/<category_id>')
-def category(category_id):
-    """Category page for web interface"""
-    products = Product.query.filter_by(
-        category=category_id, 
-        is_available=True
-    ).all()
-    
-    # Convert products to dict and add store_name
-    product_list = []
-    for product in products:
-        product_dict = product.to_dict()
-        # Add store name to each product
-        if product.store:
-            product_dict['store_name'] = product.store.name
-            product_dict['store_id'] = product.store.id  # Optional: if you want to link to store
-        else:
-            product_dict['store_name'] = 'Unknown Store'
-            product_dict['store_id'] = None
-        product_list.append(product_dict)
-    
-    return render_template('category.html',
-                         category_id=category_id,
-                         products=product_list)
+@templates_bp.route('/category/<path:category_identifier>')
+def category(category_identifier):
+    """Category page showing all products in a main category"""
+    try:
+        from app.models import Category
+        
+        # Try to find by ID first (if it's a number)
+        category = None
+        if category_identifier.isdigit():
+            category = Category.query.get(int(category_identifier))
+        
+        # If not found by ID or not a number, try by slug
+        if not category:
+            category = Category.query.filter_by(slug=category_identifier, is_active=True).first()
+        
+        if not category:
+            flash('Category not found', 'error')
+            return redirect(url_for('templates.index'))
+        
+        # Get all products in this main category
+        products = Product.query.filter_by(
+            main_category_id=category.id,
+            is_available=True,
+            is_archived=False
+        ).join(Store).filter(Store.status == 'active').all()
+        
+        # Convert products to dict and add store_name
+        product_list = []
+        for product in products:
+            product_dict = product.to_dict()
+            product_dict['store_name'] = product.store.name if product.store else 'Unknown Store'
+            
+            if product.main_category:
+                product_dict['main_category'] = {
+                    'id': product.main_category.id,
+                    'name': product.main_category.name,
+                    'slug': product.main_category.slug
+                }
+            
+            if product.store_category:
+                product_dict['store_category'] = {
+                    'id': product.store_category.id,
+                    'name': product.store_category.name,
+                    'slug': product.store_category.slug
+                }
+            
+            product_list.append(product_dict)
+        
+        return render_template('category.html',
+                             category=category,
+                             products=product_list,
+                             category_identifier=category_identifier)
+        
+    except Exception as e:
+        print(f"❌ Error loading category {category_identifier}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash('Error loading category', 'error')
+        return redirect(url_for('templates.index'))
 
 
 @templates_bp.route('/contact')
@@ -982,32 +936,83 @@ def products():
         print(f"Error loading products: {str(e)}")
         return render_template('products.html', products=[])
     
-
-
 @templates_bp.route('/product/<int:product_id>')
 def product_detail(product_id):
-    """Product detail page"""
+    """Product detail page with category support"""
     try:
         product = Product.query.get_or_404(product_id)
         store = Store.query.get(product.store_id)
         
-        # Get related products
+        # Get all main categories for the navigation
+        from app.models import Category
+        main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+        
+        # Get related products - same main category
         related_products = Product.query.filter(
+            Product.main_category_id == product.main_category_id,
             Product.store_id == product.store_id,
             Product.id != product_id,
-            Product.is_available == True
+            Product.is_available == True,
+            Product.is_archived == False,
+            Product.stock_quantity > 0
         ).limit(4).all()
         
-        return render_template('product_detail.html',
-                             product=product.to_dict(),
-                             store=store.to_dict() if store else None,
-                             related_products=[p.to_dict() for p in related_products])
+        # Get add-on products - different main category but same store
+        addon_products = []
+        if product.main_category_id:
+            addon_products = Product.query.filter(
+                Product.store_id == product.store_id,
+                Product.main_category_id != product.main_category_id,
+                Product.id != product_id,
+                Product.is_available == True,
+                Product.is_archived == False,
+                Product.stock_quantity > 0
+            ).limit(8).all()
+        
+        # Convert products to dict format
+        product_dict = product.to_dict()
+        store_dict = store.to_dict() if store else None
+        
+        # Add main_category and store_category info to product_dict for template
+        if product.main_category:
+            product_dict['main_category'] = {
+                'id': product.main_category.id,
+                'name': product.main_category.name,
+                'slug': product.main_category.slug
+            }
+        
+        if product.store_category:
+            product_dict['store_category'] = {
+                'id': product.store_category.id,
+                'name': product.store_category.name,
+                'slug': product.store_category.slug
+            }
+        
+        # Debug print
+        print(f"\n🔍 PRODUCT DETAIL - ID: {product_id}")
+        print(f"  Name: {product.name}")
+        print(f"  Main Category: {product.main_category.name if product.main_category else 'None'}")
+        print(f"  Store Category: {product.store_category.name if product.store_category else 'None'}")
+        print(f"  Categories for nav: {len(main_categories)}")
+        print(f"  Related products: {len(related_products)}")
+        print(f"  Add-on products: {len(addon_products)}")
+        
+        return render_template(
+            'product_detail.html',
+            product=product_dict,
+            store=store_dict,
+            main_categories=main_categories,  # Pass to base.html for navigation
+            related_products=[p.to_dict() for p in related_products],
+            addon_products=[p.to_dict() for p in addon_products]
+        )
+        
     except Exception as e:
-        print(f"Error loading product {product_id}: {str(e)}")
+        print(f"❌ Error loading product {product_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         flash('Product not found', 'error')
         return redirect(url_for('templates.products'))
-
-
+    
 @templates_bp.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -1193,7 +1198,7 @@ def generate_short_filename(original_filename, product_id, index):
 @templates_bp.route('/seller/products/create', methods=['POST'])
 @seller_required
 def create_product():
-    """Create a new product with variants"""
+    """Create a new product with Cloudinary images (no local storage)"""
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
     
@@ -1204,20 +1209,30 @@ def create_product():
             return jsonify({'error': 'Store not found. Please create a store first.'}), 404
         
         print("\n" + "="*60)
-        print("📝 CREATE PRODUCT REQUEST")
+        print("📝 CREATE PRODUCT REQUEST (Cloudinary Only)")
         print(f"Form keys: {list(request.form.keys())}")
-        print(f"File keys: {list(request.files.keys())}")
+        
+        # Import Cloudinary helper
+        from app.utils.cloudinary_helper import should_use_cloudinary
+        use_cloudinary = should_use_cloudinary()
+        
+        if not use_cloudinary:
+            return jsonify({'error': 'Cloudinary is not configured. Please check your environment variables.'}), 500
         
         # Get form data
         name = request.form.get('name')
         description = request.form.get('description')
         price = request.form.get('price')
         stock_quantity = request.form.get('stock_quantity')
-        category = request.form.get('category')
+        
+        # ===== UPDATED: Get category fields =====
+        main_category_id = request.form.get('main_category_id')
+        store_category_id = request.form.get('store_category_id')
+        
         is_available = request.form.get('is_available', 'false').lower() == 'true'
         has_variants = request.form.get('has_variants', 'false').lower() == 'true'
         
-        print(f"📦 Product data: name={name}, category={category}, has_variants={has_variants}")
+        print(f"📦 Product data: name={name}, main_category_id={main_category_id}, store_category_id={store_category_id}, has_variants={has_variants}")
         
         # Validate required fields
         if not name or not name.strip():
@@ -1226,6 +1241,8 @@ def create_product():
             return jsonify({'error': 'Price is required'}), 400
         if not stock_quantity:
             return jsonify({'error': 'Stock quantity is required'}), 400
+        if not main_category_id:
+            return jsonify({'error': 'Main category is required'}), 400
         
         # Convert price and stock quantity
         try:
@@ -1242,14 +1259,32 @@ def create_product():
         except ValueError:
             return jsonify({'error': 'Invalid stock quantity format'}), 400
         
-        # Create new product
+        # Validate main_category_id exists
+        from app.models import Category
+        main_category = Category.query.get(main_category_id)
+        if not main_category:
+            return jsonify({'error': 'Invalid main category'}), 400
+        
+        # Validate store_category_id if provided
+        if store_category_id:
+            from app.models import StoreCategory
+            store_category = StoreCategory.query.filter_by(
+                id=store_category_id,
+                store_id=store.id,
+                main_category_id=main_category_id
+            ).first()
+            if not store_category:
+                return jsonify({'error': 'Invalid store subcategory'}), 400
+        
+        # Create new product with category fields
         product = Product(
             store_id=store.id,
             name=name.strip(),
             description=description.strip() if description else None,
             price=price_float,
             stock_quantity=stock_int,
-            category=category,
+            main_category_id=int(main_category_id),
+            store_category_id=int(store_category_id) if store_category_id else None,
             is_available=is_available
         )
         
@@ -1258,42 +1293,41 @@ def create_product():
         
         print(f"✅ Product created with ID: {product.id}")
         
-        # Handle product images
-        upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
-        os.makedirs(upload_path, exist_ok=True)
-        
+        # ===== HANDLE CLOUDINARY IMAGES (ONLY) =====
+        cloudinary_images_json = request.form.get('cloudinary_images')
         image_count = 0
-        for key in sorted(request.files.keys()):
-            if key.startswith('image_'):
-                file = request.files[key]
-                if file and file.filename and allowed_file(file.filename):
-                    short_filename = generate_short_filename(
-                        file.filename, 
-                        product.id, 
-                        image_count
-                    )
-                    
-                    filepath = os.path.join(upload_path, short_filename)
-                    file.save(filepath)
-                    
-                    is_primary = (image_count == 0)
-                    
-                    product_image = ProductImage(
-                        product_id=product.id,
-                        filename=short_filename,
-                        is_primary=is_primary,
-                        sort_order=image_count
-                    )
-                    db.session.add(product_image)
-                    image_count += 1
-                    
-                    print(f"📸 Saved product image {image_count}: {short_filename}")
         
-        if image_count == 0:
+        if not cloudinary_images_json:
             db.session.rollback()
-            return jsonify({'error': 'At least one product image is required'}), 400
+            return jsonify({'error': 'No images provided. Please upload at least one product image.'}), 400
         
-        # Handle variants if enabled
+        try:
+            cloudinary_images = json.loads(cloudinary_images_json)
+            print(f"📸 Received {len(cloudinary_images)} Cloudinary images")
+            
+            if len(cloudinary_images) == 0:
+                db.session.rollback()
+                return jsonify({'error': 'At least one product image is required'}), 400
+            
+            for img_data in cloudinary_images:
+                product_image = ProductImage(
+                    product_id=product.id,
+                    filename=f"cloudinary_{img_data['public_id']}.jpg",
+                    public_id=img_data['public_id'],
+                    cloudinary_url=img_data['url'],
+                    is_primary=img_data.get('is_primary', False),
+                    sort_order=img_data.get('sort_order', image_count)
+                )
+                db.session.add(product_image)
+                image_count += 1
+                print(f"  ✅ Added Cloudinary image: {img_data['public_id']}")
+                
+        except json.JSONDecodeError as e:
+            print(f"❌ Error parsing cloudinary_images: {e}")
+            db.session.rollback()
+            return jsonify({'error': 'Invalid image data format'}), 400
+        
+        # ===== HANDLE VARIANTS =====
         if has_variants:
             variants_json = request.form.get('variants')
             if variants_json:
@@ -1301,12 +1335,9 @@ def create_product():
                     variants_data = json.loads(variants_json)
                     print(f"🎯 Processing {len(variants_data)} variants")
                     
-                    variant_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants')
-                    os.makedirs(variant_upload_path, exist_ok=True)
-                    
                     for idx, variant_data in enumerate(variants_data):
                         if variant_data.get('_delete'):
-                            continue  # Skip deleted variants (shouldn't happen on create)
+                            continue
                         
                         print(f"  Variant {idx}: {variant_data.get('name')}")
                         
@@ -1321,23 +1352,12 @@ def create_product():
                             is_available=True
                         )
                         
-                        # Handle variant image
-                        variant_image_key = f'variant_image_{idx}'
-                        if variant_image_key in request.files:
-                            file = request.files[variant_image_key]
-                            if file and file.filename and allowed_file(file.filename):
-                                variant_filename = generate_short_filename(
-                                    file.filename,
-                                    product.id,
-                                    idx
-                                )
-                                variant_filename = f"var_{variant_filename}"
-                                
-                                variant_filepath = os.path.join(variant_upload_path, variant_filename)
-                                file.save(variant_filepath)
-                                
-                                variant.image_filename = variant_filename
-                                print(f"    📸 Variant image saved: {variant_filename}")
+                        # Handle Cloudinary variant image
+                        if variant_data.get('cloudinary_public_id'):
+                            variant.image_public_id = variant_data['cloudinary_public_id']
+                            variant.image_url = variant_data['cloudinary_url']
+                            variant.image_filename = f"variant_{variant_data['cloudinary_public_id']}.jpg"
+                            print(f"    📸 Variant with Cloudinary image: {variant_data['cloudinary_public_id']}")
                         
                         db.session.add(variant)
                     
@@ -1345,9 +1365,13 @@ def create_product():
                     print(f"❌ JSON decode error: {e}")
                     db.session.rollback()
                     return jsonify({'error': 'Invalid variants data'}), 400
+                except Exception as e:
+                    print(f"❌ Error processing variants: {e}")
+                    db.session.rollback()
+                    return jsonify({'error': f'Error processing variants: {str(e)}'}), 400
         
         db.session.commit()
-        print(f"✅ Product {product.id} created successfully with {image_count} images")
+        print(f"✅ Product {product.id} created successfully with {image_count} Cloudinary images")
         print("="*60 + "\n")
         
         return jsonify({
@@ -1366,6 +1390,7 @@ def create_product():
 
 
 @templates_bp.route('/seller/products/<int:product_id>', methods=['GET', 'PUT', 'DELETE'])
+@seller_required
 def manage_product(product_id):
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
@@ -1386,12 +1411,18 @@ def manage_product(product_id):
             print(f"✅ Returning product with {len(product_dict.get('variants', []))} variants")
             return jsonify({'success': True, 'product': product_dict})
 
-        # ── PUT (UPDATE) ──────────────────────────────────────────────────────
+       # ── PUT (UPDATE) ──────────────────────────────────────────────────────
         elif request.method == 'PUT':
             print("\n" + "="*60)
-            print(f"📝 UPDATE PRODUCT {product_id}")
+            print(f"📝 UPDATE PRODUCT {product_id} (Cloudinary Only)")
             print(f"Form keys: {list(request.form.keys())}")
-            print(f"File keys: {list(request.files.keys())}")
+
+            # Import Cloudinary helper
+            from app.utils.cloudinary_helper import should_use_cloudinary, delete_from_cloudinary
+            use_cloudinary = should_use_cloudinary()
+            
+            if not use_cloudinary:
+                return jsonify({'error': 'Cloudinary is not configured. Please check your environment variables.'}), 500
 
             # Update basic fields
             if 'name' in request.form:
@@ -1408,16 +1439,38 @@ def manage_product(product_id):
                     product.stock_quantity = int(request.form['stock_quantity'])
                 except ValueError:
                     return jsonify({'error': 'Invalid stock quantity format'}), 400
-            if 'category' in request.form:
-                product.category = request.form['category']
+            
+            # ===== UPDATED: Handle category fields =====
+            if 'main_category_id' in request.form:
+                main_category_id = request.form['main_category_id']
+                if main_category_id:
+                    from app.models import Category
+                    main_category = Category.query.get(main_category_id)
+                    if not main_category:
+                        return jsonify({'error': 'Invalid main category'}), 400
+                    product.main_category_id = int(main_category_id)
+            
+            if 'store_category_id' in request.form:
+                store_category_id = request.form['store_category_id']
+                if store_category_id:
+                    from app.models import StoreCategory
+                    store_category = StoreCategory.query.filter_by(
+                        id=store_category_id,
+                        store_id=store.id,
+                        main_category_id=product.main_category_id
+                    ).first()
+                    if not store_category:
+                        return jsonify({'error': 'Invalid store subcategory'}), 400
+                    product.store_category_id = int(store_category_id)
+                else:
+                    product.store_category_id = None
+            
             if 'is_available' in request.form:
                 is_avail_str = request.form['is_available']
                 product.is_available = is_avail_str.lower() in ['true', '1', 'yes']
 
-            # Handle product images
-            upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
-            os.makedirs(upload_path, exist_ok=True)
-
+            # ===== HANDLE PRODUCT IMAGES (CLOUDINARY ONLY) =====
+            
             # Get images to keep/delete
             images_to_keep = []
             images_to_delete = []
@@ -1436,43 +1489,83 @@ def manage_product(product_id):
                 except:
                     pass
 
-            # Delete marked images
+            # Delete marked images from Cloudinary and database
             for img_id in images_to_delete:
                 img = ProductImage.query.filter_by(id=img_id, product_id=product.id).first()
                 if img:
-                    img_path = os.path.join(upload_path, img.filename)
-                    if os.path.exists(img_path):
-                        os.remove(img_path)
+                    if img.public_id:
+                        delete_from_cloudinary(img.public_id)
+                        print(f"  🗑️ Deleted from Cloudinary: {img.public_id}")
+                    
                     db.session.delete(img)
-                    print(f"  🗑️ Deleted image {img_id}")
+                    print(f"  🗑️ Deleted image record {img_id}")
 
-            # Add new images
-            current_images = ProductImage.query.filter_by(product_id=product.id).all()
-            next_sort_order = len(current_images)
-
-            for key in sorted(request.files.keys()):
-                if key.startswith('image_'):
-                    file = request.files[key]
-                    if file and file.filename and allowed_file(file.filename):
-                        short_filename = generate_short_filename(
-                            file.filename, product.id, next_sort_order
-                        )
-                        file.save(os.path.join(upload_path, short_filename))
-                        
-                        is_primary = (len(current_images) == 0 and next_sort_order == 0)
-                        
-                        db.session.add(ProductImage(
+            # Handle new Cloudinary images
+            cloudinary_images_json = request.form.get('cloudinary_images')
+            if cloudinary_images_json:
+                try:
+                    cloudinary_images = json.loads(cloudinary_images_json)
+                    print(f"📸 Received {len(cloudinary_images)} new Cloudinary images")
+                    
+                    for img_data in cloudinary_images:
+                        product_image = ProductImage(
                             product_id=product.id,
-                            filename=short_filename,
-                            is_primary=is_primary,
-                            sort_order=next_sort_order
-                        ))
-                        next_sort_order += 1
-                        print(f"  📸 Added new image: {short_filename}")
+                            filename=f"cloudinary_{img_data['public_id']}.jpg",
+                            public_id=img_data['public_id'],
+                            cloudinary_url=img_data['url'],
+                            is_primary=img_data.get('is_primary', False),
+                            sort_order=img_data.get('sort_order', 0)
+                        )
+                        db.session.add(product_image)
+                        print(f"  ✅ Added new Cloudinary image: {img_data['public_id']}")
+                            
+                except json.JSONDecodeError as e:
+                    print(f"❌ Error parsing cloudinary_images: {e}")
 
-            # ══════════════════════════════════════════════════════════════════
-            # HANDLE VARIANTS UPDATE
-            # ══════════════════════════════════════════════════════════════════
+            # Handle replacement images
+            replacement_images_json = request.form.get('replacement_images')
+            if replacement_images_json:
+                try:
+                    replacement_images = json.loads(replacement_images_json)
+                    print(f"🔄 Received {len(replacement_images)} replacement images")
+                    
+                    for img_data in replacement_images:
+                        existing_id = img_data.get('existing_id')
+                        if not existing_id:
+                            print(f"  ❌ No existing_id in replacement data: {img_data}")
+                            continue
+                            
+                        old_image = ProductImage.query.filter_by(
+                            id=existing_id, 
+                            product_id=product.id
+                        ).first()
+                        
+                        if old_image:
+                            print(f"  Replacing image ID {old_image.id} (public_id: {old_image.public_id})")
+                            
+                            if old_image.public_id:
+                                if delete_from_cloudinary(old_image.public_id):
+                                    print(f"    🗑️ Deleted old Cloudinary image: {old_image.public_id}")
+                                else:
+                                    print(f"    ⚠️ Failed to delete old Cloudinary image: {old_image.public_id}")
+                            
+                            old_image.public_id = img_data['public_id']
+                            old_image.cloudinary_url = img_data['url']
+                            old_image.filename = f"cloudinary_{img_data['public_id']}.jpg"
+                            old_image.is_primary = img_data.get('is_primary', old_image.is_primary)
+                            old_image.sort_order = img_data.get('sort_order', old_image.sort_order)
+                            old_image.updated_at = datetime.utcnow()
+                            
+                            print(f"    ✅ Updated existing image record {old_image.id} with new Cloudinary image: {img_data['public_id']}")
+                        else:
+                            print(f"    ❌ Could not find existing image with ID: {existing_id}")
+                            
+                except json.JSONDecodeError as e:
+                    print(f"❌ Error parsing replacement_images: {e}")
+                except Exception as e:
+                    print(f"❌ Error processing replacement images: {e}")
+
+            # ===== HANDLE VARIANTS UPDATE =====
             has_variants = request.form.get('has_variants', 'false').lower() == 'true'
             print(f"🎯 Has variants: {has_variants}")
 
@@ -1482,11 +1575,7 @@ def manage_product(product_id):
                     try:
                         variants_data = json.loads(variants_json)
                         print(f"📦 Variants data received: {len(variants_data)} variants")
-                        
-                        variant_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants')
-                        os.makedirs(variant_upload_path, exist_ok=True)
 
-                        # Track which variant IDs we're keeping
                         kept_variant_ids = []
 
                         for idx, variant_data in enumerate(variants_data):
@@ -1506,14 +1595,9 @@ def manage_product(product_id):
                                 ).first()
                                 
                                 if variant:
-                                    # Delete variant image if exists
-                                    if variant.image_filename:
-                                        variant_img_path = os.path.join(
-                                            variant_upload_path, 
-                                            variant.image_filename
-                                        )
-                                        if os.path.exists(variant_img_path):
-                                            os.remove(variant_img_path)
+                                    if variant.image_public_id:
+                                        delete_from_cloudinary(variant.image_public_id)
+                                        print(f"      🗑️ Deleted variant image from Cloudinary")
                                     
                                     db.session.delete(variant)
                                     print(f"    ✅ Deleted variant {variant_id}")
@@ -1540,42 +1624,23 @@ def manage_product(product_id):
                                     
                                     # Handle variant image removal
                                     if variant_data.get('_remove_image'):
-                                        if variant.image_filename:
-                                            img_path = os.path.join(
-                                                variant_upload_path, 
-                                                variant.image_filename
-                                            )
-                                            if os.path.exists(img_path):
-                                                os.remove(img_path)
-                                            variant.image_filename = None
-                                            print(f"      🗑️ Removed variant image")
+                                        if variant.image_public_id:
+                                            delete_from_cloudinary(variant.image_public_id)
+                                            print(f"      🗑️ Removed variant image from Cloudinary")
+                                        
+                                        variant.image_public_id = None
+                                        variant.image_url = None
+                                        variant.image_filename = None
                                     
-                                    # Handle new variant image
-                                    variant_image_key = f'variant_image_{idx}'
-                                    if variant_image_key in request.files:
-                                        file = request.files[variant_image_key]
-                                        if file and file.filename and allowed_file(file.filename):
-                                            # Delete old image
-                                            if variant.image_filename:
-                                                old_path = os.path.join(
-                                                    variant_upload_path, 
-                                                    variant.image_filename
-                                                )
-                                                if os.path.exists(old_path):
-                                                    os.remove(old_path)
-                                            
-                                            # Save new image
-                                            variant_filename = generate_short_filename(
-                                                file.filename, product.id, idx
-                                            )
-                                            variant_filename = f"var_{variant_filename}"
-                                            
-                                            file.save(os.path.join(
-                                                variant_upload_path, 
-                                                variant_filename
-                                            ))
-                                            variant.image_filename = variant_filename
-                                            print(f"      📸 Updated variant image: {variant_filename}")
+                                    # Handle new Cloudinary image
+                                    if variant_data.get('cloudinary_public_id'):
+                                        if variant.image_public_id:
+                                            delete_from_cloudinary(variant.image_public_id)
+                                        
+                                        variant.image_public_id = variant_data['cloudinary_public_id']
+                                        variant.image_url = variant_data['cloudinary_url']
+                                        variant.image_filename = f"variant_{variant_data['cloudinary_public_id']}.jpg"
+                                        print(f"      📸 Updated variant with Cloudinary image")
                                     
                                     kept_variant_ids.append(variant_id)
                             else:
@@ -1591,22 +1656,11 @@ def manage_product(product_id):
                                     is_available=True
                                 )
                                 
-                                # Handle variant image for new variant
-                                variant_image_key = f'variant_image_{idx}'
-                                if variant_image_key in request.files:
-                                    file = request.files[variant_image_key]
-                                    if file and file.filename and allowed_file(file.filename):
-                                        variant_filename = generate_short_filename(
-                                            file.filename, product.id, idx
-                                        )
-                                        variant_filename = f"var_{variant_filename}"
-                                        
-                                        file.save(os.path.join(
-                                            variant_upload_path, 
-                                            variant_filename
-                                        ))
-                                        variant.image_filename = variant_filename
-                                        print(f"      📸 Saved variant image: {variant_filename}")
+                                if variant_data.get('cloudinary_public_id'):
+                                    variant.image_public_id = variant_data['cloudinary_public_id']
+                                    variant.image_url = variant_data['cloudinary_url']
+                                    variant.image_filename = f"variant_{variant_data['cloudinary_public_id']}.jpg"
+                                    print(f"      📸 New variant with Cloudinary image")
                                 
                                 db.session.add(variant)
                                 db.session.flush()
@@ -1614,21 +1668,15 @@ def manage_product(product_id):
                                 print(f"    ✅ Created new variant {variant.id}")
 
                         # Delete variants that were not included in the update
-                        # (these are variants that existed but were removed from the form)
                         existing_variants = ProductVariant.query.filter_by(
                             product_id=product.id
                         ).all()
                         
                         for existing_variant in existing_variants:
                             if existing_variant.id not in kept_variant_ids:
-                                # This variant was removed
-                                if existing_variant.image_filename:
-                                    img_path = os.path.join(
-                                        variant_upload_path, 
-                                        existing_variant.image_filename
-                                    )
-                                    if os.path.exists(img_path):
-                                        os.remove(img_path)
+                                if existing_variant.image_public_id:
+                                    delete_from_cloudinary(existing_variant.image_public_id)
+                                    print(f"      🗑️ Deleted orphaned variant image from Cloudinary")
                                 
                                 db.session.delete(existing_variant)
                                 print(f"    🗑️ Removed orphaned variant {existing_variant.id}")
@@ -1640,19 +1688,17 @@ def manage_product(product_id):
             else:
                 # If has_variants is false, delete all variants
                 print("🗑️ Deleting all variants (has_variants=false)")
-                variant_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'product_variants')
                 
                 for variant in product.variants:
-                    if variant.image_filename:
-                        img_path = os.path.join(variant_upload_path, variant.image_filename)
-                        if os.path.exists(img_path):
-                            os.remove(img_path)
+                    if variant.image_public_id:
+                        delete_from_cloudinary(variant.image_public_id)
+                        print(f"  🗑️ Deleted variant image from Cloudinary")
                     db.session.delete(variant)
 
             product.updated_at = datetime.utcnow()
             db.session.commit()
             
-            print(f"✅ Product {product_id} updated successfully")
+            print(f"✅ Product {product_id} updated successfully with Cloudinary")
             print("="*60 + "\n")
             
             return jsonify({
@@ -1663,15 +1709,103 @@ def manage_product(product_id):
 
         # ── DELETE ────────────────────────────────────────────────────────────
         elif request.method == 'DELETE':
+            print("\n" + "="*60)
+            print(f"🗑️ DELETE PRODUCT {product_id}")
+            
+            # Check if product is in any carts
             carts_with_product = CartItem.query.filter_by(product_id=product_id).count()
-
-            return jsonify({
-                'success': True,
-                'needs_choice': True,
-                'message': 'Choose action:',
-                'product': product.to_dict(),
-                'in_carts': carts_with_product,
-            }), 200
+            print(f"🛒 Carts with this product: {carts_with_product}")
+            
+            # Import Cloudinary helper
+            from app.utils.cloudinary_helper import delete_from_cloudinary
+            
+            # If product is in carts, ask user what to do
+            if carts_with_product > 0:
+                print(f"⚠️ Product in {carts_with_product} carts - needs choice")
+                
+                # Count Cloudinary images for warning
+                image_count = len(product.images)
+                variant_image_count = sum(1 for v in product.variants if v.image_public_id)
+                total_images = image_count + variant_image_count
+                
+                return jsonify({
+                    'success': True,
+                    'needs_choice': True,
+                    'message': 'Product is in customer carts. Choose action:',
+                    'product': {
+                        'id': product.id,
+                        'name': product.name,
+                        'in_carts': carts_with_product,
+                        'image_count': image_count,
+                        'variant_image_count': variant_image_count,
+                        'total_cloudinary_images': total_images,
+                        'images': [img.to_dict() for img in product.images],
+                        'variants': [v.to_dict() for v in product.variants]
+                    }
+                }), 200
+            
+            # ===== PRODUCT NOT IN CARTS - PROCEED WITH PERMANENT DELETION =====
+            print("✅ Product not in any carts - proceeding with permanent deletion")
+            
+            try:
+                # Track deleted Cloudinary images
+                cloudinary_deleted = []
+                cloudinary_failed = []
+                
+                # 1. DELETE PRODUCT IMAGES FROM CLOUDINARY
+                print("\n📸 Deleting product images from Cloudinary...")
+                for image in product.images:
+                    if image.public_id:
+                        print(f"  Attempting to delete: {image.public_id}")
+                        if delete_from_cloudinary(image.public_id):
+                            cloudinary_deleted.append(image.public_id)
+                            print(f"  ✅ Deleted Cloudinary image: {image.public_id}")
+                        else:
+                            cloudinary_failed.append(image.public_id)
+                            print(f"  ❌ Failed to delete Cloudinary image: {image.public_id}")
+                
+                # 2. DELETE VARIANT IMAGES FROM CLOUDINARY
+                print("\n🎯 Deleting variant images from Cloudinary...")
+                for variant in product.variants:
+                    if variant.image_public_id:
+                        print(f"  Attempting to delete: {variant.image_public_id}")
+                        if delete_from_cloudinary(variant.image_public_id):
+                            cloudinary_deleted.append(variant.image_public_id)
+                            print(f"  ✅ Deleted variant Cloudinary image: {variant.image_public_id}")
+                        else:
+                            cloudinary_failed.append(variant.image_public_id)
+                            print(f"  ❌ Failed to delete variant Cloudinary image: {variant.image_public_id}")
+                
+                # 3. DELETE FROM DATABASE (cascade will delete all related records)
+                print("\n🗄️ Deleting product from database...")
+                db.session.delete(product)
+                db.session.commit()
+                
+                print(f"\n✅ DELETE SUMMARY:")
+                print(f"   - Product ID: {product_id}")
+                print(f"   - Cloudinary images deleted: {len(cloudinary_deleted)}")
+                print(f"   - Cloudinary images failed: {len(cloudinary_failed)}")
+                print("="*60 + "\n")
+                
+                # Prepare response message
+                if cloudinary_failed:
+                    message = f"Product deleted. {len(cloudinary_deleted)} Cloudinary images deleted, {len(cloudinary_failed)} failed."
+                else:
+                    message = f"Product and {len(cloudinary_deleted)} Cloudinary images deleted successfully."
+                
+                return jsonify({
+                    'success': True,
+                    'message': message,
+                    'cloudinary_deleted': len(cloudinary_deleted),
+                    'cloudinary_failed': len(cloudinary_failed)
+                }), 200
+                
+            except Exception as e:
+                db.session.rollback()
+                print(f"❌ Error during deletion: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({'error': f'Failed to delete product: {str(e)}'}), 500
 
         return jsonify({'error': 'Method not allowed'}), 405
 
@@ -1726,6 +1860,286 @@ def update_product_availability(product_id):
         return jsonify({'error': str(e)}), 500
 
 
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# STOCK REDUCTION AUDIT ENDPOINTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+@templates_bp.route('/seller/products/<int:product_id>/reduce-stock', methods=['POST'])
+def reduce_product_stock(product_id):
+    """
+    Record stock reduction with audit trail.
+    Handles both main products and variants.
+    
+    Expected JSON payload:
+    {
+        "amount": 5,
+        "reason": "damage",  # spoilage, damage, defect, other
+        "reason_notes": "Damaged during shipping",
+        "variant_id": 123  # Optional, only for variants
+    }
+    """
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Get seller's store
+        store = Store.query.filter_by(seller_id=user_id, status='active').first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        # Parse request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Invalid JSON data'}), 400
+        
+        # Validate inputs
+        amount = data.get('amount')
+        reason = data.get('reason')
+        reason_notes = data.get('reason_notes', '')
+        variant_id = data.get('variant_id')  # Get variant_id if provided
+        
+        if not amount:
+            return jsonify({'error': 'Reduction amount is required'}), 400
+        
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid reduction amount - must be integer'}), 400
+        
+        if not reason:
+            return jsonify({'error': 'Reason for reduction is required'}), 400
+        
+        if reason not in StockReduction.REASONS:
+            return jsonify({
+                'error': f'Invalid reason. Must be one of: {", ".join(StockReduction.REASONS)}'
+            }), 400
+        
+        # Find the product first
+        product = Product.query.filter_by(id=product_id, store_id=store.id).first()
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+        
+        # Handle variant reduction if variant_id is provided
+        variant = None
+        if variant_id:
+            variant = ProductVariant.query.filter_by(id=variant_id, product_id=product.id).first()
+            if not variant:
+                return jsonify({'error': 'Variant not found'}), 404
+            
+            # Validate stock
+            if amount > variant.stock_quantity:
+                return jsonify({'error': f'Cannot reduce by {amount}. Available: {variant.stock_quantity}'}), 400
+            
+            # Reduce variant stock
+            variant.stock_quantity -= amount
+            variant.updated_at = datetime.utcnow()
+            
+            # Create audit entry
+            reduction = StockReduction(
+                product_id=product.id,
+                variant_id=variant.id,
+                reduction_amount=amount,
+                reason=reason,
+                reason_notes=reason_notes,
+                reduced_by=user_id
+            )
+            db.session.add(reduction)
+            
+            print(f"✅ Variant stock reduction recorded:")
+            print(f"   Product: {product.name} (ID: {product.id})")
+            print(f"   Variant: {variant.name} (ID: {variant.id})")
+            print(f"   Reduced by: {amount} units")
+            print(f"   Reason: {reason}")
+            print(f"   New variant stock: {variant.stock_quantity}")
+            
+            # Update product's updated_at timestamp
+            product.updated_at = datetime.utcnow()
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Stock reduced by {amount} units for variant {variant.name}',
+                'reduction': reduction.to_dict(),
+                'product': product.to_dict(),
+                'variant': variant.to_dict()
+            }), 200
+            
+        else:
+            # Reduce main product stock
+            reduction = product.reduce_stock(amount, reason, user_id, reason_notes)
+            db.session.commit()
+            
+            print(f"✅ Main product stock reduction recorded:")
+            print(f"   Product: {product.name} (ID: {product.id})")
+            print(f"   Reduced by: {amount} units")
+            print(f"   Reason: {reason}")
+            print(f"   New stock: {product.stock_quantity}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Stock reduced by {amount} units',
+                'reduction': reduction.to_dict(),
+                'product': product.to_dict()
+            }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        print(f"❌ Validation error: {str(e)}")
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error reducing stock: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+@templates_bp.route('/seller/products/<int:product_id>/stock-history', methods=['GET'])
+def get_stock_history(product_id):
+    """
+    Get audit log of all stock reductions for a product or variant
+    """
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Get seller's store
+        store = Store.query.filter_by(seller_id=user_id, status='active').first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        # Try to find as a Product first
+        product = Product.query.filter_by(id=product_id, store_id=store.id).first()
+        
+        # If not found as product, try as variant
+        variant = None
+        if not product:
+            variant = ProductVariant.query.filter_by(id=product_id).first()
+            if variant:
+                # Get the product this variant belongs to
+                product = variant.product
+                # Verify the product belongs to this seller's store
+                if not product or product.store_id != store.id:
+                    return jsonify({'error': 'Product not found'}), 404
+            else:
+                return jsonify({'error': 'Product not found'}), 404
+        
+        # Get reductions for main product (where variant_id is NULL)
+        main_reductions = StockReduction.query.filter_by(
+            product_id=product.id, 
+            variant_id=None  # Only main product reductions
+        ).order_by(StockReduction.created_at.desc()).all()
+        
+        # Get reductions for variants (where variant_id is NOT NULL)
+        variant_reductions = StockReduction.query.filter(
+            StockReduction.product_id == product.id,
+            StockReduction.variant_id != None  # Only variant reductions
+        ).order_by(StockReduction.created_at.desc()).all()
+        
+        # Calculate totals for main product
+        main_total_reduced = sum(r.reduction_amount for r in main_reductions)
+        
+        # Calculate totals for variants
+        variant_total_reduced = sum(r.reduction_amount for r in variant_reductions)
+        
+        # Get primary image for main product
+        primary_image = None
+        if product.images:
+            primary_image_obj = next((img for img in product.images if img.is_primary), None)
+            if not primary_image_obj:
+                primary_image_obj = product.images[0] if product.images else None
+            if primary_image_obj:
+                primary_image = primary_image_obj.cloudinary_url or primary_image_obj.image_url
+        
+        # Build main product reductions data
+        main_history = []
+        for r in main_reductions:
+            reduction_data = {
+                'id': r.id,
+                'product_id': r.product_id,
+                'product_name': product.name,
+                'product_image': primary_image,
+                'reduction_amount': r.reduction_amount,
+                'reason': r.reason,
+                'reason_notes': r.reason_notes,
+                'reduced_by': r.reduced_by,
+                'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
+                'created_at': r.created_at.isoformat() if r.created_at else None,
+                'updated_at': r.updated_at.isoformat() if r.updated_at else None
+            }
+            main_history.append(reduction_data)
+        
+        # Build variant reductions data
+        variant_history = []
+        for r in variant_reductions:
+            # Get the variant from the variant_id field
+            var = ProductVariant.query.filter_by(id=r.variant_id).first() if r.variant_id else None
+            if var:
+                variant_image = var.image_url  # Get variant's own image
+                reduction_data = {
+                    'id': r.id,
+                    'product_id': r.product_id,
+                    'variant_id': var.id,
+                    'product_name': f"{product.name} - {var.name}",
+                    'product_image': variant_image,  # Use variant image
+                    'reduction_amount': r.reduction_amount,
+                    'reason': r.reason,
+                    'reason_notes': r.reason_notes,
+                    'reduced_by': r.reduced_by,
+                    'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
+                    'created_at': r.created_at.isoformat() if r.created_at else None,
+                    'updated_at': r.updated_at.isoformat() if r.updated_at else None
+                }
+                variant_history.append(reduction_data)
+            else:
+                # Fallback if variant not found (shouldn't happen)
+                reduction_data = {
+                    'id': r.id,
+                    'product_id': r.product_id,
+                    'variant_id': r.variant_id,
+                    'product_name': f"{product.name} - Variant {r.variant_id}",
+                    'product_image': None,
+                    'reduction_amount': r.reduction_amount,
+                    'reason': r.reason,
+                    'reason_notes': r.reason_notes,
+                    'reduced_by': r.reduced_by,
+                    'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
+                    'created_at': r.created_at.isoformat() if r.created_at else None,
+                    'updated_at': r.updated_at.isoformat() if r.updated_at else None
+                }
+                variant_history.append(reduction_data)
+        
+        return jsonify({
+            'success': True,
+            'product': {
+                'id': product.id,
+                'name': product.name,
+                'image': primary_image,
+                'current_stock': product.stock_quantity
+            },
+            'main_product': {
+                'total_reductions': main_total_reduced,
+                'reduction_count': len(main_reductions)
+            },
+            'variants': {
+                'total_reductions': variant_total_reduced,
+                'reduction_count': len(variant_reductions)
+            },
+            'stock_history': {
+                'main': main_history,
+                'variants': variant_history
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error retrieving stock history: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
 
@@ -1814,65 +2228,88 @@ def _get_seller_store():
         .first()
     )
 
-
-def _get_primary_image(product):
-    """Return the URL path for the primary (or first) product image."""
-    if not product.images:
-        return None
-    primary = next((img for img in product.images if img.is_primary), None)
-    img = primary or product.images[0]
-    return f'/static/uploads/products/{img.filename}'
-
-
 @templates_bp.route('/seller/pos')
 @seller_required
 def seller_pos():
     """
-    Render the POS interface.
-    Passes all available, in-stock products for the seller's store.
+    Render the POS interface with new category logic.
+    Passes all available, in-stock products for the seller's store,
+    organized by main categories and store-specific subcategories.
     """
     store = _get_seller_store()
 
     if not store:
         # Seller has no active store — bounce back with a flash
+        flash('Please set up your store first.', 'warning')
         return redirect(url_for('templates.dashboard'))
 
-    # Fetch all products for this store, ordered by category then name
-    products = (
+    # Get all main categories for filtering
+    from app.models import Category, StoreCategory
+    
+    # Get all main categories (global)
+    main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+    
+    # Get store-specific subcategories for this store
+    store_categories = StoreCategory.query.filter_by(
+        store_id=store.id,
+        is_active=True
+    ).order_by(StoreCategory.sort_order).all()
+    
+    # Fetch all products for this store, ordered by main category then name
+    products_query = (
         Product.query
-        .filter_by(store_id=store.id)
-        .order_by(Product.category.asc(), Product.name.asc())
+        .filter_by(store_id=store.id, is_archived=False)
+        .join(Category, Product.main_category_id == Category.id)
+        .order_by(Category.sort_order.asc(), Product.name.asc())
         .all()
     )
+    
+    # Convert products to serializable format using to_dict() method
+    # This will automatically include variants as dictionaries via ProductVariant.to_dict()
+    products = []
+    for product in products_query:
+        product_dict = product.to_dict()
+        # Add main category name for filtering
+        if product.main_category:
+            product_dict['main_category_name'] = product.main_category.name
+            product_dict['main_category_slug'] = product.main_category.slug
+            product_dict['main_category_id'] = product.main_category.id
+        # Add store subcategory info if exists
+        if product.store_category:
+            product_dict['store_category_name'] = product.store_category.name
+            product_dict['store_category_id'] = product.store_category.id
+        products.append(product_dict)
+    
+    # Organize products by main category for easier template access
+    products_by_category = {}
+    for cat in main_categories:
+        cat_products = [p for p in products if p.get('main_category_id') == cat.id]
+        if cat_products:
+            products_by_category[cat.name] = cat_products
+    
+    # Group subcategories by main category
+    subcategories_by_main = {}
+    for sc in store_categories:
+        if sc.main_category_id not in subcategories_by_main:
+            subcategories_by_main[sc.main_category_id] = []
+        subcategories_by_main[sc.main_category_id].append(sc.to_dict())
 
     return render_template(
         'seller_pos.html',
         store=store,
         products=products,
+        main_categories=main_categories,
+        store_categories=store_categories,
+        products_by_category=products_by_category,
+        subcategories_by_main=subcategories_by_main
     )
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# ROUTE 2 — CREATE POS ORDER
-# POST /seller/pos/order
-# Body (JSON):
-#   {
-#     "customer_name":    "Maria Santos",   // optional
-#     "customer_contact": "09171234567",    // optional
-#     "payment_method":   "cash",           // cash | gcash | card
-#     "discount":         50.00,            // optional, default 0
-#     "items": [
-#       { "product_id": 3, "quantity": 2, "price": 250.00 },
-#       ...
-#     ]
-#   }
-# ═════════════════════════════════════════════════════════════════════════════
 
 @templates_bp.route('/seller/pos/order', methods=['POST'])
 @seller_required
 def pos_create_order():
     """
     Create a POS order and update stock quantities.
+    Supports product variants and discounts.
     Returns JSON with the created order id.
     """
     store = _get_seller_store()
@@ -1891,12 +2328,14 @@ def pos_create_order():
     validated_items = []
     for entry in items_payload:
         product_id = entry.get('product_id')
+        variant_id = entry.get('variant_id')  # May be None
         quantity   = int(entry.get('quantity', 1))
         unit_price = Decimal(str(entry.get('price', 0)))
 
         if quantity < 1:
             return jsonify({'error': f'Quantity must be at least 1 (product id {product_id}).'}), 400
 
+        # Check if product exists and belongs to store
         product = Product.query.filter_by(id=product_id, store_id=store.id).first()
         if not product:
             return jsonify({'error': f'Product #{product_id} not found in your store.'}), 404
@@ -1904,158 +2343,385 @@ def pos_create_order():
         if not product.is_available:
             return jsonify({'error': f'"{product.name}" is currently unavailable.'}), 400
 
-        if product.stock_quantity < quantity:
-            return jsonify({
-                'error': (
-                    f'Insufficient stock for "{product.name}". '
-                    f'Available: {product.stock_quantity}, requested: {quantity}.'
-                )
-            }), 400
+        # If variant_id is provided, validate variant
+        if variant_id:
+            variant = ProductVariant.query.filter_by(id=variant_id, product_id=product_id).first()
+            if not variant:
+                return jsonify({'error': f'Variant #{variant_id} not found for product "{product.name}".'}), 404
+            
+            if not variant.is_available:
+                return jsonify({'error': f'Variant "{variant.name}" for "{product.name}" is currently unavailable.'}), 400
+            
+            if variant.stock_quantity < quantity:
+                return jsonify({
+                    'error': (
+                        f'Insufficient stock for "{product.name}" - {variant.name}. '
+                        f'Available: {variant.stock_quantity}, requested: {quantity}.'
+                    )
+                }), 400
+        else:
+            # Check main product stock
+            if product.stock_quantity < quantity:
+                return jsonify({
+                    'error': (
+                        f'Insufficient stock for "{product.name}". '
+                        f'Available: {product.stock_quantity}, requested: {quantity}.'
+                    )
+                }), 400
 
         validated_items.append({
-            'product':  product,
+            'product': product,
+            'variant_id': variant_id,
             'quantity': quantity,
-            'price':    unit_price,
+            'price': unit_price,
         })
 
-    # ── Calculate totals ──────────────────────────────────────────────────────
-    subtotal = sum(v['price'] * v['quantity'] for v in validated_items)
-    discount = Decimal(str(data.get('discount', 0) or 0))
+    # ── Create POS order ───────────────────────────────────────────────────────
+    customer_name = data.get('customer_name', '').strip()
+    customer_contact = data.get('customer_contact')
+    payment_method = data.get('payment_method', 'cash')
+    amount_given = Decimal(str(data.get('amount_given', 0)))
+    change_amount = Decimal(str(data.get('change_amount', 0)))
+    
+    # ===== HANDLE DISCOUNT =====
+    discount = Decimal(str(data.get('discount', 0)))
     if discount < 0:
-        discount = Decimal('0')
-    total_amount = max(Decimal('0'), subtotal - discount)
+        return jsonify({'error': 'Discount cannot be negative'}), 400
+    # ===========================
 
-    # ── Persist everything in a transaction ───────────────────────────────────
-    try:
-        # 1. Create POSOrder
-        order = POSOrder(
-            store_id        = store.id,
-            total_amount    = total_amount,
-            customer_name   = data.get('customer_name') or None,
-            customer_contact= data.get('customer_contact') or None,
+    # Calculate subtotal
+    subtotal = sum(item['price'] * item['quantity'] for item in validated_items)
+    total = subtotal - discount
+    
+    # Validate total is not negative
+    if total < 0:
+        return jsonify({'error': 'Discount cannot exceed subtotal'}), 400
+
+    # Create the order with discount
+    pos_order = POSOrder(
+        store_id=store.id,
+        total_amount=total,
+        amount_given=amount_given,
+        change_amount=change_amount,
+        payment_method=payment_method,
+        customer_name=customer_name,
+        customer_contact=customer_contact,
+        discount=discount  # Save the discount
+    )
+    db.session.add(pos_order)
+
+    # ── Add items and update stock ─────────────────────────────────────────────
+    for item in validated_items:
+        pos_item = POSOrderItem(
+            pos_order=pos_order,
+            product_id=item['product'].id,
+            variant_id=item['variant_id'],
+            quantity=item['quantity'],
+            price=item['price']
         )
-        db.session.add(order)
-        db.session.flush()   # get order.id before adding items
+        db.session.add(pos_item)
 
-        # 2. Create POSOrderItems + deduct stock
-        for v in validated_items:
-            item = POSOrderItem(
-                pos_order_id = order.id,
-                product_id   = v['product'].id,
-                quantity     = v['quantity'],
-                price        = v['price'],
+        # Update stock based on variant or product
+        if item['variant_id']:
+            variant = ProductVariant.query.get(item['variant_id'])
+            variant.stock_quantity -= item['quantity']
+        else:
+            item['product'].stock_quantity -= item['quantity']
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'pos_order_id': pos_order.id,
+        'message': 'Order processed successfully.'
+    }), 201
+
+@templates_bp.route('/api/seller/pos/next-order-id')
+@seller_required
+def pos_next_order_id():
+    store = _get_seller_store()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 403
+    
+    last_order = POSOrder.query.filter_by(store_id=store.id).order_by(POSOrder.id.desc()).first()
+    next_id = (last_order.id + 1) if last_order else 1000
+    
+    return jsonify({'next_id': next_id})
+
+
+@templates_bp.route('/seller/pos/orders')
+@seller_required
+def pos_orders():
+    store = _get_seller_store()
+    if not store:
+        flash('Please set up your store first.', 'warning')
+        return redirect(url_for('templates.dashboard'))
+
+    import pytz
+    ph_tz = pytz.timezone('Asia/Manila')
+    now_ph = datetime.now(ph_tz)
+    today = now_ph.date()
+    ph_date = db.func.date(POSOrder.created_at + db.text("INTERVAL '8 hours'"))
+
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    date_filter = request.args.get('date', 'today')
+    payment_filter = request.args.get('payment', 'all')
+    search_query = request.args.get('search', '')
+
+    query = POSOrder.query.filter_by(store_id=store.id)
+
+    if date_filter == 'today':
+        query = query.filter(ph_date == today)
+    elif date_filter == 'yesterday':
+        yesterday = today - timedelta(days=1)
+        query = query.filter(ph_date == yesterday)
+    elif date_filter == 'this_week':
+        start_of_week = today - timedelta(days=today.weekday())
+        query = query.filter(ph_date >= start_of_week)
+    elif date_filter == 'this_month':
+        start_of_month = today.replace(day=1)
+        query = query.filter(ph_date >= start_of_month)
+    elif date_filter == 'custom':
+        start_date_str = request.args.get('start_date', '')
+        end_date_str = request.args.get('end_date', '')
+        if start_date_str:
+            try:
+                query = query.filter(ph_date >= datetime.strptime(start_date_str, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+        if end_date_str:
+            try:
+                query = query.filter(ph_date <= datetime.strptime(end_date_str, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+
+    if payment_filter != 'all':
+        query = query.filter_by(payment_method=payment_filter)
+
+    if search_query:
+        query = query.filter(
+            db.or_(
+                POSOrder.customer_name.ilike(f'%{search_query}%'),
+                POSOrder.customer_contact.ilike(f'%{search_query}%'),
+                POSOrder.id.cast(db.String).ilike(f'%{search_query}%')
             )
-            db.session.add(item)
+        )
 
-            # Deduct stock
-            v['product'].stock_quantity -= v['quantity']
+    query = query.order_by(POSOrder.created_at.desc())
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
-        # 3. Commit
-        db.session.commit()
+    orders_data = []
+    for order in pagination.items:
+        d = order.to_dict()
+        if order.created_at:
+            utc_dt = pytz.utc.localize(order.created_at)
+            ph_dt = utc_dt.astimezone(ph_tz)
+            d['created_at_date'] = ph_dt.strftime('%Y-%m-%d')
+            d['created_at'] = ph_dt.isoformat()
+        else:
+            d['created_at_date'] = None
+        orders_data.append(d)
 
-        return jsonify({
-            'success':      True,
-            'pos_order_id': order.id,
-            'total_amount': float(total_amount),
-            'message':      'Order created successfully.',
-        }), 201
+    summary = {
+        'total_orders': POSOrder.query.filter_by(store_id=store.id).count(),
+        'total_revenue': float(db.session.query(db.func.sum(POSOrder.total_amount))
+            .filter(POSOrder.store_id == store.id).scalar() or 0),
+        'cash_orders': POSOrder.query.filter_by(store_id=store.id, payment_method='cash').count(),
+        'gcash_orders': POSOrder.query.filter_by(store_id=store.id, payment_method='gcash').count(),
+        'card_orders': POSOrder.query.filter_by(store_id=store.id, payment_method='card').count(),
+    }
 
-    except Exception as e:
-        db.session.rollback()
-        print(f'[POS] Order creation error: {e}')
-        return jsonify({'error': 'Failed to save order. Please try again.'}), 500
+    today_sales = float(db.session.query(db.func.sum(POSOrder.total_amount))
+        .filter(POSOrder.store_id == store.id, ph_date == today).scalar() or 0)
+
+    return render_template(
+        'seller_pos_orders.html',
+        store=store,
+        orders=orders_data,
+        pagination=pagination,
+        summary=summary,
+        today_sales=today_sales,
+        current_filters={
+            'date': date_filter,
+            'payment': payment_filter,
+            'search': search_query,
+            'page': page
+        }
+    )
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ROUTE 3 — GET POS ORDER HISTORY (optional, for a history panel)
-# GET /seller/pos/orders?page=1&per_page=20
-# ═════════════════════════════════════════════════════════════════════════════
+@templates_bp.route('/seller/pos/orders/<int:order_id>')
+@seller_required
+def pos_order_detail(order_id):
+    """
+    View details of a specific POS order.
+    """
+    store = _get_seller_store()
+    if not store:
+        flash('Please set up your store first.', 'warning')
+        return redirect(url_for('templates.dashboard'))
+    
+    order = POSOrder.query.filter_by(id=order_id, store_id=store.id).first_or_404()
+    
+    return render_template(
+        'seller_pos_order_detail.html',
+        store=store,
+        order=order.to_dict()
+    )
 
+
+@templates_bp.route('/seller/pos/orders/<int:order_id>/void', methods=['POST'])
+@seller_required
+def pos_void_order(order_id):
+    """
+    Void a POS order (admin only or within certain time limit).
+    This reverses the stock changes.
+    """
+    store = _get_seller_store()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 403
+    
+    order = POSOrder.query.filter_by(id=order_id, store_id=store.id).first()
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+    
+    # Check if order can be voided (e.g., within 24 hours)
+    time_limit = datetime.utcnow() - timedelta(hours=24)
+    if order.created_at < time_limit:
+        return jsonify({'error': 'Orders older than 24 hours cannot be voided'}), 400
+    
+    data = request.get_json(silent=True) or {}
+    reason = data.get('reason', 'No reason provided')
+    
+    # Restore stock
+    for item in order.items:
+        if item.variant_id:
+            variant = ProductVariant.query.get(item.variant_id)
+            if variant:
+                variant.stock_quantity += item.quantity
+        else:
+            product = Product.query.get(item.product_id)
+            if product:
+                product.stock_quantity += item.quantity
+    
+    # Mark order as voided - we'll add a status field if needed
+    # For now, we'll just delete it, but better to add a 'status' field to POSOrder
+    # order.status = 'voided'  # Add this field to POSOrder model
+    
+    # Log the void action in a separate table or just delete
+    db.session.delete(order)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Order voided successfully'
+    })
+
+
+# Optional: Add this to your POSOrder model if you want to keep voided orders
+"""
+Add to POSOrder model:
+    status = db.Column(db.String(20), default='active')  # active, voided
+
+Then modify the void function to:
+    order.status = 'voided'
+    db.session.commit()
+"""
+
+
+@templates_bp.route('/seller/pos/statistics')
+@seller_required
+def pos_statistics():
+    """
+    Get POS statistics for the seller's store.
+    Returns JSON with sales data for charts.
+    """
+    store = _get_seller_store()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 403
+    
+    # Get date range from query params
+    days = request.args.get('days', 7, type=int)
+    
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days)
+    
+    # Get daily sales
+    daily_sales = db.session.query(
+        db.func.date(POSOrder.created_at).label('date'),
+        db.func.count(POSOrder.id).label('order_count'),
+        db.func.sum(POSOrder.total_amount).label('revenue')
+    ).filter(
+        POSOrder.store_id == store.id,
+        db.func.date(POSOrder.created_at) >= start_date,
+        db.func.date(POSOrder.created_at) <= end_date
+    ).group_by(
+        db.func.date(POSOrder.created_at)
+    ).order_by(
+        db.func.date(POSOrder.created_at)
+    ).all()
+    
+    # Get payment method breakdown
+    payment_breakdown = db.session.query(
+        POSOrder.payment_method,
+        db.func.count(POSOrder.id).label('count'),
+        db.func.sum(POSOrder.total_amount).label('total')
+    ).filter(
+        POSOrder.store_id == store.id,
+        db.func.date(POSOrder.created_at) >= start_date
+    ).group_by(
+        POSOrder.payment_method
+    ).all()
+    
+    # Get top products
+    top_products = db.session.query(
+        Product.name,
+        db.func.sum(POSOrderItem.quantity).label('total_quantity'),
+        db.func.sum(POSOrderItem.quantity * POSOrderItem.price).label('total_revenue')
+    ).join(
+        POSOrderItem, POSOrderItem.product_id == Product.id
+    ).join(
+        POSOrder, POSOrder.id == POSOrderItem.pos_order_id
+    ).filter(
+        POSOrder.store_id == store.id,
+        db.func.date(POSOrder.created_at) >= start_date
+    ).group_by(
+        Product.id
+    ).order_by(
+        db.desc('total_quantity')
+    ).limit(10).all()
+    
+    return jsonify({
+        'daily_sales': [{
+            'date': str(row.date),
+            'order_count': row.order_count,
+            'revenue': float(row.revenue or 0)
+        } for row in daily_sales],
+        'payment_breakdown': [{
+            'method': row.payment_method,
+            'count': row.count,
+            'total': float(row.total or 0)
+        } for row in payment_breakdown],
+        'top_products': [{
+            'name': row.name,
+            'quantity': row.total_quantity,
+            'revenue': float(row.total_revenue or 0)
+        } for row in top_products]
+    })
+'''
 @templates_bp.route('/seller/pos/orders', methods=['GET'])
 @seller_required
 def pos_order_history():
     """
-    Return a paginated list of POS orders for the seller's store.
-    Useful for a history sidebar or analytics.
+    DEPRECATED - Use /api/seller/pos/orders instead
+    Keeping this commented out to avoid conflicts
     """
-    store = _get_seller_store()
-    if not store:
-        return jsonify({'error': 'No active store.'}), 403
-
-    page     = request.args.get('page',     1,  type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-    per_page = min(per_page, 100)   # cap at 100
-
-    pagination = (
-        POSOrder.query
-        .filter_by(store_id=store.id)
-        .order_by(POSOrder.created_at.desc())
-        .paginate(page=page, per_page=per_page, error_out=False)
-    )
-
-    orders = []
-    for o in pagination.items:
-        orders.append({
-            'id':              o.id,
-            'total_amount':    float(o.total_amount) if o.total_amount else 0,
-            'customer_name':   o.customer_name or 'Walk-in',
-            'customer_contact':o.customer_contact,
-            'item_count':      sum(i.quantity for i in o.items),
-            'created_at':      o.created_at.strftime('%b %d, %Y %I:%M %p') if o.created_at else '—',
-        })
-
-    return jsonify({
-        'orders':       orders,
-        'total':        pagination.total,
-        'pages':        pagination.pages,
-        'current_page': pagination.page,
-        'has_next':     pagination.has_next,
-        'has_prev':     pagination.has_prev,
-    })
+    return jsonify({'error': 'Use /api/seller/pos/orders instead'}), 410
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ROUTE 4 — GET SINGLE POS ORDER DETAIL
-# GET /seller/pos/orders/<int:order_id>
-# ═════════════════════════════════════════════════════════════════════════════
-
-@templates_bp.route('/seller/pos/orders/<int:order_id>', methods=['GET'])
-@seller_required
-def pos_order_detail(order_id):
-    """
-    Return full detail for a single POS order (for receipt reprinting).
-    Only accessible by the store owner.
-    """
-    store = _get_seller_store()
-    if not store:
-        return jsonify({'error': 'No active store.'}), 403
-
-    order = POSOrder.query.filter_by(id=order_id, store_id=store.id).first()
-    if not order:
-        return jsonify({'error': 'Order not found.'}), 404
-
-    items = []
-    for i in order.items:
-        product   = i.product
-        img_url   = _get_primary_image(product) if product else None
-        items.append({
-            'product_id':   i.product_id,
-            'product_name': product.name if product else '(deleted)',
-            'quantity':     i.quantity,
-            'unit_price':   float(i.price) if i.price else 0,
-            'subtotal':     float(i.price * i.quantity) if i.price else 0,
-            'image_url':    img_url,
-        })
-
-    return jsonify({
-        'id':               order.id,
-        'store_id':         order.store_id,
-        'total_amount':     float(order.total_amount) if order.total_amount else 0,
-        'customer_name':    order.customer_name or 'Walk-in',
-        'customer_contact': order.customer_contact,
-        'items':            items,
-        'created_at':       order.created_at.isoformat() if order.created_at else None,
-    })
+'''
 
 
 
@@ -2088,39 +2754,112 @@ def logout():
     session.clear()
     return redirect(url_for('templates.login'))
 
-
 @templates_bp.route('/products/<int:product_id>')
 def product_details(product_id):
-    product = Product.query.get_or_404(product_id)
-    
-    # Convert product to dict to include variants with image_url
-    product_dict = product.to_dict()
-    
-    # Add-ons: other products from same store, different category
-    addon_products = Product.query.filter(
-        Product.store_id == product.store_id,
-        Product.id != product_id,
-        Product.is_available == True,
-        Product.stock_quantity > 0
-    ).limit(8).all()
-    
-    # Convert addon products to dict as well
-    addon_dicts = [p.to_dict() for p in addon_products]
-    
-    # Related: same category, different store or same store
-    related_products = Product.query.filter(
-        Product.category == product.category,
-        Product.id != product_id,
-        Product.is_available == True
-    ).limit(8).all()
-    
-    # Convert related products to dict
-    related_dicts = [p.to_dict() for p in related_products]
-    
-    return render_template('product_details.html',
-        product=product_dict,
-        addon_products=addon_dicts,
-        related_products=related_dicts)
+    """Product detail page - updated with new category system"""
+    try:
+        product = Product.query.get_or_404(product_id)
+        store = Store.query.get(product.store_id)
+        
+        # Get all main categories for the navigation
+        from app.models import Category
+        main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+        
+        # Convert product to dict to include variants with image_url
+        product_dict = product.to_dict()
+        
+        # Add store info to product dict
+        if store:
+            product_dict['store'] = store.to_dict()
+        
+        # Add main_category and store_category info to product_dict for template
+        if product.main_category:
+            product_dict['main_category'] = {
+                'id': product.main_category.id,
+                'name': product.main_category.name,
+                'slug': product.main_category.slug
+            }
+        
+        if product.store_category:
+            product_dict['store_category'] = {
+                'id': product.store_category.id,
+                'name': product.store_category.name,
+                'slug': product.store_category.slug
+            }
+        
+        # Add-ons: other products from same store, different main category
+        addon_products = Product.query.filter(
+            Product.store_id == product.store_id,
+            Product.id != product_id,
+            Product.is_available == True,
+            Product.is_archived == False,
+            Product.stock_quantity > 0
+        )
+        
+        # If product has a main category, get products from different categories
+        if product.main_category_id:
+            addon_products = addon_products.filter(
+                Product.main_category_id != product.main_category_id
+            )
+        
+        addon_products = addon_products.limit(8).all()
+        
+        # Convert addon products to dict
+        addon_dicts = []
+        for p in addon_products:
+            p_dict = p.to_dict()
+            if p.main_category:
+                p_dict['main_category'] = {
+                    'id': p.main_category.id,
+                    'name': p.main_category.name,
+                    'slug': p.main_category.slug
+                }
+            addon_dicts.append(p_dict)
+        
+        # Related: same main category, different products
+        related_products = Product.query.filter(
+            Product.main_category_id == product.main_category_id,  # FIXED: Use main_category_id instead of category
+            Product.id != product_id,
+            Product.is_available == True,
+            Product.is_archived == False,
+            Product.stock_quantity > 0
+        ).limit(8).all()
+        
+        # Convert related products to dict
+        related_dicts = []
+        for p in related_products:
+            p_dict = p.to_dict()
+            if p.main_category:
+                p_dict['main_category'] = {
+                    'id': p.main_category.id,
+                    'name': p.main_category.name,
+                    'slug': p.main_category.slug
+                }
+            related_dicts.append(p_dict)
+        
+        # Debug print
+        print(f"\n🔍 PRODUCT DETAILS - ID: {product_id}")
+        print(f"  Name: {product.name}")
+        print(f"  Main Category: {product.main_category.name if product.main_category else 'None'}")
+        print(f"  Store Category: {product.store_category.name if product.store_category else 'None'}")
+        print(f"  Add-on products: {len(addon_dicts)}")
+        print(f"  Related products: {len(related_dicts)}")
+        print(f"  Categories for nav: {len(main_categories)}")
+        
+        return render_template(
+            'product_details.html',  # Note: this template should be updated to use the new category fields
+            product=product_dict,
+            addon_products=addon_dicts,
+            related_products=related_dicts,
+            main_categories=main_categories  # Pass to base.html for navigation
+        )
+        
+    except Exception as e:
+        print(f"❌ Error loading product {product_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash('Product not found', 'error')
+        return redirect(url_for('templates.products'))
 
 
 @templates_bp.route('/checkout')
@@ -2246,8 +2985,110 @@ def debug_auth():
 
 
 
+@templates_bp.route('/api/cart/items', methods=['POST'])
+def add_to_cart():
+    """Add item to cart - FIXED to handle variants"""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not logged in'}), 401
+    
+    try:
+        data = request.get_json()
+        product_id = data.get('product_id')
+        variant_id = data.get('variant_id')  # ✅ Get variant_id from payload
+        quantity = data.get('quantity', 1)
+        
+        print(f"🛒 Adding to cart - User: {user.id}, Product: {product_id}, Variant: {variant_id}, Quantity: {quantity}")
+        
+        if not product_id:
+            return jsonify({'error': 'Product ID is required'}), 400
+        
+        # Check if product exists
+        product = Product.query.get(product_id)
+        if not product:
+            print(f"❌ Product not found: {product_id}")
+            return jsonify({'error': 'Product not found'}), 404
+        
+        # If variant_id is provided, check variant exists and has stock
+        variant = None
+        if variant_id:
+            variant = ProductVariant.query.get(variant_id)
+            if not variant:
+                return jsonify({'error': 'Variant not found'}), 404
+            if variant.product_id != product_id:
+                return jsonify({'error': 'Variant does not belong to this product'}), 400
+            if variant.stock_quantity < quantity:
+                return jsonify({'error': f'Only {variant.stock_quantity} of this variant available'}), 400
+            print(f"📦 Variant: {variant.name}, Stock: {variant.stock_quantity}")
+        else:
+            # Check main product stock
+            if product.stock_quantity < quantity:
+                return jsonify({'error': f'Only {product.stock_quantity} available'}), 400
+        
+        print(f"📦 Product: {product.name}, Available: {product.is_available}")
+        
+        if not product.is_available:
+            return jsonify({'error': 'Product is not available'}), 400
+        
+        # Get or create cart
+        cart = Cart.query.filter_by(user_id=user.id).first()
+        if not cart:
+            print(f"🆕 Creating new cart for user: {user.id}")
+            cart = Cart(user_id=user.id)
+            db.session.add(cart)
+            db.session.flush()
+        
+        # ✅ FIXED: Check if product/variant combination already in cart
+        cart_item = CartItem.query.filter_by(
+            cart_id=cart.id,
+            product_id=product_id,
+            variant_id=variant_id  # Include variant_id in the query!
+        ).first()
+        
+        if cart_item:
+            # Check total quantity against stock
+            if variant:
+                if variant.stock_quantity < (cart_item.quantity + quantity):
+                    return jsonify({'error': f'Only {variant.stock_quantity} of this variant available total'}), 400
+            else:
+                if product.stock_quantity < (cart_item.quantity + quantity):
+                    return jsonify({'error': f'Only {product.stock_quantity} available total'}), 400
+                    
+            print(f"🔄 Updating existing cart item from {cart_item.quantity} to {cart_item.quantity + quantity}")
+            cart_item.quantity += quantity
+        else:
+            print(f"➕ Adding new cart item with variant_id: {variant_id}")
+            cart_item = CartItem(
+                cart_id=cart.id,
+                product_id=product_id,
+                variant_id=variant_id,  # ✅ Save variant_id!
+                quantity=quantity
+            )
+            db.session.add(cart_item)
+        
+        db.session.commit()
+        
+        # ✅ Return the updated cart with proper structure
+        cart_dict = cart.to_dict()
+        print(f"✅ Item added successfully. Cart now has {len(cart_dict.get('items', []))} items")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Item added to cart',
+            'cart': cart_dict
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error adding to cart: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @templates_bp.route('/api/cart', methods=['GET'])
 def get_cart():
+    """Get cart - FIXED to include variant details and Cloudinary URLs"""
     user = get_current_user()
     if not user:
         return jsonify({'error': 'Not logged in'}), 401
@@ -2267,15 +3108,98 @@ def get_cart():
             if item.product and not item.product.is_archived:
                 active_items.append(item)
             else:
-                # Automatically remove archived products from cart
                 db.session.delete(item)
                 removed_count += 1
         
         if removed_count > 0:
             db.session.commit()
         
-        # Build cart with only active items
-        cart_data = cart.to_dict()
+        # ✅ Build cart data with variant details properly included
+        cart_data = {
+            'id': cart.id,
+            'user_id': cart.user_id,
+            'items': [],
+            'created_at': cart.created_at.isoformat() if cart.created_at else None,
+            'updated_at': cart.updated_at.isoformat() if cart.updated_at else None
+        }
+        
+        total = 0
+        for item in active_items:
+            # Get product details
+            product = item.product
+            
+            # Get variant details if exists
+            variant = None
+            if item.variant_id:
+                variant = ProductVariant.query.get(item.variant_id)
+            
+            # Determine price (variant price takes precedence)
+            price = float(variant.price) if variant else float(product.price)
+            
+            # Determine name
+            if variant:
+                name = f"{variant.name} {product.name}"
+            else:
+                name = product.name
+            
+            # Get the full product dictionary (includes all image details)
+            product_dict = product.to_dict()
+            
+            # Determine image URL (variant image takes precedence)
+            image_url = None
+            if variant and variant.image_url:
+                image_url = variant.image_url
+            elif product.images:
+                primary = next((img for img in product.images if img.is_primary), product.images[0])
+                # Use cloudinary_url if available, otherwise fallback to image_url
+                image_url = primary.cloudinary_url if primary and primary.cloudinary_url else (
+                    primary.image_url if hasattr(primary, 'image_url') else None
+                )
+            
+            # Ensure product images have cloudinary_url in the response
+            if 'images' in product_dict:
+                for img in product_dict['images']:
+                    # Make sure cloudinary_url is included
+                    if 'cloudinary_url' not in img and 'image_url' in img:
+                        img['cloudinary_url'] = img['image_url']
+            
+            item_dict = {
+                'id': item.id,
+                'product_id': product.id,
+                'variant_id': item.variant_id,
+                'quantity': item.quantity,
+                'product': product_dict,  # Full product dict with all image data
+                'store_name': product.store.name if product.store else None,
+                'price': price,
+                'name': name,
+                'image_url': image_url,  # Top-level convenience field
+                'subtotal': float(price * item.quantity)
+            }
+            
+            # Add variant details if exists (with full Cloudinary URLs)
+            if variant:
+                variant_dict = variant.to_dict()
+                # Ensure variant image_url is included
+                if variant.image_url and 'image_url' not in variant_dict:
+                    variant_dict['image_url'] = variant.image_url
+                item_dict['variant'] = variant_dict
+            
+            cart_data['items'].append(item_dict)
+            total += item_dict['subtotal']
+        
+        cart_data['total'] = total
+        cart_data['item_count'] = len(cart_data['items'])
+        
+        # Debug log to verify image URLs
+        print(f"\n✅ Cart response for user {user.id}:")
+        print(f"   Items: {len(cart_data['items'])}")
+        for i, item in enumerate(cart_data['items']):
+            print(f"   Item {i}: {item['name']}")
+            if item.get('image_url'):
+                print(f"      image_url: {item['image_url']}")
+            if item['product'].get('images'):
+                for j, img in enumerate(item['product']['images']):
+                    print(f"      product.images[{j}]: cloudinary_url={img.get('cloudinary_url')}")
         
         return jsonify({
             'success': True,
@@ -2283,83 +3207,9 @@ def get_cart():
             'removed_count': removed_count,
             'message': f'{removed_count} item(s) removed as they are no longer available' if removed_count else None
         })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@templates_bp.route('/api/cart/items', methods=['POST'])
-def add_to_cart():
-    """Add item to cart"""
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': 'Not logged in'}), 401
-    
-    try:
-        data = request.get_json()
-        product_id = data.get('product_id')
-        quantity = data.get('quantity', 1)
-        
-        print(f"🛒 Adding to cart - User: {user.id}, Product: {product_id}, Quantity: {quantity}")
-        
-        if not product_id:
-            return jsonify({'error': 'Product ID is required'}), 400
-        
-        # Check if product exists and has stock
-        product = Product.query.get(product_id)
-        if not product:
-            print(f"❌ Product not found: {product_id}")
-            return jsonify({'error': 'Product not found'}), 404
-        
-        print(f"📦 Product: {product.name}, Stock: {product.stock_quantity}, Available: {product.is_available}")
-        
-        if not product.is_available:
-            return jsonify({'error': 'Product is not available'}), 400
-        
-        if product.stock_quantity < quantity:
-            return jsonify({'error': f'Only {product.stock_quantity} available'}), 400
-        
-        # Get or create cart
-        cart = Cart.query.filter_by(user_id=user.id).first()
-        if not cart:
-            print(f"🆕 Creating new cart for user: {user.id}")
-            cart = Cart(user_id=user.id)
-            db.session.add(cart)
-            db.session.flush()
-        
-        # Check if product already in cart
-        cart_item = CartItem.query.filter_by(
-            cart_id=cart.id,
-            product_id=product_id
-        ).first()
-        
-        if cart_item:
-            # Check total quantity against stock
-            if product.stock_quantity < (cart_item.quantity + quantity):
-                return jsonify({'error': f'Only {product.stock_quantity} available total'}), 400
-            print(f"🔄 Updating existing cart item from {cart_item.quantity} to {cart_item.quantity + quantity}")
-            cart_item.quantity += quantity
-        else:
-            print(f"➕ Adding new cart item")
-            cart_item = CartItem(
-                cart_id=cart.id,
-                product_id=product_id,
-                quantity=quantity
-            )
-            db.session.add(cart_item)
-        
-        db.session.commit()
-        
-        cart_dict = cart.to_dict()
-        print(f"✅ Item added successfully. Cart now has {len(cart_dict.get('items', []))} items")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Item added to cart',
-            'cart': cart_dict
-        })
         
     except Exception as e:
-        db.session.rollback()
-        print(f"❌ Error adding to cart: {str(e)}")
+        print(f"❌ Error getting cart: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -2474,51 +3324,6 @@ def clear_cart():
 
 
 
-
-@templates_bp.route('/debug/check-image/<path:filename>', methods=['GET'])
-def debug_check_image(filename):
-    """Check if an image file exists and return its info"""
-    from os.path import exists, join, getsize
-    from datetime import datetime
-    
-    try:
-        # Construct the full path to the image
-        image_path = join(BASE_DIR, 'static', 'uploads', 'products', filename)
-        
-        if exists(image_path):
-            file_size = getsize(image_path)
-            modified_time = datetime.fromtimestamp(os.path.getmtime(image_path))
-            
-            return jsonify({
-                'exists': True,
-                'filename': filename,
-                'path': image_path,
-                'size_bytes': file_size,
-                'size_kb': round(file_size / 1024, 2),
-                'modified': modified_time.isoformat(),
-                'url': f'/static/uploads/products/{filename}'
-            })
-        else:
-            # Try to list directory contents for debugging
-            upload_dir = join(BASE_DIR, 'static', 'uploads', 'products')
-            files = []
-            if exists(upload_dir):
-                files = os.listdir(upload_dir)[:10]  # First 10 files
-            
-            return jsonify({
-                'exists': False,
-                'filename': filename,
-                'path': image_path,
-                'directory_exists': exists(upload_dir),
-                'sample_files': files
-            }), 404
-            
-    except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'filename': filename
-        }), 500
-    
 '''
 @templates_bp.route('/api/product-image/<path:filename>')
 def get_resized_product_image(filename):
@@ -2816,80 +3621,6 @@ def get_resized_product_image(filename):
         # Don't expose internal errors to client
         return jsonify({'error': 'An error occurred processing the image'}), 500
 
-@templates_bp.route('/debug/images', methods=['GET'])
-def debug_images():
-    """Debug endpoint to list all product images"""
-    try:
-        upload_folder = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
-        if not os.path.exists(upload_folder):
-            return jsonify({'error': 'Upload folder not found'}), 404
-        
-        files = os.listdir(upload_folder)
-        
-        # Get file details
-        images = []
-        for f in files:
-            file_path = os.path.join(upload_folder, f)
-            if os.path.isfile(file_path):
-                images.append({
-                    'filename': f,
-                    'size': os.path.getsize(file_path),
-                    'exists': True
-                })
-        
-        # Check the specific images from your logs
-        target_images = ['p3_1_008392_c059e330.png', 'p4_1_008377_8f751b4b.png', 'p5_1_008348_61d580a4.png']
-        missing = []
-        for img in target_images:
-            if img not in files:
-                missing.append(img)
-        
-        return jsonify({
-            'total_images': len(images),
-            'images': images[:20],  # First 20 images
-            'missing_targets': missing,
-            'upload_folder': upload_folder
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@templates_bp.route('/debug/product-images/<int:product_id>', methods=['GET'])
-def debug_product_images(product_id):
-    """Debug endpoint to check all images for a product"""
-    try:
-        product = Product.query.get_or_404(product_id)
-        
-        result = {
-            'product_id': product.id,
-            'product_name': product.name,
-            'images': []
-        }
-        
-        upload_folder = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
-        
-        for img in product.images:
-            file_path = os.path.join(upload_folder, img.filename)
-            file_exists = os.path.exists(file_path)
-            
-            result['images'].append({
-                'id': img.id,
-                'filename': img.filename,
-                'is_primary': img.is_primary,
-                'file_exists': file_exists,
-                'file_size': os.path.getsize(file_path) if file_exists else None,
-                'url': f'/static/uploads/products/{img.filename}',
-                'resized_url': f'/api/product-image/{img.filename}?w=800&h=800'
-            })
-        
-        # Also list all files in the upload folder for comparison
-        if os.path.exists(upload_folder):
-            all_files = os.listdir(upload_folder)
-            result['all_files_in_folder'] = all_files[:20]  # First 20 files
-        
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
     
 
 @templates_bp.route('/seller/archive')
@@ -2898,7 +3629,7 @@ def seller_archive():
     """Render the seller archive page"""
     return render_template('seller_archive.html')
 
-
+'''
 @templates_bp.route('/seller/products/<int:product_id>/images/<int:image_id>', methods=['DELETE'])
 def delete_product_image(product_id, image_id):
     """Delete a specific product image"""
@@ -2950,33 +3681,8 @@ def delete_product_image(product_id, image_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-    
 
-
-
-@templates_bp.route('/debug/check-avatar/<filename>')
-def debug_check_avatar(filename):
-    """Check if avatar file exists and return its URL"""
-    from flask import url_for
-    import os
-    
-    # Check using config path
-    upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'avatars')
-    file_path = os.path.join(upload_path, filename)
-    file_exists = os.path.exists(file_path)
-    
-    # Generate the URL that should work
-    static_url = url_for('static', filename=f'uploads/avatars/{filename}', _external=True)
-    
-    return jsonify({
-        'filename': filename,
-        'upload_path': upload_path,
-        'file_path': file_path,
-        'file_exists': file_exists,
-        'file_size': os.path.getsize(file_path) if file_exists else None,
-        'static_url': static_url,
-        'static_url_relative': f'/static/uploads/avatars/{filename}'
-    })
+'''
 
 
 # ─── REPLACE the existing store_detail route with this ───────────────────────
@@ -2997,14 +3703,22 @@ def store_detail(store_id):
         # Only show active stores to the public
         if store.status != 'active':
             flash('This store is not currently available.', 'warning')
-            return redirect(url_for('templates.index'))  # ✅ FIXED: was url_for('templates.store_detail') — missing store_id
+            return redirect(url_for('templates.index'))
 
         # Build store dict
         store_data = store.to_dict()
 
-        # Attach logo URL from seller application
-        if store.seller_application and store.seller_application.store_logo_path:
-            store_data['logo_url'] = f'/static/uploads/seller_logos/{store.seller_application.store_logo_path}'
+        # ===== UPDATED: Use Cloudinary URL for logo if available =====
+        # Attach logo URL from seller application - prefer Cloudinary URL
+        if store.seller_application:
+            # Use Cloudinary URL if available
+            if store.seller_application.store_logo_url:
+                store_data['logo_url'] = store.seller_application.store_logo_url
+            # Fallback to local path
+            elif store.seller_application.store_logo_path:
+                store_data['logo_url'] = f'/static/uploads/seller_logos/{store.seller_application.store_logo_path}'
+            else:
+                store_data['logo_url'] = None
         else:
             store_data['logo_url'] = None
 
@@ -3055,14 +3769,7 @@ def store_detail(store_id):
         import traceback
         traceback.print_exc()
         flash('Store not found.', 'error')
-        return redirect(url_for('templates.index'))  # ✅ FIXED: was url_for('templates.store_detail') — would crash again
-    
-
-
-
-
-
-
+        return redirect(url_for('templates.index'))
 
 
 
@@ -3096,7 +3803,7 @@ def store_settings():
         # Get list of municipalities for the dropdown
         municipalities = get_municipalities()
         
-        # Process GCash QR codes for template
+        # FIXED: Process GCash QR codes for template using Cloudinary URL
         gcash_qr_data = []
         if store.gcash_qr_images:
             sorted_qrs = sorted(store.gcash_qr_images, key=lambda x: x.sort_order)
@@ -3104,7 +3811,8 @@ def store_settings():
                 gcash_qr_data.append({
                     'id': qr.id,
                     'filename': qr.filename,
-                    'url': f'/static/uploads/gcash_qr/{qr.filename}',
+                    'url': qr.cloudinary_url,  # ✅ FIXED: Use Cloudinary URL, not local path
+                    'public_id': qr.public_id,
                     'is_primary': qr.is_primary,
                     'sort_order': qr.sort_order
                 })
@@ -3120,6 +3828,9 @@ def store_settings():
         print(f"Has zone_delivery_area: {store.zone_delivery_area is not None}")
         print(f"Has selected_municipalities: {store.selected_municipalities is not None}")
         print(f"Has municipality_delivery_area: {store.municipality_delivery_area is not None}")
+        print(f"GCash QR count: {len(gcash_qr_data)}")
+        if gcash_qr_data:
+            print(f"First QR URL: {gcash_qr_data[0]['url']}")
         print("="*60 + "\n")
         
         return render_template('store_settings.html', 
@@ -3139,7 +3850,7 @@ def store_settings():
 @templates_bp.route('/api/seller/store/settings', methods=['POST'])
 @seller_required
 def update_store_settings():
-    """Update all store settings at once including GCash QR codes"""
+    """Update all store settings at once including GCash QR codes with Cloudinary"""
     print("\n" + "="*60)
     print("📥 RECEIVED UPDATE STORE SETTINGS REQUEST")
     
@@ -3305,11 +4016,8 @@ def update_store_settings():
         # ===== UPDATE ACTIVE DELIVERY AREA BASED ON CURRENT METHOD =====
         store.update_delivery_area_from_method()
         
-        # ===== GCASH QR CODE HANDLING =====
-        print("\n📱 Processing GCash QR codes...")
-
-        gcash_upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'gcash_qr')
-        os.makedirs(gcash_upload_path, exist_ok=True)
+        # ===== GCASH QR CODE HANDLING WITH CLOUDINARY =====
+        print("\n📱 Processing GCash QR codes with Cloudinary...")
 
         # Get QR IDs to keep and delete
         qr_ids_to_keep = []
@@ -3330,46 +4038,58 @@ def update_store_settings():
                 except:
                     qr_ids_to_delete = []
 
-        # Delete marked QR codes
+        # Import Cloudinary helper
+        from app.utils.cloudinary_helper import delete_from_cloudinary
+
+        # Delete marked QR codes from Cloudinary and database
         for qr_id in qr_ids_to_delete:
             qr = GCashQR.query.get(qr_id)
             if qr and qr.store_id == store.id:
-                file_path = os.path.join(gcash_upload_path, qr.filename)
-                if os.path.exists(file_path):
-                    try:
-                        os.remove(file_path)
-                    except:
-                        pass
+                # Delete from Cloudinary if public_id exists
+                if qr.public_id:
+                    delete_from_cloudinary(qr.public_id)
+                    print(f"   🗑️ Deleted QR from Cloudinary: {qr.public_id}")
+                
+                # Delete from database
                 db.session.delete(qr)
                 print(f"   ✅ Deleted QR record ID: {qr_id}")
 
-        # Process new QR code uploads
+        # Process new QR code uploads from Cloudinary
         current_qr_count = GCashQR.query.filter_by(store_id=store.id).count()
         next_sort_order = current_qr_count
 
+        # Look for Cloudinary QR data in form data (sent from frontend after upload)
+        qr_index = 0
+        while f'gcash_qr_public_id_{qr_index}' in data:
+            public_id = data.get(f'gcash_qr_public_id_{qr_index}')
+            url = data.get(f'gcash_qr_url_{qr_index}')
+            filename = data.get(f'gcash_qr_filename_{qr_index}')
+            
+            if public_id and url:
+                is_primary = (next_sort_order == 0)
+                
+                new_qr = GCashQR(
+                    store_id=store.id,
+                    filename=filename or f"gcash_{public_id}.jpg",
+                    public_id=public_id,
+                    cloudinary_url=url,
+                    is_primary=is_primary,
+                    sort_order=next_sort_order
+                )
+                db.session.add(new_qr)
+                next_sort_order += 1
+                print(f"   ✅ Created new QR record from Cloudinary: {public_id}")
+            
+            qr_index += 1
+
+        # Also check for file uploads (backward compatibility, but not recommended)
         for key in files:
             if key.startswith('gcash_qr_'):
                 file = files[key]
-                if file and file.filename and allowed_file(file.filename):
-                    timestamp = str(int(time.time()))
-                    random_str = uuid.uuid4().hex[:8]
-                    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
-                    filename = f"store_{store.id}_gcash_{timestamp}_{random_str}.{ext}"
-                    
-                    filepath = os.path.join(gcash_upload_path, filename)
-                    file.save(filepath)
-                    
-                    is_primary = (next_sort_order == 0)
-                    
-                    new_qr = GCashQR(
-                        store_id=store.id,
-                        filename=filename,
-                        is_primary=is_primary,
-                        sort_order=next_sort_order
-                    )
-                    db.session.add(new_qr)
-                    next_sort_order += 1
-                    print(f"   ✅ Created new QR record: {filename}")
+                if file and file.filename:
+                    print(f"   ⚠️ Direct file upload detected for {key}. Please use Cloudinary upload instead.")
+                    # You could still process it, but better to use Cloudinary
+                    # Consider showing a warning to the user
 
         # Update sort_order for kept QRs
         if qr_ids_to_keep:
@@ -4298,6 +5018,7 @@ def reorder_variants():
     
 
 
+
 @templates_bp.route('/seller/products/add')
 @seller_required
 def add_product_page():
@@ -4306,7 +5027,19 @@ def add_product_page():
     is_edit = bool(product_id)
     product = None
     
+    # ===== ADD THIS: Get all main categories =====
+    from app.models import Category
+    main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+    # =============================================
+    
     if is_edit:
+        # Convert product_id to integer
+        try:
+            product_id = int(product_id)
+        except (TypeError, ValueError):
+            flash('Invalid product ID', 'error')
+            return redirect(url_for('templates.seller_products'))
+        
         store = _get_seller_store()
         if not store:
             flash('Store not found', 'error')
@@ -4319,11 +5052,8 @@ def add_product_page():
     
     return render_template('add_product.html', 
                          is_edit=is_edit, 
-                         product=product)
-
-
-
-
+                         product=product,
+                         main_categories=main_categories)  # ← Pass to template
 
 
 
@@ -4416,3 +5146,532 @@ def delete_gcash_qr(filename):
     
 
 
+@templates_bp.route('/seller/products/images-count', methods=['POST'])
+@seller_required
+def get_products_image_count():
+    """Get total Cloudinary image count for selected products"""
+    try:
+        store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        data = request.get_json()
+        product_ids = data.get('product_ids', [])
+        
+        if not product_ids:
+            return jsonify({'total_images': 0})
+        
+        total_images = 0
+        
+        for product_id in product_ids:
+            product = Product.query.filter_by(id=product_id, store_id=store.id).first()
+            if product:
+                # Count product images
+                total_images += len(product.images)
+                
+                # Count variant images
+                for variant in product.variants:
+                    if variant.image_public_id:
+                        total_images += 1
+        
+        return jsonify({'total_images': total_images})
+        
+    except Exception as e:
+        print(f"Error counting images: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@templates_bp.route('/api/v1/cloudinary/upload', methods=['POST', 'OPTIONS'])
+def cloudinary_upload():
+    """Upload an image directly to Cloudinary and return the result
+    Supports both sellers and customers (customers can upload avatars, sellers can upload products)
+    """
+    # Handle preflight OPTIONS request for CORS
+    if request.method == 'OPTIONS':
+        response = jsonify({'success': True})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, X-CSRFToken, X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        return response
+    
+    try:
+        # Log the request for debugging
+        print("\n" + "="*60)
+        print("📤 CLOUDINARY UPLOAD REQUEST RECEIVED")
+        print(f"Session user_id: {session.get('user_id')}")
+        print(f"Session role: {session.get('role')}")
+        print(f"Content Type: {request.content_type}")
+        print(f"Files keys: {list(request.files.keys())}")
+        print(f"Form keys: {list(request.form.keys())}")
+        
+        # Check if user is authenticated (any role can upload)
+        if 'user_id' not in session:
+            print("❌ User not authenticated")
+            return jsonify({
+                'success': False, 
+                'error': 'Not authenticated. Please log in first.'
+            }), 401
+        
+        # Get the user to verify they exist
+        user = User.query.get(session['user_id'])
+        if not user:
+            print(f"❌ User {session['user_id']} not found in database")
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        
+        # Check if file exists
+        if 'file' not in request.files:
+            print("❌ No file in request")
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if not file or not file.filename:
+            print("❌ Empty file")
+            return jsonify({'success': False, 'error': 'Empty file'}), 400
+        
+        folder = request.form.get('folder', 'e-flowers/temp')
+        print(f"📁 Folder: {folder}")
+        print(f"📄 Filename: {file.filename}")
+        print(f"📄 File size: {file.tell()} bytes")
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        if '.' in file.filename:
+            ext = file.filename.rsplit('.', 1)[1].lower()
+            if ext not in allowed_extensions:
+                print(f"❌ Invalid file extension: {ext}")
+                return jsonify({
+                    'success': False, 
+                    'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'
+                }), 400
+        
+        # Validate file size (max 10MB)
+        file.seek(0, 2)  # Seek to end
+        file_size = file.tell()
+        file.seek(0)  # Reset to beginning
+        max_size = 10 * 1024 * 1024  # 10MB
+        
+        if file_size > max_size:
+            print(f"❌ File too large: {file_size} bytes")
+            return jsonify({
+                'success': False, 
+                'error': f'File too large. Maximum size is 10MB.'
+            }), 400
+        
+        # Import Cloudinary helper
+        from app.utils.cloudinary_helper import upload_to_cloudinary, should_use_cloudinary
+        
+        # Check if Cloudinary is configured
+        if not should_use_cloudinary():
+            print("❌ Cloudinary not configured")
+            return jsonify({
+                'success': False, 
+                'error': 'Cloudinary is not configured. Please contact support.'
+            }), 500
+        
+        # Upload to Cloudinary
+        print("⏫ Uploading to Cloudinary...")
+        result = upload_to_cloudinary(file, folder)
+        
+        if result['success']:
+            print(f"✅ Upload successful: {result['public_id']}")
+            print(f"🔗 URL: {result['url']}")
+            print(f"📊 Format: {result.get('format')}, Size: {result.get('width')}x{result.get('height')}")
+            
+            response = jsonify({
+                'success': True,
+                'public_id': result['public_id'],
+                'url': result['url'],
+                'format': result.get('format'),
+                'width': result.get('width'),
+                'height': result.get('height'),
+                'bytes': result.get('bytes')
+            })
+            
+            # Add CORS headers for development
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response
+        else:
+            print(f"❌ Upload failed: {result.get('error', 'Unknown error')}")
+            return jsonify({
+                'success': False, 
+                'error': result.get('error', 'Upload failed')
+            }), 500
+            
+    except Exception as e:
+        print(f"❌ Cloudinary upload error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False, 
+            'error': f'Server error: {str(e)}'
+        }), 500
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'''
+
+@templates_bp.route('/api/seller/pos/next-order-id', methods=['GET'])
+@seller_required
+def get_next_pos_order_id():
+    """Get the next available POS order ID"""
+    store = _get_seller_store()
+    if not store:
+        return jsonify({'error': 'No active store.'}), 403
+    
+    # Get the latest order
+    latest_order = POSOrder.query.filter_by(store_id=store.id).order_by(POSOrder.id.desc()).first()
+    
+    if latest_order:
+        next_id = latest_order.id + 1
+    else:
+        next_id = 1  # Start from 1 if no orders exist
+    
+    return jsonify({'next_id': next_id})
+'''
+
+
+
+'''
+@templates_bp.route('/seller/pos/orders')
+@seller_required
+def seller_pos_orders():
+    """Render the POS orders history page"""
+    store = _get_seller_store()
+    if not store:
+        return redirect(url_for('templates.dashboard'))
+    
+    return render_template('seller_pos_orders.html', store=store)
+'''
+@templates_bp.route('/api/seller/pos/orders/<int:order_id>', methods=['GET'])
+@seller_required
+def pos_order_detail_api(order_id):
+    store = _get_seller_store()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 403
+    
+    try:
+        order = POSOrder.query.filter_by(id=order_id, store_id=store.id).first()
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+        
+        items = []
+        subtotal = 0
+        for item in order.items:
+            product_name = 'Unknown Product'
+            if item.product:
+                product_name = item.product.name
+            if item.variant_id and item.variant:
+                product_name = f"{product_name} - {item.variant.name}"
+            item_subtotal = float(item.price * item.quantity)
+            subtotal += item_subtotal
+            items.append({
+                'id': item.id,
+                'product_id': item.product_id,
+                'variant_id': item.variant_id,
+                'product_name': product_name,
+                'quantity': item.quantity,
+                'unit_price': float(item.price),
+                'subtotal': item_subtotal
+            })
+
+        # created_at is stored as PH local time (naive datetime), NOT UTC.
+        # Just label it with +08:00 offset directly — no UTC conversion needed.
+        created_at_iso = None
+        created_at_date = None
+        if order.created_at:
+            created_at_iso  = order.created_at.strftime('%Y-%m-%dT%H:%M:%S+00:00')
+            created_at_date = order.created_at.strftime('%Y-%m-%d')
+
+        return jsonify({
+            'id': order.id,
+            'created_at': created_at_iso,
+            'created_at_date': created_at_date,
+            'customer_name': order.customer_name or 'Walk-in',
+            'customer_contact': order.customer_contact,
+            'payment_method': order.payment_method or 'cash',
+            'amount_given': float(order.amount_given) if order.amount_given else 0,
+            'change_amount': float(order.change_amount) if order.change_amount else 0,
+            'total_amount': float(order.total_amount) if order.total_amount else 0,
+            'subtotal': subtotal,
+            'discount': float(order.discount or 0),
+            'items': items,
+            'item_count': len(items)
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@templates_bp.route('/api/seller/pos/orders', methods=['GET'])
+@seller_required
+def pos_order_history_api():
+    """API endpoint to get POS orders data (returns JSON)"""
+    store = _get_seller_store()
+    if not store:
+        return jsonify({'error': 'No active store.'}), 403
+
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int), 100)
+    date_filter = request.args.get('date', 'this_week')
+    payment_filter = request.args.get('payment', 'all')
+    search_query = request.args.get('search', '')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    query = POSOrder.query.filter_by(store_id=store.id)
+
+    # ── Date filtering ────────────────────────────────────────────────────────
+    # created_at is stored as PH local time (naive datetime), NOT UTC.
+    # So we compare directly using PH local date boundaries — no UTC conversion.
+    import pytz
+    ph_tz = pytz.timezone('Asia/Manila')
+    today_ph = datetime.now(ph_tz).date()
+
+    if date_filter == 'today':
+        start = datetime(today_ph.year, today_ph.month, today_ph.day, 0, 0, 0)
+        end   = datetime(today_ph.year, today_ph.month, today_ph.day, 23, 59, 59)
+        query = query.filter(POSOrder.created_at >= start, POSOrder.created_at <= end)
+
+    elif date_filter == 'yesterday':
+        yesterday = today_ph - timedelta(days=1)
+        start = datetime(yesterday.year, yesterday.month, yesterday.day, 0, 0, 0)
+        end   = datetime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59)
+        query = query.filter(POSOrder.created_at >= start, POSOrder.created_at <= end)
+
+    elif date_filter == 'this_week':
+        start_of_week = today_ph - timedelta(days=today_ph.weekday())  # Monday
+        start = datetime(start_of_week.year, start_of_week.month, start_of_week.day, 0, 0, 0)
+        query = query.filter(POSOrder.created_at >= start)
+
+    elif date_filter == 'this_month':
+        start_of_month = today_ph.replace(day=1)
+        start = datetime(start_of_month.year, start_of_month.month, start_of_month.day, 0, 0, 0)
+        query = query.filter(POSOrder.created_at >= start)
+
+    elif date_filter == 'custom' and start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+            end   = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            query = query.filter(POSOrder.created_at >= start, POSOrder.created_at <= end)
+        except ValueError:
+            pass
+
+    # ── Payment filter ────────────────────────────────────────────────────────
+    if payment_filter != 'all':
+        query = query.filter_by(payment_method=payment_filter)
+
+    # ── Search filter ─────────────────────────────────────────────────────────
+    if search_query:
+        query = query.filter(
+            db.or_(
+                POSOrder.customer_name.ilike(f'%{search_query}%'),
+                POSOrder.customer_contact.ilike(f'%{search_query}%'),
+                db.cast(POSOrder.id, db.String).ilike(f'%{search_query}%')
+            )
+        )
+
+    # ── Paginate ──────────────────────────────────────────────────────────────
+    pagination = query.order_by(POSOrder.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    # ── Serialize ─────────────────────────────────────────────────────────────
+    # created_at is stored as PH local time, so we just label it with +08:00
+    # offset directly — no UTC conversion needed.
+    orders = []
+    for o in pagination.items:
+        subtotal   = sum(float(item.price * item.quantity) for item in o.items)
+        item_count = sum(item.quantity for item in o.items)
+
+        if o.created_at:
+            created_at_iso  = o.created_at.strftime('%Y-%m-%dT%H:%M:%S+00:00')
+            created_at_date = o.created_at.strftime('%Y-%m-%d')
+        else:
+            created_at_iso  = None
+            created_at_date = None
+
+        orders.append({
+            'id':             o.id,
+            'created_at':     created_at_iso,
+            'created_at_date': created_at_date,
+            'customer_name':  o.customer_name or 'Walk-in',
+            'customer_contact': o.customer_contact,
+            'item_count':     item_count,
+            'subtotal':       float(subtotal),
+            'discount':       float(o.discount or 0),
+            'total_amount':   float(o.total_amount) if o.total_amount else 0,
+            'amount_given':   float(o.amount_given) if o.amount_given else 0,
+            'change_amount':  float(o.change_amount) if o.change_amount else 0,
+            'payment_method': o.payment_method or 'cash'
+        })
+
+    return jsonify({
+        'orders':       orders,
+        'total':        pagination.total,
+        'pages':        pagination.pages,
+        'current_page': pagination.page,
+        'has_next':     pagination.has_next,
+        'has_prev':     pagination.has_prev,
+    })
+
+
+@templates_bp.route('/seller/pos/orders')
+@seller_required
+def seller_pos_orders():
+    """Render the POS orders history page - JS loads data via API"""
+    store = _get_seller_store()
+    if not store:
+        flash('Please set up your store first.', 'warning')
+        return redirect(url_for('templates.dashboard'))
+    
+    return render_template('seller_pos_orders.html', store=store)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@templates_bp.route('/store/<int:store_id>/category/<int:category_id>')
+def store_category(store_id, category_id):
+    """View products in a store-specific subcategory"""
+    from app.models import Store, StoreCategory, Product
+    
+    store = Store.query.get_or_404(store_id)
+    category = StoreCategory.query.get_or_404(category_id)
+    
+    # Verify category belongs to store
+    if category.store_id != store_id:
+        os.abort(404)
+    
+    products = Product.query.filter_by(
+        store_id=store_id,
+        store_category_id=category_id,
+        is_archived=False,
+        is_available=True
+    ).all()
+    
+    return render_template('store_category.html',
+                         store=store,
+                         category=category,
+                         products=products)
+
+
+@templates_bp.route('/api/store/categories', methods=['GET'])
+@seller_required
+def get_store_categories():
+    """Get store-specific subcategories for a main category"""
+    main_category_id = request.args.get('main_category_id')
+    store = _get_seller_store()
+    
+    if not store:
+        return jsonify({'success': False, 'error': 'Store not found'}), 404
+    
+    if not main_category_id:
+        return jsonify({'success': False, 'error': 'Main category ID required'}), 400
+    
+    from app.models import StoreCategory
+    
+    categories = StoreCategory.query.filter_by(
+        store_id=store.id,
+        main_category_id=main_category_id,
+        is_active=True
+    ).order_by(StoreCategory.sort_order).all()
+    
+    return jsonify({
+        'success': True,
+        'categories': [cat.to_dict() for cat in categories]
+    })
+
+
+@templates_bp.route('/api/store/categories/create', methods=['POST'])
+@seller_required
+def create_store_category():
+    """Create a new store-specific subcategory"""
+    data = request.get_json()
+    store = _get_seller_store()
+    
+    if not store:
+        return jsonify({'success': False, 'error': 'Store not found'}), 404
+    
+    main_category_id = data.get('main_category_id')
+    name = data.get('name', '').strip()
+    description = data.get('description', '').strip()
+    
+    if not main_category_id:
+        return jsonify({'success': False, 'error': 'Main category ID required'}), 400
+    
+    if not name:
+        return jsonify({'success': False, 'error': 'Subcategory name required'}), 400
+    
+    from app.models import StoreCategory, Category
+    
+    # Verify main category exists
+    main_category = Category.query.get(main_category_id)
+    if not main_category:
+        return jsonify({'success': False, 'error': 'Main category not found'}), 404
+    
+    # Check if subcategory already exists for this store
+    existing = StoreCategory.query.filter_by(
+        store_id=store.id,
+        name=name
+    ).first()
+    
+    if existing:
+        return jsonify({'success': False, 'error': 'Subcategory already exists'}), 400
+    
+    # Create slug
+    import re
+    slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    slug = f"{slug}-{store.id}"
+    
+    subcategory = StoreCategory(
+        store_id=store.id,
+        main_category_id=main_category_id,
+        name=name,
+        slug=slug,
+        description=description
+    )
+    
+    db.session.add(subcategory)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'category': subcategory.to_dict()
+    })

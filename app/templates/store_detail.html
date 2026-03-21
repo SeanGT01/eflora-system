@@ -603,13 +603,14 @@
     <div class="store-hero-pattern"></div>
 
     <div class="store-hero-content">
-        <!-- Logo -->
+        <!-- Logo - Using Cloudinary URL if available -->
         <div class="store-logo-large">
             {% if store.logo_url %}
                 <img src="{{ store.logo_url }}" alt="{{ store.name }}"
-                     onerror="this.style.display='none'">
+                     onerror="this.style.display='none'; this.parentElement.innerHTML='{{ store.name[0] if store.name else 'S' }}';">
+            {% else %}
+                {{ store.name[0] if store.name else 'S' }}
             {% endif %}
-            {{ store.name[0] if store.name else 'S' }}
         </div>
 
         <!-- Info -->
@@ -708,7 +709,7 @@
             </div>
         </div>
 
-        <!-- Products Grid -->
+        <!-- Products Grid - Using Cloudinary URLs -->
         <div class="store-products-grid" id="productsGrid">
             {% if products and products|length > 0 %}
                 {% for product in products %}
@@ -725,6 +726,7 @@
                     {% endif %}
 
                     <div class="product-image" onclick="viewProduct({{ product.id }})">
+                        {# Use the image_url from product.to_dict() which returns cloudinary_url or fallback #}
                         {% if product.image_url %}
                         <img src="{{ product.image_url }}" alt="{{ product.name }}"
                              onerror="this.parentElement.innerHTML='<div style=\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:40px;opacity:0.15\'><i class=\'ri-image-line\'></i></div>'">
@@ -933,7 +935,7 @@
     }
 
     function viewProduct(productId) {
-        window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
+        window.location.href = "{{ url_for('templates.product_detail', product_id=0) }}".replace('0', productId);
     }
 
     // Enhanced quickAdd function that uses the global cart system
@@ -968,7 +970,7 @@
                 await window.addToCart(product);
                 
                 // Show success message
-                showToast(`✓ ${productName} added to bag`);
+                showToast(`✓ ${productName} added to basket`);
             } else {
                 // Fallback if global function doesn't exist
                 const response = await fetch('/api/cart/items', {
@@ -979,7 +981,7 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    showToast(`✓ ${productName} added to bag`);
+                    showToast(`✓ ${productName} added to basket`);
                     
                     // Try to update cart count if function exists
                     if (typeof window.updateCartCount === 'function') {

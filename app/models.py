@@ -6,6 +6,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from decimal import Decimal
 from sqlalchemy.dialects.postgresql import JSON
+import cloudinary
+import cloudinary.utils
 
 
 class User(db.Model):
@@ -22,7 +24,12 @@ class User(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     birthday = db.Column(db.Date, nullable=True)
     gender = db.Column(db.String(20), nullable=True)  # male, female, other, prefer_not_to_say
-    avatar_filename = db.Column(db.String(255), nullable=True)  # Path to profile picture
+    
+    # ===== CLOUDINARY FIELDS (NO LOCAL FALLBACK) =====
+    avatar_filename = db.Column(db.String(255), nullable=True)  # Original filename (metadata only)
+    avatar_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    avatar_url = db.Column(db.String(500), nullable=True)  # Full Cloudinary URL
+    # =================================================
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -44,6 +51,31 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
     
+    @property
+    def avatar_image_url(self):
+        """Get Cloudinary URL - no local fallback"""
+        return self.avatar_url
+    
+    def get_avatar_transformed(self, width=None, height=None, crop='fill'):
+        """Generate transformed avatar URL"""
+        if not self.avatar_public_id:
+            return None
+            
+        transformations = {}
+        if width:
+            transformations['width'] = width
+        if height:
+            transformations['height'] = height
+        if crop:
+            transformations['crop'] = crop
+            
+        url, _ = cloudinary.utils.cloudinary_url(
+            self.avatar_public_id,
+            **transformations,
+            secure=True
+        )
+        return url
+    
     def to_dict(self):
         return {
             'id': self.id,
@@ -56,21 +88,29 @@ class User(db.Model):
             'phone': self.phone,
             'birthday': self.birthday.isoformat() if self.birthday else None,
             'gender': self.gender,
-            'avatar_url': f'/static/uploads/avatars/{self.avatar_filename}' if self.avatar_filename else None,
+            'avatar_url': self.avatar_url,  # Cloudinary only
+            'avatar_thumbnail': self.get_avatar_transformed(width=100, height=100),
+            'avatar_public_id': self.avatar_public_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# GCASH QR CODE MODEL (NEW)
+# GCASH QR CODE MODEL
 # ═════════════════════════════════════════════════════════════════════════════
 class GCashQR(db.Model):
     __tablename__ = 'gcash_qrs'
     
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id', ondelete='CASCADE'), nullable=False)
-    filename = db.Column(db.String(255), nullable=False)
+    
+    # ===== CLOUDINARY FIELDS (NO LOCAL FALLBACK) =====
+    filename = db.Column(db.String(255), nullable=False)  # Original filename (metadata only)
+    public_id = db.Column(db.String(255), nullable=False)  # Cloudinary public ID - REQUIRED
+    cloudinary_url = db.Column(db.String(500), nullable=False)  # Full Cloudinary URL - REQUIRED
+    # =================================================
+    
     is_primary = db.Column(db.Boolean, default=False)
     sort_order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -78,16 +118,23 @@ class GCashQR(db.Model):
     # Relationship
     store = db.relationship('Store', back_populates='gcash_qr_images')
     
+    @property
+    def url(self):
+        """Get Cloudinary URL - no local fallback"""
+        return self.cloudinary_url
+    
     def to_dict(self):
         return {
             'id': self.id,
             'store_id': self.store_id,
             'filename': self.filename,
-            'url': f'/static/uploads/gcash_qr/{self.filename}',
+            'public_id': self.public_id,
+            'url': self.cloudinary_url,  # Cloudinary only
             'is_primary': self.is_primary,
             'sort_order': self.sort_order,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
 
 class Store(db.Model):
     __tablename__ = 'stores'
@@ -164,6 +211,13 @@ class Store(db.Model):
     
     seller_application = db.relationship('SellerApplication', foreign_keys=[seller_application_id], backref='approved_store_record', lazy=True)
     approved_by_user = db.relationship('User', foreign_keys=[approved_by], backref='stores_approved', lazy=True)
+    
+    @property
+    def logo_url(self):
+        """Get store logo from seller application - Cloudinary only"""
+        if self.seller_application:
+            return self.seller_application.store_logo_url
+        return None
     
     def calculate_delivery_fee(self, distance_km, subtotal):
         """Calculate delivery fee based on distance and order subtotal"""
@@ -306,7 +360,7 @@ class Store(db.Model):
             'status': self.status,
             'contact_number': self.contact_number,
             'description': self.description,
-            'logo_path': self.seller_application.store_logo_path if self.seller_application else None,
+            'logo_url': self.logo_url,  # Cloudinary only
             'seller_application_id': self.seller_application_id,
             'approved_at': self.approved_at.isoformat() if self.approved_at else None,
             'municipality': self.municipality,
@@ -352,6 +406,7 @@ class Store(db.Model):
         except:
             return None
 
+
 class SellerApplication(db.Model):
     __tablename__ = 'seller_applications'
     
@@ -359,8 +414,17 @@ class SellerApplication(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     store_name = db.Column(db.String(100), nullable=False)
     store_description = db.Column(db.Text)
-    store_logo_path = db.Column(db.String(500))
-    government_id_path = db.Column(db.String(500))
+    
+    # ===== CLOUDINARY FIELDS (NO LOCAL FALLBACK) =====
+    store_logo_path = db.Column(db.String(500), nullable=True)  # Deprecated - keep for backward compatibility
+    store_logo_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    store_logo_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
+    
+    government_id_path = db.Column(db.String(500), nullable=True)  # Deprecated - keep for backward compatibility
+    government_id_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    government_id_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
+    # =================================================
+    
     status = db.Column(db.String(20), default='pending')
     admin_notes = db.Column(db.Text)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -370,6 +434,16 @@ class SellerApplication(db.Model):
     applicant = db.relationship('User', foreign_keys=[user_id], back_populates='seller_applications')
     reviewer = db.relationship('User', foreign_keys=[reviewed_by], back_populates='reviewed_seller_applications')
     
+    @property
+    def store_logo(self):
+        """Get Cloudinary URL - no local fallback"""
+        return self.store_logo_url
+    
+    @property
+    def government_id(self):
+        """Get Cloudinary URL - no local fallback"""
+        return self.government_id_url
+    
     def to_dict(self):
         return {
             'id': self.id,
@@ -377,8 +451,10 @@ class SellerApplication(db.Model):
             'full_name': self.applicant.full_name if self.applicant else None,
             'store_name': self.store_name,
             'store_description': self.store_description,
-            'store_logo_url': f'/static/uploads/seller_logos/{self.store_logo_path}' if self.store_logo_path else None,
-            'government_id_url': f'/static/uploads/govt_ids/{self.government_id_path}' if self.government_id_path else None,
+            'store_logo_url': self.store_logo_url,  # Cloudinary only
+            'store_logo_public_id': self.store_logo_public_id,
+            'government_id_url': self.government_id_url,  # Cloudinary only
+            'government_id_public_id': self.government_id_public_id,
             'status': self.status,
             'admin_notes': self.admin_notes,
             'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
@@ -410,10 +486,108 @@ class Rider(db.Model):
             'store_id': self.store_id,
             'full_name': self.user.full_name if self.user else None,
             'email': self.user.email if self.user else None,
+            'avatar_url': self.user.avatar_url if self.user else None,  # Cloudinary only
             'vehicle_type': self.vehicle_type,
             'license_plate': self.license_plate,
             'is_active': self.is_active
         }
+
+class Category(db.Model):
+    """Global main categories (same for all stores)"""
+    __tablename__ = 'categories'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)  # e.g., "Bouquets"
+    slug = db.Column(db.String(50), unique=True, nullable=False)  # URL-friendly: "bouquets"
+    description = db.Column(db.Text, nullable=True)
+    icon = db.Column(db.String(50), nullable=True)  # FontAwesome icon class
+    image_url = db.Column(db.String(500), nullable=True)  # Category image (Cloudinary)
+    sort_order = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    store_subcategories = db.relationship('StoreCategory', back_populates='main_category', lazy=True)
+    products = db.relationship('Product', back_populates='main_category', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'slug': self.slug,
+            'description': self.description,
+            'icon': self.icon,
+            'image_url': self.image_url,
+            'sort_order': self.sort_order,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class StoreCategory(db.Model):
+    """Store-specific subcategories"""
+    __tablename__ = 'store_categories'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id', ondelete='CASCADE'), nullable=False)
+    main_category_id = db.Column(db.Integer, db.ForeignKey('categories.id', ondelete='CASCADE'), nullable=False)
+    
+    name = db.Column(db.String(100), nullable=False)  # e.g., "Crochet Bouquets"
+    slug = db.Column(db.String(100), nullable=False)  # Store-specific slug
+    description = db.Column(db.Text, nullable=True)
+    image_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL for subcategory image
+    sort_order = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    
+    # Custom attributes (JSON field for store-specific settings)
+    custom_attributes = db.Column(db.JSON, nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    store = db.relationship('Store', backref=db.backref('custom_categories', lazy=True))
+    main_category = db.relationship('Category', back_populates='store_subcategories')
+    products = db.relationship('Product', back_populates='store_category', lazy=True)
+    
+    __table_args__ = (
+        db.UniqueConstraint('store_id', 'slug', name='unique_store_category_slug'),
+        db.UniqueConstraint('store_id', 'name', name='unique_store_category_name'),
+    )
+    
+    @property
+    def full_path(self):
+        """Get full category path e.g., 'Bouquets > Crochet Bouquets'"""
+        return f"{self.main_category.name} > {self.name}"
+    
+    def to_dict(self, include_products=False):
+        data = {
+            'id': self.id,
+            'store_id': self.store_id,
+            'main_category_id': self.main_category_id,
+            'main_category_name': self.main_category.name,
+            'main_category_slug': self.main_category.slug,
+            'main_category_icon': self.main_category.icon,
+            'name': self.name,
+            'slug': self.slug,
+            'description': self.description,
+            'image_url': self.image_url,
+            'sort_order': self.sort_order,
+            'is_active': self.is_active,
+            'full_path': self.full_path,
+            'product_count': len(self.products) if not include_products else None,
+            'custom_attributes': self.custom_attributes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+        
+        if include_products:
+            data['products'] = [p.to_dict() for p in self.products]
+        
+        return data
 
 
 class Product(db.Model):
@@ -421,11 +595,15 @@ class Product(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
+    
+    # Category relationships
+    main_category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
+    store_category_id = db.Column(db.Integer, db.ForeignKey('store_categories.id'), nullable=True)
+    
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     stock_quantity = db.Column(db.Integer, default=0)
-    category = db.Column(db.String(50))
     is_available = db.Column(db.Boolean, default=True)
     
     # Archive fields
@@ -437,11 +615,32 @@ class Product(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    main_category = db.relationship('Category', back_populates='products')
+    store_category = db.relationship('StoreCategory', back_populates='products')
     images = db.relationship('ProductImage', back_populates='product', lazy=True, cascade='all, delete-orphan', order_by='ProductImage.sort_order')
     variants = db.relationship('ProductVariant', back_populates='product', lazy=True, cascade='all, delete-orphan', order_by='ProductVariant.sort_order')
     order_items = db.relationship('OrderItem', backref='product', lazy=True)
-    pos_order_items = db.relationship('POSOrderItem', backref='product', lazy=True)
+    pos_order_items = db.relationship('POSOrderItem', back_populates='product', lazy=True)
     archived_by_user = db.relationship('User', foreign_keys=[archived_by], backref='archived_products')
+    stock_reductions = db.relationship('StockReduction', back_populates='product', lazy=True, cascade='all, delete-orphan')
+    
+    @property
+    def category_path(self):
+        """Get full category path e.g., 'Bouquets > Crochet Bouquets'"""
+        if not self.main_category:
+            return 'Uncategorized'
+        if self.store_category:
+            return self.store_category.full_path
+        return self.main_category.name
+
+    @property
+    def category_display(self):
+        """Get display name with subcategory if available"""
+        if not self.main_category:
+            return 'Uncategorized'
+        if self.store_category:
+            return f"{self.main_category.name} / {self.store_category.name}"
+        return self.main_category.name
     
     def archive(self, user_id):
         """Move product to archive"""
@@ -457,11 +656,79 @@ class Product(db.Model):
         self.archived_at = None
         self.archived_by = None
     
+    def reduce_stock(self, amount, reason, user_id, reason_notes=None, variant=None):
+        """
+        Reduce stock with audit trail.
+        
+        Args:
+            amount (int): Number of units to reduce
+            reason (str): Reason for reduction (spoilage, damage, defect, other)
+            user_id (int): ID of user making the reduction
+            reason_notes (str): Optional additional context
+            variant (ProductVariant, optional): If reducing variant stock
+            
+        Returns:
+            StockReduction: The created reduction record
+            
+        Raises:
+            ValueError: If amount is invalid or exceeds available stock
+        """
+        if amount <= 0:
+            raise ValueError("Reduction amount must be positive")
+        
+        if variant:
+            # Reduce variant stock
+            if amount > variant.stock_quantity:
+                raise ValueError(f"Cannot reduce by {amount}. Available: {variant.stock_quantity}")
+            
+            variant.stock_quantity -= amount
+            variant.updated_at = datetime.utcnow()
+            
+            reduction = StockReduction(
+                product_id=self.id,
+                variant_id=variant.id,
+                reduction_amount=amount,
+                reason=reason,
+                reason_notes=reason_notes,
+                reduced_by=user_id
+            )
+        else:
+            # Reduce main product stock
+            if amount > self.stock_quantity:
+                raise ValueError(f"Cannot reduce by {amount}. Available: {self.stock_quantity}")
+            
+            self.stock_quantity -= amount
+            
+            reduction = StockReduction(
+                product_id=self.id,
+                variant_id=None,
+                reduction_amount=amount,
+                reason=reason,
+                reason_notes=reason_notes,
+                reduced_by=user_id
+            )
+        
+        db.session.add(reduction)
+        return reduction
+    
+    def delete_with_cloudinary(self):
+        """Delete product and all associated Cloudinary images"""
+        from app.utils.cloudinary_helper import delete_from_cloudinary
+        
+        for image in self.images:
+            if image.public_id:
+                delete_from_cloudinary(image.public_id)
+        
+        for variant in self.variants:
+            if variant.image_public_id:
+                delete_from_cloudinary(variant.image_public_id)
+        
+        db.session.delete(self)
+    
     def to_dict(self):
         sorted_images = sorted(self.images, key=lambda x: x.sort_order)
         primary_image = next((img for img in sorted_images if img.is_primary), sorted_images[0] if sorted_images else None)
         
-        # Sort variants by sort_order
         sorted_variants = sorted(self.variants, key=lambda v: v.sort_order)
         
         data = {
@@ -471,8 +738,24 @@ class Product(db.Model):
             'description': self.description,
             'price': float(self.price) if self.price else 0,
             'stock_quantity': self.stock_quantity,
-            'category': self.category,
-            'image_url': f'/static/uploads/products/{primary_image.filename}' if primary_image else None,
+            
+                        # Main category info (with safe fallbacks)
+            'main_category_id': self.main_category_id,
+            'main_category_name': self.main_category.name if self.main_category else 'Uncategorized',
+            'main_category_slug': self.main_category.slug if self.main_category else None,
+            'main_category_icon': self.main_category.icon if self.main_category else None,
+
+            # Store subcategory info (if any)
+            'store_category_id': self.store_category_id,
+            'store_category_name': self.store_category.name if self.store_category else None,
+            'store_category_slug': self.store_category.slug if self.store_category else None,
+
+            # Combined category info (with safe fallbacks)
+            'category_path': self.category_path if self.main_category else 'Uncategorized',
+            'category_display': self.category_display if self.main_category else 'Uncategorized',
+            
+            'image_url': primary_image.image_url if primary_image else None,
+            'thumbnail_url': primary_image.get_transformed_url(width=200, height=200) if primary_image else None,
             'images': [img.to_dict() for img in sorted_images],
             'is_available': self.is_available,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -494,21 +777,60 @@ class ProductImage(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    filename = db.Column(db.String(255), nullable=False)
+    
+    # ===== CLOUDINARY FIELDS (NO LOCAL FALLBACK) =====
+    filename = db.Column(db.String(255), nullable=False)  # Original filename (metadata only)
+    public_id = db.Column(db.String(255), nullable=False, unique=True)  # Cloudinary public ID - REQUIRED
+    cloudinary_url = db.Column(db.String(500), nullable=False)  # Full Cloudinary URL - REQUIRED
+    cloudinary_format = db.Column(db.String(10), nullable=True)  # Store format for transformations
+    cloudinary_version = db.Column(db.String(20), nullable=True)  # Store version for cache busting
+    # =================================================
+    
     is_primary = db.Column(db.Boolean, default=False)
     sort_order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     product = db.relationship('Product', back_populates='images')
     
+    @property
+    def image_url(self):
+        """Get Cloudinary URL - no local fallback"""
+        return self.cloudinary_url
+    
+    def get_transformed_url(self, width=None, height=None, crop='fill'):
+        """Generate transformed URL on the fly"""
+        if not self.public_id:
+            return None
+            
+        transformations = {}
+        if width:
+            transformations['width'] = width
+        if height:
+            transformations['height'] = height
+        if crop:
+            transformations['crop'] = crop
+            
+        url, _ = cloudinary.utils.cloudinary_url(
+            self.public_id,
+            **transformations,
+            secure=True,
+            version=self.cloudinary_version
+        )
+        return url
+    
     def to_dict(self):
         return {
             'id': self.id,
             'product_id': self.product_id,
             'filename': self.filename,
-            'image_url': f'/static/uploads/products/{self.filename}',
+            'public_id': self.public_id,
+            'image_url': self.image_url,
+            'thumbnail_url': self.get_transformed_url(width=200, height=200),
+            'medium_url': self.get_transformed_url(width=400, height=400),
+            'large_url': self.get_transformed_url(width=800, height=800),
             'is_primary': self.is_primary,
-            'sort_order': self.sort_order
+            'sort_order': self.sort_order,
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
 
@@ -527,8 +849,12 @@ class ProductVariant(db.Model):
     stock_quantity = db.Column(db.Integer, default=0)
     sku = db.Column(db.String(50), nullable=True)  # Stock Keeping Unit
     
-    # Variant image (optional - if not provided, uses product's main image)
-    image_filename = db.Column(db.String(255), nullable=True)
+    # ===== CLOUDINARY FIELDS (NO LOCAL FALLBACK) =====
+    image_filename = db.Column(db.String(255), nullable=True)  # Original filename (metadata only)
+    image_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    image_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
+    image_format = db.Column(db.String(10), nullable=True)  # Format for transformations
+    # =================================================
     
     # Variant attributes (can be used for filtering/display)
     # e.g., {"color": "red", "size": "small", "stems": 12}
@@ -547,6 +873,31 @@ class ProductVariant(db.Model):
     # Relationships
     product = db.relationship('Product', back_populates='variants')
     
+    @property
+    def image(self):
+        """Get Cloudinary URL - no local fallback"""
+        return self.image_url
+    
+    def get_transformed_url(self, width=None, height=None, crop='fill'):
+        """Generate transformed variant image URL"""
+        if not self.image_public_id:
+            return None
+            
+        transformations = {}
+        if width:
+            transformations['width'] = width
+        if height:
+            transformations['height'] = height
+        if crop:
+            transformations['crop'] = crop
+            
+        url, _ = cloudinary.utils.cloudinary_url(
+            self.image_public_id,
+            **transformations,
+            secure=True
+        )
+        return url
+    
     def to_dict(self):
         return {
             'id': self.id,
@@ -555,7 +906,9 @@ class ProductVariant(db.Model):
             'price': float(self.price) if self.price else 0,
             'stock_quantity': self.stock_quantity,
             'sku': self.sku,
-            'image_url': f'/static/uploads/product_variants/{self.image_filename}' if self.image_filename else None,
+            'image_url': self.image_url,  # Cloudinary only
+            'image_thumbnail': self.get_transformed_url(width=100, height=100),
+            'image_public_id': self.image_public_id,
             'attributes': self.attributes,
             'sort_order': self.sort_order,
             'is_available': self.is_available,
@@ -563,6 +916,80 @@ class ProductVariant(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# STOCK REDUCTION AUDIT MODEL
+# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
+# STOCK REDUCTION AUDIT MODEL
+# ═════════════════════════════════════════════════════════════════════════════
+class StockReduction(db.Model):
+    """Audit log for all stock reductions with reason tracking"""
+    __tablename__ = 'stock_reductions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
+    reduction_amount = db.Column(db.Integer, nullable=False)
+    
+    # Reason for reduction
+    reason = db.Column(db.String(50), nullable=False)  # spoilage, damage, defect, other
+    reason_notes = db.Column(db.Text, nullable=True)   # Additional context
+    
+    # Who made the reduction
+    reduced_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product = db.relationship('Product', back_populates='stock_reductions')
+    variant = db.relationship('ProductVariant', backref='stock_reductions', foreign_keys=[variant_id])
+    reducer_user = db.relationship('User', backref='stock_reductions_made', foreign_keys=[reduced_by])
+    
+    # Valid reasons
+    REASONS = ['spoilage', 'damage', 'defect', 'other']
+    
+    def to_dict(self):
+        # Get product image (prefer primary, then first image)
+        product_image = None
+        if self.product and self.product.images:
+            primary_image = next((img for img in self.product.images if img.is_primary), None)
+            product_image = primary_image or self.product.images[0]
+        
+        # Get variant info and variant image URL
+        variant_info = None
+        variant_image_url = None  # ADD THIS VARIABLE
+        if self.variant:
+            variant_info = {
+                'id': self.variant.id,
+                'name': self.variant.name,
+                'stock_before': self.variant.stock_quantity + self.reduction_amount if self.variant else None,
+                'stock_after': self.variant.stock_quantity if self.variant else None
+            }
+            # ADD THIS - Get the variant's own image URL
+            if self.variant.image_url:
+                variant_image_url = self.variant.image_url
+        
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'product_name': self.product.name if self.product else None,
+            'product_image': product_image.image_url if product_image else None,
+            'variant_id': self.variant_id,
+            'variant_info': variant_info,
+            'variant_image_url': variant_image_url,  # ADD THIS LINE
+            'reduction_amount': self.reduction_amount,
+            'reason': self.reason,
+            'reason_notes': self.reason_notes,
+            'reduced_by': self.reduced_by,
+            'reduced_by_user': self.reducer_user.full_name if self.reducer_user else None,
+            'reducer_name': self.reducer_user.full_name if self.reducer_user else None,
+            'reducer_email': self.reducer_user.email if self.reducer_user else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
 class Order(db.Model):
     __tablename__ = 'orders'
@@ -583,7 +1010,12 @@ class Order(db.Model):
     
     payment_method = db.Column(db.String(50), default='gcash')
     payment_status = db.Column(db.String(20), default='pending')
-    payment_proof = db.Column(db.String(255))
+    
+    # ===== CLOUDINARY FIELDS (NO LOCAL FALLBACK) =====
+    payment_proof = db.Column(db.String(255), nullable=True)  # Original filename (metadata only)
+    payment_proof_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    payment_proof_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
+    # =================================================
     
     # Delivery information
     delivery_location = db.Column(Geometry('POINT', srid=4326))
@@ -601,6 +1033,11 @@ class Order(db.Model):
     
     # Relationships
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade='all, delete-orphan')
+    
+    @property
+    def payment_proof_image(self):
+        """Get Cloudinary URL - no local fallback"""
+        return self.payment_proof_url
     
     def compute_total(self):
         subtotal = Decimal(self.subtotal_amount or 0)
@@ -621,7 +1058,8 @@ class Order(db.Model):
             'total_amount': float(self.total_amount or 0),
             'payment_method': self.payment_method,
             'payment_status': self.payment_status,
-            'payment_proof_url': f'/static/uploads/payments/{self.payment_proof}' if self.payment_proof else None,
+            'payment_proof_url': self.payment_proof_url,  # Cloudinary only
+            'payment_proof_public_id': self.payment_proof_public_id,
             'delivery_address': self.delivery_address,
             'delivery_notes': self.delivery_notes,
             'customer_latitude': self.customer_latitude,
@@ -629,9 +1067,10 @@ class Order(db.Model):
             'mapbox_place_id': self.mapbox_place_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'customer_name': self.customer.full_name if self.customer else None,
+            'customer_avatar': self.customer.avatar_url if self.customer else None,  # Cloudinary only
             'store_name': self.store.name if self.store else None,
-            'rider_name': self.assigned_rider.user.full_name 
-                if self.assigned_rider and self.assigned_rider.user else None
+            'store_logo': self.store.logo_url if self.store else None,  # Cloudinary only
+            'rider_name': self.assigned_rider.user.full_name if self.assigned_rider and self.assigned_rider.user else None
         }
 
 
@@ -647,19 +1086,21 @@ class OrderItem(db.Model):
     
     variant = db.relationship('ProductVariant', backref='order_items', lazy=True)
     
+    @property
+    def product_image(self):
+        """Get the appropriate product image (variant or main) - Cloudinary only"""
+        if self.variant and self.variant.image_url:
+            return self.variant.image_url
+        elif self.product and self.product.images:
+            primary = next((img for img in self.product.images if img.is_primary), self.product.images[0] if self.product.images else None)
+            return primary.image_url if primary else None
+        return None
+    
     def to_dict(self):
         product = self.product
-        primary_image = None
-        if product and product.images:
-            primary_image = next((img for img in product.images if img.is_primary), product.images[0])
-        
-        # Use variant image if variant is selected
-        image_filename = primary_image.filename if primary_image else None
         variant_name = None
         
         if self.variant:
-            if self.variant.image_filename:
-                image_filename = self.variant.image_filename
             variant_name = self.variant.name
         
         return {
@@ -672,7 +1113,7 @@ class OrderItem(db.Model):
             'price': float(self.price) if self.price else 0,
             'total': float(self.quantity * self.price) if self.price else 0,
             'product_name': product.name if product else None,
-            'product_image': image_filename
+            'product_image_url': self.product_image  # Cloudinary only
         }
 
 
@@ -693,30 +1134,56 @@ class RiderLocation(db.Model):
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }
 
-
 class POSOrder(db.Model):
     __tablename__ = 'pos_orders'
     
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
     total_amount = db.Column(db.Numeric(10, 2))
+    
+    # ===== NEW FIELDS FOR CASH MANAGEMENT =====
+    amount_given = db.Column(db.Numeric(10, 2), nullable=True)  # Amount customer paid
+    change_amount = db.Column(db.Numeric(10, 2), nullable=True)  # Change returned to customer
+    payment_method = db.Column(db.String(20), default='cash')  # cash, gcash, card
+    # ==========================================
+    
+    # ===== NEW DISCOUNT FIELD =====
+    discount = db.Column(db.Numeric(10, 2), default=0.00, nullable=True)  # Discount amount
+    # ==============================
+    
     customer_name = db.Column(db.String(100))
     customer_contact = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    items = db.relationship('POSOrderItem', backref='pos_order', lazy=True, cascade='all, delete-orphan')
+    # FIXED: Use back_populates instead of backref
+    items = db.relationship('POSOrderItem', back_populates='pos_order', lazy=True, cascade='all, delete-orphan')
+    
+    @property
+    def subtotal(self):
+        """Calculate subtotal from items"""
+        return sum(item.price * item.quantity for item in self.items) if self.items else 0
     
     def to_dict(self):
+        subtotal = float(self.subtotal)
+        discount = float(self.discount or 0)
+        total = float(self.total_amount or 0)
+        
         return {
             'id': self.id,
             'store_id': self.store_id,
-            'total_amount': float(self.total_amount) if self.total_amount else 0,
+            'subtotal': subtotal,
+            'discount': discount,
+            'total_amount': total,
+            'amount_given': float(self.amount_given) if self.amount_given else 0,
+            'change_amount': float(self.change_amount) if self.change_amount else 0,
+            'payment_method': self.payment_method or 'cash',
             'customer_name': self.customer_name,
             'customer_contact': self.customer_contact,
+            'items': [item.to_dict() for item in self.items],
+            'item_count': len(self.items),
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
-
 
 class POSOrderItem(db.Model):
     __tablename__ = 'pos_order_items'
@@ -728,21 +1195,30 @@ class POSOrderItem(db.Model):
     quantity = db.Column(db.Integer, default=1)
     price = db.Column(db.Numeric(10, 2))
     
+    # FIXED: Use back_populates to match the relationship in POSOrder
+    pos_order = db.relationship('POSOrder', back_populates='items', lazy=True)
+    
+    # FIXED: Use back_populates for product (matches the relationship in Product)
+    product = db.relationship('Product', back_populates='pos_order_items', lazy=True)
+    
+    # This one can stay as backref since it's a simple one-way relationship
     variant = db.relationship('ProductVariant', backref='pos_order_items', lazy=True)
+    
+    @property
+    def product_image(self):
+        """Get the appropriate product image (variant or main) - Cloudinary only"""
+        if self.variant and self.variant.image_url:
+            return self.variant.image_url
+        elif self.product and self.product.images:
+            primary = next((img for img in self.product.images if img.is_primary), self.product.images[0] if self.product.images else None)
+            return primary.image_url if primary else None
+        return None
     
     def to_dict(self):
         product = self.product
-        primary_image = None
-        if product and product.images:
-            primary_image = next((img for img in product.images if img.is_primary), product.images[0])
-        
-        # Use variant image if variant is selected
-        image_filename = primary_image.filename if primary_image else None
         variant_name = None
         
         if self.variant:
-            if self.variant.image_filename:
-                image_filename = self.variant.image_filename
             variant_name = self.variant.name
         
         return {
@@ -755,7 +1231,12 @@ class POSOrderItem(db.Model):
             'price': float(self.price) if self.price else 0,
             'total': float(self.quantity * self.price) if self.price else 0,
             'product_name': product.name if product else None,
-            'product_image': image_filename
+            'product_image_url': self.product_image,  # Cloudinary only
+            # ADD THESE LINES - Category information
+            'main_category_name': product.main_category.name if product and product.main_category else None,
+            'main_category_id': product.main_category_id if product else None,
+            'subcategory_name': product.store_category.name if product and product.store_category else None,
+            'subcategory_id': product.store_category_id if product else None
         }
 
 
@@ -779,6 +1260,7 @@ class Testimonial(db.Model):
             'rating': self.rating,
             'comment': self.comment,
             'customer_name': self.customer.full_name if self.customer else None,
+            'customer_avatar': self.customer.avatar_url if self.customer else None,  # Cloudinary only
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -870,6 +1352,16 @@ class CartItem(db.Model):
             return self.variant.price * self.quantity
         return self.product.price * self.quantity if self.product else 0
     
+    @property
+    def item_image(self):
+        """Get the appropriate image for cart display - Cloudinary only"""
+        if self.variant and self.variant.image_url:
+            return self.variant.image_url
+        elif self.product and self.product.images:
+            primary = next((img for img in self.product.images if img.is_primary), self.product.images[0] if self.product.images else None)
+            return primary.image_url if primary else None
+        return None
+    
     def to_dict(self):
         product_dict = self.product.to_dict() if self.product else None
         variant_dict = self.variant.to_dict() if self.variant else None
@@ -883,6 +1375,7 @@ class CartItem(db.Model):
             'variant': variant_dict,
             'quantity': self.quantity,
             'subtotal': float(self.subtotal),
+            'image_url': self.item_image,  # Cloudinary only
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

@@ -372,7 +372,6 @@
     window.resetForm = resetForm;
     window.showNotification = showNotification;
     window.closeModal = closeModal;
-    window.uploadAvatar = uploadAvatar;
 
     let currentPage = '{{ initial_page or "profile" }}';
 
@@ -448,8 +447,38 @@
         }
     }
 
-    // ── Profile ──
+    // ===== PROFILE PAGE INIT (CLOUDINARY AVATAR SUPPORT) =====
     function initProfilePage() {
+        // Keep the last saved custom gender value around so it sticks when toggling back to "other"
+        let lastSavedOtherGender = document.getElementById('gender_other')?.value || '';
+
+        // Toggle visibility of the custom gender field
+        function updateGenderOtherVisibility() {
+            const container = document.getElementById('gender-other-container');
+            const otherInput = document.getElementById('gender_other');
+            const selected = document.querySelector('input[name="gender"]:checked');
+            if (!container) return;
+
+            const showOther = selected && selected.value === 'other';
+            container.style.display = showOther ? 'block' : 'none';
+
+            if (showOther && otherInput && otherInput.value.trim() === '' && lastSavedOtherGender) {
+                otherInput.value = lastSavedOtherGender;
+            }
+        }
+
+        // Attach toggle behavior to the gender radio group (use delegation so it survives form cloning)
+        if (!window.__genderOtherToggleAttached) {
+            window.__genderOtherToggleAttached = true;
+            document.addEventListener('change', function(e) {
+                if (e.target && e.target.name === 'gender') {
+                    updateGenderOtherVisibility();
+                }
+            });
+        }
+        updateGenderOtherVisibility();
+
+        // Re-attach profile form submit handler
         const pf = document.getElementById('profileForm');
         if (pf) {
             const nf = pf.cloneNode(true);
@@ -461,14 +490,36 @@
                 btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving…';
                 btn.disabled = true;
                 try {
-                    const r = await fetch('/api/account/profile/update', { method: 'POST', body: new FormData(this) });
+                    const formData = new FormData(this);
+                    const otherInput = document.getElementById('gender_other');
+                    if (formData.get('gender') === 'other' && otherInput && otherInput.value.trim()) {
+                        formData.set('gender', otherInput.value.trim());
+                    }
+                    const r = await fetch('/api/account/profile/update', { method: 'POST', body: formData });
                     const d = await r.json();
-                    showToast(d.success ? '✓  Profile saved' : 'Error: ' + (d.error || 'Unknown error'));
-                } catch { showToast('Network error. Please try again.'); }
-                finally { btn.innerHTML = orig; btn.disabled = false; }
+                    if (d.success) {
+                        showToast('✓  Profile saved');
+
+                        // Keep the saved custom value in memory so it reappears when toggling back to "Other"
+                        const otherInput = document.getElementById('gender_other');
+                        if (otherInput && otherInput.value.trim()) {
+                            lastSavedOtherGender = otherInput.value.trim();
+                        }
+
+                        updateGenderOtherVisibility();
+                    } else {
+                        showToast('Error: ' + (d.error || 'Unknown error'));
+                    }
+                } catch {
+                    showToast('Network error. Please try again.');
+                } finally {
+                    btn.innerHTML = orig;
+                    btn.disabled = false;
+                }
             });
         }
 
+        // Re-attach password form handler
         const pwf = document.getElementById('passwordForm');
         if (pwf) {
             const nf = pwf.cloneNode(true);
@@ -476,8 +527,14 @@
             nf.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const fd = new FormData(this);
-                if (fd.get('new_password') !== fd.get('confirm_password')) { showToast('Passwords do not match'); return; }
-                if (fd.get('new_password').length < 6) { showToast('Password must be at least 6 characters'); return; }
+                if (fd.get('new_password') !== fd.get('confirm_password')) { 
+                    showToast('Passwords do not match'); 
+                    return; 
+                }
+                if (fd.get('new_password').length < 6) { 
+                    showToast('Password must be at least 6 characters'); 
+                    return; 
+                }
                 const btn = this.querySelector('button[type="submit"]');
                 const orig = btn.innerHTML;
                 btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Changing…';
@@ -485,45 +542,157 @@
                 try {
                     const r = await fetch('/api/account/password/change', { method: 'POST', body: fd });
                     const d = await r.json();
-                    if (d.success) { showToast('✓  Password changed'); this.reset(); }
-                    else showToast('Error: ' + (d.error || 'Unknown'));
-                } catch { showToast('Network error. Please try again.'); }
-                finally { btn.innerHTML = orig; btn.disabled = false; }
+                    if (d.success) { 
+                        showToast('✓  Password changed'); 
+                        this.reset(); 
+                    } else {
+                        showToast('Error: ' + (d.error || 'Unknown'));
+                    }
+                } catch { 
+                    showToast('Network error. Please try again.'); 
+                } finally { 
+                    btn.innerHTML = orig; 
+                    btn.disabled = false; 
+                }
             });
         }
 
+        // ===== CLOUDINARY AVATAR UPLOAD HANDLER =====
         const ai = document.getElementById('avatarInput');
         if (ai) {
             const na = ai.cloneNode(true);
             ai.parentNode.replaceChild(na, ai);
-            na.addEventListener('change', e => { if (e.target.files[0]) uploadAvatar(e.target.files[0]); });
+            
+            // Attach Cloudinary upload handler
+            na.addEventListener('change', async function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // Validate file
+                const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+                if (!allowedTypes.includes(file.type)) {
+                    showToast('File must be JPG, PNG, GIF, or WebP', 'error');
+                    na.value = '';
+                    return;
+                }
+                
+                const maxSize = 5 * 1024 * 1024; // 5MB
+                if (file.size > maxSize) {
+                    showToast('File must be less than 5MB', 'error');
+                    na.value = '';
+                    return;
+                }
+                
+                // Show progress
+                const progress = document.getElementById('avatarUploadProgress');
+                const progressBar = document.getElementById('avatarProgressBar');
+                const progressText = document.getElementById('avatarProgressText');
+                
+                if (progress) {
+                    progress.style.display = 'block';
+                    progressBar.style.width = '0%';
+                    progressText.textContent = 'Uploading to Cloudinary...';
+                }
+                
+                const btn = document.querySelector('.avatar-actions .btn');
+                const origBtnText = btn?.innerHTML;
+                if (btn) { 
+                    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading…'; 
+                    btn.disabled = true; 
+                }
+                
+                try {
+                    // Upload to Cloudinary using the helper function
+                    if (progress) progressBar.style.width = '30%';
+                    
+                    // Get user ID from template
+                    const userId = '{{ user.id if user else "" }}';
+                    
+                    // Use the global uploadToCloudinary function from profile_content.html
+                    if (typeof window.uploadToCloudinary !== 'function') {
+                        throw new Error('Cloudinary upload function not available');
+                    }
+                    
+                    const result = await window.uploadToCloudinary(file, `e-flowers/users/${userId}/avatar`);
+                    
+                    if (!result || !result.success) {
+                        throw new Error(result?.error || 'Upload failed');
+                    }
+                    
+                    if (progress) progressBar.style.width = '70%';
+                    if (progress) progressText.textContent = 'Updating profile...';
+                    
+                    // Get form data
+                    const fd = new FormData();
+                    fd.append('avatar_public_id', result.public_id);
+                    fd.append('avatar_url', result.url);
+                    
+                    const pf = document.getElementById('profileForm');
+                    if (pf) {
+                        ['first_name','last_name','phone','birthday'].forEach(k => {
+                            const val = pf.querySelector(`[name="${k}"]`)?.value;
+                            if (val) fd.append(k, val);
+                        });
+                        const g = pf.querySelector('[name="gender"]:checked');
+                        if (g) fd.append('gender', g.value);
+                    }
+                    
+                    // Update profile with Cloudinary URL
+                    const r = await fetch('/api/account/profile/update', { 
+                        method: 'POST', 
+                        body: fd 
+                    });
+                    const d = await r.json();
+                    
+                    if (progress) progressBar.style.width = '100%';
+                    
+                    if (d.success) {
+                        // Update avatar in sidebar and profile
+                        const sidebarAvatar = document.querySelector('.sidebar-avatar');
+                        const profileAvatar = document.querySelector('.avatar-circle');
+                        
+                        if (sidebarAvatar && d.user?.avatar_url) {
+                            sidebarAvatar.innerHTML = `<img src="${d.user.avatar_url}?t=${Date.now()}" alt="Profile">`;
+                        }
+                        
+                        if (profileAvatar && d.user?.avatar_url) {
+                            profileAvatar.innerHTML = `<img src="${d.user.avatar_url}?t=${Date.now()}" alt="Profile">`;
+                        }
+                        
+                        showToast('✓ Profile photo updated', 'success');
+                    } else {
+                        showToast('Error: ' + (d.error || 'Update failed'), 'error');
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    showToast('Error: ' + error.message, 'error');
+                } finally {
+                    if (btn) { 
+                        btn.innerHTML = origBtnText || '<i class="ri-camera-line"></i> Change Photo'; 
+                        btn.disabled = false; 
+                    }
+                    na.value = '';
+                    
+                    if (progress) {
+                        setTimeout(() => {
+                            progress.style.display = 'none';
+                        }, 1000);
+                    }
+                }
+            });
         }
-    }
 
-    async function uploadAvatar(file) {
-        const fd = new FormData();
-        fd.append('avatar', file);
-        const pf = document.getElementById('profileForm');
-        if (pf) {
-            ['first_name','last_name','phone','birthday'].forEach(k => fd.append(k, pf.querySelector(`[name="${k}"]`)?.value || ''));
-            const g = pf.querySelector('[name="gender"]:checked');
-            if (g) fd.append('gender', g.value);
+        // Call any additional setup functions from profile_content.html
+        if (typeof window.setupImagePreviews === 'function') {
+            window.setupImagePreviews();
         }
-        const btn = document.querySelector('.profile-header .btn-outline');
-        if (btn) { btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading…'; btn.disabled = true; }
-        try {
-            const r = await fetch('/api/account/profile/update', { method: 'POST', body: fd });
-            const d = await r.json();
-            if (d.success) {
-                const ac = document.querySelector('.avatar-circle');
-                if (ac && d.user.avatar_url) ac.innerHTML = `<img src="${d.user.avatar_url}?t=${Date.now()}" alt="Profile" style="width:100%;height:100%;object-fit:cover;">`;
-                showToast('✓  Profile photo updated');
-            } else showToast('Error: ' + (d.error || 'Upload failed'));
-        } catch { showToast('Network error. Please try again.'); }
-        finally {
-            if (btn) { btn.innerHTML = '<i class="ri-camera-line"></i> Change Photo'; btn.disabled = false; }
-            const ai = document.getElementById('avatarInput');
-            if (ai) ai.value = '';
+        
+        if (typeof window.setupSellerApplicationForm === 'function') {
+            window.setupSellerApplicationForm();
+        }
+        
+        if (typeof window.checkApplicationStatus === 'function') {
+            window.checkApplicationStatus();
         }
     }
 
@@ -672,13 +841,33 @@
 
     function showNotification(message, type = 'info') { showToast(message); }
 
-    function showToast(message) {
-        const t = document.getElementById('toast');
-        if (!t) return;
-        t.textContent = message;
-        t.classList.add('show');
-        setTimeout(() => t.classList.remove('show'), 3000);
+    function showToast(message, type = 'info') {
+        const toast = document.getElementById('global-toast');
+        if (!toast) return;
+        
+        if (type === 'error') {
+            toast.style.background = '#c0392b';
+        } else if (type === 'success') {
+            toast.style.background = '#27ae60';
+        } else {
+            toast.style.background = 'var(--charcoal)';
+        }
+        
+        toast.textContent = message;
+        toast.style.display = 'block';
+        toast.offsetHeight;
+        toast.style.opacity = '1';
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 300);
+        }, 3000);
     }
+
+    // Make sure uploadToCloudinary is available from profile_content.html
+    // This will be set by the profile_content.html script
 
     // Spin animation for loader icons
     const spinStyle = document.createElement('style');

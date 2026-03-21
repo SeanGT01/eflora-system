@@ -1353,7 +1353,7 @@
 
                 <button class="action-btn cart-btn" onclick="toggleCart()">
                     <i class="ri-shopping-bag-line action-icon bag"></i>
-                    <span class="action-text" id="bag">Bag</span>
+                    <span class="action-text" id="bag">Basket</span>
                     <span class="cart-count" id="cartCount">0</span>
                 </button>
 
@@ -1397,7 +1397,7 @@
         <a href="{{ url_for('templates.index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">All</a>
         {% if categories %}
             {% for category in categories %}
-            <a href="{{ url_for('templates.category', category_id=category.id) }}" class="nav-link">{{ category.name }}</a>
+       <a href="{{ url_for('templates.category', category_identifier=category.id) }}" class="nav-link">{{ category.name }}</a>
             {% endfor %}
         {% endif %}
     </div>
@@ -1462,6 +1462,30 @@
     <div class="toast" id="toast"></div>
 
     <script>
+
+
+// Add this debug helper at the top of your base.html script section
+const DEBUG = {
+    enabled: true,
+    log: function(step, data) {
+        if (!this.enabled) return;
+        console.log(`%c🔍 CART DEBUG - ${step}`, 'background: #b5445a; color: white; padding: 2px 5px; border-radius: 3px;');
+        console.log('Data:', JSON.parse(JSON.stringify(data))); // Deep clone to avoid reference issues
+    },
+    table: function(data) {
+        if (!this.enabled) return;
+        console.table(data);
+    },    group: function(name) {
+        if (!this.enabled) return;
+        console.group(`%c📦 ${name}`, 'color: #b5445a; font-weight: bold;');
+    },
+    groupEnd: function() {
+        if (!this.enabled) return;
+        console.groupEnd();
+    }
+};
+
+
         let cart = [];
         let isLoadingCart = false;
 
@@ -1531,316 +1555,586 @@
             showToast('Guest cart cleared. Start shopping with your account!');
         }
 
-        // Load cart from server or localStorage
-        function loadCart() {
-            {% if session.get('user_id') %}
-            // For logged-in users, load from server
-            fetch('/api/cart')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        if (data.cart && data.cart.items) {
-                            cart = data.cart.items.map(item => ({
-                                id: item.product.id,
-                                name: item.product.name,
-                                price: item.product.price,
-                                store_id: item.product.store_id,
-                                store_name: item.store_name,
-                                image_url: item.product.image_url,
-                                quantity: item.quantity,
-                                cart_item_id: item.id
-                            }));
-                        } else {
-                            cart = [];
-                        }
-                        updateCartCount();
-                        updateCartDisplay();
+        // Replace your loadCart function with this:
+function loadCart() {
+    {% if session.get('user_id') %}
+    // For logged-in users, load from server
+    fetch('/api/cart')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Check the actual structure of the response
+                DEBUG.log('Raw server cart data', data);
+                
+                // Handle different possible response structures
+                let cartItems = [];
+                
+                if (data.cart && Array.isArray(data.cart)) {
+                    // If cart is directly an array
+                    cartItems = data.cart;
+                } else if (data.cart && data.cart.items && Array.isArray(data.cart.items)) {
+                    // If cart has items property
+                    cartItems = data.cart.items;
+                } else if (data.items && Array.isArray(data.items)) {
+                    // If items is directly on data
+                    cartItems = data.items;
+                }
+                
+                cart = cartItems.map(item => {
+                    // Handle different possible item structures
+                    const productId = item.product_id || (item.product && item.product.id);
+                    const variantId = item.variant_id || (item.variant && item.variant.id);
+                    const productName = item.product ? item.product.name : item.name;
+                    const variantName = item.variant ? item.variant.name : null;
+                    const storeName = item.store_name || (item.store && item.store.name) || 'Flower Shop';
+                    
+                    // Determine price (variant price takes precedence)
+                    let price = item.price;
+                    if (item.variant && item.variant.price) {
+                        price = item.variant.price;
+                    } else if (item.product && item.product.price) {
+                        price = item.product.price;
                     }
-                })
-                .catch(error => {
-                    console.error('Error loading cart:', error);
-                    loadCartFromLocal();
+                    
+                    // Determine image URL
+                    let imageUrl = item.image_url;
+                    if (item.variant && item.variant.image_url) {
+                        imageUrl = item.variant.image_url;
+                    } else if (item.product && item.product.image_url) {
+                        imageUrl = item.product.image_url;
+                    } else if (item.product && item.product.images && item.product.images[0]) {
+                        imageUrl = item.product.images[0].image_url;
+                    }
+                    
+                    return {
+                        id: productId,
+                        variant_id: variantId || null,
+                        name: variantName ? `${variantName} ${productName}` : productName,
+                        price: parseFloat(price),
+                        store_id: item.store_id || (item.product && item.product.store_id),
+                        store_name: storeName,
+                        image_url: imageUrl,
+                        quantity: item.quantity || 1,
+                        cart_item_id: item.id || item.cart_item_id
+                    };
                 });
-            {% else %}
-            // For guest users, load from localStorage
+                
+                updateCartCount();
+                updateCartDisplay();
+                
+                DEBUG.log('Cart loaded from server with variants', cart);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading cart:', error);
             loadCartFromLocal();
-            {% endif %}
-        }
-
-        function loadCartFromLocal() {
-            cart = JSON.parse(localStorage.getItem('cart')) || [];
-            updateCartCount();
-            updateCartDisplay();
-        }
+        });
+    {% else %}
+    // For guest users, load from localStorage
+    loadCartFromLocal();
+    {% endif %}
+}
 
         function updateCartCount() {
             const total = cart.reduce((s, i) => s + i.quantity, 0);
             document.getElementById('cartCount').textContent = total;
         }
 
-        function updateCartDisplay() {
-            const cartItems = document.getElementById('cartItems');
-            const cartTotal = document.getElementById('cartTotal');
-            const cartSubtotal = document.getElementById('cartSubtotal');
+      // Enhanced updateCartDisplay to show variant info clearly
+function updateCartDisplay() {
+    const cartItems = document.getElementById('cartItems');
+    const cartTotal = document.getElementById('cartTotal');
+    const cartSubtotal = document.getElementById('cartSubtotal');
 
-            if (!cart.length) {
-                cartItems.innerHTML = `
-                    <div class="empty-state">
-                        <i class="ri-shopping-bag-line empty-state-icon"></i>
-                        <p>Your basket is empty</p>
-                        <p style="font-size:13px;margin-top:0.25rem;font-family:var(--font-sans);">Add some blooms to get started</p>
-                    </div>`;
-                cartTotal.textContent = '₱0.00';
-                if (cartSubtotal) cartSubtotal.textContent = '₱0.00';
-                return;
-            }
+    if (!cart.length) {
+        cartItems.innerHTML = `
+            <div class="empty-state">
+                <i class="ri-shopping-bag-line empty-state-icon"></i>
+                <p>Your basket is empty</p>
+                <p style="font-size:13px;margin-top:0.25rem;font-family:var(--font-sans);">Add some blooms to get started</p>
+            </div>`;
+        cartTotal.textContent = '₱0.00';
+        if (cartSubtotal) cartSubtotal.textContent = '₱0.00';
+        return;
+    }
 
-            let html = '', total = 0;
-            cart.forEach((item, i) => {
-                total += item.price * item.quantity;
-                html += `
-                    <div class="cart-item">
-                        <div class="cart-item-image">
-                            ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}">` : ''}
-                        </div>
-                        <div class="cart-item-info">
-                            <div class="cart-item-title">${item.name}</div>
-                            <div class="cart-item-store">${item.store_name || ''}</div>
-                            <div class="cart-item-price">₱${item.price.toFixed(2)}</div>
-                            <div class="cart-item-controls">
-                                <button class="quantity-btn" onclick="updateQuantity(${i},-1)">−</button>
-                                <input class="quantity-input" value="${item.quantity}" readonly>
-                                <button class="quantity-btn" onclick="updateQuantity(${i},1)">+</button>
-                                <button class="cart-item-remove" onclick="removeFromCart(${i})"><i class="ri-delete-bin-line"></i></button>
-                            </div>
-                        </div>
-                    </div>`;
-            });
+    let html = '', total = 0;
+    
+    DEBUG.group('Rendering Cart Display');
+    DEBUG.log('Cart items to render', cart);
+    
+    cart.forEach((item, i) => {
+        total += item.price * item.quantity;
+        const isVariant = !!item.variant_id;
+        
+        DEBUG.log(`Rendering item ${i}`, {
+            name: item.name,
+            isVariant: isVariant,
+            productId: item.id,
+            variantId: item.variant_id || 'none'
+        });
+        
+        html += `
+            <div class="cart-item" data-index="${i}" data-product-id="${item.id}" data-variant-id="${item.variant_id || ''}">
+                <div class="cart-item-image">
+                    ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}">` : ''}
+                </div>
+                <div class="cart-item-info">
+                    <div class="cart-item-title">${item.name}</div>
+                    ${isVariant ? '<div class="cart-item-store" style="color: var(--deep-rose);">✨ Variant Option</div>' : ''}
+                    <div class="cart-item-store">${item.store_name || ''}</div>
+                    <div class="cart-item-price">₱${item.price.toFixed(2)}</div>
+                    <div class="cart-item-controls">
+                        <button class="quantity-btn" onclick="updateQuantity(${i},-1)">−</button>
+                        <input class="quantity-input" value="${item.quantity}" readonly>
+                        <button class="quantity-btn" onclick="updateQuantity(${i},1)">+</button>
+                        <button class="cart-item-remove" onclick="removeFromCart(${i})"><i class="ri-delete-bin-line"></i></button>
+                    </div>
+                </div>
+            </div>`;
+    });
 
-            cartItems.innerHTML = html;
-            cartTotal.textContent = `₱${total.toFixed(2)}`;
-            if (cartSubtotal) cartSubtotal.textContent = `₱${total.toFixed(2)}`;
+    cartItems.innerHTML = html;
+    cartTotal.textContent = `₱${total.toFixed(2)}`;
+    if (cartSubtotal) cartSubtotal.textContent = `₱${total.toFixed(2)}`;
+    
+    DEBUG.log('Cart display updated', { totalItems: cart.length, totalAmount: total });
+    DEBUG.groupEnd();
+}
+
+// Add a debug function to inspect cart state
+function inspectCart() {
+    DEBUG.group('CART INSPECTION');
+    
+    console.log('Current cart array:', cart);
+    console.log('LocalStorage cart:', JSON.parse(localStorage.getItem('cart')));
+    
+    console.log('\n📊 CART SUMMARY:');
+    console.log('Total items:', cart.length);
+    
+    const summary = cart.map((item, i) => ({
+        'Index': i,
+        'Name': item.name,
+        'Product ID': item.id,
+        'Variant ID': item.variant_id || 'MAIN PRODUCT',
+        'Quantity': item.quantity,
+        'Price': `₱${item.price}`,
+        'Store': item.store_name
+    }));
+    
+    console.table(summary);
+    
+    // Check for potential issues
+    console.log('\n🔍 VALIDATION CHECKS:');
+    
+    // Check for duplicate combinations
+    const combinations = cart.map(item => `${item.id}-${item.variant_id || 'main'}`);
+    const duplicates = combinations.filter((c, i) => combinations.indexOf(c) !== i);
+    
+    if (duplicates.length > 0) {
+        console.warn('⚠️ Found duplicate product/variant combinations:', duplicates);
+    } else {
+        console.log('✅ No duplicate combinations found');
+    }
+    
+    // Check for missing variant_id on variants
+    const variantsWithoutId = cart.filter(item => 
+        item.name.toLowerCase().includes('variant') && !item.variant_id
+    );
+    
+    if (variantsWithoutId.length > 0) {
+        console.warn('⚠️ Items that appear to be variants but missing variant_id:', variantsWithoutId);
+    }
+    
+    // Show unique product/variant pairs
+    const uniquePairs = [...new Set(combinations)].map(pair => {
+        const [productId, variantId] = pair.split('-');
+        return {
+            'Product ID': productId,
+            'Variant ID': variantId === 'main' ? 'MAIN' : variantId,
+            'Count': combinations.filter(c => c === pair).length
+        };
+    });
+    
+    console.log('\n📦 UNIQUE PRODUCT/VARIANT PAIRS:');
+    console.table(uniquePairs);
+    
+    DEBUG.groupEnd();
+    
+    return cart;
+}
+
+// Make inspectCart globally available
+window.inspectCart = inspectCart;
+     
+// Replace your addToCart function with this debug version:
+function addToCart(product) {
+    DEBUG.group('ADD TO CART - ENTRY POINT');
+    DEBUG.log('Raw product received', product);
+    
+    // ═════════════════════════════════════════════════════════════
+    // VALIDATE PRODUCT
+    // ═════════════════════════════════════════════════════════════
+    if (!product || !product.id) {
+        console.error('❌ Invalid product - missing id');
+        showToast('Error: Invalid product. Please try again.', 'error');
+        DEBUG.groupEnd();
+        return false;
+    }
+    
+    // ═════════════════════════════════════════════════════════════
+    // DETERMINE IF VARIANT OR MAIN PRODUCT
+    // ═════════════════════════════════════════════════════════════
+    const isVariant = !!product.variant_id;
+    const displayName = product.name || 'Product';
+    
+    DEBUG.log('Product classification', {
+        isVariant: isVariant,
+        product_id: product.id,
+        variant_id: product.variant_id || 'none (main product)',
+        displayName: displayName
+    });
+    
+    // ═════════════════════════════════════════════════════════════
+    // QUANTITY (default 1 if not specified)
+    // ═════════════════════════════════════════════════════════════
+    const quantity = product.quantity || 1;
+    DEBUG.log('Quantity', quantity);
+    
+    // ═════════════════════════════════════════════════════════════
+    // LOGGED IN: ADD TO SERVER CART
+    // ═════════════════════════════════════════════════════════════
+    {% if session.get('user_id') %}
+    DEBUG.log('USER STATE', 'Logged in - sending to server');
+    
+    const cartPayload = {
+        product_id: product.id,
+        quantity: quantity
+    };
+    
+    // ✅ Include variant_id if present
+    if (product.variant_id) {
+        cartPayload.variant_id = product.variant_id;
+        DEBUG.log('Variant ID included in payload', product.variant_id);
+    }
+    
+    DEBUG.log('Server payload', cartPayload);
+    
+    fetch('/api/cart/items', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(cartPayload)
+    })
+    .then(response => response.json())
+    .then(data => {
+        DEBUG.log('Server response', data);
+        
+        if (data.success) {
+            DEBUG.log('SUCCESS', 'Item added to server cart');
+            // ✅ Reload cart from server
+            loadCart();
+            showToast(`✓ Added to basket — ${displayName}`);
+        } else {
+            console.error('❌ Server error:', data.error);
+            showToast('Error: ' + (data.error || 'Could not add item'), 'error');
         }
+        DEBUG.groupEnd();
+    })
+    .catch(error => {
+        console.error('❌ Fetch error:', error);
+        DEBUG.log('FALLBACK', 'Server error, falling back to localStorage');
+        addToCartLocalStorage(product);
+        DEBUG.groupEnd();
+    });
+    
+    {% else %}
+    // ═════════════════════════════════════════════════════════════
+    // NOT LOGGED IN: ADD TO LOCAL CART (GUEST)
+    // ═════════════════════════════════════════════════════════════
+    DEBUG.log('USER STATE', 'Guest user - saving to localStorage');
+    addToCartLocalStorage(product);
+    showToast(`✓ Added to basket — ${displayName}`);
+    DEBUG.groupEnd();
+    
+    {% endif %}
+}
 
-        function addToCart(product) {
-            {% if session.get('user_id') %}
-            // For logged-in users, add to server cart
-            fetch('/api/cart/items', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    product_id: product.id,
-                    quantity: 1
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    loadCart(); // Reload cart from server
-                    showToast('✓  Added to basket — ' + product.name);
-                } else {
-                    showToast('Error: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Error adding to cart:', error);
-                // Fallback to localStorage
-                addToCartLocal(product);
-            });
-            {% else %}
-            // For guest users, always use localStorage
-            addToCartLocal(product);
-            // Show toast but DON'T redirect
-            showToast('✓  Added to basket — ' + product.name);
-            {% endif %}
-        }
-
-        function addToCartLocal(product) {
-            const existing = cart.find(i => i.id === product.id);
-            if (existing) {
-                existing.quantity++;
-            } else {
-                cart.push({ 
-                    id: product.id, 
-                    name: product.name, 
-                    price: product.price, 
-                    store_id: product.store_id, 
-                    store_name: product.store_name, 
-                    image_url: product.image_url, 
-                    quantity: 1 
-                });
+// Enhanced localStorage version with better debugging
+function addToCartLocalStorage(product) {
+    DEBUG.group('ADD TO LOCAL STORAGE');
+    DEBUG.log('Product to add', product);
+    
+    // Load current cart
+    let cart = JSON.parse(localStorage.getItem('cart')) || [];
+    DEBUG.log('Current cart (before)', cart);
+    DEBUG.table(cart.map(item => ({
+        Name: item.name,
+        ProductID: item.id,
+        VariantID: item.variant_id || 'none',
+        Quantity: item.quantity,
+        Price: item.price
+    })));
+    
+    // ═════════════════════════════════════════════════════════════
+    // CREATE CART ITEM OBJECT
+    // ═════════════════════════════════════════════════════════════
+    const cartItem = {
+        id: product.id,                    // ✅ Main product ID
+        variant_id: product.variant_id || null,  // ✅ May be null for main products
+        name: product.name,
+        quantity: product.quantity || 1,
+        price: product.price,
+        store_id: product.store_id,
+        store_name: product.store_name || 'Flower Shop',
+        image_url: product.image_url || null
+    };
+    
+    DEBUG.log('Cart item created', cartItem);
+    
+    // ═════════════════════════════════════════════════════════════
+    // CHECK FOR EXISTING ITEM - DETAILED MATCHING LOGIC
+    // ═════════════════════════════════════════════════════════════
+    DEBUG.log('Looking for existing item with:', {
+        searchProductId: cartItem.id,
+        searchVariantId: cartItem.variant_id || 'null'
+    });
+    
+    let existingIndex = -1;
+    let matchReason = '';
+    
+    for (let i = 0; i < cart.length; i++) {
+        const item = cart[i];
+        const itemDesc = `Item ${i}: ${item.name} (ID:${item.id}, Variant:${item.variant_id || 'none'})`;
+        
+        if (!cartItem.variant_id && !item.variant_id) {
+            // Both are main products
+            if (item.id === cartItem.id) {
+                existingIndex = i;
+                matchReason = 'Both are main products with same ID';
+                DEBUG.log(`✅ Match found: ${itemDesc} - ${matchReason}`);
+                break;
             }
-            localStorage.setItem('cart', JSON.stringify(cart));
-            updateCartCount();
-            updateCartDisplay();
-        }
-
-        // Sync guest cart to server after login
-        function syncGuestCart() {
-            const guestCart = JSON.parse(localStorage.getItem('cart')) || [];
-            
-            if (guestCart.length === 0) return;
-            
-            // Hide modal
-            document.getElementById('cartSyncModal').classList.remove('active');
-            
-            // Show syncing notification
-            showToast('Syncing your cart...');
-            
-            // Create an array of promises for each item
-            const syncPromises = guestCart.map(item => {
-                return fetch('/api/cart/items', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        product_id: item.id,
-                        quantity: item.quantity
-                    })
-                })
-                .then(response => response.json());
-            });
-            
-            // Wait for all items to be added
-            Promise.all(syncPromises)
-                .then(results => {
-                    // Check if all succeeded
-                    const allSuccess = results.every(r => r.success);
-                    if (allSuccess) {
-                        // Clear localStorage cart after successful sync
-                        localStorage.removeItem('cart');
-                        showToast('✓ Cart synced successfully!');
-                        // Reload cart from server
-                        loadCart();
-                    } else {
-                        showToast('Some items could not be synced', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error syncing cart:', error);
-                    showToast('Error syncing cart', 'error');
-                });
-        }
-
-        function updateQuantity(index, change) {
-            const item = cart[index];
-            const newQuantity = item.quantity + change;
-            
-            if (newQuantity <= 0) {
-                removeFromCart(index);
-                return;
+        } 
+        else if (cartItem.variant_id && item.variant_id) {
+            // Both are variants
+            if (item.id === cartItem.id && item.variant_id === cartItem.variant_id) {
+                existingIndex = i;
+                matchReason = 'Both are variants with same product ID and variant ID';
+                DEBUG.log(`✅ Match found: ${itemDesc} - ${matchReason}`);
+                break;
             }
+        }
+        else {
+            // One is variant, one is main product
+            DEBUG.log(`❌ No match: ${itemDesc} - Type mismatch (one is variant, one is main)`);
+        }
+    }
+    
+    if (existingIndex > -1) {
+        // ═════════════════════════════════════════════════════════════
+        // ITEM ALREADY IN CART - INCREMENT QUANTITY
+        // ═════════════════════════════════════════════════════════════
+        DEBUG.log('EXISTING ITEM FOUND', {
+            index: existingIndex,
+            reason: matchReason,
+            beforeQuantity: cart[existingIndex].quantity,
+            addQuantity: cartItem.quantity
+        });
+        
+        cart[existingIndex].quantity += cartItem.quantity;
+        
+        DEBUG.log('After increment', {
+            newQuantity: cart[existingIndex].quantity,
+            item: cart[existingIndex]
+        });
+    } else {
+        // ═════════════════════════════════════════════════════════════
+        // NEW ITEM - ADD TO CART
+        // ═════════════════════════════════════════════════════════════
+        DEBUG.log('NEW ITEM - No existing match found, adding to cart');
+        cart.push(cartItem);
+    }
+    
+    // ═════════════════════════════════════════════════════════════
+    // SAVE TO LOCALSTORAGE
+    // ═════════════════════════════════════════════════════════════
+    localStorage.setItem('cart', JSON.stringify(cart));
+    DEBUG.log('Cart saved to localStorage');
+    
+    // Verify save
+    const savedCart = JSON.parse(localStorage.getItem('cart'));
+    DEBUG.log('Verification - cart after save', savedCart);
+    DEBUG.table(savedCart.map(item => ({
+        Name: item.name,
+        ProductID: item.id,
+        VariantID: item.variant_id || 'none',
+        Quantity: item.quantity
+    })));
+    
+    // ═════════════════════════════════════════════════════════════
+    // UPDATE UI
+    // ═════════════════════════════════════════════════════════════
+    updateCartCount();
+    updateCartDisplay();
+    
+    DEBUG.log('UI updated');
+    DEBUG.groupEnd();
+}
 
-            // Check if user is logged in AND item has cart_item_id (meaning it's from server)
-            {% if session.get('user_id') %}
-            if (item.cart_item_id) {
-                // For logged-in users with server cart
-                fetch(`/api/cart/items/${item.cart_item_id}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ quantity: newQuantity })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        loadCart();
-                    }
-                })
-                .catch(error => {
-                    console.error('Error updating cart:', error);
-                    // Fallback to localStorage
-                    updateQuantityLocal(index, change);
-                });
-            } else {
-                // For items added while logged out
-                updateQuantityLocal(index, change);
+// Enhanced loadCartFromLocal with verification
+function loadCartFromLocal() {
+    DEBUG.group('LOAD CART FROM LOCAL');
+    
+    const rawCart = localStorage.getItem('cart');
+    DEBUG.log('Raw localStorage data', rawCart);
+    
+    cart = JSON.parse(rawCart) || [];
+    DEBUG.log('Parsed cart', cart);
+    
+    // Ensure all items have variant_id property
+    cart = cart.map(item => {
+        const normalized = {
+            ...item,
+            variant_id: item.variant_id || null
+        };
+        return normalized;
+    });
+    
+    DEBUG.log('Normalized cart', cart);
+    DEBUG.table(cart.map(item => ({
+        Name: item.name,
+        ProductID: item.id,
+        VariantID: item.variant_id || 'none',
+        Quantity: item.quantity
+    })));
+    
+    updateCartCount();
+    updateCartDisplay();
+    
+    DEBUG.groupEnd();
+}
+
+
+        
+
+       function updateQuantity(index, change) {
+    console.log(`Updating quantity at index ${index} by ${change}`);
+    
+    const item = cart[index];
+    const newQuantity = item.quantity + change;
+    
+    if (newQuantity <= 0) {
+        removeFromCart(index);
+        return;
+    }
+ 
+    {% if session.get('user_id') %}
+    // For logged-in users with server cart
+    if (item.cart_item_id) {
+        fetch(`/api/cart/items/${item.cart_item_id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ quantity: newQuantity })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadCart();
             }
-            {% else %}
-            // For guest users
+        })
+        .catch(error => {
+            console.error('Error updating cart:', error);
             updateQuantityLocal(index, change);
-            {% endif %}
-        }
+        });
+    } else {
+        updateQuantityLocal(index, change);
+    }
+    {% else %}
+    updateQuantityLocal(index, change);
+    {% endif %}
+}
+ 
+function updateQuantityLocal(index, change) {
+    cart[index].quantity += change;
+    if (cart[index].quantity <= 0) cart.splice(index, 1);
+    localStorage.setItem('cart', JSON.stringify(cart));
+    updateCartCount();
+    updateCartDisplay();
+}
 
-        function updateQuantityLocal(index, change) {
-            cart[index].quantity += change;
-            if (cart[index].quantity <= 0) cart.splice(index, 1);
-            localStorage.setItem('cart', JSON.stringify(cart));
-            updateCartCount();
-            updateCartDisplay();
-        }
-
-        function removeFromCart(index) {
-            const item = cart[index];
-
-            {% if session.get('user_id') %}
-            if (item.cart_item_id) {
-                // For logged-in users with server cart
-                fetch(`/api/cart/items/${item.cart_item_id}`, {
-                    method: 'DELETE'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        loadCart();
-                    }
-                })
-                .catch(error => {
-                    console.error('Error removing from cart:', error);
-                    // Fallback to localStorage
-                    removeFromCartLocal(index);
-                });
-            } else {
-                // For items added while logged out
-                removeFromCartLocal(index);
+    function removeFromCart(index) {
+    const item = cart[index];
+ 
+    {% if session.get('user_id') %}
+    if (item.cart_item_id) {
+        // For logged-in users with server cart
+        fetch(`/api/cart/items/${item.cart_item_id}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadCart();
             }
-            {% else %}
-            // For guest users
+        })
+        .catch(error => {
+            console.error('Error removing from cart:', error);
             removeFromCartLocal(index);
-            {% endif %}
-        }
-
-        function removeFromCartLocal(index) {
-            cart.splice(index, 1);
-            localStorage.setItem('cart', JSON.stringify(cart));
-            updateCartCount();
-            updateCartDisplay();
-        }
-
-        function clearCart() {
-            if (!confirm('Clear your entire basket?')) return;
-
-            {% if session.get('user_id') %}
-            fetch('/api/cart/clear', {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    loadCart();
-                    showToast('Basket cleared');
-                }
-            })
-            .catch(error => {
-                console.error('Error clearing cart:', error);
-                clearCartLocal();
-            });
-            {% else %}
-            clearCartLocal();
-            {% endif %}
-        }
-
-        function clearCartLocal() {
-            cart = [];
-            localStorage.setItem('cart', JSON.stringify(cart));
-            updateCartCount();
-            updateCartDisplay();
+        });
+    } else {
+        removeFromCartLocal(index);
+    }
+    {% else %}
+    removeFromCartLocal(index);
+    {% endif %}
+}
+ 
+function removeFromCartLocal(index) {
+    const removedItem = cart[index];
+    console.log('🗑️ Removing item:', removedItem.name);
+    
+    cart.splice(index, 1);
+    localStorage.setItem('cart', JSON.stringify(cart));
+    updateCartCount();
+    updateCartDisplay();
+    
+    showToast(`Removed from basket — ${removedItem.name}`);
+}
+ 
+       function clearCart() {
+    if (!confirm('Clear your entire basket?')) return;
+ 
+    {% if session.get('user_id') %}
+    fetch('/api/cart/clear', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            loadCart();
             showToast('Basket cleared');
         }
+    })
+    .catch(error => {
+        console.error('Error clearing cart:', error);
+        clearCartLocal();
+    });
+    {% else %}
+    clearCartLocal();
+    {% endif %}
+}
+ 
+function clearCartLocal() {
+    cart = [];
+    localStorage.setItem('cart', JSON.stringify(cart));
+    updateCartCount();
+    updateCartDisplay();
+    showToast('Basket cleared');
+}
 
         function toggleCart() {
             const sidebar = document.getElementById('cartSidebar');
@@ -1956,6 +2250,27 @@
             }
             return false;
         }
+        function debugCart() {
+    console.group('🐛 CART DEBUG');
+    console.log('Total items:', cart.length);
+    
+    cart.forEach((item, index) => {
+        console.group(`Item ${index + 1}: ${item.name}`);
+        console.log('ID:', item.id);
+        console.log('Product ID:', item.product_id);
+        console.log('Variant ID:', item.variant_id || '(none - main product)');
+        console.log('Quantity:', item.quantity);
+        console.log('Price:', item.price);
+        console.log('Store:', item.store_name);
+        console.groupEnd();
+    });
+    
+    console.groupEnd();
+}
+ 
+// Make debug function available globally
+window.debugCart = debugCart;
+ 
 
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');

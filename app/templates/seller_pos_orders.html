@@ -1,0 +1,748 @@
+{% extends "layout.html" %}
+
+{% block title %}POS Orders — E-FLOWERS{% endblock %}
+{% block page_title %}Point of Sale Orders{% endblock %}
+
+{% block extra_css %}
+<style>
+    :root {
+        --spacing-xs: 0.25rem;
+        --spacing-sm: 0.5rem;
+        --spacing-md: 1rem;
+        --spacing-lg: 1.5rem;
+        --spacing-xl: 2rem;
+        --spacing-xxl: 2.5rem;
+    }
+
+    .orders-container {
+        max-width: 1400px;
+        margin: var(--spacing-xl) auto;
+        padding: 0 var(--spacing-lg);
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: var(--spacing-xl);
+        flex-wrap: wrap;
+        gap: var(--spacing-lg);
+    }
+
+    .page-header-text { flex: 1; min-width: 280px; }
+    .page-header-text h1 { margin: 0 0 var(--spacing-xs) 0; font-size: clamp(24px, 4vw, 32px); line-height: 1.2; }
+    .page-header-text p  { margin: 0; font-size: clamp(13px, 3vw, 14px); color: var(--muted); }
+
+    .header-actions { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
+    .header-actions .btn { white-space: nowrap; padding: 0.7rem 1.25rem; }
+
+    .filters-card {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        padding: var(--spacing-lg);
+        margin-bottom: var(--spacing-xl);
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    .filter-group { min-width: 0; }
+    .filter-group label {
+        display: block; font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--muted); margin-bottom: var(--spacing-xs);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .filter-group select,
+    .filter-group input {
+        width: 100%; padding: 0.7rem 1rem;
+        background: var(--cream); border: 1.5px solid var(--border-strong);
+        border-radius: var(--radius-md); font-family: var(--font-sans);
+        font-size: 13px; color: var(--charcoal);
+        transition: var(--transition); box-sizing: border-box;
+    }
+    .filter-group select:focus,
+    .filter-group input:focus {
+        outline: none; border-color: var(--deep-rose);
+        background: var(--warm-white);
+        box-shadow: 0 0 0 3px rgba(181, 68, 90, 0.08);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: var(--spacing-lg);
+        margin-bottom: var(--spacing-xl);
+    }
+
+    .stat-card {
+        background: var(--warm-white); border-radius: var(--radius-lg);
+        border: 1px solid var(--border); padding: var(--spacing-lg);
+        transition: var(--transition); display: flex; flex-direction: column;
+    }
+    .stat-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); transform: translateY(-2px); }
+    .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: var(--spacing-xs); }
+    .stat-value { font-family: var(--font-display); font-size: clamp(24px, 5vw, 32px); font-weight: 400; color: var(--charcoal); line-height: 1.2; word-break: break-word; margin-bottom: var(--spacing-xs); }
+    .stat-trend { font-size: clamp(11px, 2.5vw, 12px); color: var(--muted); margin-top: auto; display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; }
+    .stat-trend.positive { color: var(--deep-sage); }
+    .stat-trend i { font-size: 14px; }
+
+    .table-wrapper {
+        background: var(--warm-white); border-radius: var(--radius-lg);
+        border: 1px solid var(--border); overflow-x: auto;
+        margin-bottom: var(--spacing-xl); -webkit-overflow-scrolling: touch;
+        box-shadow: var(--shadow-sm);
+    }
+
+    table { width: 100%; border-collapse: collapse; min-width: 1200px; font-size: 14px; }
+
+    th {
+        text-align: left; padding: var(--spacing-md) var(--spacing-lg);
+        background: var(--cream); font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap;
+    }
+    td { padding: var(--spacing-md) var(--spacing-lg); font-size: 13px; color: var(--charcoal); border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(181, 68, 90, 0.02); }
+
+    .status-badge { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; white-space: nowrap; text-transform: capitalize; }
+    .status-cash  { background: rgba(72, 187, 120, 0.12); color: #276749; }
+    .status-gcash { background: rgba(66, 153, 225, 0.1);  color: #1a5f9e; }
+    .status-card  { background: rgba(156, 39, 176, 0.1);  color: #6a1b9a; }
+
+    .change-positive { color: var(--deep-sage); font-weight: 600; }
+    .change-zero     { color: var(--muted); }
+
+    .action-btn {
+        padding: 0.4rem 0.875rem; border-radius: var(--radius-md);
+        border: 1.5px solid var(--border-strong); background: none;
+        font-size: 11px; font-weight: 600; color: var(--muted);
+        cursor: pointer; transition: var(--transition);
+        display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap;
+    }
+    .action-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); background: rgba(181, 68, 90, 0.02); }
+    .action-btn i { font-size: 14px; }
+
+    .pagination { display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: var(--spacing-xl); flex-wrap: wrap; }
+    .page-btn { min-width: 36px; height: 36px; border-radius: var(--radius-md); border: 1.5px solid var(--border-strong); background: var(--warm-white); font-size: 13px; color: var(--charcoal); cursor: pointer; transition: var(--transition); display: flex; align-items: center; justify-content: center; padding: 0 0.5rem; }
+    .page-btn:hover:not(:disabled) { border-color: var(--deep-rose); color: var(--deep-rose); background: rgba(181, 68, 90, 0.02); }
+    .page-btn.active { background: var(--deep-rose); border-color: var(--deep-rose); color: white; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .empty-state { text-align: center; padding: var(--spacing-xxl) var(--spacing-xl); background: var(--cream); border-radius: var(--radius-lg); }
+    .empty-state i { font-size: 48px; color: var(--muted); opacity: 0.3; margin-bottom: var(--spacing-md); }
+    .empty-state h3 { font-family: var(--font-display); font-size: clamp(18px, 4vw, 20px); font-weight: 400; color: var(--charcoal); margin-bottom: var(--spacing-xs); }
+    .empty-state p  { color: var(--muted); margin-bottom: var(--spacing-lg); font-size: clamp(13px, 3vw, 14px); }
+
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(42, 35, 30, 0.62); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: var(--spacing-md); }
+    .modal-overlay.active { display: flex; }
+    .modal { background: var(--warm-white); border-radius: var(--radius-xl); max-width: 600px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-deep); animation: modalSlideIn 0.3s ease; }
+    @keyframes modalSlideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    .modal-header { padding: var(--spacing-lg) var(--spacing-xl); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--warm-white); z-index: 1; }
+    .modal-title { font-family: var(--font-display); font-size: clamp(16px, 4vw, 18px); font-weight: 500; color: var(--charcoal); }
+    .modal-close { background: none; border: none; font-size: 20px; color: var(--muted); cursor: pointer; transition: var(--transition); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+    .modal-close:hover { color: var(--deep-rose); background: var(--cream); }
+    .modal-body { padding: var(--spacing-xl); }
+    .modal-footer { padding: var(--spacing-lg) var(--spacing-xl); border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: var(--spacing-sm); background: var(--cream); position: sticky; bottom: 0; }
+
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-md); margin-bottom: var(--spacing-xl); }
+    .detail-item { padding: var(--spacing-sm) var(--spacing-md); background: var(--cream); border-radius: var(--radius-md); border: 1px solid var(--border); }
+    .detail-label { font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; letter-spacing: 0.05em; }
+    .detail-value { font-size: clamp(13px, 3vw, 14px); font-weight: 500; color: var(--charcoal); word-break: break-word; }
+    .detail-value.success { color: var(--deep-sage); font-weight: 600; }
+
+    .items-table { width: 100%; border-collapse: collapse; margin-top: var(--spacing-md); font-size: 13px; }
+    .items-table th { font-size: 10px; padding: var(--spacing-sm); text-align: left; background: var(--cream); border-bottom: 1px solid var(--border); }
+    .items-table td { padding: var(--spacing-sm); font-size: 12px; border-bottom: 1px solid var(--border); }
+    .items-table tr:last-child td { border-bottom: none; }
+    .items-table tfoot tr { background: var(--cream); }
+    .items-table tfoot td { font-weight: 600; padding: var(--spacing-sm); }
+
+    .loading-spinner { width: 28px; height: 28px; border: 2.5px solid var(--border-strong); border-top-color: var(--deep-rose); border-radius: 50%; animation: spin 0.75s linear infinite; margin: 0 auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media print {
+        .no-print, .header-actions, .filters-card, .pagination, .action-btn, .modal-footer { display: none !important; }
+        body { background: white; padding: 0.5in; }
+        .modal-overlay { position: absolute; background: white; padding: 0; }
+        .modal { box-shadow: none; border: 1px solid #ddd; }
+        table, tr { page-break-inside: avoid; }
+        tr { page-break-after: auto; }
+    }
+
+    @media (max-width: 1024px) {
+        .orders-container { padding: 0 var(--spacing-md); }
+        .stats-grid, .filters-card { gap: var(--spacing-md); }
+        .filters-card { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+        .detail-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+        .orders-container { padding: 0 var(--spacing-sm); }
+        .page-header { flex-direction: column; align-items: stretch; gap: var(--spacing-md); }
+        .page-header-text { min-width: auto; }
+        .header-actions { justify-content: flex-start; }
+        .header-actions .btn { flex: 1; justify-content: center; }
+        .stats-grid { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
+        .stat-card { padding: var(--spacing-md); }
+        .filters-card { grid-template-columns: 1fr; gap: var(--spacing-md); padding: var(--spacing-md); }
+        .detail-grid { grid-template-columns: 1fr; gap: var(--spacing-sm); }
+        .modal-body { padding: var(--spacing-md); }
+        .modal-footer { flex-direction: column; }
+        .modal-footer .btn { width: 100%; justify-content: center; }
+    }
+    @media (max-width: 576px) {
+        .stats-grid { grid-template-columns: 1fr; }
+        .stat-card { padding: var(--spacing-sm) var(--spacing-md); }
+        .stat-value { font-size: 28px; }
+        .table-wrapper { border-radius: var(--radius-md); }
+        td, th { padding: var(--spacing-sm) var(--spacing-md); }
+        .action-btn { padding: 0.3rem 0.6rem; font-size: 10px; }
+        .action-btn i { font-size: 12px; }
+        .pagination { gap: 0.25rem; }
+        .page-btn { min-width: 32px; height: 32px; font-size: 12px; }
+    }
+    @media (hover: none) and (pointer: coarse) {
+        .action-btn, .page-btn, .modal-close { min-height: 44px; min-width: 44px; }
+        .filter-group select, .filter-group input { font-size: 16px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="orders-container">
+
+    <!-- Header -->
+    <div class="page-header">
+        <div class="page-header-text">
+            <h1 class="section-title">POS Orders</h1>
+            <p style="color: var(--muted); font-size: 14px;">View and manage your point of sale transactions</p>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('templates.seller_pos') }}" class="btn btn-rose">
+                <i class="ri-shopping-cart-line"></i> Open POS
+            </a>
+            <a href="{{ url_for('templates.seller_products') }}" class="btn btn-outline">
+                <i class="ri-arrow-left-line"></i> Back to Products
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Today's Sales</div>
+            <div class="stat-value" id="todaySales">₱0.00</div>
+            <div class="stat-trend positive">
+                <i class="ri-arrow-up-line"></i> <span id="todayCount">0</span> orders
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">This Week</div>
+            <div class="stat-value" id="weekSales">₱0.00</div>
+            <div class="stat-trend" id="weekCount">0 orders</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">This Month</div>
+            <div class="stat-value" id="monthSales">₱0.00</div>
+            <div class="stat-trend" id="monthCount">0 orders</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Average Order</div>
+            <div class="stat-value" id="avgOrder">₱0.00</div>
+            <div class="stat-trend" id="totalOrders">0 total orders</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-card">
+        <div class="filter-group">
+            <label>Date Range</label>
+            <select id="dateFilter" onchange="applyFilters()">
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="this_week" selected>This Week</option>
+                <option value="this_month">This Month</option>
+                <option value="custom">Custom Range</option>
+            </select>
+        </div>
+        <div class="filter-group" id="customDateStart" style="display: none;">
+            <label>Start Date</label>
+            <input type="date" id="startDate" onchange="applyFilters()">
+        </div>
+        <div class="filter-group" id="customDateEnd" style="display: none;">
+            <label>End Date</label>
+            <input type="date" id="endDate" onchange="applyFilters()">
+        </div>
+        <div class="filter-group">
+            <label>Payment Method</label>
+            <select id="paymentFilter" onchange="applyFilters()">
+                <option value="all">All Methods</option>
+                <option value="cash">Cash</option>
+                <option value="gcash">GCash</option>
+                <option value="card">Card</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Search</label>
+            <!-- onkeyup removed — debounced in JS -->
+            <input type="text" id="searchInput" placeholder="Order ID or customer...">
+        </div>
+    </div>
+
+    <!-- Orders Table -->
+    <div class="table-wrapper">
+        <table id="ordersTable">
+            <thead>
+                <tr>
+                    <th>Order #</th>
+                    <th>Date &amp; Time</th>
+                    <th>Customer</th>
+                    <th>Items</th>
+                    <th>Subtotal</th>
+                    <th>Discount</th>
+                    <th>Total</th>
+                    <th>Amount Given</th>
+                    <th>Change</th>
+                    <th>Payment</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="ordersTableBody">
+                <tr>
+                    <td colspan="11" style="text-align: center; padding: 3rem;">
+                        <div class="loading-spinner" style="margin: 0 auto 1rem;"></div>
+                        <span style="color: var(--muted);">Loading orders...</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination">
+        <button class="page-btn" onclick="changePage('prev')" disabled>
+            <i class="ri-arrow-left-line"></i>
+        </button>
+        <span id="pageInfo">Page 1 of 1</span>
+        <button class="page-btn" onclick="changePage('next')" disabled>
+            <i class="ri-arrow-right-line"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Order Detail Modal -->
+<div class="modal-overlay" id="orderModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Order Details</div>
+            <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" id="orderDetailContent"></div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="window.print()">
+                <i class="ri-printer-line"></i> Print
+            </button>
+            <button class="btn btn-rose" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* ═══════════════════════════════════════
+   STATE
+═══════════════════════════════════════ */
+let currentPage = 1;
+let totalPages  = 1;
+let statsLoaded = false;  // stats fetched only ONCE per page load
+let searchTimer = null;   // debounce timer
+
+let currentFilters = {
+    date:      'this_week',
+    payment:   'all',
+    search:    '',
+    startDate: null,
+    endDate:   null
+};
+
+/* ═══════════════════════════════════════
+   INIT
+═══════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', function () {
+    loadOrders();
+    setupDateFilterListener();
+
+    // Debounced search — fires 500 ms after user stops typing
+    document.getElementById('searchInput').addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => applyFilters(), 500);
+    });
+});
+
+/* ═══════════════════════════════════════
+   DATE FILTER LISTENER
+═══════════════════════════════════════ */
+function setupDateFilterListener() {
+    const dateFilter = document.getElementById('dateFilter');
+    dateFilter.addEventListener('change', function () {
+        const customStart = document.getElementById('customDateStart');
+        const customEnd   = document.getElementById('customDateEnd');
+
+        if (this.value === 'custom') {
+            customStart.style.display = 'block';
+            customEnd.style.display   = 'block';
+        } else {
+            customStart.style.display = 'none';
+            customEnd.style.display   = 'none';
+            applyFilters();
+        }
+    });
+
+    document.getElementById('startDate').addEventListener('change', applyFilters);
+    document.getElementById('endDate').addEventListener('change', applyFilters);
+}
+
+/* ═══════════════════════════════════════
+   LOAD ORDERS (table data)
+═══════════════════════════════════════ */
+async function loadOrders() {
+    const params = new URLSearchParams({
+        page:     currentPage,
+        per_page: 20,
+        date:     currentFilters.date,
+        payment:  currentFilters.payment,
+        search:   currentFilters.search
+    });
+
+    if (currentFilters.date === 'custom' && currentFilters.startDate && currentFilters.endDate) {
+        params.append('start_date', currentFilters.startDate);
+        params.append('end_date',   currentFilters.endDate);
+    }
+
+    try {
+        const response = await fetch(`/api/seller/pos/orders?${params}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+
+        renderOrders(data.orders);
+        updatePagination(data);
+        updateStats(data);
+
+    } catch (error) {
+        console.error('Error loading orders:', error);
+        showToast('Failed to load orders: ' + error.message, 'error');
+    }
+}
+
+/* ═══════════════════════════════════════
+   RENDER TABLE
+═══════════════════════════════════════ */
+function renderOrders(orders) {
+    const tbody = document.getElementById('ordersTableBody');
+
+    if (!orders || orders.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="11" style="text-align: center; padding: 3rem;">
+                    <div class="empty-state">
+                        <i class="ri-shopping-bag-line"></i>
+                        <h3>No orders found</h3>
+                        <p>Try adjusting your filters or create a new POS order</p>
+                        <a href="{{ url_for('templates.seller_pos') }}" class="btn btn-rose">
+                            <i></i> New Order
+                        </a>
+                    </div>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = orders.map(order => {
+
+        // ── TIME FIX ──────────────────────────────────────────────────────────
+        // Backend stores PH local time and sends it with a +08:00 offset tag.
+        // Stripping the offset before parsing prevents the browser from doing
+        // an additional 8-hour shift, so the displayed time matches the stored time.
+        const rawDt  = (order.created_at || '').replace(/[+-]\d{2}:\d{2}$/, '');
+        const dt     = rawDt ? new Date(rawDt) : new Date();
+
+        const dateStr = new Intl.DateTimeFormat('en-CA', {
+            year: 'numeric', month: '2-digit', day: '2-digit'
+        }).format(dt);
+
+        const timeStr = new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+        }).format(dt);
+        // ──────────────────────────────────────────────────────────────────────
+
+        const changeAmount = parseFloat(order.change_amount || 0);
+        const amountGiven  = parseFloat(order.amount_given  || order.total_amount);
+        const method       = order.payment_method || 'cash';
+
+        return `
+            <tr>
+                <td style="font-family:monospace;font-weight:600;">#POS-${String(order.id).padStart(4,'0')}</td>
+                <td>
+                    <div>${dateStr}</div>
+                    <div style="font-size:11px;color:var(--muted);">${timeStr}</div>
+                </td>
+                <td>
+                    <div>${order.customer_name || 'Walk-in'}</div>
+                    ${order.customer_contact ? `<div style="font-size:11px;color:var(--muted);">${order.customer_contact}</div>` : ''}
+                </td>
+                <td>${order.item_count} items</td>
+                <td>₱${parseFloat(order.subtotal   || 0).toFixed(2)}</td>
+                <td>${order.discount > 0 ? `-₱${parseFloat(order.discount).toFixed(2)}` : '—'}</td>
+                <td style="font-weight:600;">₱${parseFloat(order.total_amount).toFixed(2)}</td>
+                <td>₱${amountGiven.toFixed(2)}</td>
+                <td class="${changeAmount > 0 ? 'change-positive' : 'change-zero'}">
+                    ${changeAmount > 0 ? `₱${changeAmount.toFixed(2)}` : '—'}
+                </td>
+                <td>
+                    <span class="status-badge status-${method}">
+                        ${method.charAt(0).toUpperCase() + method.slice(1)}
+                    </span>
+                </td>
+                <td>
+                    <button class="action-btn" onclick="viewOrder(${order.id})">
+                        <i class="ri-eye-line"></i> View
+                    </button>
+                </td>
+            </tr>`;
+    }).join('');
+}
+
+/* ═══════════════════════════════════════
+   PAGINATION
+═══════════════════════════════════════ */
+function updatePagination(data) {
+    currentPage = data.current_page;
+    totalPages  = data.pages;
+
+    document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages || 1}`;
+    document.querySelector('.pagination .page-btn:first-child').disabled = !data.has_prev;
+    document.querySelector('.pagination .page-btn:last-child').disabled  = !data.has_next;
+}
+
+function changePage(direction) {
+    if (direction === 'prev' && currentPage > 1)               currentPage--;
+    else if (direction === 'next' && currentPage < totalPages) currentPage++;
+    else return;
+    loadOrders();
+}
+
+/* ═══════════════════════════════════════
+   STATS
+   - Fetched ONCE per page load via Promise.all
+   - Subsequent filter changes only update
+     "average order" and "total orders" count
+     from already-loaded table data.
+═══════════════════════════════════════ */
+async function updateStats(data) {
+    // Always refresh avg + total from current filter result
+    const avgOrder = (data.orders && data.orders.length > 0)
+        ? data.orders.reduce((s, o) => s + o.total_amount, 0) / data.orders.length
+        : 0;
+    document.getElementById('avgOrder').textContent    = `₱${avgOrder.toFixed(2)}`;
+    document.getElementById('totalOrders').textContent = `${data.total || 0} total orders`;
+
+    // Gate: only hit the API once
+    if (statsLoaded) return;
+
+    try {
+        // Parallel — all 3 fire at the same time
+        const [todayRes, weekRes, monthRes] = await Promise.all([
+            fetch('/api/seller/pos/orders?date=today&per_page=100&payment=all&search='),
+            fetch('/api/seller/pos/orders?date=this_week&per_page=100&payment=all&search='),
+            fetch('/api/seller/pos/orders?date=this_month&per_page=100&payment=all&search=')
+        ]);
+
+        const [todayData, weekData, monthData] = await Promise.all([
+            todayRes.json(),
+            weekRes.json(),
+            monthRes.json()
+        ]);
+
+        const sum = arr => arr.reduce((s, o) => s + o.total_amount, 0);
+
+        const todayOrders = todayData.orders  || [];
+        const weekOrders  = weekData.orders   || [];
+        const monthOrders = monthData.orders  || [];
+
+        document.getElementById('todaySales').textContent  = `₱${sum(todayOrders).toFixed(2)}`;
+        document.getElementById('todayCount').textContent  = todayOrders.length;
+        document.getElementById('weekSales').textContent   = `₱${sum(weekOrders).toFixed(2)}`;
+        document.getElementById('weekCount').textContent   = `${weekOrders.length} orders`;
+        document.getElementById('monthSales').textContent  = `₱${sum(monthOrders).toFixed(2)}`;
+        document.getElementById('monthCount').textContent  = `${monthOrders.length} orders`;
+
+        statsLoaded = true;   // never refetch until page refresh
+
+    } catch (err) {
+        console.error('Error loading stats:', err);
+    }
+}
+
+/* ═══════════════════════════════════════
+   APPLY FILTERS
+═══════════════════════════════════════ */
+function applyFilters() {
+    currentFilters.date      = document.getElementById('dateFilter').value;
+    currentFilters.payment   = document.getElementById('paymentFilter').value;
+    currentFilters.search    = document.getElementById('searchInput').value;
+    currentFilters.startDate = document.getElementById('startDate').value;
+    currentFilters.endDate   = document.getElementById('endDate').value;
+    currentPage = 1;
+    loadOrders();
+}
+
+/* ═══════════════════════════════════════
+   VIEW ORDER MODAL
+═══════════════════════════════════════ */
+async function viewOrder(orderId) {
+    try {
+        const response = await fetch(`/api/seller/pos/orders/${orderId}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+
+        renderOrderModal(data);
+    } catch (error) {
+        showToast('Failed to load order details: ' + error.message, 'error');
+    }
+}
+
+function renderOrderModal(order) {
+    const modal   = document.getElementById('orderModal');
+    const content = document.getElementById('orderDetailContent');
+
+    // Same time fix — strip offset
+    const rawDt      = (order.created_at || '').replace(/[+-]\d{2}:\d{2}$/, '');
+    const dt         = rawDt ? new Date(rawDt) : new Date();
+    const dateTimeStr = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+    }).format(dt);
+
+    const itemsHtml = order.items.map(item => `
+        <tr>
+            <td>${item.product_name}</td>
+            <td>${item.quantity}</td>
+            <td>₱${parseFloat(item.unit_price).toFixed(2)}</td>
+            <td>₱${parseFloat(item.subtotal).toFixed(2)}</td>
+        </tr>`).join('');
+
+    const changeAmount = parseFloat(order.change_amount || 0);
+    const amountGiven  = parseFloat(order.amount_given  || order.total_amount);
+    const method       = order.payment_method || 'cash';
+
+    content.innerHTML = `
+        <div class="detail-grid">
+            <div class="detail-item">
+                <div class="detail-label">Order ID</div>
+                <div class="detail-value">#POS-${String(order.id).padStart(4,'0')}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Date &amp; Time (PH)</div>
+                <div class="detail-value">${dateTimeStr}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Customer</div>
+                <div class="detail-value">${order.customer_name || 'Walk-in'}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Contact</div>
+                <div class="detail-value">${order.customer_contact || '—'}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Payment Method</div>
+                <div class="detail-value">
+                    <span class="status-badge status-${method}">
+                        ${method.charAt(0).toUpperCase() + method.slice(1)}
+                    </span>
+                </div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Amount Given</div>
+                <div class="detail-value">₱${amountGiven.toFixed(2)}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Change</div>
+                <div class="detail-value ${changeAmount > 0 ? 'success' : ''}">
+                    ${changeAmount > 0 ? `₱${changeAmount.toFixed(2)}` : '₱0.00'}
+                </div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Total Amount</div>
+                <div class="detail-value">₱${parseFloat(order.total_amount).toFixed(2)}</div>
+            </div>
+        </div>
+
+        <h4 style="margin:1.5rem 0 0.75rem;font-family:var(--font-display);font-size:16px;">Items</h4>
+        <table class="items-table">
+            <thead>
+                <tr><th>Product</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr>
+            </thead>
+            <tbody>${itemsHtml}</tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3" style="text-align:right;font-weight:600;">Subtotal:</td>
+                    <td>₱${parseFloat(order.subtotal).toFixed(2)}</td>
+                </tr>
+                ${order.discount > 0 ? `
+                <tr>
+                    <td colspan="3" style="text-align:right;font-weight:600;">Discount:</td>
+                    <td>-₱${parseFloat(order.discount).toFixed(2)}</td>
+                </tr>` : ''}
+                <tr style="border-top:2px solid var(--border);">
+                    <td colspan="3" style="text-align:right;font-weight:700;">Total:</td>
+                    <td style="font-weight:700;">₱${parseFloat(order.total_amount).toFixed(2)}</td>
+                </tr>
+            </tfoot>
+        </table>`;
+
+    modal.classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('orderModal').classList.remove('active');
+}
+
+/* ═══════════════════════════════════════
+   TOAST
+═══════════════════════════════════════ */
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        background: ${type === 'error' ? '#c0392b' : type === 'success' ? '#27ae60' : '#333'};
+        color: white; padding: 12px 24px; border-radius: 8px;
+        margin-bottom: 10px; animation: slideIn 0.3s ease;
+        z-index: 10000; opacity: 0.95;`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+const _animStyle = document.createElement('style');
+_animStyle.textContent = `
+    @keyframes slideIn  { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+    @keyframes slideOut { from { transform:translateX(0); opacity:1; }   to { transform:translateX(100%); opacity:0; } }`;
+document.head.appendChild(_animStyle);
+</script>
+{% endblock %}

@@ -204,6 +204,97 @@
 
 {% block extra_css %}
 <style>
+    /* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9998;
+    backdrop-filter: blur(4px);
+}
+
+.modal {
+    background: var(--warm-white);
+    border-radius: var(--radius-lg);
+    max-width: 480px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--charcoal);
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.modal-close:hover {
+    color: var(--deep-rose);
+    background: var(--cream);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+/* Button Styles */
+.btn-danger {
+    background: #f44336;
+    color: white;
+    border: 1px solid #f44336;
+}
+
+.btn-danger:hover {
+    background: #d32f2f;
+    border-color: #d32f2f;
+}
     /* Products Grid */
     .products-grid {
         display: grid;
@@ -763,7 +854,6 @@
         }
         
         // If you have a hidden input in the layout, you can get it from there
-        // This assumes you have a hidden input in your layout.html
         const csrfInput = document.querySelector('input[name="csrf_token"]');
         if (csrfInput) {
             return csrfInput.value;
@@ -779,9 +869,12 @@
         window.location.href = `/seller/products/add?edit=${productId}`;
     }
 
-    // ===== DELETE FUNCTION =====
+    // ===== DELETE FUNCTION WITH CLOUDINARY CLEANUP =====
     function deleteProduct(productId) {
-        if (!confirm('Are you sure you want to delete this product?')) return;
+        if (!confirm('⚠️ Are you sure you want to delete this product?\n\nThis will also permanently delete ALL associated images from Cloudinary. This action CANNOT be undone.')) return;
+        
+        // Show loading state
+        showToast('Deleting product and Cloudinary images...', 'info');
         
         const csrfToken = getCsrfToken();
         
@@ -792,29 +885,31 @@
                 'Content-Type': 'application/json'
             }
         })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    if (data.needs_choice) {
-                        showArchiveChoiceDialog(productId, data.product);
-                    } else if (data.archived) {
-                        window.showToast(data.message, 'info');
-                        setTimeout(() => location.reload(), 500);
-                    } else {
-                        window.showToast(data.message, 'success');
-                        setTimeout(() => location.reload(), 500);
-                    }
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.needs_choice) {
+                    // Product is in carts - show archive/delete choice
+                    showArchiveChoiceDialog(productId, data.product);
+                } else if (data.archived) {
+                    showToast(data.message, 'info');
+                    setTimeout(() => location.reload(), 500);
                 } else {
-                    window.showToast(data.error || 'Failed to delete product', 'error');
+                    // Product was deleted successfully
+                    showToast(data.message || '✅ Product and Cloudinary images deleted successfully', 'success');
+                    setTimeout(() => location.reload(), 500);
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                window.showToast('Error deleting product', 'error');
-            });
+            } else {
+                showToast('❌ ' + (data.error || 'Failed to delete product'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('❌ Network error. Please try again.', 'error');
+        });
     }
 
-    // ===== ARCHIVE CHOICE DIALOG =====
+    // ===== ARCHIVE CHOICE DIALOG WITH CLOUDINARY WARNING =====
     function showArchiveChoiceDialog(productId, product) {
         let modal = document.getElementById('archiveChoiceModal');
         if (!modal) {
@@ -822,30 +917,52 @@
             modal.className = 'modal-overlay';
             modal.id = 'archiveChoiceModal';
             modal.innerHTML = `
-                <div class="modal" style="max-width: 400px;">
+                <div class="modal" style="max-width: 480px;">
                     <div class="modal-header">
                         <h3 class="modal-title">Delete or Archive?</h3>
                         <button class="modal-close" onclick="closeArchiveModal()"><i class="ri-close-line"></i></button>
                     </div>
                     <div class="modal-body">
                         <p id="archiveChoiceMessage"></p>
+                        
+                        <!-- Cart Warning -->
+                        <div style="background: rgba(255, 152, 0, 0.1); padding: 1rem; border-radius: var(--radius-md); margin: 1rem 0;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <i class="ri-shopping-cart-line" style="font-size: 20px; color: #ff9800;"></i>
+                                <div style="font-size: 13px;">
+                                    <span id="cartWarningText"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Cloudinary Images Warning -->
+                        <div id="cloudinaryWarning" style="background: rgba(244, 67, 54, 0.1); padding: 1rem; border-radius: var(--radius-md); margin: 1rem 0; display: none;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <i class="ri-cloud-off-line" style="font-size: 20px; color: #f44336;"></i>
+                                <div style="font-size: 13px;">
+                                    <span id="cloudinaryWarningText"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Info Box -->
                         <div style="background: rgba(122, 158, 126, 0.1); padding: 1rem; border-radius: var(--radius-md); margin: 1rem 0;">
                             <div style="display: flex; align-items: center; gap: 1rem;">
                                 <i class="ri-information-line" style="font-size: 24px; color: var(--deep-sage);"></i>
                                 <div style="font-size: 13px; color: var(--charcoal);">
-                                    <strong>Archive:</strong> Hide from store, can restore later<br>
-                                    <strong>Delete:</strong> Permanently remove (cannot undo)
+                                    <strong>Archive:</strong> Hide from store, can restore later (keeps Cloudinary images)<br>
+                                    <strong style="color: #f44336;">Delete:</strong> Permanently remove product AND all Cloudinary images (CANNOT be undone)
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer">
+                    <div class="modal-footer" style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                         <button class="btn btn-outline" onclick="closeArchiveModal()">Cancel</button>
                         <button class="btn btn-outline" onclick="submitArchiveChoice(${productId}, 'archive')">
                             <i class="ri-archive-line"></i> Archive
                         </button>
-                        <button class="btn btn-danger-outline" onclick="submitArchiveChoice(${productId}, 'delete')">
-                            <i class="ri-delete-bin-line"></i> Delete
+                        <button class="btn btn-danger" onclick="confirmPermanentDelete(${productId})">
+                            <i class="ri-delete-bin-line"></i> Delete Permanently
                         </button>
                     </div>
                 </div>
@@ -853,18 +970,76 @@
             document.body.appendChild(modal);
         }
         
+        // Count images
+        const imageCount = product.images ? product.images.length : 0;
+        const variantImageCount = product.variants ? product.variants.filter(v => v.image_public_id).length : 0;
+        const totalImages = imageCount + variantImageCount;
+        
         document.getElementById('archiveChoiceMessage').innerHTML = 
-            `Product "<strong>${product.name}</strong>" is in <strong>${product.in_carts}</strong> customer cart(s).`;
+            `Product "<strong>${escapeHtml(product.name)}</strong>"`;
+        
+        document.getElementById('cartWarningText').innerHTML = 
+            `This product is in <strong>${product.in_carts}</strong> customer cart(s).`;
+        
+        // Show Cloudinary warning if there are images
+        const cloudinaryWarning = document.getElementById('cloudinaryWarning');
+        if (totalImages > 0) {
+            cloudinaryWarning.style.display = 'block';
+            document.getElementById('cloudinaryWarningText').innerHTML = 
+                `⚠️ This product has <strong>${totalImages}</strong> image(s) stored in Cloudinary that will be PERMANENTLY DELETED if you choose "Delete Permanently".`;
+        } else {
+            cloudinaryWarning.style.display = 'none';
+        }
         
         modal.style.display = 'flex';
     }
 
-    function closeArchiveModal() {
-        document.getElementById('archiveChoiceModal').style.display = 'none';
+    // ===== CONFIRM PERMANENT DELETE =====
+    function confirmPermanentDelete(productId) {
+        closeArchiveModal();
+        
+        // Double confirmation for permanent delete
+        if (!confirm('⚠️ FINAL WARNING: This will permanently delete the product AND ALL ASSOCIATED CLOUDINARY IMAGES.\n\nThis action CANNOT be undone. Are you ABSOLUTELY sure?')) {
+            return;
+        }
+        
+        showToast('🗑️ Permanently deleting product and Cloudinary images...', 'warning');
+        
+        const csrfToken = getCsrfToken();
+        
+        fetch(`/seller/products/${productId}/archive-choice`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ action: 'delete' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('✅ ' + (data.message || 'Product and Cloudinary images deleted successfully'), 'success');
+                setTimeout(() => location.reload(), 500);
+            } else {
+                showToast('❌ ' + (data.error || 'Failed to delete product'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('❌ Network error. Please try again.', 'error');
+        });
     }
 
+    // ===== LEGACY ARCHIVE CHOICE SUBMISSION (for backward compatibility) =====
     function submitArchiveChoice(productId, action) {
         closeArchiveModal();
+        
+        if (action === 'delete') {
+            confirmPermanentDelete(productId);
+            return;
+        }
+        
+        showToast('Archiving product...', 'info');
         
         const csrfToken = getCsrfToken();
         
@@ -879,16 +1054,23 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                window.showToast(data.message, 'success');
+                showToast('✅ ' + data.message, 'success');
                 setTimeout(() => location.reload(), 500);
             } else {
-                window.showToast(data.error || 'Failed to process request', 'error');
+                showToast('❌ ' + (data.error || 'Failed to process request'), 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            window.showToast('Network error. Please try again.', 'error');
+            showToast('❌ Network error. Please try again.', 'error');
         });
+    }
+
+    function closeArchiveModal() {
+        const modal = document.getElementById('archiveChoiceModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
     }
 
     // ===== FILTER FUNCTION =====
@@ -957,13 +1139,13 @@
         }
     }
 
-    // ===== BULK ACTIONS =====
+    // ===== BULK ACTIONS WITH CLOUDINARY SUPPORT =====
     document.getElementById('selectAllBtn')?.addEventListener('click', function() {
         const visibleCards = Array.from(document.querySelectorAll('.product-card'))
             .filter(c => c.style.display !== 'none');
         
         const allSelected = visibleCards.length > 0 && 
-                           visibleCards.every(c => c.style.outline);
+                           visibleCards.every(c => c.style.outline === '2px solid var(--deep-rose)');
         
         selectedProducts.clear();
         visibleCards.forEach(card => {
@@ -978,9 +1160,9 @@
             }
         });
         
-        this.innerHTML = allSelected
+        this.innerHTML = !allSelected
             ? '<i class="ri-checkbox-multiple-line"></i> Select All'
-            : '<i class="ri-close-circle-line"></i> Deselect All';
+            : '<i class="ri-checkbox-multiple-line"></i> Select All';
         
         updateBulkButtons();
     });
@@ -997,19 +1179,29 @@
         if (!selectedProducts.size) return;
         
         if (confirm(`Mark ${selectedProducts.size} product(s) as available?`)) {
+            showToast(`Updating ${selectedProducts.size} products...`, 'info');
+            
             const csrfToken = getCsrfToken();
+            let successCount = 0;
             
             for (const id of selectedProducts) {
-                await fetch(`/seller/products/${id}/availability`, {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify({ is_available: true })
-                });
+                try {
+                    const response = await fetch(`/seller/products/${id}/availability`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify({ is_available: true })
+                    });
+                    const data = await response.json();
+                    if (data.success) successCount++;
+                } catch (error) {
+                    console.error('Error updating product:', id, error);
+                }
             }
-            window.showToast(`✓  ${selectedProducts.size} product(s) marked available`, 'success');
+            
+            showToast(`✅ ${successCount} of ${selectedProducts.size} products marked available`, 'success');
             setTimeout(() => location.reload(), 800);
         }
     });
@@ -1018,42 +1210,110 @@
         if (!selectedProducts.size) return;
         
         if (confirm(`Mark ${selectedProducts.size} product(s) as unavailable?`)) {
+            showToast(`Updating ${selectedProducts.size} products...`, 'info');
+            
             const csrfToken = getCsrfToken();
+            let successCount = 0;
             
             for (const id of selectedProducts) {
-                await fetch(`/seller/products/${id}/availability`, {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify({ is_available: false })
-                });
+                try {
+                    const response = await fetch(`/seller/products/${id}/availability`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify({ is_available: false })
+                    });
+                    const data = await response.json();
+                    if (data.success) successCount++;
+                } catch (error) {
+                    console.error('Error updating product:', id, error);
+                }
             }
-            window.showToast(`${selectedProducts.size} product(s) marked unavailable`);
+            
+            showToast(`✅ ${successCount} of ${selectedProducts.size} products marked unavailable`, 'success');
             setTimeout(() => location.reload(), 800);
         }
     });
 
+    // ===== BULK DELETE WITH CLOUDINARY WARNING =====
     document.getElementById('bulkDeleteBtn')?.addEventListener('click', async function() {
         if (!selectedProducts.size) return;
         
-        if (confirm(`Delete ${selectedProducts.size} product(s)? This cannot be undone.`)) {
-            const csrfToken = getCsrfToken();
-            
-            for (const id of selectedProducts) {
-                await fetch(`/seller/products/${id}`, { 
+        // Show loading while counting images
+        showToast('Counting Cloudinary images...', 'info');
+        
+        // Get total image count
+        const totalImages = await getTotalImagesCount(Array.from(selectedProducts));
+        
+        // Show warning with image count
+        const message = totalImages > 0 
+            ? `⚠️ WARNING: Delete ${selectedProducts.size} product(s) and ${totalImages} Cloudinary image(s)?\n\nThis will PERMANENTLY delete all products AND their Cloudinary images. This action CANNOT be undone!`
+            : `⚠️ Delete ${selectedProducts.size} product(s)? This action CANNOT be undone!`;
+        
+        if (!confirm(message)) return;
+        
+        // Double confirmation for safety
+        if (!confirm('ARE YOU ABSOLUTELY SURE? This is permanent and cannot be reversed.')) return;
+        
+        showToast(`🗑️ Deleting ${selectedProducts.size} products and ${totalImages} Cloudinary images...`, 'warning');
+        
+        const csrfToken = getCsrfToken();
+        let successCount = 0;
+        let failCount = 0;
+        let failedProducts = [];
+        
+        for (const id of selectedProducts) {
+            try {
+                const response = await fetch(`/seller/products/${id}`, { 
                     method: 'DELETE',
                     headers: {
                         'X-CSRFToken': csrfToken,
                         'Content-Type': 'application/json'
                     }
                 });
+                const data = await response.json();
+                if (data.success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                    failedProducts.push(id);
+                }
+            } catch (error) {
+                console.error('Error deleting product:', id, error);
+                failCount++;
+                failedProducts.push(id);
             }
-            window.showToast(`✓  ${selectedProducts.size} product(s) deleted`, 'success');
-            setTimeout(() => location.reload(), 800);
         }
+        
+        if (failCount === 0) {
+            showToast(`✅ Successfully deleted ${successCount} products and their Cloudinary images!`, 'success');
+        } else {
+            showToast(`⚠️ Deleted ${successCount} products, but ${failCount} failed. Check console for details.`, 'warning');
+        }
+        
+        setTimeout(() => location.reload(), 800);
     });
+
+    // ===== HELPER FUNCTION TO COUNT TOTAL IMAGES =====
+    async function getTotalImagesCount(productIds) {
+        try {
+            const response = await fetch(`/seller/products/images-count`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({ product_ids: productIds })
+            });
+            const data = await response.json();
+            return data.total_images || 0;
+        } catch (error) {
+            console.error('Error counting images:', error);
+            return 0;
+        }
+    }
 
     // ===== AVAILABILITY TOGGLE =====
     document.addEventListener('change', async function(e) {
@@ -1078,20 +1338,19 @@
             const data = await response.json();
             
             if (data.success) {
-                window.showToast(data.message || (val ? '✓ Product available' : 'Product unavailable'), 'success');
+                showToast(data.message || (val ? '✅ Product available' : '✅ Product unavailable'), 'success');
             } else {
                 e.target.checked = originalState;
-                window.showToast(data.error || 'Failed to update availability', 'error');
+                showToast('❌ ' + (data.error || 'Failed to update availability'), 'error');
             }
         } catch (error) {
             console.error('Error updating availability:', error);
             e.target.checked = originalState;
-            window.showToast('Network error. Please try again.', 'error');
+            showToast('❌ Network error. Please try again.', 'error');
         }
     });
 
     // ===== ADD CSRF META TAG TO LAYOUT =====
-    // Add this to your layout.html if not already present
     function addCsrfMetaTag() {
         if (!document.querySelector('meta[name="csrf-token"]')) {
             const csrfInput = document.querySelector('input[name="csrf_token"]');
@@ -1104,19 +1363,13 @@
         }
     }
 
-    // ===== INIT =====
-    document.addEventListener('DOMContentLoaded', function() {
-        addCsrfMetaTag();
-        updateBulkButtons();
-    });
-
-    // ===== CLOSE MODAL WHEN CLICKING OVERLAY =====
-    document.addEventListener('click', function(e) {
-        const modal = document.getElementById('archiveChoiceModal');
-        if (modal && e.target === modal) {
-            closeArchiveModal();
-        }
-    });
+    // ===== HELPER FUNCTION TO ESCAPE HTML =====
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
     // ===== TOAST NOTIFICATION =====
     window.showToast = function(message, type = 'info') {
@@ -1134,43 +1387,72 @@
         }
 
         const toast = document.createElement('div');
+        
+        // Set colors based on type
+        let bgColor = '#333';
+        if (type === 'error') bgColor = '#f44336';
+        else if (type === 'success') bgColor = '#4CAF50';
+        else if (type === 'warning') bgColor = '#ff9800';
+        else if (type === 'info') bgColor = '#2196F3';
+        
         toast.style.cssText = `
-            background: ${type === 'error' ? '#f44336' : type === 'success' ? '#4CAF50' : '#333'};
+            background: ${bgColor};
             color: white;
             padding: 12px 24px;
             border-radius: 4px;
             margin-bottom: 10px;
             animation: slideIn 0.3s ease;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            min-width: 300px;
+            font-size: 14px;
         `;
         toast.textContent = message;
 
-        const slideInStyle = document.createElement('style');
-        slideInStyle.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            @keyframes slideOut {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(100%); opacity: 0; }
-            }
-        `;
-        document.head.appendChild(slideInStyle);
+        // Add slide animations if not already present
+        if (!document.getElementById('toast-styles')) {
+            const slideInStyle = document.createElement('style');
+            slideInStyle.id = 'toast-styles';
+            slideInStyle.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(slideInStyle);
+        }
 
         toastContainer.appendChild(toast);
 
         setTimeout(() => {
             toast.style.animation = 'slideOut 0.3s ease';
             setTimeout(() => toast.remove(), 300);
-        }, 3000);
+        }, 4000);
     };
 
-    // Make functions globally available
+    // ===== INIT =====
+    document.addEventListener('DOMContentLoaded', function() {
+        addCsrfMetaTag();
+        updateBulkButtons();
+        
+        // Add click outside modal to close
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('archiveChoiceModal');
+            if (modal && e.target === modal) {
+                closeArchiveModal();
+            }
+        });
+    });
+
+    // ===== EXPOSE FUNCTIONS GLOBALLY =====
     window.editProduct = editProduct;
     window.deleteProduct = deleteProduct;
     window.filterProducts = filterProducts;
     window.closeArchiveModal = closeArchiveModal;
     window.submitArchiveChoice = submitArchiveChoice;
+    window.confirmPermanentDelete = confirmPermanentDelete;
 </script>
 {% endblock %}

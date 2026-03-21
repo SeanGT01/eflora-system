@@ -50,12 +50,18 @@
                         <div class="form-group">
                             <label class="form-label">First Name</label>
                             <input type="text" class="form-control" name="first_name" 
-                                   value="{{ user.first_name if user else '' }}" required>
+                                   value="{{ user.first_name if user else '' }}" required
+                                   style="text-transform: capitalize;"
+                                   oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);"
+                                   onkeyup="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Last Name</label>
                             <input type="text" class="form-control" name="last_name" 
-                                   value="{{ user.last_name if user else '' }}" required>
+                                   value="{{ user.last_name if user else '' }}" required
+                                   style="text-transform: capitalize;"
+                                   oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);"
+                                   onkeyup="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Email Address</label>
@@ -78,25 +84,27 @@
                             <div class="radio-group">
                                 <label class="radio-option">
                                     <input type="radio" name="gender" value="male" 
-                                           {{ 'checked' if user and user.gender == 'male' else '' }}>
+                                           {{ 'checked' if user and user.gender == 'male' else '' }}
+                                           onchange="updateGenderOtherVisibility()">
                                     <span class="radio-label">Male</span>
                                 </label>
                                 <label class="radio-option">
                                     <input type="radio" name="gender" value="female" 
-                                           {{ 'checked' if user and user.gender == 'female' else '' }}>
+                                           {{ 'checked' if user and user.gender == 'female' else '' }}
+                                           onchange="updateGenderOtherVisibility()">
                                     <span class="radio-label">Female</span>
                                 </label>
                                 <label class="radio-option">
                                     <input type="radio" name="gender" value="other" 
-                                           {{ 'checked' if user and user.gender == 'other' else '' }}>
+                                           {{ 'checked' if user and (user.gender == 'other' or (user.gender and user.gender not in ['male','female','other'])) else '' }}
+                                           onchange="updateGenderOtherVisibility()">
                                     <span class="radio-label">Other</span>
                                 </label>
-                                <label class="radio-option">
-                                    <input type="radio" name="gender" value="prefer_not_to_say" 
-                                           {{ 'checked' if user and user.gender == 'prefer_not_to_say' else '' }}>
-                                    <span class="radio-label">Prefer not to say</span>
-                                </label>
                             </div>
+                        </div>
+                        <div class="form-group" id="gender-other-container" style="display:none;">
+                            <label class="form-label" for="gender_other">Please specify your gender</label>
+                            <input type="text" id="gender_other" name="gender_other" class="form-control" placeholder="e.g., Non-binary" value="{{ user.gender if user and user.gender and user.gender not in ['male','female','other','prefer_not_to_say'] else '' }}">
                         </div>
                     </div>
                     
@@ -442,85 +450,163 @@
     function resetForm() {
         if (confirm('Discard all changes?')) {
             document.getElementById('profileForm').reset();
+            updateGenderOtherVisibility();
         }
     }
 
-    // Handle profile form submission
-    document.getElementById('profileForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(this);
-        const data = Object.fromEntries(formData);
-        
-        try {
-            const response = await fetch('/api/profile/update', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showNotification('Profile updated successfully!');
-                // Update the avatar initial if name changed
-                if (result.user_name) {
-                    const avatarLarge = document.querySelector('.avatar-large');
-                    const avatarMini = document.querySelector('.user-avatar-mini');
-                    const userName = document.querySelector('.user-name');
-                    
-                    if (avatarLarge) avatarLarge.textContent = result.user_name[0];
-                    if (avatarMini) avatarMini.textContent = result.user_name[0];
-                    if (userName) userName.textContent = result.user_name;
-                }
-            } else {
-                alert('Error: ' + result.message);
-            }
-        } catch (error) {
-            alert('Network error. Please try again.');
-        }
-    });
+    function capitalizeFirstLetter(str) {
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
 
-    // Handle password form submission
-    document.getElementById('passwordForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(this);
-        const data = Object.fromEntries(formData);
-        
-        if (data.new_password !== data.confirm_password) {
-            alert('New passwords do not match!');
-            return;
+    function autoCapitalizeNameInput(event) {
+        const input = event.target;
+        const original = input.value;
+
+        // Capitalize first character and keep rest as typed
+        const capitalized = original.replace(/^(\w)/, (m) => m.toUpperCase());
+
+        if (original !== capitalized) {
+            input.value = capitalized;
+            // Keep cursor at end for simplicity
+            input.setSelectionRange(capitalized.length, capitalized.length);
         }
-        
-        if (data.new_password.length < 8) {
-            alert('Password must be at least 8 characters long');
-            return;
+    }
+
+    // Track the last saved custom "other" gender so it can reappear when toggling back
+    let lastSavedOtherGender = document.getElementById('gender_other')?.value || '';
+
+    function updateGenderOtherVisibility() {
+        const container = document.getElementById('gender-other-container');
+        const otherInput = document.getElementById('gender_other');
+        const selected = document.querySelector('input[name="gender"]:checked');
+        if (!container) return;
+
+        const showOther = selected && selected.value === 'other';
+        container.style.display = showOther ? 'block' : 'none';
+
+        // If the user selects "other" and the input is empty, restore the last saved value
+        if (showOther && otherInput && otherInput.value.trim() === '' && lastSavedOtherGender) {
+            otherInput.value = lastSavedOtherGender;
         }
-        
-        try {
-            const response = await fetch('/api/profile/change-password', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showNotification('Password changed successfully!');
-                this.reset();
-            } else {
-                alert('Error: ' + result.message);
+
+        if (otherInput) {
+            otherInput.required = showOther;
+        }
+    }
+
+    // Ensure the custom input visibility is correct on page load and when options change
+    function initGenderOtherToggle() {
+        const radioGroup = document.querySelector('.radio-group');
+        if (radioGroup) {
+            radioGroup.addEventListener('change', updateGenderOtherVisibility);
+        }
+
+        // Auto-capitalize first/last name in real time via event delegation
+        document.addEventListener('input', function(e) {
+            if (!e.target) return;
+            if (e.target.name === 'first_name' || e.target.name === 'last_name') {
+                autoCapitalizeNameInput(e);
             }
-        } catch (error) {
-            alert('Network error. Please try again.');
+        });
+
+        updateGenderOtherVisibility();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initGenderOtherToggle);
+    } else {
+        initGenderOtherToggle();
+    }
+
+    // Handle profile form submission
+    function attachFormHandlers() {
+        const profileForm = document.getElementById('profileForm');
+        if (profileForm) {
+            profileForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const formData = new FormData(this);
+                const data = Object.fromEntries(formData);
+
+                const otherInput = document.getElementById('gender_other');
+                if (data.gender === 'other' && otherInput && otherInput.value.trim()) {
+                    data.gender = otherInput.value.trim();
+                }
+
+                try {
+                    const response = await fetch('/api/profile/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showNotification('Profile updated successfully!');
+                        // Update the avatar initial if name changed
+                        if (result.user_name) {
+                            const avatarLarge = document.querySelector('.avatar-large');
+                            const avatarMini = document.querySelector('.user-avatar-mini');
+                            const userName = document.querySelector('.user-name');
+
+                            if (avatarLarge) avatarLarge.textContent = result.user_name[0];
+                            if (avatarMini) avatarMini.textContent = result.user_name[0];
+                            if (userName) userName.textContent = result.user_name;
+                        }
+                    } else {
+                        alert('Error: ' + result.message);
+                    }
+                } catch (error) {
+                    alert('Network error. Please try again.');
+                }
+            });
         }
-    });
+
+        const passwordForm = document.getElementById('passwordForm');
+        if (passwordForm) {
+            passwordForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const formData = new FormData(this);
+                const data = Object.fromEntries(formData);
+
+                if (data.new_password !== data.confirm_password) {
+                    alert('New passwords do not match!');
+                    return;
+                }
+
+                if (data.new_password.length < 8) {
+                    alert('Password must be at least 8 characters long');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/profile/change-password', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showNotification('Password changed successfully!');
+                        this.reset();
+                    } else {
+                        alert('Error: ' + result.message);
+                    }
+                } catch (error) {
+                    alert('Network error. Please try again.');
+                }
+            });
+        }
+    }
 
     function showNotification(message) {
         const notification = document.createElement('div');

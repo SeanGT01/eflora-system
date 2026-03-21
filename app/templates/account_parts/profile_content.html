@@ -1,8 +1,5 @@
 <style>
     /* ─── Profile Content Styles ─── */
-
-
-        /* Add to your styles */
     .mapboxgl-ctrl-geocoder {
         width: 100% !important;
         max-width: 100% !important;
@@ -294,6 +291,9 @@
         transition: var(--transition);
         cursor: pointer;
         background: var(--cream);
+        max-height: 400px;
+        min-height: 200px;
+        object-fit: contain;
     }
 
     .upload-zone:hover {
@@ -321,6 +321,29 @@
         border-radius: var(--radius-md);
         object-fit: cover;
         box-shadow: var(--shadow-sm);
+    }
+
+    /* Upload progress indicator */
+    .upload-progress {
+        margin-top: 1rem;
+        padding: 0.5rem;
+        background: var(--cream);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+    }
+
+    .progress-bar {
+        height: 4px;
+        background: var(--deep-rose);
+        border-radius: 2px;
+        width: 0%;
+        transition: width 0.3s ease;
+    }
+
+    .progress-text {
+        font-size: 12px;
+        color: var(--muted);
+        margin-left: 0.5rem;
     }
 
     /* ─── Checkbox ─── */
@@ -548,6 +571,266 @@
     }
 </style>
 
+
+<style>
+
+    .modal-footer {
+    padding: 1.5rem 2rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+    /* Modal Styles */
+    .modal { 
+        display: none;
+        position: fixed;
+        top: 5%;
+        margin: auto;    
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 1);
+        z-index: 1000;
+        backdrop-filter: blur(5px);
+        animation: fadeIn 0.3s ease;
+    }
+
+    .modal-content {
+        position: relative;
+        background: var(--surface);
+        margin: 2vh auto;
+        width: 90%;
+        max-width: 700px;
+        max-height: 90vh;
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-xl);
+        display: flex;
+        flex-direction: column;
+        animation: slideUp 0.3s ease;
+    }
+
+    .modal-header {
+        padding: 1.5rem 2rem;
+        padding-top: 1rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        color: white;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+
+    .modal-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0;
+        color: rgb(0, 0, 0);
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        color: rgb(0, 0, 0);
+        font-size: 2rem;
+        cursor: pointer;
+        line-height: 1;
+        opacity: 0.8;
+        transition: var(--transition);
+    }
+
+    .modal-close:hover {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+
+    .modal-body {
+        padding: 2rem;
+        overflow-y: auto;
+        max-height: 55vh;
+        position: relative;
+        scroll-behavior: smooth;
+    }
+
+    .terms-content {
+        line-height: 1.6;
+    }
+
+    .terms-content h4 {
+        color: var(--primary);
+        margin: 1.5rem 0 0.5rem;
+        font-size: 1.1rem;
+    }
+
+    .terms-content h4:first-child {
+        margin-top: 0;
+    }
+
+    .terms-content p {
+        margin-bottom: 1rem;
+        color: var(--text-light);
+    }
+
+    .scroll-progress {
+        position: sticky;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: var(--border);
+        margin-top: 1rem;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        width: 0%;
+        transition: width 0.1s ease;
+    }
+
+    .modal-footer {
+        padding: 1rem 2rem;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    }
+
+     .btn-primary:hover {
+            
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(181, 68, 90, 0.3);
+        }
+
+
+    .checkbox-wrapper {
+        
+        display: block;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .checkbox-wrapper input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+    }
+
+    .checkbox-wrapper label {
+        color: var(--text);
+        font-size: 14px;
+    }
+
+    .checkbox-wrapper label.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+    }
+
+    .btn-outline {
+        background: transparent;
+        color: var(--primary);
+        border: 2px solid var(--primary);
+    }
+
+    .btns{
+        position: relative;
+        border-radius: 10px;
+        height: 30px;
+        width: 150px;
+    }
+    .btn-outline:hover {
+        background: rgba(182, 110, 121, 0.05);
+    }
+
+    .btn-rose {
+        background: var(--deep-rose);
+        color: white;
+        border: none;
+    }
+    .btn-rose:hover {
+      
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(182, 110, 121, 0.3);
+    }
+
+    .btn-rose:hover:not(:disabled) {
+        
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(182, 110, 121, 0.3);
+    }
+
+    .btn-rose:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-secondary {
+        background: transparent;
+        color: var(--text);
+        border: 2px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+       
+        color: var(--primary);
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+        from {
+            transform: translateY(50px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .modal-content {
+            margin: 2vh auto;
+            width: 95%;
+            max-height: 96vh;
+        }
+
+        .modal-body {
+            max-height: 50vh;
+        }
+
+        .modal-actions {
+            flex-direction: column;
+        }
+    }
+</style>
+
+
 <!-- ─── Header ─── -->
 <div class="content-header">
     <div class="content-eyebrow">Account</div>
@@ -569,13 +852,19 @@
             <div class="avatar-name">{{ user.full_name if user else 'Your Name' }}</div>
             <div class="avatar-meta">{{ user.email if user else '' }}</div>
             <div class="avatar-actions">
-                <input type="file" id="avatarInput" name="avatar" accept="image/*,image/webp" style="display:none;">
+                <input type="file" id="avatarInput" name="avatar" accept="image/*" style="display:none;">
                 <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('avatarInput').click()">
                     <i class="ri-camera-line"></i> Change Photo
                 </button>
                 <span style="font-size:11px;color:var(--muted);">JPG, PNG, GIF, WebP — max 5 MB</span>
             </div>
         </div>
+    </div>
+
+    <!-- Avatar Upload Progress (hidden by default) -->
+    <div id="avatarUploadProgress" class="upload-progress" style="display:none; margin:0 2rem 1.5rem 2rem;">
+        <div class="progress-bar" id="avatarProgressBar"></div>
+        <span class="progress-text" id="avatarProgressText">Uploading...</span>
     </div>
 
     <!-- Form Body -->
@@ -586,13 +875,15 @@
                     <label class="form-label">First Name</label>
                     <input type="text" class="form-control" name="first_name"
                            value="{{ user.first_name if user else '' }}" required
-                           placeholder="Enter first name">
+                           placeholder="Enter first name"
+                           oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Last Name</label>
                     <input type="text" class="form-control" name="last_name"
                            value="{{ user.last_name if user else '' }}" required
-                           placeholder="Enter last name">
+                           placeholder="Enter last name"
+                           oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
                 </div>
 
                 <div class="form-group form-group-full">
@@ -618,15 +909,20 @@
                 <div class="form-group form-group-full">
                     <label class="form-label">Gender</label>
                     <div class="radio-group">
-                        {% for value, label in [('male','Male'),('female','Female'),('other','Other'),('prefer_not_to_say','Prefer not to say')] %}
+                        {% for value, label in [('male','Male'),('female','Female'),('other','Other')] %}
                         <label class="radio-option">
                             <input type="radio" name="gender" value="{{ value }}"
-                                   {{ 'checked' if user and user.gender == value else '' }}>
+                                   {{ 'checked' if user and (user.gender == value or (value == 'other' and user.gender and user.gender not in ['male','female','other','prefer_not_to_say'])) else '' }}>
                             <span class="radio-dot"></span>
                             <span>{{ label }}</span>
                         </label>
                         {% endfor %}
                     </div>
+                </div>
+                <div class="form-group form-group-full" id="gender-other-container" style="display:none;">
+                    <label class="form-label" for="gender_other">Please specify your gender</label>
+                    <input type="text" id="gender_other" name="gender_other" class="form-control" placeholder="e.g., Non-binary"
+                           value="{{ user.gender if user and user.gender and user.gender not in ['male','female','other','prefer_not_to_say'] else '' }}">
                 </div>
             </div>
 
@@ -711,6 +1007,7 @@
         <div id="applicationStatus"></div>
         <div id="sellerApplicationForm" style="display:none;">
             <form id="sellerAppForm" enctype="multipart/form-data">
+                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-grid">
                     <div class="form-group form-group-full">
                         <label class="form-label">Store Name <span style="color:var(--deep-rose)">*</span></label>
@@ -728,7 +1025,7 @@
                     <div class="form-group">
                         <label class="form-label">Store Logo <span style="color:var(--deep-rose)">*</span></label>
                         <div class="upload-zone" onclick="document.getElementById('storeLogo').click()">
-                            <input type="file" name="store_logo" id="storeLogo" accept="image/*,image/webp" required style="display:none;">
+                            <input type="file" name="store_logo" id="storeLogo" accept="image/*" required style="display:none;">
                             <i class="ri-image-add-line upload-zone-icon"></i>
                             <p>Click to upload your store logo</p>
                             <button type="button" class="btn btn-outline btn-sm">Choose Image</button>
@@ -737,31 +1034,47 @@
                             </div>
                         </div>
                         <div class="form-hint" style="margin-top:.5rem;">JPG, PNG, GIF, WebP — max 5 MB</div>
+                        <!-- Upload progress for logo -->
+                        <div id="logoUploadProgress" class="upload-progress" style="display:none;">
+                            <div class="progress-bar" id="logoProgressBar"></div>
+                            <span class="progress-text" id="logoProgressText">Uploading...</span>
+                        </div>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label">Government ID <span style="color:var(--deep-rose)">*</span></label>
                         <div class="upload-zone" onclick="document.getElementById('governmentID').click()">
-                            <input type="file" name="government_id" id="governmentID" accept="image/*,image/webp" required style="display:none;">
-                            <i class="ri-id-card-line upload-zone-icon"></i>
+                            <input type="file" name="government_id" id="governmentID" accept="image/*" required style="display:none;">
+                            <i class="ri-image-add-line upload-zone-icon"></i>
                             <p>Passport, Driver's License, or National ID</p>
                             <button type="button" class="btn btn-outline btn-sm">Upload ID</button>
                             <div class="upload-preview" id="idPreview">
                                 <img src="#" alt="ID Preview">
                             </div>
                         </div>
+                        <!-- Upload progress for ID -->
+                        <div id="idUploadProgress" class="upload-progress" style="display:none;">
+                            <div class="progress-bar" id="idProgressBar"></div>
+                            <span class="progress-text" id="idProgressText">Uploading...</span>
+                        </div>
                     </div>
 
                     <div class="form-group form-group-full">
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="agree_terms" required>
-                            <span>I agree to the <a href="#" style="color:var(--deep-rose);text-decoration:none;font-weight:500;">Seller Terms & Conditions</a></span>
-                        </label>
+                        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-outline btn-rose" onclick="openTermsModal()" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                                <i class="ri-file-text-line"></i>
+                                Review Terms & Conditions
+                            </button>
+                            <label class="checkbox-option" style="margin: 0;">
+                                <input type="checkbox" name="agree_terms" id="agreeTermsCheckbox" required disabled>
+                                <span>I agree to the Terms & Conditions</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-outline" onclick="cancelSellerApplication()">Cancel</button>
-                    <button type="submit" class="btn btn-rose">
+                    <button type="submit" class="btn btn-rose" id="submitSellerAppBtn" disabled>
                         <i class="ri-send-plane-line"></i> Submit Application
                     </button>
                 </div>
@@ -771,7 +1084,7 @@
 </div>
 {% endif %}
 
-<!-- ─── Seller Active Status ─── -->
+<!-- Seller Active Status -->
 {% if session.get('role') == 'seller' %}
 <div class="profile-card">
     <div class="card-header">
@@ -796,6 +1109,251 @@
 </div>
 {% endif %}
 
+<!-- Terms and Conditions Modal -->
+<div id="termsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i class="ri-file-text-line"></i>
+                Seller Terms & Conditions
+            </h3>
+            <button class="modal-close" onclick="closeTermsModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="termsModalBody" onscroll="checkTermsScroll()">
+            <div class="terms-content">
+                <h4>1. Seller Agreement</h4>
+                <p>By applying to become a seller on our platform, you agree to comply with and be bound by the following terms and conditions. Please read them carefully.</p>
+                
+                <h4>2. Account Registration</h4>
+                <p>You must provide accurate and complete information when registering as a seller. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.</p>
+                
+                <h4>3. Product Listings</h4>
+                <p>All products listed for sale must comply with our platform's guidelines and applicable laws. You are solely responsible for the accuracy, quality, and legality of your product listings, including descriptions, images, and pricing.</p>
+                
+                <h4>4. Fees and Payments</h4>
+                <p>As a seller, you agree to pay all applicable fees as outlined in our fee schedule. We reserve the right to modify fees with prior notice. All payments will be processed through our secure payment system.</p>
+                
+                <h4>5. Order Fulfillment</h4>
+                <p>You must fulfill orders promptly and provide tracking information when required. Failure to fulfill orders may result in account suspension or termination.</p>
+                
+                <h4>6. Returns and Refunds</h4>
+                <p>You agree to comply with our returns and refunds policy. This includes processing returns within the specified timeframe and issuing refunds promptly when required.</p>
+                
+                <h4>7. Prohibited Activities</h4>
+                <p>You may not engage in fraudulent activities, list prohibited items, manipulate reviews, or use the platform for any illegal purposes. Violation may result in immediate account termination.</p>
+                
+                <h4>8. Intellectual Property</h4>
+                <p>You represent that you have all necessary rights to the products you list and that your listings do not infringe on any third-party intellectual property rights.</p>
+                
+                <h4>9. Termination</h4>
+                <p>We reserve the right to suspend or terminate your seller account at any time for violations of these terms or for any other reason at our discretion.</p>
+                
+                <h4>10. Limitation of Liability</h4>
+                <p>Our platform shall not be liable for any indirect, incidental, or consequential damages arising from your use of the seller services.</p>
+                
+                <h4>11. Indemnification</h4>
+                <p>You agree to indemnify and hold harmless our platform, its affiliates, and their respective officers, directors, employees, and agents from any claims arising out of your breach of these terms.</p>
+                
+                <h4>12. Modifications to Terms</h4>
+                <p>We may modify these terms at any time. Continued use of the seller services after changes constitutes acceptance of the modified terms.</p>
+                
+                <h4>13. Governing Law</h4>
+                <p>These terms shall be governed by and construed in accordance with the laws of the jurisdiction in which our platform operates.</p>
+                
+                <h4>14. Contact Information</h4>
+                <p>For questions regarding these terms, please contact our support team at support@example.com.</p>
+            </div>
+            
+            <!-- Scroll Progress Indicator -->
+            <div class="scroll-progress" id="scrollProgress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+        </div>
+       <div class="modal-footer">
+    <div class="checkbox-wrapper">
+        <input type="checkbox" id="acceptTerms" disabled>
+        <label for="acceptTerms" id="termsLabel">I have read and agree to the Seller Terms & Conditions (please scroll to the bottom)</label>
+    </div>
+    <div class="modal-actions">
+        <button class="btns btn-secondarys" onclick="closeTermsModal()">Close</button>
+        <button class="btns btn-rose" id="acceptTermsBtn" disabled onclick="acceptTermsAndClose()">
+            <i class="ri-check-line"></i>
+            Accept Terms
+        </button>
+    </div>
+</div>
+    </div>
+</div>
+
+
+
+<script>
+    // Terms Modal Functions
+    function openTermsModal() {
+        const modal = document.getElementById('termsModal');
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        
+        // Reset scroll position and checkbox
+        const modalBody = document.getElementById('termsModalBody');
+        modalBody.scrollTop = 0;
+        
+        const acceptCheckbox = document.getElementById('acceptTerms');
+        const acceptBtn = document.getElementById('acceptTermsBtn');
+        
+        acceptCheckbox.checked = false;
+        acceptCheckbox.disabled = true;
+        acceptBtn.disabled = true;
+        
+        document.getElementById('termsLabel').classList.add('disabled');
+        updateProgressBar();
+    }
+
+    function closeTermsModal() {
+        const modal = document.getElementById('termsModal');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    function checkTermsScroll() {
+        const modalBody = document.getElementById('termsModalBody');
+        const scrollPosition = modalBody.scrollTop;
+        const scrollHeight = modalBody.scrollHeight;
+        const clientHeight = modalBody.clientHeight;
+        
+        // Calculate scroll percentage
+        const scrollPercentage = (scrollPosition / (scrollHeight - clientHeight)) * 100;
+        updateProgressBar(scrollPercentage);
+        
+        // Check if scrolled to bottom (with small tolerance)
+        const isAtBottom = Math.abs(scrollHeight - clientHeight - scrollPosition) < 5;
+        
+        const acceptCheckbox = document.getElementById('acceptTerms');
+        const acceptBtn = document.getElementById('acceptTermsBtn');
+        const termsLabel = document.getElementById('termsLabel');
+        
+        if (isAtBottom) {
+            acceptCheckbox.disabled = false;
+            termsLabel.classList.remove('disabled');
+            
+            // Auto-enable if checkbox was checked while scrolling
+            if (acceptCheckbox.checked) {
+                acceptBtn.disabled = false;
+            }
+        } else {
+            acceptCheckbox.disabled = true;
+            acceptCheckbox.checked = false;
+            acceptBtn.disabled = true;
+            termsLabel.classList.add('disabled');
+        }
+    }
+
+    function updateProgressBar(percentage) {
+        const progressBar = document.getElementById('progressBar');
+        if (percentage !== undefined) {
+            progressBar.style.width = percentage + '%';
+        } else {
+            progressBar.style.width = '0%';
+        }
+    }
+
+    function acceptTermsAndClose() {
+        const acceptCheckbox = document.getElementById('acceptTerms');
+        
+        if (!acceptCheckbox.checked) {
+            alert('Please read and accept the Terms and Conditions first.');
+            return;
+        }
+        
+        // Update the main form checkbox and enable submit button
+        const mainTermsCheckbox = document.getElementById('agreeTermsCheckbox');
+        const submitBtn = document.getElementById('submitSellerAppBtn');
+        
+        mainTermsCheckbox.checked = true;
+        mainTermsCheckbox.disabled = false;
+        submitBtn.disabled = false;
+        
+        // Show success message
+        showNotification('Terms accepted successfully! You can now submit your application.');
+        closeTermsModal();
+    }
+
+    // Handle terms checkbox in modal
+    document.addEventListener('DOMContentLoaded', function() {
+        const acceptCheckbox = document.getElementById('acceptTerms');
+        const acceptBtn = document.getElementById('acceptTermsBtn');
+        
+        if (acceptCheckbox) {
+            acceptCheckbox.addEventListener('change', function() {
+                acceptBtn.disabled = !this.checked;
+            });
+        }
+    });
+
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        const modal = document.getElementById('termsModal');
+        if (event.target === modal) {
+            closeTermsModal();
+        }
+    };
+
+    function showNotification(message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            z-index: 1003;
+            animation: slideIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        `;
+        notification.innerHTML = `
+            <i class="ri-checkbox-circle-line" style="font-size: 20px;"></i>
+            <span>${message}</span>
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+
+    // Add animation keyframes
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+</script>
+
 <!-- ─── Add/Edit Address Modal ─── -->
 <div id="addressModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;overflow-y:auto;padding:1rem;">
     <div style="background:var(--warm-white);border-radius:var(--radius-xl);width:90%;max-width:700px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-petal);margin:auto;">
@@ -814,7 +1372,7 @@
                 <input type="hidden" id="addressId" name="address_id">
                 <input type="hidden" id="exactLat" name="exact_lat">
                 <input type="hidden" id="exactLng" name="exact_lng">
-                <!-- NEW: Hidden input for place_id -->
+                <!-- Hidden input for place_id -->
                 <input type="hidden" id="exactPlaceId" name="place_id">
                 
                 <div class="form-grid">
@@ -885,7 +1443,7 @@
                             </span>
                         </label>
                         
-                        <!-- ADD THIS: Geocoder search container -->
+                        <!-- Geocoder search container -->
                         <div id="geocoder" style="margin-bottom: 10px;"></div>
                         
                         <div style="position:relative;">
@@ -931,6 +1489,10 @@
 </div>
 
 <script>
+
+    
+window.uploadToCloudinary = uploadToCloudinary;
+window.setupAvatarUpload = setupAvatarUpload;
 // Global toast function
 function showToast(message, type = 'info') {
     const toast = document.getElementById('global-toast');
@@ -959,6 +1521,293 @@ function showToast(message, type = 'info') {
             toast.style.display = 'none';
         }, 300);
     }, 3000);
+}
+
+// ===== CLOUDINARY UPLOAD HELPER =====
+async function uploadToCloudinary(file, folder) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', folder);
+
+    // Get CSRF token from meta tag or hidden input
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 
+                     document.querySelector('input[name="csrf_token"]')?.value;
+
+    try {
+        const response = await fetch('/api/v1/cloudinary/upload', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData,
+            credentials: 'same-origin'
+        });
+        
+        if (response.status === 401) {
+            showToast('Your session has expired. Please log in again.', 'error');
+            setTimeout(() => {
+                window.location.href = '/login?next=' + encodeURIComponent('/my-account');
+            }, 2000);
+            return { success: false, error: 'Not authenticated' };
+        }
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Upload failed:', errorText);
+            return { success: false, error: `Upload failed: ${response.status}` };
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            return {
+                success: true,
+                public_id: data.public_id,
+                url: data.url,
+                format: data.format,
+                width: data.width,
+                height: data.height
+            };
+        } else {
+            return { success: false, error: data.error };
+        }
+    } catch (error) {
+        console.error('Cloudinary upload error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ===== AVATAR UPLOAD WITH CLOUDINARY =====
+function setupAvatarUpload() {
+    const ai = document.getElementById('avatarInput');
+    if (!ai) return;
+    
+    ai.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            showToast('File must be JPG, PNG, GIF, or WebP', 'error');
+            ai.value = '';
+            return;
+        }
+        
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+            showToast('File must be less than 5MB', 'error');
+            ai.value = '';
+            return;
+        }
+        
+        // Show progress
+        const progress = document.getElementById('avatarUploadProgress');
+        const progressBar = document.getElementById('avatarProgressBar');
+        const progressText = document.getElementById('avatarProgressText');
+        
+        progress.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressText.textContent = 'Uploading to Cloudinary...';
+        
+        const btn = document.querySelector('.avatar-actions .btn');
+        const orig = btn?.innerHTML;
+        if (btn) { btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading…'; btn.disabled = true; }
+        
+        try {
+            // Upload to Cloudinary
+            progressBar.style.width = '30%';
+            const result = await uploadToCloudinary(file, 'e-flowers/users/{{ user.id }}/avatar');
+            
+            if (!result.success) {
+                throw new Error(result.error || 'Upload failed');
+            }
+            
+            progressBar.style.width = '70%';
+            progressText.textContent = 'Updating profile...';
+            
+            // Get form data
+            const fd = new FormData();
+            fd.append('avatar_public_id', result.public_id);
+            fd.append('avatar_url', result.url);
+            
+            const pf = document.getElementById('profileForm');
+            if (pf) {
+                ['first_name','last_name','phone','birthday'].forEach(k => {
+                    const val = pf.querySelector(`[name="${k}"]`)?.value;
+                    if (val) fd.append(k, val);
+                });
+                const g = pf.querySelector('[name="gender"]:checked');
+                if (g) fd.append('gender', g.value);
+            }
+            
+            // Update profile with Cloudinary URL
+            const r = await fetch('/api/account/profile/update', { 
+                method: 'POST', 
+                body: fd 
+            });
+            const d = await r.json();
+            
+            progressBar.style.width = '100%';
+            
+            if (d.success) {
+                const ac = document.querySelector('.avatar-circle');
+                if (ac && d.user?.avatar_url) {
+                    ac.innerHTML = `<img src="${d.user.avatar_url}?t=${Date.now()}" alt="Profile">`;
+                }
+                showToast('✓ Profile photo updated', 'success');
+            } else {
+                showToast('Error: ' + (d.error || 'Update failed'), 'error');
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            showToast('Network error. Please try again.', 'error');
+        } finally {
+            if (btn) { btn.innerHTML = orig; btn.disabled = false; }
+            ai.value = '';
+            setTimeout(() => {
+                progress.style.display = 'none';
+            }, 1000);
+        }
+    });
+}
+
+// ===== SELLER APPLICATION WITH CLOUDINARY =====
+function setupSellerApplicationForm() {
+    document.getElementById('sellerAppForm')?.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const storeName = this.querySelector('[name="store_name"]').value.trim();
+        const storeDesc = this.querySelector('[name="store_description"]').value.trim();
+        const agreeTerms = this.querySelector('[name="agree_terms"]').checked;
+        
+        const storeLogoFile = this.querySelector('[name="store_logo"]').files[0];
+        const govIdFile = this.querySelector('[name="government_id"]').files[0];
+        
+        if (!storeName || !storeDesc) {
+            showToast('Please fill in all required fields', 'error');
+            return;
+        }
+        
+        if (!agreeTerms) {
+            showToast('You must agree to the Seller Terms & Conditions', 'error');
+            return;
+        }
+        
+        if (!storeLogoFile) {
+            showToast('Please upload a store logo', 'error');
+            return;
+        }
+        
+        if (!govIdFile) {
+            showToast('Please upload your government ID', 'error');
+            return;
+        }
+        
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(storeLogoFile.type)) {
+            showToast('Store logo must be JPG, PNG, GIF, or WebP', 'error');
+            return;
+        }
+        
+        if (!allowedTypes.includes(govIdFile.type)) {
+            showToast('Government ID must be JPG, PNG, GIF, or WebP', 'error');
+            return;
+        }
+        
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (storeLogoFile.size > maxSize) {
+            showToast('Store logo must be less than 5MB', 'error');
+            return;
+        }
+        
+        if (govIdFile.size > maxSize) {
+            showToast('Government ID must be less than 5MB', 'error');
+            return;
+        }
+        
+        const btn = this.querySelector('button[type="submit"]');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading...';
+        btn.disabled = true;
+        
+        // Show progress indicators
+        const logoProgress = document.getElementById('logoUploadProgress');
+        const idProgress = document.getElementById('idUploadProgress');
+        const logoBar = document.getElementById('logoProgressBar');
+        const idBar = document.getElementById('idProgressBar');
+        const logoText = document.getElementById('logoProgressText');
+        const idText = document.getElementById('idProgressText');
+        
+        logoProgress.style.display = 'block';
+        idProgress.style.display = 'block';
+        logoBar.style.width = '0%';
+        idBar.style.width = '0%';
+        logoText.textContent = 'Uploading logo...';
+        idText.textContent = 'Uploading ID...';
+        
+        try {
+            // Upload logo to Cloudinary
+            logoBar.style.width = '30%';
+            const logoResult = await uploadToCloudinary(storeLogoFile, 'e-flowers/sellers/{{ user.id }}/logo');
+            if (!logoResult.success) throw new Error('Logo upload failed: ' + (logoResult.error || 'Unknown error'));
+            logoBar.style.width = '70%';
+            
+            // Upload ID to Cloudinary
+            idBar.style.width = '30%';
+            const idResult = await uploadToCloudinary(govIdFile, 'e-flowers/sellers/{{ user.id }}/govt_id');
+            if (!idResult.success) throw new Error('ID upload failed: ' + (idResult.error || 'Unknown error'));
+            idBar.style.width = '70%';
+            
+            // Create form data with Cloudinary URLs
+            const fd = new FormData();
+            fd.append('store_name', storeName);
+            fd.append('store_description', storeDesc);
+            fd.append('agree_terms', agreeTerms);
+            fd.append('store_logo_public_id', logoResult.public_id);
+            fd.append('store_logo_url', logoResult.url);
+            fd.append('government_id_public_id', idResult.public_id);
+            fd.append('government_id_url', idResult.url);
+            
+            // Add CSRF token
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 
+                             document.querySelector('input[name="csrf_token"]')?.value;
+            fd.append('csrf_token', csrfToken);
+            
+            logoBar.style.width = '90%';
+            idBar.style.width = '90%';
+            logoText.textContent = 'Submitting application...';
+            idText.textContent = 'Submitting application...';
+            
+            // Submit application
+            const r = await fetch('/seller/apply', { 
+                method: 'POST', 
+                body: fd 
+            });
+            const d = await r.json();
+            
+            logoBar.style.width = '100%';
+            idBar.style.width = '100%';
+            
+            if (d.success) {
+                showToast('✓ Application submitted!', 'success');
+                cancelSellerApplication();
+                this.reset();
+                document.getElementById('logoPreview').style.display = 'none';
+                document.getElementById('idPreview').style.display = 'none';
+            } else {
+                showToast('Error: ' + (d.error || 'Submission failed'), 'error');
+            }
+        } catch (error) {
+            console.error('Submission error:', error);
+            showToast('Network error. Please try again.', 'error');
+        } finally { 
+            btn.innerHTML = orig; 
+            btn.disabled = false;
+            setTimeout(() => {
+                logoProgress.style.display = 'none';
+                idProgress.style.display = 'none';
+            }, 2000);
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1006,6 +1855,14 @@ document.addEventListener('DOMContentLoaded', function() {
     setupSellerApplicationForm();
     setupAvatarUpload();
     setupProfileForm();
+
+    // Ensure the gender selection toggle works even if the radios are dynamically updated
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.name === 'gender') {
+            updateGenderOtherVisibility();
+        }
+    });
+
     setupPasswordForm();
     loadAddresses();
     loadMunicipalities();
@@ -1014,7 +1871,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // ═════ ADDRESS MANAGEMENT WITH MAPBOX ═════
 let map = null;
 let marker = null;
-let geocoder = null; // Add geocoder variable
+let geocoder = null;
 
 async function loadAddresses() {
     try {
@@ -1059,7 +1916,7 @@ async function loadAddresses() {
                     <i class="ri-map-pin-line"></i>
                     <p>No delivery addresses yet</p>
                     <button class="btn btn-rose" onclick="showAddAddressModal()">
-                        <i class="ri-add-line"></i> Add Your First Address
+                        </i> Add Your First Address
                     </button>
                 </div>
             `;
@@ -1486,61 +2343,30 @@ document.getElementById('addressModal')?.addEventListener('click', function(e) {
 });
 
 // ═════ OTHER PROFILE FUNCTIONS ═════
-function setupAvatarUpload() {
-    const ai = document.getElementById('avatarInput');
-    if (!ai) return;
-    ai.addEventListener('change', async function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-        if (!allowedTypes.includes(file.type)) {
-            showToast('File must be JPG, PNG, GIF, or WebP', 'error');
-            ai.value = '';
-            return;
-        }
-        
-        const maxSize = 5 * 1024 * 1024;
-        if (file.size > maxSize) {
-            showToast('File must be less than 5MB', 'error');
-            ai.value = '';
-            return;
-        }
-        
-        const fd = new FormData();
-        fd.append('avatar', file);
-        const pf = document.getElementById('profileForm');
-        if (pf) {
-            ['first_name','last_name','phone','birthday'].forEach(k => fd.append(k, pf.querySelector(`[name="${k}"]`)?.value || ''));
-            const g = pf.querySelector('[name="gender"]:checked');
-            if (g) fd.append('gender', g.value);
-        }
-        const btn = document.querySelector('.avatar-actions .btn');
-        const orig = btn?.innerHTML;
-        if (btn) { btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading…'; btn.disabled = true; }
-        try {
-            const r = await fetch('/api/account/profile/update', { method: 'POST', body: fd });
-            const d = await r.json();
-            if (d.success) {
-                const ac = document.querySelector('.avatar-circle');
-                if (ac && d.user?.avatar_url) {
-                    ac.innerHTML = `<img src="${d.user.avatar_url}?t=${Date.now()}" alt="Profile">`;
-                }
-                showToast('✓ Profile photo updated', 'success');
-            } else {
-                showToast('Error: ' + (d.error || 'Upload failed'), 'error');
-            }
-        } catch (error) {
-            console.error('Upload error:', error);
-            showToast('Network error. Please try again.', 'error');
-        } finally {
-            if (btn) { btn.innerHTML = orig; btn.disabled = false; }
-            ai.value = '';
-        }
-    });
+
+function updateGenderOtherVisibility() {
+    const container = document.getElementById('gender-other-container');
+    const otherInput = document.getElementById('gender_other');
+    const selected = document.querySelector('input[name="gender"]:checked');
+    if (!container || !selected) return;
+
+    if (selected.value === 'other') {
+        container.style.display = 'block';
+    } else {
+        container.style.display = 'none';
+        if (otherInput) otherInput.value = '';
+    }
 }
 
 function setupProfileForm() {
+    // Ensure custom gender field is correct on load
+    updateGenderOtherVisibility();
+
+    // Re-run visibility logic whenever gender selection changes
+    document.querySelectorAll('input[name="gender"]').forEach(radio => {
+        radio.addEventListener('change', updateGenderOtherVisibility);
+    });
+
     document.getElementById('profileForm')?.addEventListener('submit', async function(e) {
         e.preventDefault();
         const btn = this.querySelector('button[type="submit"]');
@@ -1548,7 +2374,14 @@ function setupProfileForm() {
         btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving…';
         btn.disabled = true;
         try {
-            const r = await fetch('/api/account/profile/update', { method: 'POST', body: new FormData(this) });
+            const formData = new FormData(this);
+            const otherInput = document.getElementById('gender_other');
+            if (formData.get('gender') === 'other' && otherInput && otherInput.value.trim()) {
+                // Send the actual custom gender value instead of the literal "other"
+                formData.set('gender', otherInput.value.trim());
+            }
+
+            const r = await fetch('/api/account/profile/update', { method: 'POST', body: formData });
             const d = await r.json();
             if (d.success) {
                 showToast('✓ Profile saved', 'success');
@@ -1603,6 +2436,7 @@ function setupPasswordForm() {
 function resetForm() {
     if (confirm('Discard all changes?')) {
         document.getElementById('profileForm')?.reset();
+        updateGenderOtherVisibility();
         showToast('Changes discarded', 'info');
     }
 }
@@ -1694,90 +2528,6 @@ function setupImagePreviews() {
             };
             reader.readAsDataURL(file);
         });
-    });
-}
-
-function setupSellerApplicationForm() {
-    document.getElementById('sellerAppForm')?.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const storeName = this.querySelector('[name="store_name"]').value.trim();
-        const storeDesc = this.querySelector('[name="store_description"]').value.trim();
-        const agreeTerms = this.querySelector('[name="agree_terms"]').checked;
-        
-        const storeLogo = this.querySelector('[name="store_logo"]').files[0];
-        const govId = this.querySelector('[name="government_id"]').files[0];
-        
-        if (!storeName || !storeDesc) {
-            showToast('Please fill in all required fields', 'error');
-            return;
-        }
-        
-        if (!agreeTerms) {
-            showToast('You must agree to the Seller Terms & Conditions', 'error');
-            return;
-        }
-        
-        if (!storeLogo) {
-            showToast('Please upload a store logo', 'error');
-            return;
-        }
-        
-        if (!govId) {
-            showToast('Please upload your government ID', 'error');
-            return;
-        }
-        
-        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-        if (!allowedTypes.includes(storeLogo.type)) {
-            showToast('Store logo must be JPG, PNG, GIF, or WebP', 'error');
-            return;
-        }
-        
-        if (!allowedTypes.includes(govId.type)) {
-            showToast('Government ID must be JPG, PNG, GIF, or WebP', 'error');
-            return;
-        }
-        
-        const maxSize = 5 * 1024 * 1024;
-        if (storeLogo.size > maxSize) {
-            showToast('Store logo must be less than 5MB', 'error');
-            return;
-        }
-        
-        if (govId.size > maxSize) {
-            showToast('Government ID must be less than 5MB', 'error');
-            return;
-        }
-        
-        const btn = this.querySelector('button[type="submit"]');
-        const orig = btn.innerHTML;
-        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Submitting…';
-        btn.disabled = true;
-        
-        try {
-            const r = await fetch('/seller/apply', { 
-                method: 'POST', 
-                body: new FormData(this) 
-            });
-            const d = await r.json();
-            
-            if (d.success) {
-                showToast('✓ Application submitted!', 'success');
-                cancelSellerApplication();
-                this.reset();
-                document.getElementById('logoPreview').style.display = 'none';
-                document.getElementById('idPreview').style.display = 'none';
-            } else {
-                showToast('Error: ' + (d.error || 'Submission failed'), 'error');
-            }
-        } catch (error) {
-            console.error('Submission error:', error);
-            showToast('Network error. Please try again.', 'error');
-        } finally { 
-            btn.innerHTML = orig; 
-            btn.disabled = false; 
-        }
     });
 }
 

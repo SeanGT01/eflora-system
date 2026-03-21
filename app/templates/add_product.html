@@ -23,8 +23,10 @@
 
     <!-- Main Form -->
     <form id="addProductForm" enctype="multipart/form-data" class="product-form">
-           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" id="productId" name="product_id" value="{{ product.id if product else '' }}">
+
+        
         
         <!-- Two Column Layout -->
         <div class="form-layout">
@@ -46,19 +48,46 @@
                             <div class="character-count"><span id="nameCount">{{ product.name|length if product else 0 }}</span>/100</div>
                         </div>
 
+                        <!-- ===== UPDATED: Category Selection with Main + Sub ===== -->
                         <div class="form-row">
                             <div class="form-group">
-                                <label class="form-label">Category <span class="required">*</span></label>
-                                <select id="productCategory" name="category" class="form-select" required>
-                                    <option value="">Select Category</option>
-                                    <option value="flowers" {% if product and product.category == 'flowers' %}selected{% endif %}>Fresh Flowers</option>
-                                    <option value="plants" {% if product and product.category == 'plants' %}selected{% endif %}>Potted Plants</option>
-                                    <option value="bouquets" {% if product and product.category == 'bouquets' %}selected{% endif %}>Bouquets</option>
-                                    <option value="succulents" {% if product and product.category == 'succulents' %}selected{% endif %}>Succulents</option>
-                                    <option value="seasonal" {% if product and product.category == 'seasonal' %}selected{% endif %}>Seasonal</option>
+                                <label class="form-label">Main Category <span class="required">*</span></label>
+                                <select id="mainCategory" name="main_category_id" class="form-select" required onchange="loadStoreSubcategories()">
+                                    <option value="">Select Main Category</option>
+                                    {% for category in main_categories %}
+                                    <option value="{{ category.id }}" 
+                                            {% if product and product.main_category_id == category.id %}selected{% endif %}>
+                                        {{ category.name }}
+                                    </option>
+                                    {% endfor %}
                                 </select>
+                                <!-- Add this debug info -->
+                                    {% if not main_categories %}
+                                    <div style="background: #fee; padding: 10px; margin: 10px 0; border-radius: 4px; color: #c00;">
+                                        ⚠️ Debug: main_categories is empty or not passed to template
+                                    </div>
+                                    {% endif %}
+                                <small class="form-hint">Select the main category for your product</small>
                             </div>
                             
+                            <div class="form-group">
+                                <label class="form-label">Store Subcategory (Optional)</label>
+                                <select id="storeCategory" name="store_category_id" class="form-select">
+                                    <option value="">No Subcategory</option>
+                                    {% if product and product.store_category %}
+                                        <option value="{{ product.store_category.id }}" selected>
+                                            {{ product.store_category.name }}
+                                        </option>
+                                    {% endif %}
+                                </select>
+                                <small class="form-hint">Add a custom subcategory for your store</small>
+                                <button type="button" class="btn btn-link btn-sm" onclick="showAddSubcategoryModal()" style="margin-top: 0.5rem;">
+                                    <i class="ri-add-line"></i> Create New Subcategory
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label">SKU (Optional)</label>
                                 <input type="text" id="productSku" name="sku" class="form-control" 
@@ -100,6 +129,28 @@
                                 <small class="form-hint">Total stock including all variants</small>
                             </div>
                         </div>
+
+                        <!-- ===== NEW: Stock Management (Edit Mode Only) ===== -->
+                        {% if is_edit %}
+                        <div class="stock-management-section" id="stockManagementSection">
+                            <div class="stock-info-box">
+                                <div class="stock-info-item">
+                                    <span class="label">Current Stock</span>
+                                    <span class="value" id="currentStockDisplay">{{ product.stock_quantity if product else 0 }}</span>
+                                    <span class="unit">units</span>
+                                </div>
+                            </div>
+                            
+                            <div class="stock-actions">
+                                <button type="button" class="btn btn-outline btn-sm" onclick="openStockHistoryModal()">
+                                    <i class="ri-history-line"></i> View History
+                                </button>
+                                <button type="button" class="btn btn-warning btn-sm" onclick="openStockReductionModal()">
+                                    <i class="ri-subtract-line"></i> Reduce Stock
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
 
                         <div class="form-group">
                             <label class="toggle-switch">
@@ -238,6 +289,170 @@
     </form>
 </div>
 
+<!-- ===== NEW: Add Subcategory Modal ===== -->
+<div id="addSubcategoryModal" class="modal-overlay" style="display: none;">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <h3 class="modal-title">Create New Subcategory</h3>
+            <button class="modal-close" onclick="closeAddSubcategoryModal()">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Main Category</label>
+                <input type="text" id="modalMainCategoryName" class="form-control" readonly>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Subcategory Name <span class="required">*</span></label>
+                <input type="text" id="newSubcategoryName" class="form-control" 
+                       placeholder="e.g., Crochet Bouquets, Wedding Bouquets">
+                <small class="form-hint">This will be visible only to your store</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description (Optional)</label>
+                <textarea id="newSubcategoryDescription" class="form-control" rows="2" 
+                          placeholder="Describe this subcategory..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeAddSubcategoryModal()">Cancel</button>
+            <button class="btn btn-rose" onclick="createSubcategory()">Create Subcategory</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Stock Reduction Modal ===== -->
+<div id="stockReductionModal" class="modal-overlay" style="display: none;">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <h3 class="modal-title">Reduce Stock</h3>
+            <button class="modal-close" onclick="closeStockReductionModal()">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <!-- Product/Variant Selector -->
+            <div class="form-group">
+                <label class="form-label">Select Product/Variant <span class="required">*</span></label>
+                <select id="productVariantSelector" class="form-select" onchange="updateStockDisplay()" required>
+                    <option value="">-- Choose a product --</option>
+                </select>
+                <small class="form-hint">Select the product or variant to reduce stock for</small>
+            </div>
+
+            <div class="stock-modal-info">
+                <p class="info-text"><strong>Selected:</strong> <span id="modalProductName">{{ product.name if product else '' }}</span></p>
+                <p class="info-text"><strong>Current Stock:</strong> <span id="modalCurrentStock" class="highlight">{{ product.stock_quantity if product else 0 }}</span> units</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Reduction Amount (units) <span class="required">*</span></label>
+                <input type="number" id="reductionAmount" class="form-control" 
+                       placeholder="How many units to reduce?" min="1" required>
+                <small class="form-hint" id="amountHint"></small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Reason for Reduction <span class="required">*</span></label>
+                <div class="reason-options">
+                    <label class="reason-option">
+                        <input type="radio" name="reductionReason" value="spoilage" required>
+                        <div class="reason-card">
+                            <i class="ri-leaf-line"></i>
+                            <span class="reason-name">Spoilage</span>
+                            <span class="reason-desc">Product spoiled or expired</span>
+                        </div>
+                    </label>
+                    <label class="reason-option">
+                        <input type="radio" name="reductionReason" value="damage" required>
+                        <div class="reason-card">
+                            <i class="ri-alert-line"></i>
+                            <span class="reason-name">Damage</span>
+                            <span class="reason-desc">Product is damaged</span>
+                        </div>
+                    </label>
+                    <label class="reason-option">
+                        <input type="radio" name="reductionReason" value="defect" required>
+                        <div class="reason-card">
+                            <i class="ri-error-warning-line"></i>
+                            <span class="reason-name">Defect</span>
+                            <span class="reason-desc">Manufacturing defect</span>
+                        </div>
+                    </label>
+                    <label class="reason-option">
+                        <input type="radio" name="reductionReason" value="other" required>
+                        <div class="reason-card">
+                            <i class="ri-question-line"></i>
+                            <span class="reason-name">Other</span>
+                            <span class="reason-desc">Other reason</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Additional Notes (Optional)</label>
+                <textarea id="reductionNotes" class="form-control" rows="3" 
+                          placeholder="Add any additional details or context..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeStockReductionModal()">Cancel</button>
+            <button class="btn btn-rose" id="submitReductionBtn" onclick="submitStockReduction()">
+                <i class="ri-save-line"></i> Record Reduction
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden data element with product and variant information -->
+<script type="application/json" id="productVariantsData">
+    {% if product %}
+    {
+        "mainProduct": {
+            "id": {{ product.id }},
+            "name": "{{ product.name|safe }}",
+            "stock": {{ product.stock_quantity }}
+        },
+        "variants": [
+            {% for variant in product.variants %}
+            {
+                "id": {{ variant.id }},
+                "name": "{{ variant.name|safe }}",
+                "stock_quantity": {{ variant.stock_quantity }}
+            }{{ "," if not loop.last else "" }}
+            {% endfor %}
+        ]
+    }
+    {% else %}
+    {}
+    {% endif %}
+</script>
+
+<!-- ===== Stock History Modal ===== -->
+<div id="stockHistoryModal" class="modal-overlay" style="display: none;">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Stock Reduction History</h3>
+            <button class="modal-close" onclick="closeStockHistoryModal()">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="stockHistoryContent" style="min-height: 200px;">
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading stock history...</p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeStockHistoryModal()">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- Loading Overlay -->
 <div id="loadingOverlay" class="loading-overlay" style="display: none;">
     <div class="loading-spinner"></div>
@@ -247,6 +462,101 @@
 
 {% block extra_css %}
 <style>
+    /* Add these new styles to your existing CSS */
+    
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        backdrop-filter: blur(4px);
+    }
+    
+    .modal {
+        background: var(--warm-white);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+        width: 90%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .modal-md {
+        max-width: 500px;
+    }
+    
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-title {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+    }
+    
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--muted);
+        transition: var(--transition);
+    }
+    
+    .modal-close:hover {
+        color: var(--deep-rose);
+    }
+    
+    .modal-body {
+        padding: 1.5rem;
+    }
+    
+    .modal-footer {
+        padding: 1rem 1.5rem 1.5rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+    
+    .image-slot.marked-for-deletion {
+        border-color: var(--deep-rose);
+        background: rgba(181, 68, 90, 0.05);
+        opacity: 0.6;
+    }
+
+    .image-slot.marked-for-deletion .slot-placeholder i {
+        color: var(--deep-rose);
+    }
+
+    .image-slot.marked-for-deletion .slot-placeholder span {
+        color: var(--deep-rose);
+    }
+    
+    .btn-link {
+        background: none;
+        border: none;
+        color: var(--deep-rose);
+        cursor: pointer;
+        text-decoration: underline;
+        font-size: 12px;
+    }
+    
+    .btn-link:hover {
+        color: var(--dusty-rose);
+    }
+    
     /* Add Product Container */
     .add-product-container {
         max-width: 1400px;
@@ -455,7 +765,230 @@
         color: var(--charcoal);
     }
 
+    /* ===== Stock Management Section ===== */
+    .stock-management-section {
+        padding: 1rem;
+        background: linear-gradient(135deg, rgba(181, 68, 90, 0.05), rgba(181, 68, 90, 0.02));
+        border: 1px solid rgba(181, 68, 90, 0.2);
+        border-radius: var(--radius-md);
+        margin: 1rem 0;
+    }
+
+    .stock-info-box {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .stock-info-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0.75rem;
+        background: white;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+    }
+
+    .stock-info-item .label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--muted);
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .stock-info-item .value {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--charcoal);
+    }
+
+    .stock-info-item .unit {
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .stock-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .stock-actions .btn {
+        flex: 1;
+    }
+
+    .btn-warning {
+        background: #f0b429;
+        color: white;
+        border: none;
+    }
+
+    .btn-warning:hover {
+        background: #d89f1b;
+    }
+
+    /* ===== Stock Reduction Modal Styles ===== */
+    .stock-modal-info {
+        background: var(--cream);
+        padding: 1rem;
+        border-radius: var(--radius-md);
+        margin-bottom: 1.5rem;
+        border-left: 4px solid var(--deep-rose);
+    }
+
+    .stock-modal-info .info-text {
+        margin: 0.5rem 0;
+        font-size: 14px;
+        color: var(--charcoal);
+    }
+
+    .stock-modal-info .highlight {
+        font-weight: 700;
+        color: var(--deep-rose);
+        font-size: 18px;
+    }
+
+    .reason-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin: 0.75rem 0;
+    }
+
+    .reason-option {
+        display: block;
+        cursor: pointer;
+    }
+
+    .reason-option input[type="radio"] {
+        display: none;
+    }
+
+    .reason-option input[type="radio"]:checked + .reason-card {
+        border-color: var(--deep-rose);
+        background: rgba(181, 68, 90, 0.1);
+        box-shadow: 0 0 0 2px rgba(181, 68, 90, 0.1);
+    }
+
+    .reason-card {
+        padding: 1rem;
+        border: 2px solid var(--border);
+        border-radius: var(--radius-md);
+        text-align: center;
+        background: white;
+        transition: var(--transition);
+    }
+
+    .reason-card i {
+        font-size: 24px;
+        color: var(--muted);
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .reason-card .reason-name {
+        display: block;
+        font-weight: 600;
+        color: var(--charcoal);
+        font-size: 14px;
+        margin-bottom: 0.25rem;
+    }
+
+    .reason-card .reason-desc {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+    }
+
+    .reason-option input[type="radio"]:checked + .reason-card i {
+        color: var(--deep-rose);
+    }
+
+    .reason-option input[type="radio"]:checked + .reason-card .reason-name {
+        color: var(--deep-rose);
+    }
+
+    /* Stock History Styles */
+    .stock-history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .stock-history-item {
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: white;
+    }
+
+    .history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .history-amount {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--deep-rose);
+    }
+
+    .history-reason {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        background: var(--cream);
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: capitalize;
+        color: var(--charcoal);
+    }
+
+    .history-details {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0.75rem 0;
+    }
+
+    .history-notes {
+        padding: 0.75rem;
+        background: var(--cream);
+        border-radius: var(--radius-md);
+        font-size: 13px;
+        color: var(--charcoal);
+        font-style: italic;
+    }
+
+    .history-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: var(--muted);
+    }
+
+    .empty-state i {
+        font-size: 32px;
+        display: block;
+        margin-bottom: 0.75rem;
+        opacity: 0.5;
+    }
+
     /* Image Grid */
+
     .image-grid {
         display: grid;
         grid-template-columns: repeat(5, 1fr);
@@ -866,22 +1399,176 @@
 
 {% block extra_js %}
 <script>
+    // ===== GLOBAL VARIABLES =====
     let imageSlots = [];
     let existingImages = [];
     const MAX_IMAGES = 5;
     let isEditMode = {% if is_edit %}true{% else %}false{% endif %};
     let productId = {% if product and product.id %}{{ product.id }}{% else %}null{% endif %};
 
-    // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
+        console.log(`🚀 Page loaded. isEditMode: ${isEditMode}, productId: ${productId}`);
         initializeImageSlots();
         initializeCharacterCounts();
         
         // Load existing images and variants if in edit mode
         if (isEditMode && productId) {
+            console.log(`📥 Loading product data for ID: ${productId}`);
             loadProductData();
+        } else {
+            console.log(`🆕 Add mode - no product data to load`);
         }
     });
+
+    // ===== NEW: LOAD STORE SUBCATEGORIES =====
+    function loadStoreSubcategories() {
+        const mainCategoryId = document.getElementById('mainCategory').value;
+        const storeCategorySelect = document.getElementById('storeCategory');
+        
+        if (!mainCategoryId) {
+            storeCategorySelect.innerHTML = '<option value="">No Subcategory</option>';
+            return;
+        }
+        
+        storeCategorySelect.innerHTML = '<option value="">Loading...</option>';
+        
+        fetch(`/api/store/categories?main_category_id=${mainCategoryId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.categories && data.categories.length > 0) {
+                    let options = '<option value="">No Subcategory</option>';
+                    data.categories.forEach(cat => {
+                        options += `<option value="${cat.id}">${cat.name}</option>`;
+                    });
+                    storeCategorySelect.innerHTML = options;
+                } else {
+                    storeCategorySelect.innerHTML = '<option value="">No Subcategory</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading subcategories:', error);
+                storeCategorySelect.innerHTML = '<option value="">Error loading</option>';
+            });
+    }
+
+    // ===== NEW: SHOW ADD SUBCATEGORY MODAL =====
+    function showAddSubcategoryModal() {
+        const mainCategoryId = document.getElementById('mainCategory').value;
+        if (!mainCategoryId) {
+            showToast('Please select a main category first', 'error');
+            return;
+        }
+        
+        const mainCategoryName = document.getElementById('mainCategory').selectedOptions[0].text;
+        document.getElementById('modalMainCategoryName').value = mainCategoryName;
+        document.getElementById('addSubcategoryModal').style.display = 'flex';
+    }
+
+    function closeAddSubcategoryModal() {
+        document.getElementById('addSubcategoryModal').style.display = 'none';
+        document.getElementById('newSubcategoryName').value = '';
+        document.getElementById('newSubcategoryDescription').value = '';
+    }
+
+    async function createSubcategory() {
+        const mainCategoryId = document.getElementById('mainCategory').value;
+        const name = document.getElementById('newSubcategoryName').value.trim();
+        const description = document.getElementById('newSubcategoryDescription').value.trim();
+        
+        if (!name) {
+            showToast('Please enter a subcategory name', 'error');
+            return;
+        }
+        
+        const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+        
+        try {
+            const response = await fetch('/api/store/categories/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    main_category_id: mainCategoryId,
+                    name: name,
+                    description: description
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('Subcategory created successfully!', 'success');
+                closeAddSubcategoryModal();
+                loadStoreSubcategories();
+                
+                // Select the newly created category
+                setTimeout(() => {
+                    const select = document.getElementById('storeCategory');
+                    for (let option of select.options) {
+                        if (option.text === name) {
+                            option.selected = true;
+                            break;
+                        }
+                    }
+                }, 500);
+            } else {
+                showToast(data.error || 'Failed to create subcategory', 'error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('Network error', 'error');
+        }
+    }
+
+    // ===== CLOUDINARY UPLOAD HELPER =====
+    async function uploadToCloudinary(file, folder) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('folder', folder);
+
+        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+
+        try {
+            const response = await fetch('/api/v1/cloudinary/upload', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData,
+                credentials: 'same-origin'
+            });
+            
+            if (response.status === 401) {
+                showToast('Your session has expired. Please log in again.', 'error');
+                setTimeout(() => {
+                    window.location.href = '/login?next=' + encodeURIComponent('/seller/products/add');
+                }, 2000);
+                return { success: false, error: 'Not authenticated' };
+            }
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Upload failed:', errorText);
+                return { success: false, error: `Upload failed: ${response.status}` };
+            }
+            
+            const data = await response.json();
+            if (data.success) {
+                return {
+                    success: true,
+                    public_id: data.public_id,
+                    url: data.url
+                };
+            } else {
+                return { success: false, error: data.error };
+            }
+        } catch (error) {
+            console.error('Cloudinary upload error:', error);
+            return { success: false, error: error.message };
+        }
+    }
 
     // ===== LOAD PRODUCT DATA FOR EDIT =====
     function loadProductData() {
@@ -895,13 +1582,25 @@
                 if (data.product) {
                     const product = data.product;
                     
-                    // Load existing images
+                    // Set main category and load subcategories
+                    if (product.main_category_id) {
+                        setTimeout(() => {
+                            loadStoreSubcategories();
+                            
+                            // Set store category after subcategories are loaded
+                            if (product.store_category_id) {
+                                setTimeout(() => {
+                                    document.getElementById('storeCategory').value = product.store_category_id;
+                                }, 500);
+                            }
+                        }, 300);
+                    }
+                    
                     if (product.images && product.images.length > 0) {
                         existingImages = product.images.sort((a, b) => a.sort_order - b.sort_order);
                         loadExistingImages(existingImages);
                     }
                     
-                    // Load variants if any
                     if (product.has_variants && product.variants && product.variants.length > 0) {
                         console.log('🎯 Loading variants:', product.variants);
                         loadExistingVariants(product.variants);
@@ -921,7 +1620,14 @@
 
         for (let i = 0; i < MAX_IMAGES; i++) {
             if (i < images.length) {
-                createImageSlot(i, images[i]);
+                const imageData = images[i];
+                const imageUrl = imageData.cloudinary_url || imageData.image_url;
+                createImageSlot(i, {
+                    id: imageData.id,
+                    url: imageUrl,
+                    public_id: imageData.public_id,
+                    is_primary: imageData.is_primary
+                });
             } else {
                 createImageSlot(i, null);
             }
@@ -945,13 +1651,11 @@
             row.className = 'variant-row';
             row.id = rowId;
             
-            // ✅ FIX: Store variant ID as data attribute AND as a property
             row.setAttribute('data-variant-id', variant.id);
-            row.variantId = variant.id; // Store as property too
+            row.variantId = variant.id;
             
             console.log(`✅ Set variant ID for row ${rowId}:`, variant.id);
 
-            // Handle attributes
             let attrValue = '';
             if (variant.attributes) {
                 if (typeof variant.attributes === 'object') {
@@ -1025,9 +1729,8 @@
 
             container.appendChild(row);
             
-            console.log(`✅ Variant row added: ${rowId}, variantId=${row.variantId}, data-variant-id=${row.getAttribute('data-variant-id')}`);
+            console.log(`✅ Variant row added: ${rowId}, variantId=${row.variantId}`);
 
-            // Add event listener for image upload
             const fileInput = document.getElementById(`variant-image-${rowId}`);
             if (fileInput) {
                 fileInput.addEventListener('change', function(e) {
@@ -1039,7 +1742,6 @@
         console.log('✅ All variants loaded');
     }
 
-    // Helper function to escape HTML
     function escapeHtml(text) {
         if (!text) return '';
         const div = document.createElement('div');
@@ -1067,7 +1769,7 @@
         });
     }
 
-    // ===== IMAGE HANDLING =====
+    // ===== IMAGE HANDLING (FIXED) =====
     function initializeImageSlots() {
         const grid = document.getElementById('imageGrid');
         grid.innerHTML = '';
@@ -1099,11 +1801,14 @@
         placeholder.innerHTML = '<i class="ri-image-add-line"></i><span>Click to upload</span>';
 
         const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
         removeBtn.className = 'remove-image';
         removeBtn.innerHTML = '<i class="ri-close-line"></i>';
         removeBtn.onclick = (e) => {
+            e.preventDefault();
             e.stopPropagation();
             removeImage(index);
+            return false;
         };
         removeBtn.style.display = 'none';
 
@@ -1131,17 +1836,23 @@
             mainBadge,
             file: null,
             hasImage: false,
-            imageId: imageData?.id || null
+            imageId: imageData?.id || null,
+            public_id: imageData?.public_id || null,
+            cloudinary_url: imageData?.url || null,
+            markedForDeletion: false
         };
 
         if (imageData) {
-            if (imageData.image_url) {
-                img.src = imageData.image_url;
+            if (imageData.url) {
+                img.src = imageData.url;
                 img.style.display = 'block';
                 placeholder.style.display = 'none';
                 slot.classList.add('has-image');
                 removeBtn.style.display = 'flex';
                 imageSlots[index].hasImage = true;
+                imageSlots[index].imageId = imageData.id;
+                imageSlots[index].public_id = imageData.public_id;
+                imageSlots[index].cloudinary_url = imageData.url;
 
                 if (index === 0) {
                     mainBadge.style.display = 'block';
@@ -1164,20 +1875,27 @@
             slotData.img.style.display = 'block';
             slotData.placeholder.style.display = 'none';
             slotData.slot.classList.add('has-image');
+            slotData.slot.classList.remove('marked-for-deletion');
             slotData.removeBtn.style.display = 'flex';
             slotData.file = file;
             slotData.hasImage = true;
-            slotData.imageId = null;
+            
+            // Keep imageId unchanged
+            slotData.public_id = null;
+            slotData.cloudinary_url = null;
+            slotData.markedForDeletion = false;
 
             if (index === 0) {
                 slotData.mainBadge.style.display = 'block';
-                
                 for (let i = 1; i < imageSlots.length; i++) {
                     if (imageSlots[i] && imageSlots[i].mainBadge) {
                         imageSlots[i].mainBadge.style.display = 'none';
                     }
                 }
             }
+            
+            const imageIdInfo = slotData.imageId ? `ID ${slotData.imageId}` : 'no existing ID';
+            console.log(`📸 Image selected for slot ${index}:`, file.name, `(${imageIdInfo})`);
         };
         reader.readAsDataURL(file);
     }
@@ -1190,25 +1908,44 @@
             if (!confirm('Are you sure you want to delete this image?')) {
                 return;
             }
+            
+            console.log(`🗑️ Deleting image at index ${index} with ID: ${slotData.imageId}`);
+            
             slotData.markedForDeletion = true;
+            slotData.slot.classList.add('marked-for-deletion');
+            slotData.slot.classList.remove('has-image');
+            slotData.removeBtn.style.display = 'none';
+            slotData.mainBadge.style.display = 'none';
+            slotData.placeholder.innerHTML = '<i class="ri-delete-bin-line" style="color:var(--deep-rose);"></i><span style="color:var(--deep-rose);">Will be deleted</span>';
+            slotData.placeholder.style.display = 'flex';
+            slotData.img.style.display = 'none';
+            slotData.file = null;
+            slotData.hasImage = false;
+            
+            console.log(`✅ Image ${index} marked for deletion`);
+        } else {
+            console.log(`🗑️ Clearing new image at index ${index}`);
+            slotData.fileInput.value = '';
+            slotData.img.src = '';
+            slotData.img.style.display = 'none';
+            slotData.placeholder.innerHTML = '<i class="ri-image-add-line"></i><span>Click to upload</span>';
+            slotData.placeholder.style.display = 'flex';
+            slotData.slot.classList.remove('has-image', 'marked-for-deletion');
+            slotData.removeBtn.style.display = 'none';
+            slotData.mainBadge.style.display = 'none';
+            slotData.file = null;
+            slotData.hasImage = false;
+            slotData.imageId = null;
+            slotData.public_id = null;
+            slotData.cloudinary_url = null;
+            slotData.markedForDeletion = false;
         }
-
-        slotData.fileInput.value = '';
-        slotData.img.src = '';
-        slotData.img.style.display = 'none';
-        slotData.placeholder.innerHTML = '<i class="ri-image-add-line"></i><span>Click to upload</span>';
-        slotData.placeholder.style.display = 'flex';
-        slotData.slot.classList.remove('has-image');
-        slotData.removeBtn.style.display = 'none';
-        slotData.mainBadge.style.display = 'none';
-        slotData.file = null;
-        slotData.hasImage = false;
-        slotData.imageId = null;
 
         if (index === 0) {
             for (let i = 1; i < imageSlots.length; i++) {
-                if (imageSlots[i] && imageSlots[i].hasImage) {
+                if (imageSlots[i] && imageSlots[i].hasImage && !imageSlots[i].markedForDeletion) {
                     imageSlots[i].mainBadge.style.display = 'block';
+                    console.log(`🏷️ New primary image at index ${i}`);
                     break;
                 }
             }
@@ -1218,8 +1955,20 @@
     function getImageFiles() {
         const files = [];
         for (let i = 0; i < imageSlots.length; i++) {
-            if (imageSlots[i] && imageSlots[i].file) {
-                files.push(imageSlots[i].file);
+            const slot = imageSlots[i];
+            if (slot && slot.file && !slot.markedForDeletion) {
+                const isReplacement = !!slot.imageId;
+                
+                files.push({
+                    file: slot.file,
+                    slotIndex: i,
+                    isReplacement: isReplacement,
+                    existingId: slot.imageId || null
+                });
+                
+                const type = isReplacement ? 'REPLACEMENT' : 'NEW';
+                console.log(`📸 Slot ${i} has ${type} image:`, slot.file.name, 
+                           isReplacement ? `(replacing ID: ${slot.imageId})` : '(new slot)');
             }
         }
         return files;
@@ -1227,11 +1976,28 @@
 
     function validateImages() {
         for (let i = 0; i < imageSlots.length; i++) {
-            if (imageSlots[i] && imageSlots[i].hasImage) {
+            if (imageSlots[i] && imageSlots[i].hasImage && !imageSlots[i].markedForDeletion) {
                 return true;
             }
         }
         return false;
+    }
+
+    function debugImageSlots() {
+        console.log('📊 Image Slots Debug:');
+        imageSlots.forEach((slot, i) => {
+            if (slot) {
+                console.log(`Slot ${i}:`, {
+                    hasImage: slot.hasImage,
+                    imageId: slot.imageId,
+                    hasFile: !!slot.file,
+                    fileName: slot.file ? slot.file.name : null,
+                    markedForDeletion: slot.markedForDeletion,
+                    public_id: slot.public_id,
+                    cloudinary_url: slot.cloudinary_url
+                });
+            }
+        });
     }
 
     // ===== VARIANT HANDLING =====
@@ -1260,7 +2026,6 @@
         const row = document.createElement('div');
         row.className = 'variant-row';
         row.id = rowId;
-        // For new variants, no variantId
         row.variantId = null;
 
         row.innerHTML = `
@@ -1373,17 +2138,14 @@
                 return;
             }
             
-            // ✅ FIX: Mark for deletion using setAttribute
             row.setAttribute('data-delete-variant', 'true');
             row.style.display = 'none';
             console.log(`✅ Marked variant for deletion: ${rowId}`);
         } else {
-            // New variant - just remove it
             row.remove();
             console.log(`✅ Removed new variant: ${rowId}`);
         }
         
-        // Check if we need to add a variant row
         const visibleRows = document.querySelectorAll('.variant-row:not([data-delete-variant="true"])');
         const hasVariants = document.getElementById('hasVariants').checked;
         
@@ -1496,31 +2258,21 @@
         console.log('📋 Collecting variants from', rows.length, 'rows');
 
         rows.forEach((row, index) => {
-            // ✅ FIX: Check using getAttribute
             const isMarkedForDeletion = row.getAttribute('data-delete-variant') === 'true';
             
-            console.log(`Row ${index} (${row.id}):`, {
-                variantId: row.variantId || row.getAttribute('data-variant-id'),
-                isMarkedForDeletion: isMarkedForDeletion,
-                display: row.style.display
-            });
-            
-            const name = row.querySelector('[name="variant_name"]')?.value;
-            const price = row.querySelector('[name="variant_price"]')?.value;
-            const stock = row.querySelector('[name="variant_stock"]')?.value;
-            
-            // ✅ FIX: Get variant ID from property or attribute
             const variantId = row.variantId || row.getAttribute('data-variant-id');
 
             if (isMarkedForDeletion && variantId) {
-                // Include deleted variants so backend knows to delete them
                 variants.push({
                     id: variantId,
                     _delete: true
                 });
-                console.log(`➖ Variant ${variantId} marked for deletion`);
                 return;
             }
+
+            const name = row.querySelector('[name="variant_name"]')?.value;
+            const price = row.querySelector('[name="variant_price"]')?.value;
+            const stock = row.querySelector('[name="variant_stock"]')?.value;
 
             if (name && price && stock) {
                 let attributes = {};
@@ -1529,7 +2281,6 @@
                     try {
                         attributes = JSON.parse(attrText);
                     } catch (e) {
-                        console.warn('Invalid JSON attributes:', e);
                         attributes = { value: attrText };
                     }
                 }
@@ -1546,27 +2297,26 @@
                 if (row.variantImageFile) {
                     variantData.image = row.variantImageFile;
                     variantData.image_index = index;
+                    console.log(`📸 New image file for variant ${name} (ID: ${variantId || 'new'}):`, row.variantImageFile.name);
                 }
                 
                 if (row.getAttribute('data-remove-variant-image') === 'true') {
                     variantData._remove_image = true;
+                    console.log(`🗑️ Image marked for removal for variant ${name} (ID: ${variantId})`);
                 }
 
                 variants.push(variantData);
-                console.log(`➕ Collected variant:`, variantData);
-            } else {
-                console.log(`⚠️ Row ${index} missing required fields, skipping`);
             }
         });
 
-        console.log('✅ Final variants collected:', variants);
+        console.log('✅ Final variants collected:', variants.length, 'variants');
         return variants;
     }
 
     // ===== FORM VALIDATION =====
     function validateForm() {
         const name = document.getElementById('productName').value.trim();
-        const category = document.getElementById('productCategory').value;
+        const mainCategory = document.getElementById('mainCategory').value;
         const price = document.getElementById('productPrice').value;
         const stock = document.getElementById('productStock').value;
 
@@ -1574,8 +2324,8 @@
             showToast('Please enter product name', 'error');
             return false;
         }
-        if (!category) {
-            showToast('Please select a category', 'error');
+        if (!mainCategory) {
+            showToast('Please select a main category', 'error');
             return false;
         }
         if (!price || parseFloat(price) <= 0) {
@@ -1621,107 +2371,203 @@
         return true;
     }
 
-    
-   // ===== SUBMIT =====
-function submitProduct() {
-    if (!validateForm()) {
-        return;
-    }
+    // ===== SUBMIT FUNCTION (UPDATED) =====
+    async function submitProduct() {
+        if (!validateForm()) {
+            return;
+        }
 
-    document.getElementById('loadingOverlay').style.display = 'flex';
+        debugImageSlots();
 
-    const formData = new FormData();
-    const hasVariants = document.getElementById('hasVariants').checked;
-    const productId = document.getElementById('productId').value;
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        showToast('Uploading images to Cloudinary...', 'info');
 
-    // ✅ FIX: Get the CSRF token from the form
-    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-    
-    // ✅ FIX: Add CSRF token to form data
-    formData.append('csrf_token', csrfToken);
+        const formData = new FormData();
+        const hasVariants = document.getElementById('hasVariants').checked;
+        const productId = document.getElementById('productId').value;
 
-    if (isEditMode) {
-        formData.append('_method', 'PUT');
-    }
+        const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+        formData.append('csrf_token', csrfToken);
 
-    formData.append('name', document.getElementById('productName').value.trim());
-    formData.append('description', document.getElementById('productDescription').value.trim() || '');
-    formData.append('price', document.getElementById('productPrice').value);
-    formData.append('stock_quantity', document.getElementById('productStock').value);
-    formData.append('category', document.getElementById('productCategory').value);
-    formData.append('is_available', document.getElementById('isAvailable').checked);
-    formData.append('has_variants', hasVariants);
+        if (isEditMode) {
+            formData.append('_method', 'PUT');
+        }
 
-    const imageFiles = getImageFiles();
-    imageFiles.forEach((file, index) => {
-        formData.append(`image_${index}`, file);
-    });
-
-    if (isEditMode) {
-        const imagesToKeep = [];
-        const imagesToDelete = [];
+        formData.append('name', document.getElementById('productName').value.trim());
+        formData.append('description', document.getElementById('productDescription').value.trim() || '');
+        formData.append('price', document.getElementById('productPrice').value);
+        formData.append('stock_quantity', document.getElementById('productStock').value);
         
-        imageSlots.forEach(slot => {
-            if (slot.imageId && !slot.markedForDeletion) {
-                imagesToKeep.push(slot.imageId);
-            } else if (slot.imageId && slot.markedForDeletion) {
-                imagesToDelete.push(slot.imageId);
+        // ===== UPDATED: Category fields =====
+        formData.append('main_category_id', document.getElementById('mainCategory').value);
+        const storeCategoryId = document.getElementById('storeCategory').value;
+        if (storeCategoryId) {
+            formData.append('store_category_id', storeCategoryId);
+        }
+        
+        formData.append('is_available', document.getElementById('isAvailable').checked);
+        formData.append('has_variants', hasVariants);
+
+        // Handle product images
+        const imageFiles = getImageFiles();
+        
+        const replacementImages = [];
+        const newImages = [];
+
+        imageFiles.forEach(item => {
+            if (item.isReplacement && item.existingId) {
+                replacementImages.push({
+                    existingId: item.existingId,
+                    file: item.file,
+                    slotIndex: item.slotIndex,
+                    is_primary: item.slotIndex === 0
+                });
+            } else {
+                newImages.push({
+                    file: item.file,
+                    slotIndex: item.slotIndex,
+                    is_primary: item.slotIndex === 0
+                });
             }
         });
-        
-        formData.append('images_to_keep', JSON.stringify(imagesToKeep));
-        formData.append('images_to_delete', JSON.stringify(imagesToDelete));
-    }
 
-    if (hasVariants) {
-        const variants = collectVariants();
-        console.log('📤 Submitting variants:', variants);
-        
-        const variantData = variants.map(v => {
-            const { image, image_index, ...rest } = v;
-            return rest;
-        });
-        
-        formData.append('variants', JSON.stringify(variantData));
-        
-        variants.forEach((variant, index) => {
-            if (variant.image) {
-                formData.append(`variant_image_${index}`, variant.image);
-                console.log(`📎 Appending variant_image_${index}`, variant.image.name);
+        const cloudinaryResults = [];
+        for (let i = 0; i < newImages.length; i++) {
+            const item = newImages[i];
+            showToast(`Uploading new image ${i + 1}/${newImages.length}...`, 'info');
+            
+            const result = await uploadToCloudinary(item.file, 'e-flowers/products');
+            
+            if (result.success) {
+                cloudinaryResults.push({
+                    public_id: result.public_id,
+                    url: result.url,
+                    is_primary: item.is_primary,
+                    sort_order: item.slotIndex
+                });
+            } else {
+                showToast(`Failed to upload image: ${result.error}`, 'error');
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return;
             }
-        });
-    }
+        }
 
-    const url = isEditMode ? `/seller/products/${productId}` : '/seller/products/create';
-    
-    console.log(`📤 Submitting to: ${url}`);
-    
-    fetch(url, {
-        method: isEditMode ? 'PUT' : 'POST',
-        body: formData,
-        // ✅ Optional: Also add as header for extra compatibility
-        headers: {
-            'X-CSRFToken': csrfToken
+        const replacementResults = [];
+        for (let i = 0; i < replacementImages.length; i++) {
+            const item = replacementImages[i];
+            showToast(`Uploading replacement image ${i + 1}/${replacementImages.length}...`, 'info');
+            
+            const result = await uploadToCloudinary(item.file, 'e-flowers/products');
+            
+            if (result.success) {
+                replacementResults.push({
+                    existing_id: item.existingId,
+                    public_id: result.public_id,
+                    url: result.url,
+                    is_primary: item.is_primary,
+                    sort_order: item.slotIndex
+                });
+            } else {
+                showToast(`Failed to upload replacement image: ${result.error}`, 'error');
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return;
+            }
         }
-    })
-    .then(response => response.json())
-    .then(data => {
-        document.getElementById('loadingOverlay').style.display = 'none';
-        if (data.success) {
-            showToast(`✅ Product ${isEditMode ? 'updated' : 'created'} successfully!`, 'success');
-            setTimeout(() => {
-                window.location.href = '/seller/products';
-            }, 1500);
-        } else {
-            showToast('Error: ' + (data.error || `Failed to ${isEditMode ? 'update' : 'create'} product`), 'error');
+
+        if (cloudinaryResults.length > 0) {
+            formData.append('cloudinary_images', JSON.stringify(cloudinaryResults));
         }
-    })
-    .catch(error => {
-        document.getElementById('loadingOverlay').style.display = 'none';
-        console.error('Error:', error);
-        showToast('Network error. Please try again.', 'error');
-    });
-}
+        
+        if (replacementResults.length > 0) {
+            formData.append('replacement_images', JSON.stringify(replacementResults));
+        }
+
+        if (isEditMode) {
+            const imagesToDelete = [];
+            
+            imageSlots.forEach(slot => {
+                if (slot.imageId && slot.markedForDeletion) {
+                    imagesToDelete.push(slot.imageId);
+                }
+            });
+            
+            if (imagesToDelete.length > 0) {
+                formData.append('images_to_delete', JSON.stringify(imagesToDelete));
+            }
+        }
+
+        // Handle variants
+        if (hasVariants) {
+            const variants = collectVariants();
+            
+            const variantData = [];
+            
+            for (let i = 0; i < variants.length; i++) {
+                const variant = { ...variants[i] };
+                
+                if (variant.image) {
+                    showToast(`Uploading variant image for ${variant.name}...`, 'info');
+                    
+                    const result = await uploadToCloudinary(variant.image, 'e-flowers/variants');
+                    
+                    if (result.success) {
+                        variant.cloudinary_public_id = result.public_id;
+                        variant.cloudinary_url = result.url;
+                    } else {
+                        showToast(`Failed to upload variant image: ${result.error}`, 'error');
+                        document.getElementById('loadingOverlay').style.display = 'none';
+                        return;
+                    }
+                }
+                
+                delete variant.image;
+                variantData.push(variant);
+            }
+
+            try {
+                formData.append('variants', JSON.stringify(variantData));
+            } catch (e) {
+                console.error('❌ Error stringifying variants:', e);
+                showToast('Error processing variant data', 'error');
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return;
+            }
+        }
+
+        const url = isEditMode ? `/seller/products/${productId}` : '/seller/products/create';
+        
+        try {
+            const response = await fetch(url, {
+                method: isEditMode ? 'PUT' : 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Server response:', errorText);
+                throw new Error(`Server responded with ${response.status}`);
+            }
+            
+            const data = await response.json();
+            document.getElementById('loadingOverlay').style.display = 'none';
+            
+            if (data.success) {
+                showToast(`✅ Product ${isEditMode ? 'updated' : 'created'} successfully!`, 'success');
+                setTimeout(() => {
+                    window.location.href = '/seller/products';
+                }, 1500);
+            } else {
+                showToast('Error: ' + (data.error || `Failed to ${isEditMode ? 'update' : 'create'} product`), 'error');
+            }
+        } catch (error) {
+            document.getElementById('loadingOverlay').style.display = 'none';
+            console.error('❌ Error:', error);
+            showToast('Network error. Please try again.', 'error');
+        }
+    }
 
     // ===== RESET FORM =====
     function resetForm() {
@@ -1743,7 +2589,7 @@ function submitProduct() {
         showToast('Add variants for products with different options like size, color, or stem count', 'info', 5000);
     }
 
-    function showToast(message, type = 'info') {
+    function showToast(message, type = 'info', duration = 3000) {
         let toastContainer = document.getElementById('toast-container');
         if (!toastContainer) {
             toastContainer = document.createElement('div');
@@ -1788,9 +2634,463 @@ function submitProduct() {
         setTimeout(() => {
             toast.style.animation = 'slideOut 0.3s ease';
             setTimeout(() => toast.remove(), 300);
-        }, 3000);
+        }, duration);
     }
 
+    // ===== STOCK REDUCTION MODAL FUNCTIONS =====
+    let selectedProductForReduction = null; // Track selected product for reduction
+    
+    function openStockReductionModal() {
+        const modal = document.getElementById('stockReductionModal');
+        
+        // Populate product/variant selector
+        populateProductVariantSelector();
+        
+        // Reset form
+        document.getElementById('reductionAmount').value = '';
+        // Select first reason radio button (spoilage)
+        document.querySelector('input[name="reductionReason"][value="spoilage"]').checked = true;
+        document.getElementById('reductionNotes').value = '';
+        document.getElementById('submitReductionBtn').disabled = false;
+        
+        modal.style.display = 'flex';
+    }
+
+    function populateProductVariantSelector() {
+    const selector = document.getElementById('productVariantSelector');
+    const mainProductId = document.getElementById('productId').value;
+    const mainProductName = document.getElementById('productName').value;
+    const mainProductStock = parseInt(document.getElementById('productStock').value) || 0;
+    
+    // Clear existing options
+    selector.innerHTML = '<option value="">-- Choose a product/variant --</option>';
+    
+    // Add main product with a marker that it's the main product
+    const mainOption = document.createElement('option');
+    mainOption.value = mainProductId;
+    mainOption.setAttribute('data-type', 'main');
+    mainOption.text = `${mainProductName} (Main - ${mainProductStock} units)`;
+    selector.appendChild(mainOption);
+    
+    // Add variants if they exist
+    const variantsScript = document.getElementById('productVariantsData');
+    if (variantsScript) {
+        try {
+            const data = JSON.parse(variantsScript.textContent);
+            if (data.variants && Array.isArray(data.variants)) {
+                data.variants.forEach(variant => {
+                    const variantOption = document.createElement('option');
+                    variantOption.value = variant.id;
+                    variantOption.setAttribute('data-type', 'variant');
+                    variantOption.text = `${variant.name} (Variant - ${variant.stock_quantity} units)`;
+                    selector.appendChild(variantOption);
+                });
+            }
+        } catch (e) {
+            console.log('No variants or error parsing variants data:', e);
+        }
+    }
+    
+    // Set initial selection to first option if exists
+    if (selector.options.length > 0) {
+        selector.selectedIndex = 0;
+    }
+    
+    updateStockDisplay();
+}
+
+    function updateStockDisplay() {
+        const selector = document.getElementById('productVariantSelector');
+        const selectedProductId = selector.value;
+        const selectedOption = selector.options[selector.selectedIndex];
+        
+        if (!selectedProductId) {
+            document.getElementById('modalProductName').textContent = 'Select a product';
+            document.getElementById('modalCurrentStock').textContent = '0';
+            document.getElementById('amountHint').textContent = 'Select a product first';
+            return;
+        }
+        
+        selectedProductForReduction = selectedProductId;
+        
+        // Extract stock from option text
+        const optionText = selectedOption.text;
+        const stockMatch = optionText.match(/(\d+)\s*units/);
+        const stock = stockMatch ? parseInt(stockMatch[1]) : 0;
+        
+        // Update display
+        const productName = optionText.split(' (')[0];
+        document.getElementById('modalProductName').textContent = productName;
+        document.getElementById('modalCurrentStock').textContent = stock;
+        document.getElementById('amountHint').textContent = `Available: ${stock} units`;
+        
+        // Reset amount validation
+        document.getElementById('reductionAmount').value = '';
+        validateReductionAmount();
+    }
+
+    function closeStockReductionModal() {
+        const modal = document.getElementById('stockReductionModal');
+        modal.style.display = 'none';
+    }
+
+    function validateReductionAmount() {
+        const amount = parseInt(document.getElementById('reductionAmount').value) || 0;
+        const stockText = document.getElementById('modalCurrentStock').textContent;
+        const currentStock = parseInt(stockText) || 0;
+        const amountHint = document.getElementById('amountHint');
+        const submitBtn = document.getElementById('submitReductionBtn');
+        
+        if (amount < 0) {
+            amountHint.textContent = '❌ Amount must be positive';
+            amountHint.style.color = '#f44336';
+            submitBtn.disabled = true;
+        } else if (amount > currentStock) {
+            amountHint.textContent = `❌ Cannot reduce by ${amount}. Max available: ${currentStock}`;
+            amountHint.style.color = '#f44336';
+            submitBtn.disabled = true;
+        } else if (amount === 0) {
+            amountHint.textContent = `Available: ${currentStock} units`;
+            amountHint.style.color = '#666';
+            submitBtn.disabled = true;
+        } else {
+            amountHint.textContent = `✓ Will reduce to ${currentStock - amount} units`;
+            amountHint.style.color = '#4CAF50';
+            submitBtn.disabled = false;
+        }
+    }
+
+    async function submitStockReduction() {
+    const amount = parseInt(document.getElementById('reductionAmount').value);
+    const reasonRadio = document.querySelector('input[name="reductionReason"]:checked');
+    const reason = reasonRadio ? reasonRadio.value : null;
+    const notes = document.getElementById('reductionNotes').value.trim();
+    const submitBtn = document.getElementById('submitReductionBtn');
+    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+    
+    // Get selected item info
+    const selector = document.getElementById('productVariantSelector');
+    const selectedValue = selector.value;
+    const selectedOption = selector.options[selector.selectedIndex];
+    const isVariant = selectedOption.getAttribute('data-type') === 'variant';
+    
+    if (!selectedValue) {
+        showToast('Please select a product or variant', 'error');
+        return;
+    }
+    
+    if (!amount || amount <= 0) {
+        showToast('Please enter a valid amount', 'error');
+        return;
+    }
+    
+    if (!reason) {
+        showToast('Please select a reason', 'error');
+        return;
+    }
+    
+    const mainProductId = document.getElementById('productId').value;
+    
+    // Build request body
+    const requestBody = {
+        amount: amount,
+        reason: reason,
+        reason_notes: notes
+    };
+    
+    // If this is a variant, add variant_id to the request
+    if (isVariant) {
+        requestBody.variant_id = parseInt(selectedValue);
+    }
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
+    
+    try {
+        const response = await fetch(`/seller/products/${mainProductId}/reduce-stock`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showToast(`✅ Stock reduced successfully!`, 'success');
+            
+            // Update the stock display
+            if (isVariant && data.variant) {
+                // Update variant stock in the selector
+                const option = document.querySelector(`#productVariantSelector option[value="${selectedValue}"]`);
+                if (option) {
+                    const currentText = option.text;
+                    const newStock = data.variant.stock_quantity;
+                    option.text = currentText.replace(/\((\d+) units\)/, `(${newStock} units)`);
+                }
+                
+                // Also update the variant data in the hidden JSON
+                updateVariantStockInData(selectedValue, data.variant.stock_quantity);
+            } else if (data.product) {
+                // Update main product stock
+                document.getElementById('currentStockDisplay').textContent = data.product.stock_quantity;
+                document.getElementById('productStock').value = data.product.stock_quantity;
+            }
+            
+            // Refresh the selector
+            setTimeout(() => {
+                populateProductVariantSelector();
+            }, 500);
+            
+            // Close modal
+            closeStockReductionModal();
+        } else {
+            showToast(`❌ Error: ${data.error || 'Failed to reduce stock'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error submitting stock reduction:', error);
+        showToast('Network error. Please try again.', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="ri-save-line"></i> Record Reduction';
+    }
+}
+
+// Helper function to update variant stock in the hidden data
+function updateVariantStockInData(variantId, newStock) {
+    const variantsScript = document.getElementById('productVariantsData');
+    if (variantsScript) {
+        try {
+            const data = JSON.parse(variantsScript.textContent);
+            if (data.variants) {
+                const variant = data.variants.find(v => v.id == variantId);
+                if (variant) {
+                    variant.stock_quantity = newStock;
+                    variantsScript.textContent = JSON.stringify(data);
+                }
+            }
+        } catch (e) {
+            console.log('Error updating variant data:', e);
+        }
+    }
+}
+
+    async function openStockHistoryModal() {
+        const modal = document.getElementById('stockHistoryModal');
+        const content = document.getElementById('stockHistoryContent');
+        
+        modal.style.display = 'flex';
+        content.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="ri-loader-4-line" style="font-size: 2rem; animation: spin 1s linear infinite;"></i><p>Loading history...</p></div>';
+        
+        await loadStockHistory();
+    }
+
+    function closeStockHistoryModal() {
+        const modal = document.getElementById('stockHistoryModal');
+        modal.style.display = 'none';
+    }
+
+    async function loadStockHistory() {
+    const productId = document.getElementById('productId').value;
+    const content = document.getElementById('stockHistoryContent');
+    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+    
+    if (!productId) {
+        content.innerHTML = '<p style="color: #f44336; padding: 20px;">Product ID not found. Please save product first.</p>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/seller/products/${productId}/stock-history`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to load history');
+        }
+        
+        if (!data.stock_history || (!data.stock_history.main && !data.stock_history.variants) || 
+            (data.stock_history.main.length === 0 && data.stock_history.variants.length === 0)) {
+            content.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px;">
+                    <i class="ri-database-2-line" style="font-size: 3rem; color: #ccc;"></i>
+                    <p style="color: #999; font-size: 1.1rem;">No reduction history yet</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Build product header with image
+        let html = `
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; border-left: 4px solid #2196F3;">
+                ${data.product.image ? `<img src="${data.product.image}" alt="${data.product.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px;">` : `<div style="width: 60px; height: 60px; background: #e0e0e0; border-radius: 6px; display: flex; align-items: center; justify-content: center;"><i class="ri-image-line" style="color: #999; font-size: 1.5rem;"></i></div>`}
+                <div>
+                    <h4 style="margin: 0 0 5px 0; font-size: 1.1rem; color: #333;">${data.product.name}</h4>
+                    <p style="margin: 0; font-size: 0.9rem; color: #666;"><i class="ri-database-2-line" style="margin-right: 4px;"></i>${data.main_product.reduction_count + data.variants.reduction_count} total reductions</p>
+                </div>
+            </div>
+        `;
+        
+        // REMOVED: The 3 summary cards (Current Stock, Main Product, Variants)
+        
+        // Helper function to build history section with variant image support
+        function buildHistorySection(title, reductions, color, icon) {
+            if (!reductions || reductions.length === 0) {
+                return '';
+            }
+            
+            let html = `<div style="margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid ${color};">
+                    <i class="${icon}" style="color: ${color}; font-size: 1.2rem;"></i>
+                    <h5 style="margin: 0; color: ${color}; font-size: 1rem;">${title}</h5>
+                    <span style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-left: auto;">
+                        ${reductions.length} reduction${reductions.length !== 1 ? 's' : ''}
+                    </span>
+                </div>`;
+            
+            reductions.forEach(reduction => {
+                const date = new Date(reduction.created_at).toLocaleString();
+                const reasonColors = {
+                    'spoilage': '#FFB74D',
+                    'damage': '#EF5350',
+                    'defect': '#AB47BC',
+                    'other': '#90A4AE'
+                };
+                const reasonIcons = {
+                    'spoilage': 'ri-leaf-line',
+                    'damage': 'ri-alert-line',
+                    'defect': 'ri-error-warning-line',
+                    'other': 'ri-question-line'
+                };
+                
+                const reasonColor = reasonColors[reduction.reason] || '#90A4AE';
+                const reasonIcon = reasonIcons[reduction.reason] || 'ri-question-line';
+                
+                // Get the appropriate image - prioritize variant image if available
+                let itemImage = reduction.product_image; // Default to product image
+                let itemName = reduction.product_name;
+                
+                // If this is a variant reduction and variant_info exists, use variant image
+                if (reduction.variant_info && reduction.variant_info.id) {
+                    // Check if variant image URL is available in the reduction data
+                    if (reduction.variant_image_url) {
+                        itemImage = reduction.variant_image_url;
+                    }
+                    // Add variant name to display
+                    itemName = `${reduction.product_name} - ${reduction.variant_info.name}`;
+                }
+                
+                html += `
+                    <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fafafa;">
+                        <!-- Product/Variant info header -->
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e0e0e0;">
+                            ${itemImage ? `<img src="${itemImage}" alt="${itemName}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; flex-shrink: 0;">` : `<div style="width: 40px; height: 40px; background: #e0e0e0; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><i class="ri-image-line" style="color: #999; font-size: 1rem;"></i></div>`}
+                            <div style="flex: 1;">
+                                <div style="font-size: 0.9rem; font-weight: 500; color: #333;">
+                                    ${itemName}
+                                    ${reduction.variant_info ? `<span style="font-size: 0.75rem; color: #9C27B0; margin-left: 6px;">(Variant)</span>` : ''}
+                                </div>
+                                <div style="font-size: 0.75rem; color: #999;">Reduced by ${reduction.reduced_by_user || 'Unknown'}</div>
+                            </div>
+                            <div style="text-align: right; font-size: 0.75rem; color: #999; white-space: nowrap;">
+                                ${date}
+                            </div>
+                        </div>
+                        
+                        <!-- Reduction details -->
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                <div style="background: ${reasonColor}; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <i class="${reasonIcon}"></i>
+                                </div>
+                                <div style="flex: 1;">
+                                    <strong style="font-size: 1rem; color: #d32f2f;">-${reduction.reduction_amount} units</strong>
+                                    <div style="font-size: 0.85rem; color: #666; margin-top: 2px;">
+                                        <span style="background: ${reasonColor}; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 500;">
+                                            ${reduction.reason.charAt(0).toUpperCase() + reduction.reason.slice(1)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${reduction.reason_notes ? `<div style="background: white; padding: 10px; border-radius: 4px; border-left: 3px solid ${reasonColor}; font-size: 0.9rem; color: #555; margin-top: 10px;"><strong>Notes:</strong> ${reduction.reason_notes}</div>` : ''}
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            return html;
+        }
+        
+        // Add main product history
+        html += buildHistorySection('Main Product', data.stock_history.main, '#4CAF50', 'ri-box-3-line');
+        
+        // Add variants history
+        html += buildHistorySection('Variants', data.stock_history.variants, '#9C27B0', 'ri-layout-grid-line');
+        
+        content.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error loading stock history:', error);
+        content.innerHTML = `
+            <div style="text-align: center; padding: 20px;">
+                <p style="color: #f44336; margin-bottom: 10px;">❌ Error loading history: ${error.message}</p>
+                <button onclick="loadStockHistory()" style="background: #2196F3; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                    <i class="ri-refresh-line"></i> Retry
+                </button>
+            </div>
+        `;
+    }
+}
+
+    // Add input event listener for real-time validation
+    document.addEventListener('DOMContentLoaded', function() {
+        const amountInput = document.getElementById('reductionAmount');
+        if (amountInput) {
+            amountInput.addEventListener('input', validateReductionAmount);
+        }
+        
+        // Modal backdrop click handlers - close when clicking outside modal
+        const stockReductionModal = document.getElementById('stockReductionModal');
+        const stockHistoryModal = document.getElementById('stockHistoryModal');
+        
+        if (stockReductionModal) {
+            stockReductionModal.addEventListener('click', function(e) {
+                if (e.target === stockReductionModal) {
+                    closeStockReductionModal();
+                }
+            });
+        }
+        
+        if (stockHistoryModal) {
+            stockHistoryModal.addEventListener('click', function(e) {
+                if (e.target === stockHistoryModal) {
+                    closeStockHistoryModal();
+                }
+            });
+        }
+        
+        // Add spin animation for loader
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+    });
+
+    // ===== GLOBAL FUNCTION EXPORTS =====
     window.addVariantRow = addVariantRow;
     window.removeVariantRow = removeVariantRow;
     window.removeVariantImage = removeVariantImage;
@@ -1800,5 +3100,18 @@ function submitProduct() {
     window.resetForm = resetForm;
     window.toggleVariantsHelp = toggleVariantsHelp;
     window.showToast = showToast;
+    window.loadStoreSubcategories = loadStoreSubcategories;
+    window.showAddSubcategoryModal = showAddSubcategoryModal;
+    window.closeAddSubcategoryModal = closeAddSubcategoryModal;
+    window.createSubcategory = createSubcategory;
+    window.openStockReductionModal = openStockReductionModal;
+    window.closeStockReductionModal = closeStockReductionModal;
+    window.submitStockReduction = submitStockReduction;
+    window.openStockHistoryModal = openStockHistoryModal;
+    window.closeStockHistoryModal = closeStockHistoryModal;
+    window.loadStockHistory = loadStockHistory;
+    window.validateReductionAmount = validateReductionAmount;
+    window.populateProductVariantSelector = populateProductVariantSelector;
+    window.updateStockDisplay = updateStockDisplay;
 </script>
 {% endblock %}

@@ -16,6 +16,69 @@
 <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css' />
 
 <style>
+    /* Ensure QR images are always visible */
+.qr-slot img {
+    display: block !important;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: white;
+}
+
+.qr-slot.has-image {
+    border: 2px solid var(--deep-rose) !important;
+}
+
+.qr-slot.has-image .slot-placeholder {
+    display: none !important;
+}
+
+.qr-slot.has-image img {
+    display: block !important;
+}
+
+.qr-slot.has-image .remove-image {
+    display: flex !important;
+}
+
+.qr-slot .primary-badge {
+    display: none;
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    background: var(--deep-rose);
+    color: white;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    z-index: 2;
+}
+
+.qr-slot.has-image .primary-badge {
+    display: none; /* Will be shown via JS for first image */
+}
+
+/* QR Preview */
+.qr-preview-item {
+    width: 80px;
+    height: 80px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 2px solid var(--border);
+    position: relative;
+}
+
+.qr-preview-item.primary {
+    border-color: var(--deep-rose);
+}
+
+.qr-preview-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: white;
+    display: block !important;
+}
     /* ─── Layout ─── */
     .settings-container {
         max-width: 1400px;
@@ -1047,18 +1110,35 @@
                 </div>
                 <div class="card-body">
                     <!-- QR Code Gallery -->
-                    <div class="form-group">
-                        <label class="form-label">GCash QR Codes <span class="form-hint" style="margin-left: 0.5rem;">(Upload up to 3 QR codes)</span></label>
-                        
-                        <div class="qr-gallery" id="qrGallery">
-                            <!-- QR slots will be generated here -->
-                        </div>
-                        
-                        <div class="image-upload-tips" style="margin-top: 1rem;">
-                            <i class="ri-information-line"></i>
-                            <span>First QR code will be used as the primary payment QR. Customers can choose between multiple GCash accounts. Supported formats: PNG, JPG up to 2MB each.</span>
-                        </div>
+                       
+                <div class="form-group">
+                    <label class="form-label">GCash QR Codes <span class="form-hint" style="margin-left: 0.5rem;">(Up to 3 QR codes)</span></label>
+                    
+                    <div class="qr-gallery" id="qrGallery">
+                        <!-- QR slots will be generated here -->
                     </div>
+                    
+                    <!-- Hidden template for QR slots -->
+                    <template id="qr-slot-template">
+                        <div class="qr-slot">
+                            <input type="file" accept="image/png,image/jpeg,image/jpg" style="display: none;">
+                            <img src="" alt="GCash QR" style="display: none;">
+                            <div class="slot-placeholder">
+                                <i class="ri-qr-code-line"></i>
+                                <span>Add QR</span>
+                            </div>
+                            <button class="remove-image" type="button">
+                                <i class="ri-close-line"></i>
+                            </button>
+                            <div class="primary-badge">Primary</div>
+                        </div>
+                    </template>
+                    
+                    <div class="image-upload-tips" style="margin-top: 1rem;">
+                        <i class="ri-information-line"></i>
+                        <span>First QR code will be used as the primary payment QR. Customers can choose between multiple GCash accounts.</span>
+                    </div>
+                </div>
                     
                     <!-- Payment Instructions -->
                     <div class="form-group">
@@ -1066,17 +1146,7 @@
                         <textarea id="gcashInstructions" class="form-control" rows="3" placeholder="e.g., Please send exact amount and include your order number in the message...">{{ store.gcash_instructions or '' }}</textarea>
                         <div class="form-hint">These instructions will be shown to customers when they choose GCash payment</div>
                     </div>
-                    
-                    <!-- Preview how it looks to customers -->
-                    <div style="margin-top: 1.5rem; padding: 1rem; background: var(--cream); border-radius: var(--radius-lg);">
-                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                            <i class="ri-eye-line" style="color: var(--deep-rose);"></i>
-                            <span style="font-weight: 600;">Customer Preview</span>
-                        </div>
-                        <div id="qrPreview" class="qr-preview-container">
-                            <!-- Preview will be updated dynamically -->
-                        </div>
-                    </div>
+                
                 </div>
             </div>
             
@@ -1108,6 +1178,8 @@
 <input type="hidden" id="zone-delivery-area" name="zone_delivery_area" value="{{ store.to_dict().zone_geojson or '' }}">
 <input type="hidden" id="municipality-delivery-area" name="municipality_delivery_area" value="{{ store.to_dict().municipality_geojson or '' }}">
 <input type="hidden" id="clear-zone-flag" value="false">
+<input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+
 <!-- Store data as JSON -->
 <script id="store-data" type="application/json">
 {
@@ -1139,6 +1211,7 @@
     "gcash_instructions": {{ store.gcash_instructions|tojson if store.gcash_instructions else 'null' }}
 }
 </script>
+
 <!-- Toast notification placeholder -->
 <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;"></div>
 
@@ -1154,7 +1227,6 @@
     }
 </style>
 {% endblock %}
-
 
 {% block extra_js %}
 <script>
@@ -1278,162 +1350,152 @@
         }, 50);
     }
 
-    // ===== GCASH QR CODE HANDLING =====
+    // ===== UPDATED GCASH QR CODE HANDLING WITH CLOUDINARY =====
     let qrSlots = [];
     const MAX_QR = 3;
 
     // Initialize QR slots on page load
-    function initializeQRSlots() {
-        const gallery = document.getElementById('qrGallery');
-        if (!gallery) return;
-        
-        gallery.innerHTML = '';
-        qrSlots = [];
-        
-        // Get store data
-        let storeData;
-        try {
-            const storeDataElement = document.getElementById('store-data');
-            storeData = JSON.parse(storeDataElement.textContent);
-            debug.log('Store data for QR:', storeData);
-        } catch (e) {
-            debug.error('Failed to parse store data for QR:', e);
-            storeData = { gcash_qr_data: [] };
-        }
-        
-        // Get the QR data from storeData - should be an array of QR objects
-        let existingQRs = storeData.gcash_qr_data || [];
-        debug.log('QR data from database:', existingQRs);
-        
-        for (let i = 0; i < MAX_QR; i++) {
-            // Pass the QR object if it exists at this index
-            const qrData = existingQRs[i] || null;
-            createQRSlot(i, qrData);
-        }
-        
-        updateQRPreview();
+   function initializeQRSlots() {
+    const gallery = document.getElementById('qrGallery');
+    if (!gallery) return;
+    
+    // Clear existing content
+    gallery.innerHTML = '';
+    
+    // Get store data with QR codes
+    let storeData;
+    try {
+        const storeDataElement = document.getElementById('store-data');
+        storeData = JSON.parse(storeDataElement.textContent);
+        console.log('📸 Loading QR codes from store data:', storeData.gcash_qr_data);
+    } catch (e) {
+        console.error('Failed to parse store data:', e);
+        storeData = { gcash_qr_data: [] };
     }
-
-    function createQRSlot(index, qrData = null) {
-        const gallery = document.getElementById('qrGallery');
+    
+    const existingQRs = storeData.gcash_qr_data || [];
+    
+    // Create 3 slots
+    for (let i = 0; i < 3; i++) {
+        const qrData = existingQRs[i] || null;
+        createQRSlot(i, qrData);
+    }
+}
+   function createQRSlot(index, qrData = null) {
+    const gallery = document.getElementById('qrGallery');
+    
+    // Create slot container
+    const slot = document.createElement('div');
+    slot.className = 'qr-slot';
+    if (qrData) slot.classList.add('has-image');
+    slot.dataset.index = index;
+    
+    // File input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/png,image/jpeg,image/jpg';
+    fileInput.style.display = 'none';
+    fileInput.dataset.index = index;
+    
+    // Image element
+    const img = document.createElement('img');
+    img.alt = `GCash QR ${index + 1}`;
+    
+    // Placeholder
+    const placeholder = document.createElement('div');
+    placeholder.className = 'slot-placeholder';
+    
+    // Remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-image';
+    removeBtn.innerHTML = '<i class="ri-close-line"></i>';
+    
+    // Primary badge
+    const primaryBadge = document.createElement('div');
+    primaryBadge.className = 'primary-badge';
+    primaryBadge.textContent = 'Primary';
+    
+    // Assemble slot
+    slot.appendChild(fileInput);
+    slot.appendChild(img);
+    slot.appendChild(placeholder);
+    slot.appendChild(removeBtn);
+    slot.appendChild(primaryBadge);
+    
+    // Add click handler
+    slot.addEventListener('click', (e) => {
+        if (e.target !== removeBtn && !removeBtn.contains(e.target)) {
+            fileInput.click();
+        }
+    });
+    
+    // Add remove handler
+    removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeQR(index);
+    });
+    
+    // Add file input handler
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) handleQRFile(file, index);
+    });
+    
+    // If there's existing QR data, show the image
+    if (qrData && qrData.url) {
+        console.log(`✅ Loading QR for slot ${index}:`, qrData.url);
         
-        const slot = document.createElement('div');
-        slot.className = 'qr-slot';
-        slot.dataset.index = index;
+        // Set image source
+        img.src = qrData.url;
+        img.style.display = 'block';
         
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = 'image/png,image/jpeg,image/jpg';
-        fileInput.style.display = 'none';
-        fileInput.dataset.index = index;
-        fileInput.onchange = (e) => handleQRSelect(e, index);
+        // Hide placeholder
+        placeholder.style.display = 'none';
         
-        const img = document.createElement('img');
-        img.style.display = 'none';
+        // Show remove button
+        removeBtn.style.display = 'flex';
         
-        const placeholder = document.createElement('div');
-        placeholder.className = 'slot-placeholder';
+        // Show primary badge for first slot or if marked primary
+        if (qrData.is_primary || index === 0) {
+            primaryBadge.style.display = 'block';
+        }
         
+        // Store QR data in slot
+        slot.dataset.qrId = qrData.id;
+        slot.dataset.publicId = qrData.public_id;
+        slot.dataset.hasImage = 'true';
+    } else {
+        // Set placeholder based on index
         if (index === 0) {
             placeholder.innerHTML = '<i class="ri-qr-code-line"></i><span>Primary QR</span>';
         } else {
             placeholder.innerHTML = '<i class="ri-qr-code-line"></i><span>Add QR</span>';
         }
-        
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'remove-image';
-        removeBtn.innerHTML = '<i class="ri-close-line"></i>';
-        removeBtn.onclick = (e) => {
-            e.stopPropagation();
-            removeQR(index);
-        };
-        
-        const primaryBadge = document.createElement('div');
-        primaryBadge.className = 'primary-badge';
-        primaryBadge.textContent = 'Primary';
-        
-        slot.appendChild(fileInput);
-        slot.appendChild(img);
-        slot.appendChild(placeholder);
-        slot.appendChild(removeBtn);
-        slot.appendChild(primaryBadge);
-        
-        slot.onclick = () => fileInput.click();
-        
-        slot.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            slot.style.borderColor = 'var(--deep-rose)';
-            slot.style.background = 'rgba(181, 68, 90, 0.02)';
-        });
-        
-        slot.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            slot.style.borderColor = 'var(--border-strong)';
-            slot.style.background = 'var(--cream)';
-        });
-        
-        slot.addEventListener('drop', (e) => {
-            e.preventDefault();
-            slot.style.borderColor = 'var(--border-strong)';
-            slot.style.background = 'var(--cream)';
-            
-            const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) {
-                handleQRFile(file, index);
-            }
-        });
-        
-        gallery.appendChild(slot);
-        
-        // Store QR data in the slot
-        qrSlots[index] = {
-            slot,
-            fileInput,
-            img,
-            placeholder,
-            removeBtn,
-            primaryBadge,
-            file: null,
-            hasImage: false,
-            qrId: qrData ? qrData.id : null,
-            filename: qrData ? qrData.filename : null,
-            isPrimary: qrData ? qrData.is_primary : (index === 0),
-            markedForDeletion: false
-        };
-        
-        // If there's existing QR data, load the image
-        if (qrData && qrData.url) {
-            const imageUrl = qrData.url;
-            debug.log(`Loading QR image for slot ${index}: ${imageUrl}`);
-            
-            // Test if the image loads successfully
-            const testImg = new Image();
-            testImg.onload = () => {
-                // Image loaded successfully
-                img.src = imageUrl;
-                img.style.display = 'block';
-                placeholder.style.display = 'none';
-                slot.classList.add('has-image');
-                slot.style.border = '2px solid var(--deep-rose)';
-                removeBtn.style.display = 'flex';
-                qrSlots[index].hasImage = true;
-                
-                if (qrData.is_primary || index === 0) {
-                    primaryBadge.style.display = 'block';
-                }
-                
-                debug.log(`✅ QR image loaded for slot ${index}`);
-                updateQRPreview();
-            };
-            
-            testImg.onerror = () => {
-                debug.error(`❌ Failed to load QR image for slot ${index}: ${imageUrl}`);
-                // Keep the placeholder visible
-            };
-            
-            testImg.src = imageUrl;
-        }
+        placeholder.style.display = 'flex';
+        img.style.display = 'none';
+        removeBtn.style.display = 'none';
+        primaryBadge.style.display = 'none';
     }
+    
+    gallery.appendChild(slot);
+    
+    // Store slot reference
+    qrSlots[index] = {
+        element: slot,
+        fileInput,
+        img,
+        placeholder,
+        removeBtn,
+        primaryBadge,
+        qrId: qrData ? qrData.id : null,
+        publicId: qrData ? qrData.public_id : null,
+        url: qrData ? qrData.url : null,
+        hasImage: !!qrData,
+        cloudinaryData: null,  // Add this
+        markedForDeletion: false,  // Add this
+        file: null  // Add this
+    };
+}
 
     function handleQRSelect(event, index) {
         const file = event.target.files[0];
@@ -1441,7 +1503,8 @@
         handleQRFile(file, index);
     }
 
-    function handleQRFile(file, index) {
+    // UPDATED: Upload to Cloudinary first, then show preview
+    async function handleQRFile(file, index) {
         // Validate file type
         if (!file.type.match('image.*')) {
             showToast('Please upload an image file', 'error');
@@ -1457,23 +1520,55 @@
         const slotData = qrSlots[index];
         
         // Show loading
-        slotData.placeholder.innerHTML = '<i class="ri-loader-4-line ri-spin" style="font-size: 32px;"></i><span style="font-size: 11px; margin-top: 0.5rem;">Processing...</span>';
+        slotData.placeholder.innerHTML = '<i class="ri-loader-4-line ri-spin" style="font-size: 32px;"></i><span style="font-size: 11px; margin-top: 0.5rem;">Uploading to Cloudinary...</span>';
         
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            slotData.img.src = e.target.result;
+        try {
+            // Get CSRF token
+            const csrfToken = document.getElementById('csrf_token')?.value || '';
+            
+            // Create FormData for Cloudinary upload
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('folder', 'e-flowers/gcash_qr');
+            
+            // Upload to Cloudinary
+            debug.log('📤 Uploading to Cloudinary...');
+            const uploadResponse = await fetch('/api/v1/cloudinary/upload', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData
+            });
+            
+            const uploadData = await uploadResponse.json();
+            
+            if (!uploadData.success) {
+                throw new Error(uploadData.error || 'Upload failed');
+            }
+            
+            debug.log('✅ Cloudinary upload successful:', uploadData);
+            
+            // Store Cloudinary data in the slot
+            slotData.cloudinaryData = {
+                public_id: uploadData.public_id,
+                url: uploadData.url
+            };
+            
+            // Show preview
+            slotData.img.src = uploadData.url;
             slotData.img.style.display = 'block';
             slotData.placeholder.style.display = 'none';
             slotData.slot.classList.add('has-image');
             slotData.slot.style.border = '2px solid var(--deep-rose)';
             slotData.removeBtn.style.display = 'flex';
-            slotData.file = file;
             slotData.hasImage = true;
+            slotData.file = file; // Keep file reference for backward compatibility
             
             // If this was an existing QR code, mark it for deletion
             if (slotData.qrId) {
                 slotData.markedForDeletion = true;
-                console.log(`🔄 Replacing existing QR ID ${slotData.qrId} with new file`);
+                console.log(`🔄 Replacing existing QR ID ${slotData.qrId} with new Cloudinary image`);
             }
             
             // Update primary badge
@@ -1494,51 +1589,328 @@
             }
             
             updateQRPreview();
-            showToast('QR code added', 'success');
-        };
-        reader.readAsDataURL(file);
+            showToast('QR code uploaded to Cloudinary', 'success');
+            
+        } catch (error) {
+            debug.error('❌ Error uploading to Cloudinary:', error);
+            showToast('Failed to upload image: ' + error.message, 'error');
+            
+            // Reset the slot
+            slotData.placeholder.innerHTML = index === 0 ? 
+                '<i class="ri-qr-code-line"></i><span>Primary QR</span>' : 
+                '<i class="ri-qr-code-line"></i><span>Add QR</span>';
+            slotData.placeholder.style.display = 'flex';
+            slotData.fileInput.value = '';
+        }
     }
 
-    function removeQR(index) {
-        const slotData = qrSlots[index];
-        if (!slotData) return;
+    // ===== QR CODE INITIALIZATION - ALWAYS VISIBLE =====
+document.addEventListener('DOMContentLoaded', function() {
+    initializeQRSlots();
+});
+
+function initializeQRSlots() {
+    const gallery = document.getElementById('qrGallery');
+    if (!gallery) return;
+    
+    // Clear existing content
+    gallery.innerHTML = '';
+    
+    // Get store data with QR codes
+    let storeData;
+    try {
+        const storeDataElement = document.getElementById('store-data');
+        storeData = JSON.parse(storeDataElement.textContent);
+        console.log('📸 Loading QR codes from store data:', storeData.gcash_qr_data);
+    } catch (e) {
+        console.error('Failed to parse store data:', e);
+        storeData = { gcash_qr_data: [] };
+    }
+    
+    const existingQRs = storeData.gcash_qr_data || [];
+    
+    // Create 3 slots
+    for (let i = 0; i < 3; i++) {
+        const qrData = existingQRs[i] || null;
+        createQRSlot(i, qrData);
+    }
+}
+
+function createQRSlot(index, qrData = null) {
+    const gallery = document.getElementById('qrGallery');
+    
+    // Create slot container
+    const slot = document.createElement('div');
+    slot.className = 'qr-slot';
+    if (qrData) slot.classList.add('has-image');
+    slot.dataset.index = index;
+    
+    // File input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/png,image/jpeg,image/jpg';
+    fileInput.style.display = 'none';
+    fileInput.dataset.index = index;
+    
+    // Image element
+    const img = document.createElement('img');
+    img.alt = `GCash QR ${index + 1}`;
+    
+    // Placeholder
+    const placeholder = document.createElement('div');
+    placeholder.className = 'slot-placeholder';
+    
+    // Remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-image';
+    removeBtn.innerHTML = '<i class="ri-close-line"></i>';
+    
+    // Primary badge
+    const primaryBadge = document.createElement('div');
+    primaryBadge.className = 'primary-badge';
+    primaryBadge.textContent = 'Primary';
+    
+    // Assemble slot
+    slot.appendChild(fileInput);
+    slot.appendChild(img);
+    slot.appendChild(placeholder);
+    slot.appendChild(removeBtn);
+    slot.appendChild(primaryBadge);
+    
+    // Add click handler
+    slot.addEventListener('click', (e) => {
+        if (e.target !== removeBtn && !removeBtn.contains(e.target)) {
+            fileInput.click();
+        }
+    });
+    
+    // Add remove handler
+    removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeQR(index);
+    });
+    
+    // Add file input handler
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) handleQRFile(file, index);
+    });
+    
+    // If there's existing QR data, show the image
+    if (qrData && qrData.url) {
+        console.log(`✅ Loading QR for slot ${index}:`, qrData.url);
         
-        // Only confirm if there's an existing QR code
-        if (slotData.qrId && slotData.hasImage) {
-            if (!confirm('Are you sure you want to remove this QR code?')) {
-                return;
-            }
-            slotData.markedForDeletion = true;
-            console.log(`🗑️ Marked QR ID ${slotData.qrId} for deletion`);
+        // Set image source
+        img.src = qrData.url;
+        img.style.display = 'block';
+        
+        // Hide placeholder
+        placeholder.style.display = 'none';
+        
+        // Show remove button
+        removeBtn.style.display = 'flex';
+        
+        // Show primary badge for first slot or if marked primary
+        if (qrData.is_primary || index === 0) {
+            primaryBadge.style.display = 'block';
         }
         
-        // Clear the slot
-        slotData.fileInput.value = '';
-        slotData.img.src = '';
-        slotData.img.style.display = 'none';
-        slotData.placeholder.innerHTML = index === 0 ? 
+        // Store QR data in slot
+        slot.dataset.qrId = qrData.id;
+        slot.dataset.publicId = qrData.public_id;
+        slot.dataset.hasImage = 'true';
+    } else {
+        // Set placeholder based on index
+        if (index === 0) {
+            placeholder.innerHTML = '<i class="ri-qr-code-line"></i><span>Primary QR</span>';
+        } else {
+            placeholder.innerHTML = '<i class="ri-qr-code-line"></i><span>Add QR</span>';
+        }
+        placeholder.style.display = 'flex';
+        img.style.display = 'none';
+        removeBtn.style.display = 'none';
+        primaryBadge.style.display = 'none';
+    }
+    
+    gallery.appendChild(slot);
+    
+    // Store slot reference
+    qrSlots[index] = {
+        element: slot,
+        fileInput,
+        img,
+        placeholder,
+        removeBtn,
+        primaryBadge,
+        qrId: qrData ? qrData.id : null,
+        publicId: qrData ? qrData.public_id : null,
+        url: qrData ? qrData.url : null,
+        hasImage: !!qrData
+    };
+}
+
+function removeQR(index) {
+    const slot = qrSlots[index];
+    if (!slot) return;
+    
+    // Confirm if removing existing QR
+    if (slot.hasImage && slot.qrId) {
+        if (!confirm('Remove this QR code?')) return;
+        
+        // Mark for deletion in the slot object (not just dataset)
+        slot.markedForDeletion = true;
+    }
+    
+    // Reset the slot
+    slot.img.src = '';
+    slot.img.style.display = 'none';
+    slot.placeholder.style.display = 'flex';
+    slot.placeholder.innerHTML = index === 0 ? 
+        '<i class="ri-qr-code-line"></i><span>Primary QR</span>' : 
+        '<i class="ri-qr-code-line"></i><span>Add QR</span>';
+    slot.removeBtn.style.display = 'none';
+    slot.primaryBadge.style.display = 'none';
+    slot.element.classList.remove('has-image');
+    slot.fileInput.value = '';
+    
+    // Update data
+    slot.hasImage = false;
+    slot.file = null;
+    // Keep qrId and publicId to track deletion
+    
+    // Update primary badge for remaining images
+    updatePrimaryBadge();
+}
+
+function updatePrimaryBadge() {
+    // Find first slot with image
+    for (let i = 0; i < qrSlots.length; i++) {
+        if (qrSlots[i] && qrSlots[i].hasImage) {
+            qrSlots[i].primaryBadge.style.display = 'block';
+            break;
+        }
+    }
+}
+
+function updateQRPreview() {
+    const preview = document.getElementById('qrPreview');
+    if (!preview) return;
+    
+    preview.innerHTML = '';
+    
+    let hasImages = false;
+    qrSlots.forEach((slot, index) => {
+        if (slot && slot.hasImage && slot.img && slot.img.src) {
+            hasImages = true;
+            const previewItem = document.createElement('div');
+            previewItem.className = `qr-preview-item ${index === 0 ? 'primary' : ''}`;
+            previewItem.innerHTML = `
+                <img src="${slot.img.src}" alt="GCash QR ${index + 1}">
+                ${index === 0 ? '<div class="qr-preview-badge">Primary</div>' : ''}
+            `;
+            preview.appendChild(previewItem);
+        }
+    });
+    
+    if (!hasImages) {
+        preview.innerHTML = '<p style="color: var(--muted); text-align: center; padding: 1rem;">No QR codes uploaded yet</p>';
+    }
+}
+
+// Handle new QR file upload
+async function handleQRFile(file, index) {
+    // Validate file
+    if (!file.type.match('image.*')) {
+        showToast('Please upload an image file', 'error');
+        return;
+    }
+    
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('File size must be less than 2MB', 'error');
+        return;
+    }
+    
+    const slot = qrSlots[index];
+    
+    // Show loading
+    slot.placeholder.innerHTML = '<i class="ri-loader-4-line ri-spin" style="font-size: 32px;"></i><span>Uploading...</span>';
+    
+    try {
+        // Get CSRF token
+        const csrfToken = document.getElementById('csrf_token')?.value || '';
+        
+        // Create FormData for Cloudinary upload
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('folder', 'e-flowers/gcash_qr');
+        
+        // Upload to Cloudinary
+        debug.log('📤 Uploading to Cloudinary...');
+        const uploadResponse = await fetch('/api/v1/cloudinary/upload', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData
+        });
+        
+        const uploadData = await uploadResponse.json();
+        
+        if (!uploadData.success) {
+            throw new Error(uploadData.error || 'Upload failed');
+        }
+        
+        debug.log('✅ Cloudinary upload successful:', uploadData);
+        
+        // IMPORTANT: If this slot already has an existing QR, mark it for deletion
+        if (slot.qrId) {
+            slot.markedForDeletion = true;
+            console.log(`🔄 Marking old QR ID ${slot.qrId} for deletion`);
+        }
+        
+        // Store Cloudinary data in the slot
+        slot.cloudinaryData = {
+            public_id: uploadData.public_id,
+            url: uploadData.url
+        };
+        
+        // Update the image display
+        slot.img.src = uploadData.url;
+        slot.img.style.display = 'block';
+        slot.placeholder.style.display = 'none';
+        slot.removeBtn.style.display = 'flex';
+        slot.element.classList.add('has-image');
+        slot.hasImage = true;
+        slot.file = file;
+        
+        // Keep the qrId and publicId for deletion tracking, but clear them if this is a new image
+        // (we already set markedForDeletion above)
+        
+        // Update primary badge
+        if (index === 0) {
+            slot.primaryBadge.style.display = 'block';
+        } else {
+            // Check if this is the first image (if slot 0 is empty, this becomes primary)
+            if (!qrSlots[0] || !qrSlots[0].hasImage) {
+                updatePrimaryBadge();
+            }
+        }
+        
+        showToast('QR code uploaded to Cloudinary', 'success');
+        
+    } catch (error) {
+        debug.error('❌ Error uploading to Cloudinary:', error);
+        showToast('Failed to upload image: ' + error.message, 'error');
+        
+        // Reset the slot
+        slot.placeholder.innerHTML = index === 0 ? 
             '<i class="ri-qr-code-line"></i><span>Primary QR</span>' : 
             '<i class="ri-qr-code-line"></i><span>Add QR</span>';
-        slotData.placeholder.style.display = 'flex';
-        slotData.slot.classList.remove('has-image');
-        slotData.slot.style.border = '2px dashed var(--border-strong)';
-        slotData.removeBtn.style.display = 'none';
-        slotData.primaryBadge.style.display = 'none';
-        slotData.file = null;
-        slotData.hasImage = false;
-        // Keep qrId and filename to track deletion
-        
-        // Update primary badge for remaining images
-        for (let i = 0; i < qrSlots.length; i++) {
-            if (qrSlots[i] && qrSlots[i].hasImage) {
-                qrSlots[i].primaryBadge.style.display = i === 0 ? 'block' : 'none';
-                qrSlots[i].isPrimary = (i === 0);
-                break;
-            }
-        }
-        
-        updateQRPreview();
+        slot.placeholder.style.display = 'flex';
+        slot.img.style.display = 'none';
+        slot.fileInput.value = '';
     }
+}
 
     function updateQRPreview() {
         const preview = document.getElementById('qrPreview');
@@ -2787,7 +3159,7 @@
             }
         }
         
-        // Save all settings
+        // Save all settings - UPDATED to send Cloudinary data
         const saveBtn = document.getElementById('save-all-btn');
         if (saveBtn) {
             saveBtn.addEventListener('click', async () => {
@@ -2837,26 +3209,46 @@
                 const selectedCheckboxes = document.querySelectorAll('.municipality-check:checked');
                 const selectedMunicipalities = Array.from(selectedCheckboxes).map(cb => cb.value);
                 
-                // Collect GCash QR data
-                const qrFiles = [];
+                // ===== UPDATED: Collect GCash QR data with Cloudinary info =====
                 const qrIdsToKeep = [];
                 const qrIdsToDelete = [];
+                const cloudinaryQRData = []; // Array to hold new Cloudinary uploads
 
                 qrSlots.forEach((slot, index) => {
-                    if (slot.file) {
-                        qrFiles.push({
-                            file: slot.file,
-                            index: index
-                        });
-                    }
+                    console.log(`Slot ${index}:`, {
+                        qrId: slot.qrId,
+                        hasImage: slot.hasImage,
+                        markedForDeletion: slot.markedForDeletion,
+                        hasCloudinaryData: !!slot.cloudinaryData
+                    });
                     
-                    if (slot.qrId && !slot.markedForDeletion && !slot.file && slot.hasImage) {
+                    // Track existing QRs to keep (has qrId, has image, not marked for deletion, no new cloudinary data)
+                    if (slot.qrId && slot.hasImage && !slot.markedForDeletion && !slot.cloudinaryData) {
                         qrIdsToKeep.push(slot.qrId);
+                        console.log(`  → Keeping QR ID ${slot.qrId}`);
                     }
                     
-                    if (slot.qrId && (slot.markedForDeletion || (slot.file && slot.markedForDeletion))) {
+                    // Track QRs to delete (has qrId and marked for deletion)
+                    if (slot.qrId && slot.markedForDeletion) {
                         qrIdsToDelete.push(slot.qrId);
+                        console.log(`  → Deleting QR ID ${slot.qrId}`);
                     }
+                    
+                    // Track new Cloudinary uploads (has cloudinaryData)
+                    if (slot.cloudinaryData) {
+                        cloudinaryQRData.push({
+                            index: index,
+                            public_id: slot.cloudinaryData.public_id,
+                            url: slot.cloudinaryData.url
+                        });
+                        console.log(`  → New upload: ${slot.cloudinaryData.public_id}`);
+                    }
+                });
+
+                console.log('QR Summary:', {
+                    keep: qrIdsToKeep,
+                    delete: qrIdsToDelete,
+                    new: cloudinaryQRData.length
                 });
 
                 const gcashInstructions = document.getElementById('gcashInstructions').value;
@@ -2895,12 +3287,24 @@
                 
                 formData.append('clear_delivery_zone', clearZoneFlag);
                 
+                // ===== UPDATED: Add Cloudinary QR data =====
                 formData.append('gcash_qr_ids_to_keep', JSON.stringify(qrIdsToKeep));
                 formData.append('gcash_qr_ids_to_delete', JSON.stringify(qrIdsToDelete));
+                
+                // Add each Cloudinary upload as separate fields
+                cloudinaryQRData.forEach((qr, idx) => {
+                    formData.append(`gcash_qr_public_id_${idx}`, qr.public_id);
+                    formData.append(`gcash_qr_url_${idx}`, qr.url);
+                    formData.append(`gcash_qr_filename_${idx}`, `gcash_qr_${qr.public_id}.jpg`);
+                });
+                
                 formData.append('gcash_instructions', gcashInstructions);
                 
-                qrFiles.forEach(item => {
-                    formData.append(`gcash_qr_${item.index}`, item.file);
+                // Also include file uploads as backup (but Cloudinary data is preferred)
+                qrSlots.forEach((slot, index) => {
+                    if (slot.file && !slot.cloudinaryData) {
+                        formData.append(`gcash_qr_${index}`, slot.file);
+                    }
                 });
                 
                 try {
@@ -2931,9 +3335,14 @@
                             gcash_instructions: gcashInstructions
                         }};
                         
+                        // Clear temporary data
                         qrSlots.forEach(slot => {
                             if (slot) {
                                 slot.markedForDeletion = false;
+                                if (slot.cloudinaryData) {
+                                    // Update the slot with the new QR ID (will be refreshed on page reload)
+                                    slot.cloudinaryData = null;
+                                }
                                 if (slot.file) {
                                     slot.file = null;
                                 }

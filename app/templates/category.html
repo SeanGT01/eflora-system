@@ -125,7 +125,7 @@
     .product-image img {
         width: 100%;
         height: 100%;
-        object-fit: contain;
+        object-fit: cover;
         transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     }
     
@@ -370,11 +370,11 @@
                         store_name: "{{ product.store_name|replace('"', '\\"')|safe if product.store_name else 'Flower Shop' }}",
                         image_url: "{{ product.image_url|safe if product.image_url else '' }}"
                     })'>
-                        <i class="ri-shopping-bag-line"></i> Add to Bag
+                        <i class="ri-shopping-bag-line"></i> Add to Basket
                     </button>
-                    <button class="btn btn-outline btn-icon" onclick="window.location.href='{{ url_for('templates.product_details', product_id=product.id) }}'">
-                        <i class="ri-eye-line"></i>
-                    </button>
+                  <button class="btn btn-outline btn-icon" onclick="viewProduct({{ product.id }})">
+    <i class="ri-eye-line"></i>
+</button>
                     {% else %}
                     <button class="btn btn-outline" disabled style="flex:1;opacity:0.5;cursor:not-allowed;">
                         Out of Stock
@@ -399,6 +399,82 @@
 
 {% block extra_js %}
 <script>
+
+      function viewProduct(productId) {
+        window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
+    }
+
+    // Your existing addToCart and other functions...
+    function addToCart(product) {
+        {% if session.get('user_id') %}
+        // For logged-in users, add to server cart
+        fetch('/api/cart/items', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                product_id: product.id,
+                quantity: 1
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (typeof loadCart === 'function') {
+                    loadCart();
+                }
+                showToast('✓ Added to basket — ' + product.name);
+            } else {
+                showToast('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error adding to cart:', error);
+            addToCartLocal(product);
+        });
+        {% else %}
+        addToCartLocal(product);
+        showToast('✓ Added to basket — ' + product.name);
+        {% endif %}
+    }
+
+    // Local storage fallback
+    if (typeof addToCartLocal !== 'function') {
+        window.addToCartLocal = function(product) {
+            let cart = JSON.parse(localStorage.getItem('cart')) || [];
+            const existing = cart.find(i => i.id === product.id);
+            
+            if (existing) {
+                existing.quantity++;
+            } else {
+                cart.push({ 
+                    id: product.id, 
+                    name: product.name, 
+                    price: product.price, 
+                    store_id: product.store_id, 
+                    store_name: product.store_name, 
+                    image_url: product.image_url, 
+                    quantity: 1 
+                });
+            }
+            localStorage.setItem('cart', JSON.stringify(cart));
+            
+            const cartCount = document.getElementById('cartCount');
+            if (cartCount) {
+                const total = cart.reduce((s, i) => s + i.quantity, 0);
+                cartCount.textContent = total;
+            }
+        };
+    }
+
+    // Toast function fallback
+    if (typeof showToast !== 'function') {
+        window.showToast = function(message, type = 'success') {
+            alert(message);
+        };
+
+    }
     // Make sure addToCart function uses the same logic as base.html
     // This function will work alongside the one in base.html
     function addToCart(product) {
