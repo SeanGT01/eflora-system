@@ -2,7 +2,6 @@
 
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -19,4 +18,4 @@ RUN mkdir -p logs
 
 EXPOSE 8000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "run:app"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0: run:app"]
