@@ -886,7 +886,8 @@
 
             <!-- Main image -->
             <div class="gallery-main" id="galleryMain">
-                {% if product.stock_quantity <= 0 or not product.is_available %}
+                {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
+                {% if (product.stock_quantity <= 0 and not has_variant_stock) or not product.is_available %}
                 <div class="gallery-stock-tag">
                     <span class="status-badge badge-out">Out of Stock</span>
                 </div>
@@ -1090,11 +1091,7 @@
                 </button>
             </div>
             <small id="stockDisplay" style="display: block; margin-top: 0.5rem; color: var(--muted);">
-                {% if product.variants and product.variants|length > 0 %}
-                    {{ product.variants[0].stock_quantity }} available
-                {% else %}
-                    {{ product.stock_quantity }} available
-                {% endif %}
+                {{ product.stock_quantity }} available
             </small>
         </div>
 
@@ -1171,17 +1168,18 @@
         </div>
 
         <!-- CTA Buttons -->
-        {% if product.stock_quantity > 0 and product.is_available %}
+        {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
+        {% if product.is_available and (product.stock_quantity > 0 or has_variant_stock) %}
         <div class="cta-row">
-            <button class="btn btn-outline" onclick="addToCartWithVariant()">
+            <button class="btn btn-outline" id="addToCartBtn" onclick="addToCartWithVariant()">
                 <i class="ri-shopping-bag-line"></i> Add to Basket
             </button>
-            <button class="btn btn-rose" onclick="buyNow()">
+            <button class="btn btn-rose" id="buyNowBtn" onclick="buyNow()">
                 <i class="ri-secure-payment-line"></i> Buy Now
             </button>
         </div>
         {% else %}
-        <button class="btn btn-outline" disabled style="opacity:0.5;cursor:not-allowed;border-radius:var(--radius-pill);">
+        <button class="btn btn-outline" id="productUnavailableBtn" disabled style="opacity:0.5;cursor:not-allowed;border-radius:var(--radius-pill);">
             <i class="ri-close-circle-line"></i> Out of Stock
         </button>
         {% endif %}
@@ -1292,6 +1290,38 @@ let currentPrice = {{ product.price }};
 let currentStock = {{ product.stock_quantity }};
 let currentImage = null;
 let qty = 1;
+
+function syncPurchaseActions() {
+    const addToCartBtn = document.getElementById('addToCartBtn');
+    const buyNowBtn = document.getElementById('buyNowBtn');
+    const stockDisplay = document.getElementById('stockDisplay');
+    const isPurchasable = {{ 'true' if product.is_available else 'false' }} && currentStock > 0;
+
+    if (stockDisplay) {
+        stockDisplay.textContent = currentStock > 0 ? `${currentStock} available` : 'Out of stock';
+    }
+
+    if (addToCartBtn) {
+        addToCartBtn.disabled = !isPurchasable;
+        addToCartBtn.style.opacity = isPurchasable ? '1' : '0.5';
+        addToCartBtn.style.cursor = isPurchasable ? '' : 'not-allowed';
+    }
+
+    if (buyNowBtn) {
+        buyNowBtn.disabled = !isPurchasable;
+        buyNowBtn.style.opacity = isPurchasable ? '1' : '0.5';
+        buyNowBtn.style.cursor = isPurchasable ? '' : 'not-allowed';
+    }
+
+    const qtyPlus = document.getElementById('qtyPlus');
+    const qtyMinus = document.getElementById('qtyMinus');
+    if (qtyPlus) {
+        qtyPlus.disabled = currentStock <= 0 || qty >= currentStock;
+    }
+    if (qtyMinus) {
+        qtyMinus.disabled = qty <= 1 || currentStock <= 0;
+    }
+}
  
 // Store main product data
 const mainProduct = {
@@ -1373,9 +1403,6 @@ let currentImageIndex = 0;
         // Update price display
         document.getElementById('currentPrice').textContent = '₱' + Math.round(mainProduct.price).toLocaleString();
         
-        // Update stock display
-        document.getElementById('stockDisplay').textContent = mainProduct.stock + ' available';
-        
         // Show first product image
         setMainImage(0);
         
@@ -1401,9 +1428,6 @@ let currentImageIndex = 0;
         
         // Update price display
         document.getElementById('currentPrice').textContent = '₱' + Math.round(variantPrice).toLocaleString();
-        
-        // Update stock display
-        document.getElementById('stockDisplay').textContent = variantStock + ' available';
         
         // Update main image if variant has specific image
         if (variantImage && variantImage !== 'null' && variantImage !== '') {
@@ -1432,11 +1456,10 @@ let currentImageIndex = 0;
     const qtyDisplay = document.getElementById('qtyDisplay');
     let currentQty = parseInt(qtyDisplay.textContent);
     if (currentQty > currentStock) {
-        qtyDisplay.textContent = currentStock;
-        qty = currentStock;
+        qty = Math.max(currentStock, 1);
+        qtyDisplay.textContent = qty;
     }
-    document.getElementById('qtyPlus').disabled = qty >= currentStock;
-    document.getElementById('qtyMinus').disabled = qty <= 1;
+    syncPurchaseActions();
     
     // ═══════════════════════════════════════════════════════════
     // UPDATE TOTAL
@@ -1500,8 +1523,7 @@ document.addEventListener('keydown', function(e) {
     
     qty = newQty;
     document.getElementById('qtyDisplay').textContent = qty;
-    document.getElementById('qtyMinus').disabled = qty <= 1;
-    document.getElementById('qtyPlus').disabled = qty >= currentStock;
+    syncPurchaseActions();
     updateTotal();
 }
  
@@ -1657,6 +1679,10 @@ function updateTotal() {
     // In product_details.html, update addToCartWithVariant function:
 async function addToCartWithVariant() {
     const button = event.currentTarget;
+    if (currentStock <= 0) {
+        showToast('This selection is out of stock.', 'error');
+        return;
+    }
     const originalHtml = button.innerHTML;
     
     button.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
@@ -1714,6 +1740,10 @@ async function addToCartWithVariant() {
        BUY NOW
     ════════════════════════════════ */
    function buyNow() {
+    if (currentStock <= 0) {
+        showToast('Please select an in-stock option first.', 'error');
+        return;
+    }
     const delivery = document.getElementById('deliveryInput').value;
     if (!delivery) {
         const field = document.getElementById('deliveryField');
@@ -1763,6 +1793,8 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedVariant = null;
         console.log('✅ Main product button activated');
     }
+    
+    syncPurchaseActions();
     
     // Verify addToCart exists
     if (typeof window.addToCart !== 'function') {

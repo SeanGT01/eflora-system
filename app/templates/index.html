@@ -1577,7 +1577,9 @@
     <div class="product-grid">
         {% for product in products %}
         <div class="product-card">
-            {% if product.stock_quantity < 10 %}
+            {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
+            {% set has_sellable_stock = product.is_available and (product.stock_quantity > 0 or has_variant_stock) %}
+            {% if product.stock_quantity < 10 and not has_variant_stock %}
             <div class="product-badge">Low Stock</div>
             {% endif %}
 
@@ -1606,6 +1608,13 @@
                         image_url: "{{ product.image_url|safe if product.image_url else '' }}"
                     })'>
                         <i class="ri-shopping-bag-line"></i> Add to Basket
+                    </button>
+                    <button class="btn btn-outline btn-icon" onclick="viewProduct({{ product.id }})">
+                        <i class="ri-eye-line"></i>
+                    </button>
+                    {% elif has_sellable_stock %}
+                    <button class="btn btn-outline" disabled style="flex:1;opacity:0.5;cursor:not-allowed;">
+                        Select Variant
                     </button>
                     <button class="btn btn-outline btn-icon" onclick="viewProduct({{ product.id }})">
                         <i class="ri-eye-line"></i>

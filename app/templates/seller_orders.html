@@ -5,12 +5,660 @@
 {% block page_title %}Orders Management{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-8">
-        <div class="input-group">
-            <input type="text" class="form-control" placeholder="Search orders..." id="searchInput">
-            <select class="form-select" style="max-width: 150px;" id="statusFilter">
-                <option value="">All Status</option>
+<style>
+    .orders-page {
+        display: flex;
+        flex-direction: column;
+        gap: 1.75rem;
+    }
+
+    .orders-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .section-eyebrow {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--deep-rose);
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+    }
+
+    .section-title {
+        font-family: var(--font-display);
+        font-size: 2.2rem;
+        color: var(--charcoal);
+        margin: 0;
+        line-height: 1;
+    }
+
+    .section-subtitle {
+        color: var(--muted);
+        margin-top: 0.55rem;
+        font-size: 14px;
+    }
+
+    .orders-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+    }
+
+    .orders-stat {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.1rem 1.05rem;
+        box-shadow: var(--shadow-sm);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .orders-stat::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        border-radius: 4px 0 0 4px;
+        background: var(--deep-rose);
+    }
+
+    .orders-stat-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .orders-stat-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        flex-shrink: 0;
+        background: rgba(181, 68, 90, 0.08);
+        color: var(--deep-rose);
+    }
+
+    .orders-stat.sage::before { background: var(--sage); }
+    .orders-stat.sage .orders-stat-icon { background: rgba(122, 158, 126, 0.12); color: var(--deep-sage); }
+    .orders-stat.terra::before { background: var(--terracotta); }
+    .orders-stat.terra .orders-stat-icon { background: rgba(196, 113, 75, 0.12); color: var(--terracotta); }
+    .orders-stat.bark::before { background: var(--bark); }
+    .orders-stat.bark .orders-stat-icon { background: rgba(107, 76, 59, 0.12); color: var(--bark); }
+    .orders-stat.rose::before { background: var(--deep-rose); }
+    .orders-stat.rose .orders-stat-icon { background: rgba(181, 68, 90, 0.1); color: var(--deep-rose); }
+    .orders-stat.gold::before { background: #d7a52c; }
+    .orders-stat.gold .orders-stat-icon { background: rgba(215, 165, 44, 0.12); color: #a27400; }
+
+    .filters-card {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-sm);
+        padding: 1.35rem 1.5rem;
+    }
+
+    .orders-stat-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        margin-bottom: 0.45rem;
+        font-weight: 700;
+    }
+
+    .orders-stat-value {
+        font-size: 1.75rem;
+        line-height: 1;
+        font-weight: 700;
+        color: var(--charcoal);
+        font-family: var(--font-display);
+    }
+
+    .orders-stat-sub {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 0.35rem;
+    }
+
+    .orders-panel {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+    }
+
+    .orders-panel-head {
+        padding: 1.1rem 1.5rem 0.95rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .orders-panel-title {
+        font-family: var(--font-display);
+        font-size: 1.9rem;
+        color: var(--charcoal);
+        margin: 0;
+    }
+
+    .orders-panel-sub {
+        margin: 0.25rem 0 0;
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    .orders-toolbar {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .orders-search {
+        position: relative;
+        flex: 1 1 260px;
+    }
+
+    .orders-search i {
+        position: absolute;
+        left: 0.9rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted);
+    }
+
+    .orders-search input,
+    .orders-toolbar select {
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: white;
+        color: var(--charcoal);
+        min-height: 42px;
+        font-size: 14px;
+    }
+
+    .orders-search input {
+        width: 100%;
+        padding: 0.75rem 0.9rem 0.75rem 2.5rem;
+    }
+
+    .orders-toolbar select {
+        min-width: 170px;
+        padding: 0.65rem 0.8rem;
+    }
+
+    .orders-table-wrap {
+        overflow-x: auto;
+    }
+
+    .orders-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .orders-table th,
+    .orders-table td {
+        padding: 1rem 1.1rem;
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .orders-table th {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        background: rgba(250, 246, 240, 0.72);
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .orders-table tbody tr:hover {
+        background: rgba(181, 68, 90, 0.03);
+    }
+
+    .orders-table td.actions-cell {
+        min-width: 150px;
+    }
+
+    .order-code {
+        font-weight: 700;
+        color: var(--charcoal);
+        margin-bottom: 0.25rem;
+    }
+
+    .order-subline {
+        font-size: 12px;
+        color: var(--muted);
+    }
+
+    .order-items-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-width: 160px;
+    }
+
+    .order-item-mini {
+        font-size: 13px;
+        color: var(--charcoal);
+    }
+
+    .order-item-more {
+        font-size: 12px;
+        color: var(--deep-rose);
+        font-weight: 600;
+    }
+
+    .status-pill,
+    .payment-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-pill);
+        padding: 0.35rem 0.7rem;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .status-pending { background: rgba(245, 158, 11, 0.14); color: #9a6700; }
+    .status-accepted, .status-preparing { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; }
+    .status-on_delivery { background: rgba(122, 158, 126, 0.14); color: var(--deep-sage); }
+    .status-delivered { background: rgba(16, 185, 129, 0.14); color: #047857; }
+    .status-cancelled { background: rgba(225, 29, 72, 0.12); color: #be123c; }
+
+    .payment-pending { background: rgba(148, 163, 184, 0.14); color: #475569; }
+    .payment-pending_verification { background: rgba(245, 158, 11, 0.14); color: #9a6700; }
+    .payment-verified { background: rgba(16, 185, 129, 0.14); color: #047857; }
+
+    .orders-table select {
+        width: 150px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        padding: 0.55rem 0.7rem;
+        font-size: 13px;
+        background: #fff;
+    }
+
+    .action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        align-items: center;
+    }
+
+    .orders-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        border: 1px solid var(--border-strong);
+        background: white;
+        color: var(--charcoal);
+        border-radius: var(--radius-md);
+        padding: 0.52rem 0.78rem;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        line-height: 1;
+        min-height: 36px;
+        min-width: 88px;
+        white-space: nowrap;
+    }
+
+    .orders-action-btn i {
+        font-size: 15px;
+        line-height: 1;
+    }
+
+    .orders-action-btn:hover {
+        border-color: var(--deep-rose);
+        color: var(--deep-rose);
+        background: rgba(181, 68, 90, 0.05);
+    }
+
+    .orders-action-btn.success:hover {
+        border-color: var(--deep-sage);
+        color: var(--deep-sage);
+        background: rgba(122, 158, 126, 0.08);
+    }
+
+    .orders-empty {
+        padding: 3rem 1.5rem;
+        text-align: center;
+        color: var(--muted);
+    }
+
+    .orders-empty i {
+        display: block;
+        font-size: 2.25rem;
+        margin-bottom: 0.75rem;
+        opacity: 0.35;
+    }
+
+    .details-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .details-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1rem;
+        background: rgba(250, 246, 240, 0.45);
+    }
+
+    .details-card.full {
+        grid-column: 1 / -1;
+    }
+
+    .details-card h6 {
+        margin: 0 0 0.75rem;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+
+    .details-table {
+        width: 100%;
+        font-size: 14px;
+    }
+
+    .details-table td {
+        padding: 0.35rem 0;
+        vertical-align: top;
+    }
+
+    .details-table td:first-child {
+        width: 40%;
+        color: var(--muted);
+    }
+
+    .proof-image {
+        width: 100%;
+        max-height: 65vh;
+        object-fit: contain;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--cream);
+    }
+
+    .proof-empty {
+        display: none;
+        border: 1px dashed var(--border-strong);
+        border-radius: var(--radius-lg);
+        padding: 2rem 1rem;
+        text-align: center;
+        color: var(--muted);
+        background: rgba(250, 246, 240, 0.65);
+    }
+
+    .proof-empty i {
+        display: block;
+        font-size: 2rem;
+        margin-bottom: 0.6rem;
+        opacity: 0.45;
+    }
+
+    .custom-modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1.25rem;
+        background: rgba(44, 37, 32, 0.48);
+        z-index: 1200;
+    }
+
+    .custom-modal.active {
+        display: flex;
+    }
+
+    .custom-modal-dialog {
+        width: min(1120px, 100%);
+        max-height: 88vh;
+        overflow: auto;
+        background: var(--warm-white);
+        border-radius: var(--radius-xl);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-deep);
+    }
+
+    .custom-modal-dialog.narrow {
+        width: min(760px, 100%);
+    }
+
+    .custom-modal-head,
+    .custom-modal-foot {
+        padding: 1rem 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .custom-modal-foot {
+        border-bottom: none;
+        border-top: 1px solid var(--border);
+        justify-content: flex-end;
+    }
+
+    .custom-modal-body {
+        padding: 1.25rem;
+    }
+
+    .custom-close {
+        border: 1px solid var(--border-strong);
+        background: white;
+        color: var(--charcoal);
+        width: 36px;
+        height: 36px;
+        border-radius: var(--radius-pill);
+        cursor: pointer;
+    }
+
+    @media (max-width: 900px) {
+        .details-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .orders-toolbar {
+            flex-wrap: wrap;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .orders-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .section-title {
+            font-size: 1.85rem;
+        }
+
+        .orders-summary {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .orders-panel-head,
+        .filters-card,
+        .orders-table th,
+        .orders-table td {
+            padding-left: 0.85rem;
+            padding-right: 0.85rem;
+        }
+
+        .orders-table-wrap {
+            overflow-x: visible;
+        }
+
+        .orders-table,
+        .orders-table thead,
+        .orders-table tbody,
+        .orders-table tr,
+        .orders-table th,
+        .orders-table td {
+            display: block;
+            width: 100%;
+        }
+
+        .orders-table thead {
+            display: none;
+        }
+
+        .orders-table tbody tr {
+            border-bottom: 1px solid var(--border);
+            padding: 0.5rem 0;
+        }
+
+        .orders-table td {
+            border-bottom: none;
+            padding-top: 0.45rem;
+            padding-bottom: 0.45rem;
+        }
+
+        .orders-table td::before {
+            content: attr(data-label);
+            display: block;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            font-weight: 700;
+            margin-bottom: 0.28rem;
+        }
+
+        .orders-table td.actions-cell {
+            min-width: 0;
+        }
+
+        .action-row {
+            width: 100%;
+        }
+
+        .orders-action-btn {
+            flex: 1 1 calc(50% - 0.45rem);
+            min-width: 0;
+        }
+
+        .custom-modal {
+            padding: 0.75rem;
+        }
+
+        .custom-modal-body,
+        .custom-modal-head,
+        .custom-modal-foot {
+            padding-left: 0.9rem;
+            padding-right: 0.9rem;
+        }
+    }
+
+    @media (max-width: 420px) {
+        .orders-summary {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="orders-page">
+    <div class="orders-header">
+        <div>
+            <div class="section-eyebrow">Manage Your Store</div>
+            <h2 class="section-title">Orders & Fulfillment</h2>
+            <p class="section-subtitle">Review receipts, update order progress, and keep delivery handoff smooth.</p>
+        </div>
+        <button type="button" class="btn btn-rose" id="refreshOrdersBtn">
+            <i class="ri-refresh-line"></i>
+            Refresh Orders
+        </button>
+    </div>
+
+    <div class="orders-summary">
+        <div class="orders-stat rose">
+            <div class="orders-stat-head">
+                <div class="orders-stat-label">Today</div>
+                <div class="orders-stat-icon"><i class="ri-calendar-event-line"></i></div>
+            </div>
+            <div class="orders-stat-value">{{ order_stats.today }}</div>
+            <div class="orders-stat-sub">New orders today</div>
+        </div>
+        <div class="orders-stat gold">
+            <div class="orders-stat-head">
+                <div class="orders-stat-label">Payment Review</div>
+                <div class="orders-stat-icon"><i class="ri-bank-card-line"></i></div>
+            </div>
+            <div class="orders-stat-value">{{ order_stats.payment_review }}</div>
+            <div class="orders-stat-sub">Receipts to check</div>
+        </div>
+        <div class="orders-stat terra">
+            <div class="orders-stat-head">
+                <div class="orders-stat-label">Preparing</div>
+                <div class="orders-stat-icon"><i class="ri-box-3-line"></i></div>
+            </div>
+            <div class="orders-stat-value">{{ order_stats.preparing }}</div>
+            <div class="orders-stat-sub">Accepted and preparing</div>
+        </div>
+        <div class="orders-stat bark">
+            <div class="orders-stat-head">
+                <div class="orders-stat-label">On Delivery</div>
+                <div class="orders-stat-icon"><i class="ri-truck-line"></i></div>
+            </div>
+            <div class="orders-stat-value">{{ order_stats.on_delivery }}</div>
+            <div class="orders-stat-sub">Currently out for delivery</div>
+        </div>
+        <div class="orders-stat sage">
+            <div class="orders-stat-head">
+                <div class="orders-stat-label">Delivered</div>
+                <div class="orders-stat-icon"><i class="ri-checkbox-circle-line"></i></div>
+            </div>
+            <div class="orders-stat-value">{{ order_stats.delivered }}</div>
+            <div class="orders-stat-sub">Completed orders</div>
+        </div>
+        <div class="orders-stat rose">
+            <div class="orders-stat-head">
+                <div class="orders-stat-label">Revenue</div>
+                <div class="orders-stat-icon"><i class="ri-money-dollar-circle-line"></i></div>
+            </div>
+            <div class="orders-stat-value">Php {{ "%.0f"|format(order_stats.revenue) }}</div>
+            <div class="orders-stat-sub">Delivered revenue</div>
+        </div>
+    </div>
+
+    <div class="filters-card">
+        <div class="orders-toolbar">
+            <div class="orders-search">
+                <i class="ri-search-line"></i>
+                <input type="text" id="sellerOrderSearch" placeholder="Search order, customer, address, or product">
+            </div>
+            <select id="sellerStatusSelect">
+                <option value="all">All statuses</option>
                 <option value="pending">Pending</option>
                 <option value="accepted">Accepted</option>
                 <option value="preparing">Preparing</option>
@@ -18,220 +666,94 @@
                 <option value="delivered">Delivered</option>
                 <option value="cancelled">Cancelled</option>
             </select>
-            <button class="btn btn-outline-primary" type="button">
-                <i class="fas fa-search"></i>
-            </button>
+            <select id="sellerPaymentSelect">
+                <option value="all">All payments</option>
+                <option value="pending">Pending</option>
+                <option value="pending_verification">Pending Verification</option>
+                <option value="verified">Verified</option>
+            </select>
         </div>
     </div>
-    <div class="col-md-4 text-end">
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createOrderModal">
-            <i class="fas fa-plus-circle me-2"></i>Create Order
-        </button>
-    </div>
-</div>
 
-<!-- Stats Cards -->
-<div class="row mb-4">
-    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
-        <div class="card stat-card border-left-primary">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-grow-1">
-                        <div class="text-muted">Today</div>
-                        <div class="h4 mb-0">12</div>
-                    </div>
-                    <div class="ms-auto">
-                        <i class="fas fa-calendar-day fa-2x text-primary"></i>
-                    </div>
-                </div>
+    <div class="orders-panel">
+        <div class="orders-panel-head">
+            <div>
+                <h2 class="orders-panel-title">Store Orders</h2>
+                <p class="orders-panel-sub">{{ store.name }} • {{ order_stats.total }} total orders</p>
             </div>
         </div>
-    </div>
-    
-    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
-        <div class="card stat-card border-left-warning">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-grow-1">
-                        <div class="text-muted">Pending</div>
-                        <div class="h4 mb-0">5</div>
-                    </div>
-                    <div class="ms-auto">
-                        <i class="fas fa-clock fa-2x text-warning"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
-        <div class="card stat-card border-left-info">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-grow-1">
-                        <div class="text-muted">Processing</div>
-                        <div class="h4 mb-0">3</div>
-                    </div>
-                    <div class="ms-auto">
-                        <i class="fas fa-cogs fa-2x text-info"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
-        <div class="card stat-card border-left-secondary">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-grow-1">
-                        <div class="text-muted">On Delivery</div>
-                        <div class="h4 mb-0">2</div>
-                    </div>
-                    <div class="ms-auto">
-                        <i class="fas fa-shipping-fast fa-2x text-secondary"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
-        <div class="card stat-card border-left-success">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-grow-1">
-                        <div class="text-muted">Delivered</div>
-                        <div class="h4 mb-0">8</div>
-                    </div>
-                    <div class="ms-auto">
-                        <i class="fas fa-check-circle fa-2x text-success"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-xl-2 col-md-4 col-sm-6 mb-4">
-        <div class="card stat-card border-left-danger">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-grow-1">
-                        <div class="text-muted">Cancelled</div>
-                        <div class="h4 mb-0">1</div>
-                    </div>
-                    <div class="ms-auto">
-                        <i class="fas fa-times-circle fa-2x text-danger"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- Orders Table -->
-<div class="card shadow-sm">
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-hover">
+        <div class="orders-table-wrap">
+            <table class="orders-table">
                 <thead>
                     <tr>
-                        <th>Order ID</th>
+                        <th>Order</th>
                         <th>Customer</th>
-                        <th>Date</th>
-                        <th>Items</th>
-                        <th>Amount</th>
                         <th>Payment</th>
                         <th>Status</th>
-                        <th>Delivery</th>
+                        <th>Summary</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="sellerOrdersTableBody">
                     {% for order in orders %}
-                    <tr>
-                        <td>
-                            <strong>#{{ order.id }}</strong>
-                            <br>
-                            <small class="text-muted">
-                                <i class="fas fa-{{ 'store' if order.order_type == 'walkin' else 'mobile-alt' }}"></i>
-                                {{ order.order_type|capitalize }}
-                            </small>
+                    <tr
+                        class="seller-order-row"
+                        data-order-id="{{ order.id }}"
+                        data-status="{{ order.status }}"
+                        data-payment-status="{{ order.payment_status }}"
+                        data-search="{{ (
+                            '#' ~ order.id ~ ' ' ~
+                            (order.customer_name or '') ~ ' ' ~
+                            (order.customer_phone or '') ~ ' ' ~
+                            (order.delivery_address or '') ~ ' ' ~
+                            (order['items'] | map(attribute='product_name') | join(' '))
+                        )|lower }}"
+                    >
+                        <td data-label="Order">
+                            <div class="order-code">#{{ order.id }}</div>
+                            <div class="order-subline">{{ order.order_type|capitalize }}</div>
+                            <div class="order-subline">{{ order.datetime_formatted or order.created_at }}</div>
                         </td>
-                        <td>
-                            <div class="fw-bold">{{ order.customer_name }}</div>
-                            <small class="text-muted">{{ order.customer_phone }}</small>
+                        <td data-label="Customer">
+                            <div class="order-code" style="font-size:14px;">{{ order.customer_name or 'Customer' }}</div>
+                            <div class="order-subline">{{ order.customer_phone or 'No phone' }}</div>
                         </td>
-                        <td>
-                           <div>{{ order.created_at.strftime('%Y-%m-%d %H:%M') if order.created_at else '' }}</div>
-                        <small class="text-muted">
-    {% if order.created_at and 'T' in order.created_at %}
-        {{ order.created_at.split('T')[1][:5] }}
-    {% endif %}
-</small>
+                        <td data-label="Payment">
+                            <div>
+                                <span class="payment-pill payment-{{ order.payment_status }}">
+                                    {{ order.payment_status.replace('_', ' ')|title }}
+                                </span>
+                            </div>
+                            <div class="order-subline" style="margin-top:0.35rem;">{{ order.payment_method|capitalize }}</div>
                         </td>
-                        <td>
-                            <div>{{ order.items_count }} items</div>
-                            <button class="btn btn-sm btn-outline-info mt-1 view-items" 
-                                    data-order-id="{{ order.id }}">
-                                View Items
-                            </button>
-                        </td>
-                        <td>
-                     <div class="fw-bold">₱{{ "%.2f"|format(order.total_amount) if order.total_amount else "0.00" }}</div>
-                        </td>
-                        <td>
-                            <span class="badge 
-                                {% if order.payment_status == 'paid' %}bg-success
-                                {% elif order.payment_status == 'pending' %}bg-warning
-                                {% elif order.payment_status == 'verified' %}bg-info
-                                {% else %}bg-secondary{% endif %}">
-                                {{ order.payment_status|capitalize }}
+                        <td data-label="Status">
+                            <span class="status-pill status-{{ order.status }}">
+                                {{ order.status.replace('_', ' ')|title }}
                             </span>
-                            <br>
-                            <small>{{ order.payment_method|capitalize }}</small>
                         </td>
-                        <td>
-                            <select class="form-select form-select-sm order-status" 
-                                    data-order-id="{{ order.id }}"
-                                    style="width: 140px;">
-                                <option value="pending" {% if order.status == 'pending' %}selected{% endif %}>Pending</option>
-                                <option value="accepted" {% if order.status == 'accepted' %}selected{% endif %}>Accepted</option>
-                                <option value="preparing" {% if order.status == 'preparing' %}selected{% endif %}>Preparing</option>
-                                <option value="on_delivery" {% if order.status == 'on_delivery' %}selected{% endif %}>On Delivery</option>
-                                <option value="delivered" {% if order.status == 'delivered' %}selected{% endif %}>Delivered</option>
-                                <option value="cancelled" {% if order.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                            </select>
+                        <td data-label="Summary">
+                            <div class="order-code" style="font-size:15px;">Php {{ "%.2f"|format(order.total_amount or 0) }}</div>
+                            <div class="order-subline">{{ order.items_count }} item{% if order.items_count != 1 %}s{% endif %}</div>
+                            <div class="order-items-preview" style="margin-top:0.45rem;">
+                                {% for item in order['items'][:2] %}
+                                <div class="order-item-mini">{{ item.product_name }} x{{ item.quantity }}</div>
+                                {% endfor %}
+                                {% if order['items']|length > 2 %}
+                                <div class="order-item-more">+{{ order['items']|length - 2 }} more items</div>
+                                {% endif %}
+                            </div>
                         </td>
-                        <td>
-                            {% if order.rider_name %}
-                            <div class="fw-bold">{{ order.rider_name }}</div>
-                            <small class="text-muted">{{ order.rider_vehicle }}</small>
-                            {% else %}
-                            <button class="btn btn-sm btn-outline-primary assign-rider" 
-                                    data-order-id="{{ order.id }}">
-                                Assign Rider
-                            </button>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-primary view-order" 
-                                        data-order-id="{{ order.id }}"
-                                        data-bs-toggle="modal" 
-                                        data-bs-target="#viewOrderModal">
-                                    <i class="fas fa-eye"></i>
+                        <td class="actions-cell" data-label="Actions">
+                            <div class="action-row">
+                                <button type="button" class="orders-action-btn seller-view-order" data-order-id="{{ order.id }}">
+                                    <i class="ri-eye-line"></i>
+                                    View
                                 </button>
-                                <button class="btn btn-outline-success print-order" 
-                                        data-order-id="{{ order.id }}">
-                                    <i class="fas fa-print"></i>
-                                </button>
-                                {% if order.payment_proof %}
-                                <button class="btn btn-outline-info view-payment" 
-                                        data-proof="{{ order.payment_proof_url }}"
-                                        data-bs-toggle="modal" 
-                                        data-bs-target="#paymentModal">
-                                    <i class="fas fa-receipt"></i>
+                                {% if order.payment_proof_url %}
+                                <button type="button" class="orders-action-btn seller-view-payment" data-order-id="{{ order.id }}" data-proof-url="{{ order.payment_proof_url }}">
+                                    <i class="ri-file-image-line"></i>
+                                    Receipt
                                 </button>
                                 {% endif %}
                             </div>
@@ -241,295 +763,50 @@
                 </tbody>
             </table>
         </div>
-        
-        <!-- Pagination -->
-        <nav aria-label="Page navigation">
-            <ul class="pagination justify-content-center">
-                <li class="page-item disabled">
-                    <a class="page-link" href="#">Previous</a>
-                </li>
-                <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                <li class="page-item"><a class="page-link" href="#">2</a></li>
-                <li class="page-item"><a class="page-link" href="#">3</a></li>
-                <li class="page-item">
-                    <a class="page-link" href="#">Next</a>
-                </li>
-            </ul>
-        </nav>
-    </div>
-</div>
 
-<!-- Create Order Modal -->
-<div class="modal fade" id="createOrderModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Create New Order</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="createOrderForm">
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <!-- Customer Details -->
-                            <div class="card mb-3">
-                                <div class="card-header">
-                                    <h6 class="mb-0"><i class="fas fa-user me-2"></i>Customer Details</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Customer Name *</label>
-                                            <input type="text" class="form-control" name="customer_name" required>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Contact Number</label>
-                                            <input type="tel" class="form-control" name="customer_phone">
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label">Delivery Address</label>
-                                        <textarea class="form-control" name="delivery_address" rows="2"></textarea>
-                                    </div>
-                                    
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Order Type</label>
-                                            <select class="form-select" name="order_type">
-                                                <option value="walkin">Walk-in</option>
-                                                <option value="online">Online</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Payment Method</label>
-                                            <select class="form-select" name="payment_method">
-                                                <option value="cash">Cash</option>
-                                                <option value="gcash">GCash</option>
-                                                <option value="card">Credit/Debit Card</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Products Selection -->
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="mb-0"><i class="fas fa-shopping-cart me-2"></i>Select Products</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table" id="productsTable">
-                                            <thead>
-                                                <tr>
-                                                    <th>Product</th>
-                                                    <th>Price</th>
-                                                    <th>Stock</th>
-                                                    <th>Quantity</th>
-                                                    <th>Total</th>
-                                                    <th></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="orderItems">
-                                                <!-- Items will be added here -->
-                                            </tbody>
-                                            <tfoot>
-                                                <tr>
-                                                    <td colspan="4" class="text-end fw-bold">Subtotal:</td>
-                                                    <td id="subtotal">₱0.00</td>
-                                                    <td></td>
-                                                </tr>
-                                                <tr>
-                                                    <td colspan="4" class="text-end fw-bold">Delivery Fee:</td>
-                                                    <td>
-                                                        <input type="number" class="form-control form-control-sm" 
-                                                               id="deliveryFee" value="50" style="width: 100px; display: inline;">
-                                                    </td>
-                                                    <td></td>
-                                                </tr>
-                                                <tr>
-                                                    <td colspan="4" class="text-end fw-bold">Total:</td>
-                                                    <td id="totalAmount" class="h5 text-primary">₱0.00</td>
-                                                    <td></td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
-                                    
-                                    <button type="button" class="btn btn-outline-primary" 
-                                            data-bs-toggle="modal" 
-                                            data-bs-target="#addProductModal">
-                                        <i class="fas fa-plus me-2"></i>Add Product
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-4">
-                            <!-- Order Summary -->
-                            <div class="card mb-3">
-                                <div class="card-header">
-                                    <h6 class="mb-0"><i class="fas fa-receipt me-2"></i>Order Summary</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label class="form-label">Order Notes</label>
-                                        <textarea class="form-control" name="notes" rows="3"></textarea>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label">Delivery Date & Time</label>
-                                        <input type="datetime-local" class="form-control" name="delivery_time">
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label">Assign Rider</label>
-                                        <select class="form-select" name="rider_id">
-                                            <option value="">Select Rider</option>
-                                            {% for rider in riders %}
-                                            <option value="{{ rider.id }}">{{ rider.name }} - {{ rider.vehicle }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label">Initial Status</label>
-                                        <select class="form-select" name="status">
-                                            <option value="pending">Pending</option>
-                                            <option value="accepted">Accepted</option>
-                                            <option value="preparing">Preparing</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Quick Actions -->
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-grid gap-2">
-                                        <button type="button" class="btn btn-outline-success" id="saveDraftBtn">
-                                            <i class="fas fa-save me-2"></i>Save as Draft
-                                        </button>
-                                        <button type="button" class="btn btn-outline-primary" id="sendInvoiceBtn">
-                                            <i class="fas fa-paper-plane me-2"></i>Send Invoice
-                                        </button>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-check-circle me-2"></i>Create Order
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </form>
+        {% if not orders %}
+        <div class="orders-empty">
+            <i class="ri-inbox-line"></i>
+            No orders yet.
         </div>
+        {% endif %}
     </div>
 </div>
 
-<!-- View Order Modal -->
-<div class="modal fade" id="viewOrderModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Order Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="orderDetails">
-                    <!-- Order details will be loaded here -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="printOrderBtn">
-                    <i class="fas fa-print me-2"></i>Print Invoice
-                </button>
+<div class="custom-modal" id="sellerOrderDetailsModal" aria-hidden="true">
+    <div class="custom-modal-dialog">
+        <div class="custom-modal-head">
+            <h5 class="modal-title" style="margin:0;">Order Details</h5>
+            <button type="button" class="custom-close" data-close-modal="sellerOrderDetailsModal">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="custom-modal-body" id="sellerOrderDetailsBody"></div>
+    </div>
+</div>
+
+<div class="custom-modal" id="sellerPaymentProofModal" aria-hidden="true">
+    <div class="custom-modal-dialog narrow">
+        <div class="custom-modal-head">
+            <h5 class="modal-title" style="margin:0;">Payment Receipt</h5>
+            <button type="button" class="custom-close" data-close-modal="sellerPaymentProofModal">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="custom-modal-body">
+            <img id="sellerPaymentProofImage" class="proof-image" alt="Payment proof">
+            <div id="sellerPaymentProofEmpty" class="proof-empty">
+                <i class="ri-image-circle-line"></i>
+                <div>Payment receipt image is unavailable.</div>
+                <div style="font-size:12px; margin-top:0.35rem;">The saved proof link may no longer exist.</div>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- Payment Proof Modal -->
-<div class="modal fade" id="paymentModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Payment Proof</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body text-center">
-                <img id="paymentProofImage" src="" class="img-fluid rounded" style="max-height: 500px;">
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-success" id="verifyPaymentBtn">
-                    <i class="fas fa-check-circle me-2"></i>Verify Payment
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Assign Rider Modal -->
-<div class="modal fade" id="assignRiderModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Assign Rider</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="assignRiderForm">
-                <div class="modal-body">
-                    <input type="hidden" id="assign_order_id" name="order_id">
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Select Rider *</label>
-                        <select class="form-select" id="rider_id" name="rider_id" required>
-                            <option value="">Select Rider</option>
-                            {% for rider in available_riders %}
-                            <option value="{{ rider.id }}">
-                                {{ rider.name }} - {{ rider.vehicle }} 
-                                ({{ 'Available' if rider.is_available else 'Busy' }})
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Delivery Instructions</label>
-                        <textarea class="form-control" name="instructions" rows="2"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Assign Rider</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Order Items Modal -->
-<div class="modal fade" id="itemsModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Order Items</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="itemsList">
-                    <!-- Items will be loaded here -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
+        <div class="custom-modal-foot">
+            <button type="button" class="btn btn-outline-secondary" data-close-modal="sellerPaymentProofModal">Close</button>
+            <button type="button" class="btn btn-success" id="sellerVerifyPaymentBtn">
+                <i class="ri-check-double-line"></i>
+                Verify Payment
+            </button>
         </div>
     </div>
 </div>
@@ -537,344 +814,221 @@
 
 {% block extra_js %}
 <script>
-    // Update order status
-    document.querySelectorAll('.order-status').forEach(select => {
-        select.addEventListener('change', function() {
-            const orderId = this.dataset.orderId;
-            const status = this.value;
-            
-            fetch(`/api/v1/seller/orders/${orderId}/status`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ status: status })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.message) {
-                    showAlert('success', 'Order status updated');
-                    
-                    // If status changed to on_delivery and no rider assigned, show assign rider modal
-                    if (status === 'on_delivery') {
-                        const row = this.closest('tr');
-                        if (!row.querySelector('.assign-rider').disabled) {
-                            showAssignRiderModal(orderId);
-                        }
-                    }
-                }
-            })
-            .catch(error => {
-                showAlert('danger', 'Error updating status');
-                this.value = this.dataset.previousValue;
-            });
-            
-            this.dataset.previousValue = status;
-        });
-    });
-    
-    // Assign rider
-    document.querySelectorAll('.assign-rider').forEach(button => {
-        button.addEventListener('click', function() {
-            const orderId = this.dataset.orderId;
-            showAssignRiderModal(orderId);
-        });
-    });
-    
-    function showAssignRiderModal(orderId) {
-        document.getElementById('assign_order_id').value = orderId;
-        const modal = new bootstrap.Modal(document.getElementById('assignRiderModal'));
-        modal.show();
+    const sellerRows = Array.from(document.querySelectorAll('.seller-order-row'));
+    const sellerOrderDetailsModal = document.getElementById('sellerOrderDetailsModal');
+    const sellerPaymentProofModal = document.getElementById('sellerPaymentProofModal');
+    let activePaymentOrderId = null;
+
+    function openModal(modal) {
+        if (!modal) return;
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
     }
-    
-    // View order items
-    document.querySelectorAll('.view-items').forEach(button => {
-        button.addEventListener('click', function() {
-            const orderId = this.dataset.orderId;
-            
-            fetch(`/api/v1/seller/orders/${orderId}/items`)
-                .then(response => response.json())
-                .then(items => {
-                    const itemsList = document.getElementById('itemsList');
-                    let html = '<table class="table table-sm">';
-                    html += '<thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>';
-                    html += '<tbody>';
-                    
-                    items.forEach(item => {
-                        html += `
-                            <tr>
-                                <td>${item.product_name}</td>
-                                <td>${item.quantity}</td>
-                                <td>₱${item.price}</td>
-                                <td>₱${item.quantity * item.price}</td>
-                            </tr>
-                        `;
-                    });
-                    
-                    html += '</tbody></table>';
-                    itemsList.innerHTML = html;
-                    
-                    const modal = new bootstrap.Modal(document.getElementById('itemsModal'));
-                    modal.show();
-                });
-        });
-    });
-    
-    // View order details
-    document.querySelectorAll('.view-order').forEach(button => {
-        button.addEventListener('click', function() {
-            const orderId = this.dataset.orderId;
-            
-            fetch(`/api/v1/seller/orders/${orderId}`)
-                .then(response => response.json())
-                .then(order => {
-                    const orderDetails = document.getElementById('orderDetails');
-                    orderDetails.innerHTML = `
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h6>Order Information</h6>
-                                <table class="table table-bordered">
-                                    <tr><th>Order ID:</th><td>#${order.id}</td></tr>
-                                    <tr><th>Customer:</th><td>${order.customer_name}</td></tr>
-                                    <tr><th>Contact:</th><td>${order.customer_phone || 'N/A'}</td></tr>
-                                    <tr><th>Order Type:</th><td>${order.order_type}</td></tr>
-                                    <tr><th>Date:</th><td>${order.created_at}</td></tr>
-                                </table>
-                            </div>
-                            <div class="col-md-6">
-                                <h6>Payment & Delivery</h6>
-                                <table class="table table-bordered">
-                                    <tr><th>Status:</th><td><span class="badge bg-${getStatusColor(order.status)}">${order.status}</span></td></tr>
-                                    <tr><th>Payment Method:</th><td>${order.payment_method}</td></tr>
-                                    <tr><th>Payment Status:</th><td><span class="badge bg-${getPaymentStatusColor(order.payment_status)}">${order.payment_status}</span></td></tr>
-                                    <tr><th>Total Amount:</th><td class="fw-bold">₱${order.total_amount}</td></tr>
-                                </table>
-                            </div>
-                        </div>
-                        
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <h6>Delivery Information</h6>
-                                <div class="card">
-                                    <div class="card-body">
-                                        <p><strong>Address:</strong> ${order.delivery_address || 'N/A'}</p>
-                                        ${order.delivery_notes ? `<p><strong>Notes:</strong> ${order.delivery_notes}</p>` : ''}
-                                        ${order.rider_name ? `<p><strong>Rider:</strong> ${order.rider_name} (${order.rider_vehicle})</p>` : ''}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <h6>Order Items</h6>
-                                <div class="table-responsive">
-                                    <table class="table table-bordered">
-                                        <thead>
-                                            <tr>
-                                                <th>Product</th>
-                                                <th>Quantity</th>
-                                                <th>Price</th>
-                                                <th>Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${order.items.map(item => `
-                                                <tr>
-                                                    <td>${item.product_name}</td>
-                                                    <td>${item.quantity}</td>
-                                                    <td>₱${item.price}</td>
-                                                    <td>₱${item.quantity * item.price}</td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr>
-                                                <td colspan="3" class="text-end fw-bold">Total:</td>
-                                                <td class="fw-bold">₱${order.total_amount}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    document.getElementById('printOrderBtn').dataset.orderId = orderId;
-                });
-        });
-    });
-    
-    // View payment proof
-    document.querySelectorAll('.view-payment').forEach(button => {
-        button.addEventListener('click', function() {
-            const proofUrl = this.dataset.proof;
-            document.getElementById('paymentProofImage').src = proofUrl;
-            document.getElementById('verifyPaymentBtn').dataset.orderId = this.closest('tr').querySelector('.order-status').dataset.orderId;
-        });
-    });
-    
-    // Verify payment
-    document.getElementById('verifyPaymentBtn').addEventListener('click', function() {
-        const orderId = this.dataset.orderId;
-        
-        fetch(`/api/v1/seller/orders/${orderId}/verify-payment`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.message) {
-                showAlert('success', 'Payment verified successfully');
-                bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
-                location.reload();
-            }
-        })
-        .catch(error => {
-            showAlert('danger', 'Error verifying payment');
-        });
-    });
-    
-    // Print order
-    document.querySelectorAll('.print-order').forEach(button => {
-        button.addEventListener('click', function() {
-            const orderId = this.dataset.orderId;
-            window.open(`/seller/orders/${orderId}/print`, '_blank');
-        });
-    });
-    
-    // Search functionality
-    document.getElementById('searchInput').addEventListener('input', function() {
-        const searchTerm = this.value.toLowerCase();
-        const statusFilter = document.getElementById('statusFilter').value;
-        const rows = document.querySelectorAll('tbody tr');
-        
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            const status = row.querySelector('.order-status').value;
-            
-            const matchesSearch = text.includes(searchTerm);
-            const matchesStatus = !statusFilter || status === statusFilter;
-            
-            row.style.display = matchesSearch && matchesStatus ? '' : 'none';
-        });
-    });
-    
-    document.getElementById('statusFilter').addEventListener('change', function() {
-        document.getElementById('searchInput').dispatchEvent(new Event('input'));
-    });
-    
-    // Form submissions
-    document.getElementById('createOrderForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        // Collect order data
-        const orderData = {
-            customer_name: this.querySelector('[name="customer_name"]').value,
-            customer_phone: this.querySelector('[name="customer_phone"]').value,
-            delivery_address: this.querySelector('[name="delivery_address"]').value,
-            order_type: this.querySelector('[name="order_type"]').value,
-            payment_method: this.querySelector('[name="payment_method"]').value,
-            notes: this.querySelector('[name="notes"]').value,
-            delivery_time: this.querySelector('[name="delivery_time"]').value,
-            rider_id: this.querySelector('[name="rider_id"]').value,
-            status: this.querySelector('[name="status"]').value,
-            items: getOrderItems()
-        };
-        
-        fetch('/api/v1/seller/orders', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify(orderData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.message) {
-                showAlert('success', 'Order created successfully');
-                location.reload();
-            }
-        })
-        .catch(error => {
-            showAlert('danger', 'Error creating order');
-        });
-    });
-    
-    document.getElementById('assignRiderForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        const orderId = document.getElementById('assign_order_id').value;
-        
-        fetch(`/api/v1/seller/orders/${orderId}/assign-rider`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.message) {
-                showAlert('success', 'Rider assigned successfully');
-                location.reload();
-            }
-        })
-        .catch(error => {
-            showAlert('danger', 'Error assigning rider');
-        });
-    });
-    
-    function getOrderItems() {
-        const items = [];
-        document.querySelectorAll('#orderItems tr').forEach(row => {
-            if (row.dataset.productId) {
-                items.push({
-                    product_id: row.dataset.productId,
-                    quantity: parseInt(row.querySelector('.item-quantity').value),
-                    price: parseFloat(row.querySelector('.item-price').value)
-                });
-            }
-        });
-        return items;
+
+    function closeModal(modal) {
+        if (!modal) return;
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
     }
-    
-    function getStatusColor(status) {
-        const colors = {
-            'pending': 'warning',
-            'accepted': 'info',
-            'preparing': 'primary',
-            'on_delivery': 'secondary',
-            'delivered': 'success',
-            'cancelled': 'danger'
-        };
-        return colors[status] || 'secondary';
+
+    function getSellerToken() {
+        return localStorage.getItem('jwt_token') || localStorage.getItem('token') || '';
     }
-    
-    function getPaymentStatusColor(status) {
-        const colors = {
-            'pending': 'warning',
-            'paid': 'success',
-            'verified': 'info',
-            'refunded': 'danger'
-        };
-        return colors[status] || 'secondary';
+
+    async function sellerFetch(url, options = {}) {
+        return fetch(url, options);
     }
-    
-    function showAlert(type, message) {
+
+    function showSellerAlert(type, message) {
         const alert = document.createElement('div');
         alert.className = `alert alert-${type} alert-dismissible fade show`;
-        alert.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        document.querySelector('.main-content').insertBefore(alert, document.querySelector('.main-content').firstChild);
-        
+        alert.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+        const mainContent = document.querySelector('.main-content') || document.querySelector('.main-area') || document.body;
+        if (mainContent.firstChild) {
+            mainContent.insertBefore(alert, mainContent.firstChild);
+        } else {
+            mainContent.appendChild(alert);
+        }
         setTimeout(() => alert.remove(), 5000);
     }
+
+    function titleCaseStatus(value) {
+        return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+    }
+
+    function formatAmount(value) {
+        return Number(value || 0).toLocaleString('en-PH', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function formatDateTime(value) {
+        if (!value) return 'N/A';
+        try {
+            return new Intl.DateTimeFormat('en-PH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            }).format(new Date(value));
+        } catch (error) {
+            return value;
+        }
+    }
+
+    function applySellerFilters() {
+        const search = (document.getElementById('sellerOrderSearch').value || '').trim().toLowerCase();
+        const status = document.getElementById('sellerStatusSelect').value;
+        const payment = document.getElementById('sellerPaymentSelect').value;
+
+        sellerRows.forEach(row => {
+            const matchesSearch = !search || (row.dataset.search || '').includes(search);
+            const matchesStatus = status === 'all' || row.dataset.status === status;
+            const matchesPayment = payment === 'all' || row.dataset.paymentStatus === payment;
+            row.style.display = matchesSearch && matchesStatus && matchesPayment ? '' : 'none';
+        });
+    }
+
+    document.getElementById('sellerOrderSearch').addEventListener('input', applySellerFilters);
+    document.getElementById('sellerStatusSelect').addEventListener('change', applySellerFilters);
+    document.getElementById('sellerPaymentSelect').addEventListener('change', applySellerFilters);
+    document.getElementById('refreshOrdersBtn').addEventListener('click', () => window.location.reload());
+
+    document.querySelectorAll('.seller-view-order').forEach(button => {
+        button.addEventListener('click', async () => {
+            const body = document.getElementById('sellerOrderDetailsBody');
+            body.innerHTML = '<div class="text-center py-4 text-muted">Loading...</div>';
+            openModal(sellerOrderDetailsModal);
+            try {
+                const response = await sellerFetch(`/api/seller/orders/${button.dataset.orderId}`);
+                const order = await response.json();
+                if (!response.ok) throw new Error(order.error || 'Failed to load order');
+
+                const itemsHtml = (order.items || []).map(item => `
+                    <tr>
+                        <td>${item.product_name || 'Product'}${item.variant_name ? ` <span style="color:var(--deep-rose)">(${item.variant_name})</span>` : ''}</td>
+                        <td>${item.quantity || 0}</td>
+                        <td>Php ${formatAmount(item.price || 0)}</td>
+                        <td>Php ${formatAmount((item.quantity || 0) * (item.price || 0))}</td>
+                    </tr>
+                `).join('');
+
+                body.innerHTML = `
+                    <div class="details-grid">
+                        <div class="details-card">
+                            <h6>Order</h6>
+                            <table class="details-table">
+                                <tr><td>Order ID</td><td>#${order.id}</td></tr>
+                                <tr><td>Status</td><td>${titleCaseStatus(order.status)}</td></tr>
+                                <tr><td>Type</td><td>${titleCaseStatus(order.order_type)}</td></tr>
+                                <tr><td>Created</td><td>${formatDateTime(order.created_at)}</td></tr>
+                            </table>
+                        </div>
+                        <div class="details-card">
+                            <h6>Customer</h6>
+                            <table class="details-table">
+                                <tr><td>Name</td><td>${order.customer_name || 'Customer'}</td></tr>
+                                <tr><td>Phone</td><td>${order.customer_phone || 'N/A'}</td></tr>
+                                <tr><td>Rider</td><td>${order.rider_name || 'Not assigned'}</td></tr>
+                                <tr><td>Vehicle</td><td>${order.rider_vehicle || 'N/A'}</td></tr>
+                            </table>
+                        </div>
+                        <div class="details-card">
+                            <h6>Payment</h6>
+                            <table class="details-table">
+                                <tr><td>Method</td><td>${titleCaseStatus(order.payment_method)}</td></tr>
+                                <tr><td>Status</td><td>${titleCaseStatus(order.payment_status)}</td></tr>
+                                <tr><td>Subtotal</td><td>Php ${formatAmount(order.subtotal_amount || 0)}</td></tr>
+                                <tr><td>Delivery</td><td>Php ${formatAmount(order.delivery_fee || 0)}</td></tr>
+                                <tr><td>Total</td><td>Php ${formatAmount(order.total_amount || 0)}</td></tr>
+                            </table>
+                        </div>
+                        <div class="details-card">
+                            <h6>Delivery</h6>
+                            <table class="details-table">
+                                <tr><td>Address</td><td>${order.delivery_address || 'N/A'}</td></tr>
+                                <tr><td>Notes</td><td>${order.delivery_notes || 'None'}</td></tr>
+                                <tr><td>Distance</td><td>${order.distance_km ? `${Number(order.distance_km).toFixed(2)} km` : 'N/A'}</td></tr>
+                            </table>
+                        </div>
+                        <div class="details-card full">
+                            <h6>Items</h6>
+                            <div class="table-responsive">
+                                <table class="orders-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Product</th>
+                                            <th>Qty</th>
+                                            <th>Price</th>
+                                            <th>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${itemsHtml}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                body.innerHTML = `<div class="text-danger">${error.message || 'Failed to load order.'}</div>`;
+            }
+        });
+    });
+
+    document.querySelectorAll('.seller-view-payment').forEach(button => {
+        button.addEventListener('click', () => {
+            activePaymentOrderId = button.dataset.orderId;
+            const proofImage = document.getElementById('sellerPaymentProofImage');
+            const proofEmpty = document.getElementById('sellerPaymentProofEmpty');
+            proofEmpty.style.display = 'none';
+            proofImage.style.display = 'block';
+            proofImage.src = button.dataset.proofUrl;
+            document.getElementById('sellerVerifyPaymentBtn').style.display =
+                button.closest('tr')?.dataset.paymentStatus === 'pending_verification' ? 'inline-flex' : 'none';
+            openModal(sellerPaymentProofModal);
+        });
+    });
+
+    async function verifyPayment(orderId) {
+        try {
+            const response = await sellerFetch(`/api/seller/orders/${orderId}/verify-payment`, { method: 'PUT' });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.error || 'Could not verify payment');
+            closeModal(sellerPaymentProofModal);
+            showSellerAlert('success', 'Payment verified successfully.');
+            window.location.reload();
+        } catch (error) {
+            showSellerAlert('danger', error.message || 'Could not verify payment.');
+        }
+    }
+
+    document.getElementById('sellerVerifyPaymentBtn').addEventListener('click', () => {
+        if (activePaymentOrderId) verifyPayment(activePaymentOrderId);
+    });
+
+    const proofImage = document.getElementById('sellerPaymentProofImage');
+    const proofEmpty = document.getElementById('sellerPaymentProofEmpty');
+    proofImage.addEventListener('load', () => {
+        proofEmpty.style.display = 'none';
+        proofImage.style.display = 'block';
+    });
+    proofImage.addEventListener('error', () => {
+        proofImage.style.display = 'none';
+        proofEmpty.style.display = 'block';
+    });
+
+    document.querySelectorAll('[data-close-modal]').forEach(button => {
+        button.addEventListener('click', () => {
+            closeModal(document.getElementById(button.getAttribute('data-close-modal')));
+        });
+    });
+
+    [sellerOrderDetailsModal, sellerPaymentProofModal].forEach(modal => {
+        modal.addEventListener('click', event => {
+            if (event.target === modal) closeModal(modal);
+        });
+    });
 </script>
 {% endblock %}

@@ -1,29 +1,1308 @@
-<h1 class="profile-title">Purchase History</h1>
+<!-- account_parts/orders_content.html -->
+<style>
+/* ── Orders Page ── */
+.orders-page { padding: 0; }
 
-<div class="profile-card orders-container">
-    <div style="margin-bottom: 1.5rem;">
-        <input type="text" class="form-control" placeholder="Search orders..." style="max-width: 300px;" id="orderSearch">
+.orders-page-title {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--charcoal);
+    margin-bottom: 1.5rem;
+}
+
+/* ── Status Tab Bar ── */
+.order-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.order-tabs::-webkit-scrollbar { display: none; }
+
+.order-tab {
+    padding: 0.75rem 1.25rem;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: var(--font-sans);
+    white-space: nowrap;
+    position: relative;
+    transition: color 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+}
+.order-tab:hover { color: var(--charcoal); }
+.order-tab.active {
+    color: var(--deep-rose);
+    border-bottom-color: var(--deep-rose);
+}
+
+.tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    background: var(--deep-rose);
+    color: white;
+    border-radius: 50px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 6px;
+    padding: 0 5px;
+}
+
+/* ── Search Bar ── */
+.orders-search-bar {
+    position: relative;
+    margin-bottom: 1.25rem;
+}
+.orders-search-bar i {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 16px;
+}
+.orders-search-bar input {
+    width: 100%;
+    padding: 0.7rem 1rem 0.7rem 2.75rem;
+    background: var(--cream);
+    border: 1.5px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--charcoal);
+    outline: none;
+    transition: var(--transition);
+}
+.orders-search-bar input:focus {
+    border-color: var(--deep-rose);
+    background: var(--warm-white);
+    box-shadow: 0 0 0 3px rgba(181,68,90,0.08);
+}
+
+/* ── Order Card ── */
+.order-card {
+    background: var(--warm-white);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    margin-bottom: 1rem;
+    overflow: hidden;
+    transition: var(--transition);
+}
+.order-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: 0 4px 20px rgba(42,35,30,0.08);
+}
+
+/* Store header */
+.order-card-store-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--cream);
+}
+.order-store-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.order-store-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--blush), var(--dusty-rose));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: white;
+    flex-shrink: 0;
+}
+.order-store-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--charcoal);
+}
+.order-status-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
+}
+.badge-pending      { background: rgba(255,183,77,0.15); color: #8a5e00; }
+.badge-processing   { background: rgba(66,153,225,0.12); color: #1a5f9e; }
+.badge-on_delivery  { background: rgba(122,158,126,0.15); color: var(--deep-sage); }
+.badge-delivered    { background: rgba(72,187,120,0.12); color: #276749; }
+.badge-cancelled    { background: rgba(192,57,43,0.1);  color: #9b1c1c; }
+
+/* Items list */
+.order-items-list {
+    padding: 0.75rem 1.25rem;
+}
+.order-item-row {
+    display: flex;
+    gap: 0.875rem;
+    align-items: flex-start;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.order-item-row:last-child { border-bottom: none; }
+
+.order-item-img {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-md);
+    object-fit: cover;
+    background: linear-gradient(145deg, #f5ede6, #ede3d8);
+    flex-shrink: 0;
+}
+.order-item-img-ph {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(145deg, #f5ede6, #ede3d8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    color: rgba(107,76,59,0.15);
+    flex-shrink: 0;
+}
+
+.order-item-info { flex: 1; min-width: 0; }
+.order-item-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--charcoal);
+    margin-bottom: 3px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.order-item-variant {
+    font-size: 12px;
+    color: var(--deep-rose);
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+.order-item-qty {
+    font-size: 12px;
+    color: var(--muted);
+}
+.order-item-price {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--deep-rose);
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* Footer */
+.order-card-footer {
+    padding: 0.875rem 1.25rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    background: var(--warm-white);
+}
+.order-total-block {}
+.order-total-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+.order-total-amount {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--charcoal);
+}
+.order-total-items {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 1px;
+}
+
+.order-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-order-action {
+    padding: 0.5rem 1.125rem;
+    border-radius: var(--radius-pill);
+    font-size: 12.5px;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: var(--transition);
+    border: 1.5px solid var(--border-strong);
+    background: none;
+    color: var(--charcoal);
+    white-space: nowrap;
+}
+.btn-order-action:hover {
+    border-color: var(--charcoal);
+    background: var(--charcoal);
+    color: white;
+}
+.btn-order-action.primary {
+    background: var(--deep-rose);
+    border-color: var(--deep-rose);
+    color: white;
+}
+.btn-order-action.primary:hover {
+    background: #9b3048;
+    border-color: #9b3048;
+}
+.btn-order-action.danger {
+    color: #c0392b;
+    border-color: rgba(192,57,43,0.25);
+}
+.btn-order-action.danger:hover {
+    background: #c0392b;
+    border-color: #c0392b;
+    color: white;
+}
+
+/* Order meta (date / order #) */
+.order-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 1.25rem;
+    background: rgba(250,246,240,0.6);
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--muted);
+}
+.order-meta-row span { display: flex; align-items: center; gap: 4px; }
+.order-meta-row i { font-size: 13px; }
+
+/* Collapsed items */
+.order-more-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--cream);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    padding: 3px 10px;
+    margin-top: 6px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.order-more-badge:hover { border-color: var(--deep-rose); color: var(--deep-rose); }
+
+/* ── Empty / Loading ── */
+.orders-empty {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--muted);
+}
+.orders-empty-icon {
+    font-size: 56px;
+    opacity: 0.15;
+    margin-bottom: 1rem;
+    display: block;
+}
+.orders-empty-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 400;
+    margin-bottom: 0.4rem;
+    color: var(--charcoal);
+}
+.orders-empty-sub {
+    font-size: 13px;
+    opacity: 0.7;
+    margin-bottom: 1.5rem;
+}
+
+.orders-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.skeleton-card {
+    background: var(--warm-white);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.skeleton-line {
+    height: 12px;
+    background: linear-gradient(90deg, var(--cream) 25%, rgba(245,237,230,0.5) 50%, var(--cream) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 6px;
+}
+.skeleton-line.short  { width: 40%; }
+.skeleton-line.medium { width: 65%; }
+.skeleton-line.long   { width: 90%; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ── Order Detail Modal ── */
+.order-detail-modal {
+    max-width: 640px;
+}
+.order-detail-section {
+    margin-bottom: 1.5rem;
+}
+.order-detail-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+}
+.order-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+.order-detail-item {
+    background: var(--cream);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+}
+.order-detail-item-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 3px;
+}
+.order-detail-item-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--charcoal);
+}
+.order-detail-item-value.highlight { color: var(--deep-rose); font-family: var(--font-display); font-size: 18px; }
+
+/* Progress tracker */
+.order-progress {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 1rem 0;
+    position: relative;
+}
+.progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+    z-index: 1;
+}
+.progress-step-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--cream);
+    border: 2px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    transition: var(--transition);
+}
+.progress-step.done .progress-step-dot {
+    background: var(--deep-rose);
+    border-color: var(--deep-rose);
+    color: white;
+}
+.progress-step.active .progress-step-dot {
+    background: var(--warm-white);
+    border-color: var(--deep-rose);
+    color: var(--deep-rose);
+    box-shadow: 0 0 0 4px rgba(181,68,90,0.12);
+}
+.progress-step-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: 0.04em;
+}
+.progress-step.done .progress-step-label,
+.progress-step.active .progress-step-label { color: var(--charcoal); }
+
+.progress-connector {
+    flex: 1;
+    height: 2px;
+    background: var(--border-strong);
+    margin-bottom: 22px;
+    position: relative;
+    z-index: 0;
+}
+.progress-connector.done { background: var(--deep-rose); }
+
+@media (max-width: 600px) {
+    .order-detail-grid { grid-template-columns: 1fr; }
+    .order-card-footer { flex-direction: column; align-items: flex-start; }
+    .order-card-actions { width: 100%; }
+    .btn-order-action { flex: 1; justify-content: center; display: inline-flex; }
+}
+</style>
+
+<div class="orders-page">
+    <h1 class="orders-page-title">My Orders</h1>
+
+    <!-- Status Tabs -->
+    <div class="order-tabs" id="orderTabs">
+        <button class="order-tab active" data-status="all" onclick="filterOrdersByStatus('all', this)">
+            All <span class="tab-count" id="count-all">0</span>
+        </button>
+        <button class="order-tab" data-status="pending" onclick="filterOrdersByStatus('pending', this)">
+            To Pay <span class="tab-count" id="count-pending" style="display:none;"></span>
+        </button>
+        <button class="order-tab" data-status="processing" onclick="filterOrdersByStatus('processing', this)">
+            To Ship <span class="tab-count" id="count-processing" style="display:none;"></span>
+        </button>
+        <button class="order-tab" data-status="on_delivery" onclick="filterOrdersByStatus('on_delivery', this)">
+            To Receive <span class="tab-count" id="count-on_delivery" style="display:none;"></span>
+        </button>
+        <button class="order-tab" data-status="delivered" onclick="filterOrdersByStatus('delivered', this)">
+            Completed
+        </button>
+        <button class="order-tab" data-status="cancelled" onclick="filterOrdersByStatus('cancelled', this)">
+            Cancelled
+        </button>
     </div>
-    
-    <div style="overflow-x: auto;">
-        <table class="orders-table">
-            <thead>
-                <tr>
-                    <th>Order ID</th>
-                    <th>Date</th>
-                    <th>Total</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Orders will be loaded here by JavaScript -->
-            </tbody>
-        </table>
+
+    <!-- Search -->
+    <div class="orders-search-bar">
+        <i class="ri-search-line"></i>
+        <input type="text" id="orderSearchInput" placeholder="Search by order ID, product, or store…" oninput="filterOrdersBySearch(this.value)">
     </div>
-    
-    <!-- Loading placeholder -->
-    <div class="loading" id="ordersLoading">
-        <div class="loading-spinner"></div>
+
+    <!-- Order List -->
+    <div id="ordersList">
+        <!-- Skeleton loading -->
+        <div class="orders-skeleton" id="ordersSkeleton">
+            <div class="skeleton-card">
+                <div class="skeleton-line short"></div>
+                <div style="display:flex;gap:1rem;align-items:center;">
+                    <div style="width:72px;height:72px;border-radius:12px;background:var(--cream);flex-shrink:0;animation:shimmer 1.5s infinite;background-size:200% 100%;background-image:linear-gradient(90deg,var(--cream) 25%,rgba(245,237,230,0.5) 50%,var(--cream) 75%);"></div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="skeleton-card">
+                <div class="skeleton-line short"></div>
+                <div style="display:flex;gap:1rem;align-items:center;">
+                    <div style="width:72px;height:72px;border-radius:12px;background:var(--cream);flex-shrink:0;animation:shimmer 1.5s infinite;background-size:200% 100%;background-image:linear-gradient(90deg,var(--cream) 25%,rgba(245,237,230,0.5) 50%,var(--cream) 75%);"></div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line medium"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ordersContent" style="display:none;"></div>
     </div>
 </div>
+
+<!-- Order Detail Modal -->
+<div class="modal-overlay" id="orderDetailModal" style="display:none;">
+    <div class="modal order-detail-modal">
+        <div class="modal-header">
+            <h3 id="orderDetailTitle" style="font-family:var(--font-display);font-size:20px;font-weight:500;">Order Details</h3>
+            <button class="cart-close" onclick="closeOrderDetail()"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" id="orderDetailBody" style="padding:1.5rem 2rem;max-height:70vh;overflow-y:auto;">
+        </div>
+        <div class="modal-footer" style="padding:1rem 2rem 1.5rem;display:flex;gap:0.5rem;justify-content:flex-end;border-top:1px solid var(--border);background:var(--cream);">
+            <button class="btn-order-action" onclick="closeOrderDetail()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════
+   STATE
+═══════════════════════════════════════ */
+let _allOrders       = [];
+let _filteredOrders  = [];
+let _activeStatus    = 'all';
+let _searchQuery     = '';
+let _cartGroups      = [];
+
+const STATUS_CONFIG = {
+    pending:     { label: 'To Pay',     badge: 'badge-pending',     icon: 'ri-time-line',           progress: 0 },
+    processing:  { label: 'To Ship',    badge: 'badge-processing',  icon: 'ri-box-1-line',          progress: 1 },
+    on_delivery: { label: 'On the Way', badge: 'badge-on_delivery', icon: 'ri-e-bike-line',         progress: 2 },
+    delivered:   { label: 'Delivered',  badge: 'badge-delivered',   icon: 'ri-checkbox-circle-line',progress: 3 },
+    cancelled:   { label: 'Cancelled',  badge: 'badge-cancelled',   icon: 'ri-close-circle-line',   progress: -1 },
+};
+
+const PROGRESS_STEPS = [
+    { key: 'pending',     label: 'Order\nPlaced',  icon: 'ri-shopping-bag-line' },
+    { key: 'processing',  label: 'Processing',     icon: 'ri-box-1-line' },
+    { key: 'on_delivery', label: 'On the Way',     icon: 'ri-e-bike-line' },
+    { key: 'delivered',   label: 'Delivered',      icon: 'ri-checkbox-circle-line' },
+];
+
+/* ═══════════════════════════════════════
+   INIT
+═══════════════════════════════════════ */
+(async function init() {
+    await Promise.all([loadOrders(), loadCartGroups()]);
+    refreshOrdersView();
+})();
+
+/* ═══════════════════════════════════════
+   DATA
+═══════════════════════════════════════ */
+async function loadOrders() {
+    try {
+        const res  = await fetch('/api/account/orders/data');
+        const data = await res.json();
+
+        // Normalise — handle both array response and {orders:[]} wrapper
+        _allOrders = Array.isArray(data) ? data : (data.orders || []);
+    } catch (err) {
+        console.error('Failed to load orders:', err);
+        _allOrders = [];
+    } finally {
+        document.getElementById('ordersSkeleton').style.display = 'none';
+        document.getElementById('ordersContent').style.display  = 'block';
+    }
+}
+
+async function loadCartGroups() {
+    try {
+        if (typeof loadCart === 'function') {
+            await loadCart();
+        }
+
+        const res = await fetch('/api/cart');
+        const data = await res.json();
+        const cartItems = Array.isArray(data?.cart?.items) ? data.cart.items : [];
+
+        _cartGroups = normaliseCartGroups(cartItems);
+    } catch (err) {
+        console.error('Failed to load cart groups:', err);
+        _cartGroups = [];
+    }
+}
+
+function normaliseCartGroups(cartItems) {
+    const groups = new Map();
+
+    cartItems.forEach(item => {
+        const storeId = item.store_id || item.product?.store_id;
+        const storeName = item.store_name || item.product?.store_name || 'Store';
+        const key = storeId || `store-${storeName}`;
+        const price = Number(item.price || 0);
+        const quantity = Number(item.quantity || 0);
+
+        if (!groups.has(key)) {
+            groups.set(key, {
+                source: 'cart',
+                id: `cart-${key}`,
+                store_id: storeId,
+                store_name: storeName,
+                status: 'pending',
+                payment_status: 'pending',
+                created_at: item.updated_at || item.created_at || null,
+                items: [],
+                total_amount: 0,
+                item_count: 0
+            });
+        }
+
+        const group = groups.get(key);
+        group.items.push({
+            id: item.id,
+            cart_item_id: item.id,
+            product_id: item.product_id,
+            variant_id: item.variant_id,
+            name: item.name || item.product?.name || 'Product',
+            product_name: item.name || item.product?.name || 'Product',
+            variant_name: item.variant?.name || null,
+            quantity,
+            price,
+            image_url: item.image_url || null,
+            product_image_url: item.image_url || null,
+            is_selected: Boolean(item.is_selected)
+        });
+        group.total_amount += price * quantity;
+        group.item_count += quantity;
+    });
+
+    return Array.from(groups.values());
+}
+
+function refreshOrdersView() {
+    updateTabCounts();
+    applyFilters();
+}
+
+/* ═══════════════════════════════════════
+   FILTERS
+═══════════════════════════════════════ */
+function filterOrdersByStatus(status, btn) {
+    _activeStatus = status;
+    document.querySelectorAll('.order-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+}
+
+function filterOrdersBySearch(q) {
+    _searchQuery = q.toLowerCase().trim();
+    applyFilters();
+}
+
+function applyFilters() {
+    let result = [];
+
+    if (_activeStatus === 'all') {
+        result = [
+            ..._cartGroups,
+            ..._allOrders.filter(o => getDisplayState(o).key !== 'pending')
+        ];
+    } else if (_activeStatus === 'pending') {
+        result = [..._cartGroups];
+    } else {
+        result = _allOrders.filter(o => getDisplayState(o).key === _activeStatus);
+    }
+
+    if (_searchQuery) {
+        result = result.filter(o =>
+            String(o.id || o.order_number || '').toLowerCase().includes(_searchQuery) ||
+            (o.store_name || '').toLowerCase().includes(_searchQuery) ||
+            (o.items || []).some(i => (i.name || i.product_name || '').toLowerCase().includes(_searchQuery))
+        );
+    }
+
+    _filteredOrders = result;
+    renderOrders(_filteredOrders);
+}
+
+/* ═══════════════════════════════════════
+   TAB COUNTS
+═══════════════════════════════════════ */
+function updateTabCounts() {
+    const total = _cartGroups.length + _allOrders.filter(o => getDisplayState(o).key !== 'pending').length;
+    const el    = document.getElementById('count-all');
+    if (el) el.textContent = total;
+
+    ['pending','processing','on_delivery'].forEach(s => {
+        const n = s === 'pending'
+            ? _cartGroups.length
+            : _allOrders.filter(o => getDisplayState(o).key === s).length;
+        const cnt = document.getElementById(`count-${s}`);
+        if (cnt) {
+            if (n > 0) { cnt.textContent = n; cnt.style.display = 'inline-flex'; }
+            else        { cnt.style.display = 'none'; }
+        }
+    });
+}
+
+/* ═══════════════════════════════════════
+   RENDER ORDERS
+═══════════════════════════════════════ */
+function renderOrders(orders) {
+    const container = document.getElementById('ordersContent');
+
+    if (!orders || orders.length === 0) {
+        container.innerHTML = renderEmpty();
+        return;
+    }
+
+    container.innerHTML = orders.map(order => renderOrderCard(order)).join('');
+}
+
+function renderEmpty(msg) {
+    const msgs = {
+        all:         'You haven\'t placed any orders yet.',
+        pending:     'No orders waiting for payment.',
+        processing:  'No orders being prepared.',
+        on_delivery: 'No orders on the way.',
+        delivered:   'No completed orders yet.',
+        cancelled:   'No cancelled orders.',
+    };
+    return `
+        <div class="orders-empty">
+            <i class="ri-shopping-bag-3-line orders-empty-icon"></i>
+            <div class="orders-empty-title">No orders found</div>
+            <div class="orders-empty-sub">${msg || msgs[_activeStatus] || 'No orders match your search.'}</div>
+            <a href="/" class="btn btn-rose" style="display:inline-flex;align-items:center;gap:.5rem;margin-top:.5rem;">
+                <i class="ri-store-line"></i> Start Shopping
+            </a>
+        </div>`;
+}
+
+function renderOrderCard(order) {
+    if (order.source === 'cart') {
+        return renderCartGroupCard(order);
+    }
+
+    const display    = getDisplayState(order);
+    const cfg        = STATUS_CONFIG[display.key] || STATUS_CONFIG.pending;
+    const items      = order.items || [];
+    const showItems  = items.slice(0, 2);
+    const moreCount  = items.length - showItems.length;
+    const orderId    = order.order_number || `ORD-${String(order.id).padStart(4,'0')}`;
+    const dateStr    = formatDate(order.date || order.created_at);
+    const storeName  = order.store_name || 'E-FLOWERS Store';
+    const totalAmt   = formatPeso(order.total_amount ?? order.total ?? 0);
+    const itemCount  = items.reduce((s, i) => s + (i.quantity || 1), 0);
+
+    const itemsHtml = showItems.map(item => {
+        const img    = item.image_url || item.product_image_url;
+        const name   = item.name || item.product_name || 'Product';
+        const variant = item.variant_name ? `<div class="order-item-variant">${esc(item.variant_name)}</div>` : '';
+        const qty    = item.quantity || 1;
+        const price  = formatPeso(item.price || 0);
+        const imgHtml = img
+            ? `<img class="order-item-img" src="${img}" alt="${esc(name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+               <div class="order-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
+            : `<div class="order-item-img-ph"><i class="ri-flower-line"></i></div>`;
+        return `
+            <div class="order-item-row">
+                ${imgHtml}
+                <div class="order-item-info">
+                    <div class="order-item-name">${esc(name)}</div>
+                    ${variant}
+                    <div class="order-item-qty">Qty: ${qty}</div>
+                </div>
+                <div class="order-item-price">${price}</div>
+            </div>`;
+    }).join('');
+
+    const moreBadge = moreCount > 0
+        ? `<div class="order-more-badge" onclick="viewOrderDetail(${order.id || `'${orderId}'`})">
+               +${moreCount} more item${moreCount > 1 ? 's' : ''}
+           </div>`
+        : '';
+
+    const ctaButtons = buildCTAButtons(order);
+
+    return `
+        <div class="order-card" id="order-card-${order.id}">
+            <!-- Store header -->
+            <div class="order-card-store-hdr">
+                <div class="order-store-left">
+                    <div class="order-store-icon"><i class="ri-store-2-line"></i></div>
+                    <span class="order-store-name">${esc(storeName)}</span>
+                </div>
+                <span class="order-status-badge ${cfg.badge}">
+                    <i class="${cfg.icon}" style="margin-right:4px;"></i>${display.label}
+                </span>
+            </div>
+
+            <!-- Order meta -->
+            <div class="order-meta-row">
+                <span><i class="ri-file-list-3-line"></i> ${esc(orderId)}</span>
+                <span><i class="ri-calendar-line"></i> ${dateStr}</span>
+            </div>
+
+            <!-- Items -->
+            <div class="order-items-list">
+                ${itemsHtml}
+                ${moreBadge}
+            </div>
+
+            <!-- Footer -->
+            <div class="order-card-footer">
+                <div class="order-total-block">
+                    <div class="order-total-label">Order Total</div>
+                    <div class="order-total-amount">${totalAmt}</div>
+                    <div class="order-total-items">${itemCount} item${itemCount !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="order-card-actions">
+                    ${ctaButtons}
+                </div>
+            </div>
+        </div>`;
+}
+
+function renderCartGroupCard(group) {
+    const items = group.items || [];
+    const showItems = items.slice(0, 2);
+    const moreCount = items.length - showItems.length;
+    const totalAmt = formatPeso(group.total_amount || 0);
+    const storeName = group.store_name || 'Store';
+    const selectedCount = items.filter(item => item.is_selected).length;
+
+    const itemsHtml = showItems.map(item => {
+        const img = item.image_url || item.product_image_url;
+        const name = item.name || item.product_name || 'Product';
+        const variant = item.variant_name ? `<div class="order-item-variant">${esc(item.variant_name)}</div>` : '';
+        const imgHtml = img
+            ? `<img class="order-item-img" src="${img}" alt="${esc(name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+               <div class="order-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
+            : `<div class="order-item-img-ph"><i class="ri-flower-line"></i></div>`;
+
+        return `
+            <div class="order-item-row">
+                ${imgHtml}
+                <div class="order-item-info">
+                    <div class="order-item-name">${esc(name)}</div>
+                    ${variant}
+                    <div class="order-item-qty">Qty: ${item.quantity || 1}</div>
+                </div>
+                <div class="order-item-price">${formatPeso(item.price || 0)}</div>
+            </div>`;
+    }).join('');
+
+    const moreBadge = moreCount > 0
+        ? `<div class="order-more-badge" onclick="viewCartGroupDetail(${group.store_id || `'${group.id}'`})">
+               +${moreCount} more item${moreCount > 1 ? 's' : ''}
+           </div>`
+        : '';
+
+    return `
+        <div class="order-card" id="cart-group-${group.store_id || group.id}">
+            <div class="order-card-store-hdr">
+                <div class="order-store-left">
+                    <div class="order-store-icon"><i class="ri-shopping-bag-3-line"></i></div>
+                    <span class="order-store-name">${esc(storeName)}</span>
+                </div>
+                <span class="order-status-badge badge-pending">
+                    <i class="ri-bank-card-line" style="margin-right:4px;"></i>Ready to Pay
+                </span>
+            </div>
+
+            <div class="order-meta-row">
+                <span><i class="ri-shopping-cart-2-line"></i> Basket items</span>
+                <span><i class="ri-checkbox-circle-line"></i> ${selectedCount}/${items.length} selected</span>
+            </div>
+
+            <div class="order-items-list">
+                ${itemsHtml}
+                ${moreBadge}
+            </div>
+
+            <div class="order-card-footer">
+                <div class="order-total-block">
+                    <div class="order-total-label">Cart Total</div>
+                    <div class="order-total-amount">${totalAmt}</div>
+                    <div class="order-total-items">${group.item_count} item${group.item_count !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="order-card-actions">
+                    <button class="btn-order-action" onclick="viewCartGroupDetail(${group.store_id || `'${group.id}'`})">View Details</button>
+                    <button class="btn-order-action primary" onclick="payCartStore(${group.store_id})"><i class="ri-bank-card-line"></i> Pay Now</button>
+                </div>
+            </div>
+        </div>`;
+}
+
+function buildCTAButtons(order) {
+    const id = order.id;
+    const display = getDisplayState(order);
+    let btns = `<button class="btn-order-action" onclick="viewOrderDetail(${id})">View Details</button>`;
+
+    if (display.key === 'pending') {
+        btns += `<button class="btn-order-action primary" onclick="payOrder(${id})"><i class="ri-bank-card-line"></i> Pay Now</button>`;
+        btns += `<button class="btn-order-action danger" onclick="cancelOrderFromCard(${id})">Cancel</button>`;
+    }
+    if (display.key === 'on_delivery') {
+        btns += `<button class="btn-order-action primary" onclick="confirmReceivedOrder(${id})"><i class="ri-checkbox-circle-line"></i> Order Received</button>`;
+    }
+    if (display.key === 'delivered') {
+        btns += `<button class="btn-order-action primary" onclick="rateOrder(${id})"><i class="ri-star-line"></i> Rate</button>`;
+        btns += `<button class="btn-order-action" onclick="reorderItems(${id})"><i class="ri-refresh-line"></i> Buy Again</button>`;
+    }
+
+    return btns;
+}
+
+/* ═══════════════════════════════════════
+   ORDER DETAIL MODAL
+═══════════════════════════════════════ */
+async function viewOrderDetail(orderId) {
+    const modal = document.getElementById('orderDetailModal');
+    const body  = document.getElementById('orderDetailBody');
+    const title = document.getElementById('orderDetailTitle');
+
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    body.innerHTML = `<div style="text-align:center;padding:3rem;"><div class="loading-spinner" style="margin:0 auto;"></div></div>`;
+
+    try {
+        const res   = await fetch(`/api/account/orders/${orderId}`);
+        const order = await res.json();
+
+        title.textContent = `Order #${order.order_number || String(orderId).padStart(4,'0')}`;
+        body.innerHTML    = buildOrderDetailHTML(order);
+
+    } catch (err) {
+        body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">Failed to load order details.</div>`;
+    }
+}
+
+function viewCartGroupDetail(storeId) {
+    const group = _cartGroups.find(entry => String(entry.store_id) === String(storeId) || String(entry.id) === String(storeId));
+    if (!group) {
+        showOrderToast('Cart details unavailable.');
+        return;
+    }
+
+    const modal = document.getElementById('orderDetailModal');
+    const body  = document.getElementById('orderDetailBody');
+    const title = document.getElementById('orderDetailTitle');
+
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    title.textContent = `${group.store_name || 'Store'} Basket`;
+    body.innerHTML = buildCartDetailHTML(group);
+}
+
+function buildCartDetailHTML(group) {
+    const itemsHtml = (group.items || []).map(item => {
+        const img = item.image_url || item.product_image_url;
+        const name = item.name || item.product_name || 'Product';
+        const imgHtml = img
+            ? `<img class="order-item-img" src="${img}" alt="${esc(name)}" style="width:60px;height:60px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+               <div class="order-item-img-ph" style="width:60px;height:60px;display:none;"><i class="ri-flower-line"></i></div>`
+            : `<div class="order-item-img-ph" style="width:60px;height:60px;"><i class="ri-flower-line"></i></div>`;
+
+        return `
+            <div class="order-item-row" style="padding:.625rem 0;">
+                ${imgHtml}
+                <div class="order-item-info">
+                    <div class="order-item-name" style="font-size:13px;">${esc(name)}</div>
+                    ${item.variant_name ? `<div class="order-item-variant" style="font-size:11px;">${esc(item.variant_name)}</div>` : ''}
+                    <div class="order-item-qty" style="font-size:12px;">Qty: ${item.quantity || 1}${item.is_selected ? ' • Selected' : ''}</div>
+                </div>
+                <div class="order-item-price" style="font-size:15px;">${formatPeso(item.price || 0)}</div>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="order-detail-section">
+            <div class="order-detail-section-title">Items Ready for Checkout</div>
+            <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-md);padding:0 1rem;">
+                ${itemsHtml}
+            </div>
+        </div>
+
+        <div class="order-detail-section">
+            <div class="order-detail-section-title">Checkout Summary</div>
+            <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem 1.25rem;display:flex;flex-direction:column;gap:.625rem;">
+                <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);">
+                    <span>Store</span><span style="font-weight:600;color:var(--charcoal);">${esc(group.store_name || 'Store')}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);">
+                    <span>Items</span><span style="font-weight:600;color:var(--charcoal);">${group.item_count}</span>
+                </div>
+                <div style="height:1px;background:var(--border);"></div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                    <span style="font-family:var(--font-display);font-size:15px;color:var(--charcoal);">Subtotal</span>
+                    <span style="font-family:var(--font-display);font-size:24px;font-weight:600;color:var(--deep-rose);">${formatPeso(group.total_amount || 0)}</span>
+                </div>
+                <button class="btn-order-action primary" style="margin-top:.5rem;align-self:flex-end;" onclick="payCartStore(${group.store_id})">
+                    <i class="ri-bank-card-line"></i> Pay This Basket
+                </button>
+            </div>
+        </div>`;
+}
+
+function buildOrderDetailHTML(order) {
+    const display  = getDisplayState(order);
+    const progressState = display.progressKey || display.key;
+    const cfg      = STATUS_CONFIG[progressState] || STATUS_CONFIG.pending;
+    const items    = order.items || [];
+    const dateStr  = formatDate(order.date || order.created_at);
+    const orderId  = order.order_number || `ORD-${String(order.id).padStart(4,'0')}`;
+
+    // Progress tracker (skip for cancelled)
+    let progressHtml = '';
+    if (display.key !== 'cancelled') {
+        const currentStep = cfg.progress;
+        progressHtml = `
+            <div class="order-detail-section">
+                <div class="order-detail-section-title">Order Progress</div>
+                <div class="order-progress">
+                    ${PROGRESS_STEPS.map((step, idx) => {
+                        const isDone   = currentStep > idx;
+                        const isActive = currentStep === idx;
+                        const cls      = isDone ? 'done' : isActive ? 'active' : '';
+                        const connector = idx < PROGRESS_STEPS.length - 1
+                            ? `<div class="progress-connector ${isDone ? 'done' : ''}"></div>`
+                            : '';
+                        return `
+                            <div class="progress-step ${cls}">
+                                <div class="progress-step-dot"><i class="${step.icon}"></i></div>
+                                <div class="progress-step-label">${step.label}</div>
+                            </div>
+                            ${connector}`;
+                    }).join('')}
+                </div>
+            </div>`;
+    }
+
+    // Items
+    const itemsHtml = items.map(item => {
+        const img    = item.image_url || item.product_image_url;
+        const name   = item.name || item.product_name || 'Product';
+        const imgHtml = img
+            ? `<img class="order-item-img" src="${img}" alt="${esc(name)}" style="width:60px;height:60px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+               <div class="order-item-img-ph" style="width:60px;height:60px;display:none;"><i class="ri-flower-line"></i></div>`
+            : `<div class="order-item-img-ph" style="width:60px;height:60px;"><i class="ri-flower-line"></i></div>`;
+        const variantHtml = item.variant_name ? `<div class="order-item-variant" style="font-size:11px;">${esc(item.variant_name)}</div>` : '';
+        return `
+            <div class="order-item-row" style="padding:.625rem 0;">
+                ${imgHtml}
+                <div class="order-item-info">
+                    <div class="order-item-name" style="font-size:13px;">${esc(name)}</div>
+                    ${variantHtml}
+                    <div class="order-item-qty" style="font-size:12px;">Qty: ${item.quantity || 1}</div>
+                </div>
+                <div class="order-item-price" style="font-size:15px;">${formatPeso(item.price || 0)}</div>
+            </div>`;
+    }).join('');
+
+    // Summary totals
+    const sub      = order.subtotal_amount ?? order.subtotal ?? order.total ?? 0;
+    const delivery = order.delivery_fee ?? 0;
+    const total    = order.total_amount ?? order.total ?? 0;
+
+    return `
+        ${progressHtml}
+
+        <!-- Items -->
+        <div class="order-detail-section">
+            <div class="order-detail-section-title">Items Ordered</div>
+            <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-md);padding:0 1rem;">
+                ${itemsHtml}
+            </div>
+        </div>
+
+        <!-- Info grid -->
+        <div class="order-detail-section">
+            <div class="order-detail-section-title">Order Information</div>
+            <div class="order-detail-grid">
+                <div class="order-detail-item">
+                    <div class="order-detail-item-label">Order ID</div>
+                    <div class="order-detail-item-value">${esc(orderId)}</div>
+                </div>
+                <div class="order-detail-item">
+                    <div class="order-detail-item-label">Date Placed</div>
+                    <div class="order-detail-item-value">${dateStr}</div>
+                </div>
+                <div class="order-detail-item">
+                    <div class="order-detail-item-label">Payment</div>
+                    <div class="order-detail-item-value">${capitalise(order.payment_method || 'GCash')}</div>
+                </div>
+                <div class="order-detail-item">
+                    <div class="order-detail-item-label">Payment Status</div>
+                    <div class="order-detail-item-value">${capitalise(order.payment_status || 'Pending')}</div>
+                </div>
+                ${order.delivery_address ? `
+                <div class="order-detail-item" style="grid-column:1/-1;">
+                    <div class="order-detail-item-label">Delivery Address</div>
+                    <div class="order-detail-item-value" style="font-size:13px;font-weight:500;">${esc(order.delivery_address)}</div>
+                </div>` : ''}
+                ${order.delivery_notes ? `
+                <div class="order-detail-item" style="grid-column:1/-1;">
+                    <div class="order-detail-item-label">Delivery Notes</div>
+                    <div class="order-detail-item-value" style="font-size:13px;font-weight:500;">${esc(order.delivery_notes)}</div>
+                </div>` : ''}
+            </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="order-detail-section">
+            <div class="order-detail-section-title">Order Summary</div>
+            <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem 1.25rem;display:flex;flex-direction:column;gap:.625rem;">
+                <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);">
+                    <span>Subtotal</span><span style="font-weight:600;color:var(--charcoal);">${formatPeso(sub)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);">
+                    <span>Delivery Fee</span><span style="font-weight:600;color:var(--charcoal);">${formatPeso(delivery)}</span>
+                </div>
+                <div style="height:1px;background:var(--border);"></div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                    <span style="font-family:var(--font-display);font-size:15px;color:var(--charcoal);">Total</span>
+                    <span style="font-family:var(--font-display);font-size:24px;font-weight:600;color:var(--deep-rose);">${formatPeso(total)}</span>
+                </div>
+            </div>
+        </div>`;
+}
+
+function closeOrderDetail() {
+    const modal = document.getElementById('orderDetailModal');
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+}
+
+/* ═══════════════════════════════════════
+   ACTIONS
+═══════════════════════════════════════ */
+async function cancelOrderFromCard(orderId) {
+    if (!confirm('Cancel this order?')) return;
+    try {
+        const res = await fetch(`/api/account/orders/${orderId}/cancel`, { method: 'POST' });
+        const d   = await res.json();
+        if (d.success) {
+            showOrderToast('Order cancelled.');
+            await loadOrders();
+        } else {
+            showOrderToast(d.message || 'Could not cancel order.');
+        }
+    } catch { showOrderToast('Error cancelling order.'); }
+}
+
+function payOrder(orderId) {
+    showOrderToast('Redirecting to payment…');
+    // Hook up your actual payment flow here
+}
+
+async function payCartStore(storeId) {
+    if (!storeId) {
+        showOrderToast('Store checkout is unavailable for this basket.');
+        return;
+    }
+
+    try {
+        if (typeof loadCart === 'function') {
+            await loadCart();
+        }
+
+        if (!Array.isArray(cart) || !cart.length) {
+            showOrderToast('Your basket is empty.');
+            return;
+        }
+
+        const token = await getAuthToken();
+        const storeIds = [...new Set(cart.map(item => item.store_id).filter(Boolean))];
+
+        await Promise.all(storeIds.map(id =>
+            fetch(`/api/v1/checkout/cart/store/${id}/toggle`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({ selected: id === storeId })
+            })
+        ));
+
+        cart.forEach(item => {
+            item.is_selected = item.store_id === storeId;
+        });
+
+        if (typeof updateCartDisplay === 'function') updateCartDisplay();
+        closeOrderDetail();
+        checkout();
+    } catch (error) {
+        console.error('Pay cart store error:', error);
+        showOrderToast('Could not start checkout for these items.');
+        if (typeof loadCart === 'function') {
+            await loadCart();
+        }
+    }
+}
+
+function confirmReceivedOrder(orderId) {
+    if (!confirm('Confirm that you have received this order?')) return;
+    showOrderToast('Thank you! Order marked as received.');
+    // Call your confirm-received API here
+}
+
+function rateOrder(orderId)   { showOrderToast('Rating feature coming soon!'); }
+function reorderItems(orderId){ showOrderToast('Adding items to cart…'); }
+
+/* ═══════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════ */
+function formatPeso(v) {
+    return '₱' + parseFloat(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatDate(dt) {
+    if (!dt) return '—';
+    try {
+        return new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(dt));
+    } catch { return dt; }
+}
+
+function capitalise(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : '';
+}
+
+function getDisplayState(order) {
+    const status = order.status || 'pending';
+    const paymentStatus = order.payment_status || 'pending';
+
+    if (status === 'cancelled') {
+        return { key: 'cancelled', label: 'Cancelled', progressKey: 'cancelled' };
+    }
+    if (status === 'delivered') {
+        return { key: 'delivered', label: 'Delivered', progressKey: 'delivered' };
+    }
+    if (status === 'on_delivery') {
+        return { key: 'on_delivery', label: 'On the Way', progressKey: 'on_delivery' };
+    }
+
+    // Receipt uploaded but still waiting for seller/admin review.
+    if (paymentStatus === 'pending_verification') {
+        return { key: 'processing', label: 'Payment Review', progressKey: 'pending' };
+    }
+
+    if (status === 'accepted' || status === 'preparing' || paymentStatus === 'verified') {
+        return { key: 'processing', label: 'To Ship', progressKey: 'processing' };
+    }
+
+    return { key: 'pending', label: 'To Pay', progressKey: 'pending' };
+}
+
+function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function showOrderToast(msg) {
+    if (typeof showToast === 'function') { showToast(msg); return; }
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--charcoal);color:white;padding:12px 24px;border-radius:50px;font-size:14px;z-index:9999;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+}
+
+// Close modal on overlay click
+document.getElementById('orderDetailModal').addEventListener('click', function(e) {
+    if (e.target === this) closeOrderDetail();
+});
+</script>

@@ -20,6 +20,7 @@ from app.models import UserAddress
 from app.utils.cloudinary_helper import upload_to_cloudinary
 # app/templates_routes.py - Add these imports at the top
 from flask_wtf.csrf import generate_csrf
+from sqlalchemy.orm import joinedload
 
 # Import the extensions from app (they're initialized in __init__.py)
 from app import limiter
@@ -40,6 +41,53 @@ def inject_csrf_token():
     return dict(csrf_token=generate_csrf)
 
 
+def _serialize_customer_order(order):
+    """Shape order data for the customer account order UI."""
+    items_payload = []
+    total_quantity = 0
+
+    for item in order.items:
+        quantity = item.quantity or 0
+        unit_price = float(item.price or 0)
+        total_quantity += quantity
+
+        items_payload.append({
+            'id': item.id,
+            'product_id': item.product_id,
+            'variant_id': item.variant_id,
+            'product_name': item.product.name if item.product else 'Product',
+            'name': item.product.name if item.product else 'Product',
+            'variant_name': item.variant.name if item.variant else None,
+            'quantity': quantity,
+            'price': unit_price,
+            'total': float(quantity * unit_price),
+            'product_image_url': item.product_image,
+            'image_url': item.product_image,
+        })
+
+    return {
+        'id': order.id,
+        'order_number': f'ORD-{order.id:05d}',
+        'status': order.status,
+        'payment_method': order.payment_method,
+        'payment_status': order.payment_status,
+        'subtotal_amount': float(order.subtotal_amount or 0),
+        'delivery_fee': float(order.delivery_fee or 0),
+        'distance_km': order.distance_km,
+        'total_amount': float(order.total_amount or 0),
+        'delivery_address': order.delivery_address,
+        'delivery_notes': order.delivery_notes,
+        'payment_proof_url': order.payment_proof_url,
+        'created_at': order.created_at.isoformat() if order.created_at else None,
+        'updated_at': order.updated_at.isoformat() if order.updated_at else None,
+        'store_id': order.store_id,
+        'store_name': order.store.name if order.store else 'Store',
+        'store_contact': order.store.contact_number if order.store else None,
+        'item_count': total_quantity,
+        'items': items_payload,
+    }
+
+
 @templates_bp.route('/')
 @limiter.limit("5 per minute")
 def index():
@@ -48,6 +96,12 @@ def index():
         # Get all main categories from database for the navigation
         from app.models import Category
         main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+
+        variant_in_stock_exists = db.session.query(ProductVariant.id).filter(
+            ProductVariant.product_id == Product.id,
+            ProductVariant.is_available == True,
+            ProductVariant.stock_quantity > 0
+        ).exists()
         
         # Get products for the landing page - only from active stores with stock
         products = Product.query\
@@ -56,7 +110,10 @@ def index():
                 Product.is_archived == False,
                 Product.is_available == True,
                 Store.status == 'active',
-                Product.stock_quantity > 0
+                db.or_(
+                    Product.stock_quantity > 0,
+                    variant_in_stock_exists
+                )
             )\
             .order_by(Product.created_at.desc())\
             .limit(8)\
@@ -697,53 +754,79 @@ def register():
 @templates_bp.route('/api/account/orders/data')
 def orders_data():
     """Return JSON data for orders"""
-    # Example data - replace with actual database query
-    orders = [
-        {
-            'id': 1,
-            'order_number': 'ORD-001',
-            'date': '2024-01-15',
-            'total': 2499.99,
-            'status': 'delivered',
-            'items': [
-                {'name': 'Rose Bouquet', 'store_name': 'Floral Dreams', 'quantity': 1, 'price': 1499.99},
-                {'name': 'Vase', 'store_name': 'Floral Dreams', 'quantity': 1, 'price': 1000.00}
-            ]
-        },
-        {
-            'id': 2,
-            'order_number': 'ORD-002',
-            'date': '2024-01-10',
-            'total': 899.99,
-            'status': 'processing',
-            'items': [
-                {'name': 'Tulips', 'store_name': 'Garden Delights', 'quantity': 2, 'price': 449.99}
-            ]
-        }
-    ]
-    return jsonify(orders)
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user_id = session.get('user_id')
+
+    orders = (
+        Order.query
+        .options(
+            joinedload(Order.store),
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
+            joinedload(Order.items).joinedload(OrderItem.variant)
+        )
+        .filter_by(customer_id=user_id)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    orders_payload = []
+    for order in orders:
+        order_dict = _serialize_customer_order(order)
+        order_dict['date'] = order_dict['created_at']
+        orders_payload.append(order_dict)
+
+    return jsonify(orders_payload)
 
 @templates_bp.route('/api/account/orders/<int:order_id>')
 def order_details(order_id):
     """Return specific order details"""
-    # Replace with actual database query
-    order = {
-        'id': order_id,
-        'order_number': f'ORD-{order_id:03d}',
-        'date': '2024-01-15',
-        'total': 2499.99,
-        'status': 'delivered',
-        'items': [
-            {'name': 'Rose Bouquet', 'store_name': 'Floral Dreams', 'quantity': 1, 'price': 1499.99},
-            {'name': 'Vase', 'store_name': 'Floral Dreams', 'quantity': 1, 'price': 1000.00}
-        ]
-    }
-    return jsonify(order)
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user_id = session.get('user_id')
+    order = (
+        Order.query
+        .options(
+            joinedload(Order.store),
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
+            joinedload(Order.items).joinedload(OrderItem.variant)
+        )
+        .filter_by(id=order_id, customer_id=user_id)
+        .first()
+    )
+
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    order_dict = _serialize_customer_order(order)
+    order_dict['date'] = order_dict['created_at']
+    return jsonify(order_dict)
 
 @templates_bp.route('/api/account/orders/<int:order_id>/cancel', methods=['POST'])
 def cancel_order(order_id):
     """Cancel an order"""
-    # Add your cancellation logic here
+    if not session.get('user_id'):
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+
+    user_id = session.get('user_id')
+    order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
+
+    if not order:
+        return jsonify({'success': False, 'message': 'Order not found'}), 404
+
+    cancellable_statuses = {'pending'}
+    if order.status not in cancellable_statuses:
+        return jsonify({
+            'success': False,
+            'message': 'Only pending orders can be cancelled.'
+        }), 400
+
+    order.status = 'cancelled'
+    order.updated_at = datetime.utcnow()
+    db.session.commit()
+
     return jsonify({'success': True, 'message': 'Order cancelled successfully'})
 
 @templates_bp.route('/orders')
@@ -1713,101 +1796,34 @@ def manage_product(product_id):
         elif request.method == 'DELETE':
             print("\n" + "="*60)
             print(f"🗑️ DELETE PRODUCT {product_id}")
-            
-            # Check if product is in any carts
-            carts_with_product = CartItem.query.filter_by(product_id=product_id).count()
-            print(f"🛒 Carts with this product: {carts_with_product}")
-            
-            # Import Cloudinary helper
-            from app.utils.cloudinary_helper import delete_from_cloudinary
-            
-            # If product is in carts, ask user what to do
-            if carts_with_product > 0:
-                print(f"⚠️ Product in {carts_with_product} carts - needs choice")
-                
-                # Count Cloudinary images for warning
-                image_count = len(product.images)
-                variant_image_count = sum(1 for v in product.variants if v.image_public_id)
-                total_images = image_count + variant_image_count
-                
+
+            if product.is_archived:
                 return jsonify({
                     'success': True,
-                    'needs_choice': True,
-                    'message': 'Product is in customer carts. Choose action:',
-                    'product': {
-                        'id': product.id,
-                        'name': product.name,
-                        'in_carts': carts_with_product,
-                        'image_count': image_count,
-                        'variant_image_count': variant_image_count,
-                        'total_cloudinary_images': total_images,
-                        'images': [img.to_dict() for img in product.images],
-                        'variants': [v.to_dict() for v in product.variants]
-                    }
+                    'archived': True,
+                    'message': 'Product is already in archive'
                 }), 200
-            
-            # ===== PRODUCT NOT IN CARTS - PROCEED WITH PERMANENT DELETION =====
-            print("✅ Product not in any carts - proceeding with permanent deletion")
-            
+
             try:
-                # Track deleted Cloudinary images
-                cloudinary_deleted = []
-                cloudinary_failed = []
-                
-                # 1. DELETE PRODUCT IMAGES FROM CLOUDINARY
-                print("\n📸 Deleting product images from Cloudinary...")
-                for image in product.images:
-                    if image.public_id:
-                        print(f"  Attempting to delete: {image.public_id}")
-                        if delete_from_cloudinary(image.public_id):
-                            cloudinary_deleted.append(image.public_id)
-                            print(f"  ✅ Deleted Cloudinary image: {image.public_id}")
-                        else:
-                            cloudinary_failed.append(image.public_id)
-                            print(f"  ❌ Failed to delete Cloudinary image: {image.public_id}")
-                
-                # 2. DELETE VARIANT IMAGES FROM CLOUDINARY
-                print("\n🎯 Deleting variant images from Cloudinary...")
-                for variant in product.variants:
-                    if variant.image_public_id:
-                        print(f"  Attempting to delete: {variant.image_public_id}")
-                        if delete_from_cloudinary(variant.image_public_id):
-                            cloudinary_deleted.append(variant.image_public_id)
-                            print(f"  ✅ Deleted variant Cloudinary image: {variant.image_public_id}")
-                        else:
-                            cloudinary_failed.append(variant.image_public_id)
-                            print(f"  ❌ Failed to delete variant Cloudinary image: {variant.image_public_id}")
-                
-                # 3. DELETE FROM DATABASE (cascade will delete all related records)
-                print("\n🗄️ Deleting product from database...")
-                db.session.delete(product)
+                product.archive(session['user_id'])
                 db.session.commit()
-                
-                print(f"\n✅ DELETE SUMMARY:")
-                print(f"   - Product ID: {product_id}")
-                print(f"   - Cloudinary images deleted: {len(cloudinary_deleted)}")
-                print(f"   - Cloudinary images failed: {len(cloudinary_failed)}")
+
+                print(f"📦 Product {product_id} archived instead of permanently deleting")
                 print("="*60 + "\n")
-                
-                # Prepare response message
-                if cloudinary_failed:
-                    message = f"Product deleted. {len(cloudinary_deleted)} Cloudinary images deleted, {len(cloudinary_failed)} failed."
-                else:
-                    message = f"Product and {len(cloudinary_deleted)} Cloudinary images deleted successfully."
-                
+
                 return jsonify({
                     'success': True,
-                    'message': message,
-                    'cloudinary_deleted': len(cloudinary_deleted),
-                    'cloudinary_failed': len(cloudinary_failed)
+                    'archived': True,
+                    'message': 'Product moved to archive successfully',
+                    'product': product.to_dict()
                 }), 200
-                
+
             except Exception as e:
                 db.session.rollback()
-                print(f"❌ Error during deletion: {str(e)}")
+                print(f"❌ Error archiving product: {str(e)}")
                 import traceback
                 traceback.print_exc()
-                return jsonify({'error': f'Failed to delete product: {str(e)}'}), 500
+                return jsonify({'error': f'Failed to archive product: {str(e)}'}), 500
 
         return jsonify({'error': 'Method not allowed'}), 405
 
@@ -2183,7 +2199,7 @@ def date_format(value):
 def seller_orders():
     if session.get('role') != 'seller':
         return redirect(url_for('templates.dashboard'))
-    
+
     # Get seller's store
     store = Store.query.filter_by(seller_id=session['user_id']).first()
     if not store:
@@ -2192,6 +2208,9 @@ def seller_orders():
     # Get orders for this store
     orders = Order.query.filter_by(store_id=store.id)\
                        .order_by(Order.created_at.desc()).all()
+
+    available_riders = Rider.query.filter_by(store_id=store.id, is_active=True)\
+                                  .order_by(Rider.created_at.desc()).all()
     
     # Format dates for template
     orders_data = []
@@ -2203,19 +2222,146 @@ def seller_orders():
         order_dict['payment_proof'] = order.payment_proof
         order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
         
-        # Add formatted dates
+        # ✅ FIX: Add formatted dates
         if order.created_at:
-            order_dict['date_formatted'] = order.created_at.strftime('%Y-%m-%d')
-            order_dict['time_formatted'] = order.created_at.strftime('%H:%M')
-            order_dict['datetime_formatted'] = order.created_at.strftime('%Y-%m-%d %H:%M')
+            # Check if created_at is already a datetime object
+            if isinstance(order.created_at, datetime):
+                order_dict['date_formatted'] = order.created_at.strftime('%Y-%m-%d')
+                order_dict['time_formatted'] = order.created_at.strftime('%H:%M')
+                order_dict['datetime_formatted'] = order.created_at.strftime('%Y-%m-%d %H:%M')
+            else:
+                # If it's a string, try to parse it
+                try:
+                    dt = datetime.fromisoformat(order.created_at.replace('Z', '+00:00'))
+                    order_dict['date_formatted'] = dt.strftime('%Y-%m-%d')
+                    order_dict['time_formatted'] = dt.strftime('%H:%M')
+                    order_dict['datetime_formatted'] = dt.strftime('%Y-%m-%d %H:%M')
+                except:
+                    order_dict['date_formatted'] = str(order.created_at)
+                    order_dict['time_formatted'] = ''
+                    order_dict['datetime_formatted'] = str(order.created_at)
         else:
             order_dict['date_formatted'] = ''
             order_dict['time_formatted'] = ''
             order_dict['datetime_formatted'] = ''
         
         orders_data.append(order_dict)
-    
-    return render_template('seller_orders.html', orders=orders_data, store=store.to_dict())
+
+    today = datetime.utcnow().date()
+    order_stats = {
+        'total': len(orders),
+        'today': sum(1 for order in orders if order.created_at and order.created_at.date() == today),
+        'pending': sum(1 for order in orders if order.status == 'pending'),
+        'payment_review': sum(1 for order in orders if order.payment_status == 'pending_verification'),
+        'preparing': sum(1 for order in orders if order.status in ['accepted', 'preparing']),
+        'on_delivery': sum(1 for order in orders if order.status == 'on_delivery'),
+        'delivered': sum(1 for order in orders if order.status == 'delivered'),
+        'cancelled': sum(1 for order in orders if order.status == 'cancelled'),
+        'revenue': float(sum((order.total_amount or 0) for order in orders if order.status == 'delivered'))
+    }
+
+    riders_data = []
+    for rider in available_riders:
+        riders_data.append({
+            'id': rider.id,
+            'name': rider.user.full_name if rider.user else 'Rider',
+            'vehicle': rider.vehicle_type,
+            'is_active': rider.is_active
+        })
+
+    return render_template(
+        'seller_orders.html',
+        orders=orders_data,
+        store=store.to_dict(),
+        order_stats=order_stats,
+        available_riders=riders_data
+    )
+
+
+def _serialize_seller_order_for_template(order):
+    order_dict = order.to_dict()
+    order_dict['items'] = [item.to_dict() for item in order.items]
+    order_dict['items_count'] = sum(item.quantity for item in order.items)
+    order_dict['customer_phone'] = order.customer.phone if order.customer else None
+    order_dict['payment_proof'] = order.payment_proof
+    order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
+    return order_dict
+
+
+@templates_bp.route('/api/seller/orders/<int:order_id>', methods=['GET'])
+def seller_order_details_api(order_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id']).first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    order = Order.query.filter_by(id=order_id, store_id=store.id).first()
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    return jsonify(_serialize_seller_order_for_template(order)), 200
+
+
+@templates_bp.route('/api/seller/orders/<int:order_id>/status', methods=['PUT'])
+def seller_order_status_api(order_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id']).first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    order = Order.query.filter_by(id=order_id, store_id=store.id).first()
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    data = request.get_json() or {}
+    new_status = data.get('status')
+    allowed_statuses = {'pending', 'accepted', 'preparing', 'on_delivery', 'delivered', 'cancelled'}
+
+    if new_status not in allowed_statuses:
+        return jsonify({'error': 'Invalid status'}), 400
+
+    order.status = new_status
+    order.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Order status updated',
+        'order': _serialize_seller_order_for_template(order)
+    }), 200
+
+
+@templates_bp.route('/api/seller/orders/<int:order_id>/verify-payment', methods=['PUT'])
+def seller_order_verify_payment_api(order_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id']).first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    order = Order.query.filter_by(id=order_id, store_id=store.id).first()
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    if not order.payment_proof_url:
+        return jsonify({'error': 'No payment proof uploaded'}), 400
+
+    order.payment_status = 'verified'
+    if order.status == 'pending':
+        order.status = 'accepted'
+    order.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Payment verified successfully',
+        'order': _serialize_seller_order_for_template(order)
+    }), 200
 
 @templates_bp.route('/seller/riders')
 def seller_riders():

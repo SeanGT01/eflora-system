@@ -17,7 +17,7 @@
     <!-- Icons -->
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     
-    <style>
+   <style>
         :root {
             --cream: #faf6f0;
             --warm-white: #fffdf9;
@@ -220,7 +220,7 @@
             font-size: clamp(10px, 0.3rem + 1vw, 12px);
             font-weight:600 ; 
             color: rgba(75, 46, 30, 0.822);
-    }
+        }
 
         .cart-btn { position: relative; }
 
@@ -406,6 +406,21 @@
             box-shadow: 0 6px 20px rgba(181, 68, 90, 0.35);
         }
 
+        /* Button disabled state */
+        .btn-rose:disabled,
+        .btn-rose.disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-rose:disabled:hover,
+        .btn-rose.disabled:hover {
+            transform: none;
+            box-shadow: none;
+            background: var(--deep-rose);
+        }
+
         .btn-outline {
             background: transparent;
             color: var(--charcoal);
@@ -436,6 +451,13 @@
             padding: 0;
             flex-shrink: 0;
             border-radius: 50%;
+        }
+
+        /* Spinner Animation */
+        .ri-spin,
+        .ri-loader-4-line.ri-spin {
+            animation: spin 1s linear infinite;
+            display: inline-block;
         }
 
         /* ─── Product Grid ─── */
@@ -747,11 +769,13 @@
         .modal {
             background: var(--warm-white);
             border-radius: var(--radius-xl);
-            max-width: 520px;
+            max-width: 600px;
             width: 100%;
-            max-height: 90vh;
+            max-height: 85vh;
             overflow-y: auto;
             box-shadow: var(--shadow-deep);
+            display: flex;
+            flex-direction: column;
         }
 
         .modal-header {
@@ -768,13 +792,110 @@
             font-weight: 500;
         }
 
-        .modal-body { padding: 1.75rem 2rem; }
+        .modal-body { 
+            padding: 1.75rem 2rem; 
+            flex: 1;
+            overflow-y: auto;
+        }
 
         .modal-footer {
             padding: 1.25rem 2rem 2rem;
             display: flex;
             gap: 0.75rem;
             justify-content: flex-end;
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        /* ===== CHECKOUT PROGRESS INDICATOR ===== */
+        .checkout-progress {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+            padding: 0 20px;
+        }
+
+        .progress-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .step-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--border);
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .progress-step.active .step-number {
+            background: var(--deep-rose);
+            color: white;
+        }
+
+        .progress-step.completed .step-number {
+            background: var(--sage);
+            color: white;
+        }
+
+        .step-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--muted);
+        }
+
+        .progress-step.active .step-label {
+            color: var(--deep-rose);
+        }
+
+        .progress-line {
+            width: 60px;
+            height: 2px;
+            background: var(--border);
+            margin: 0 8px;
+        }
+
+        .progress-line.active {
+            background: var(--deep-rose);
+        }
+
+        /* ===== CHECKOUT DELIVERY ISSUES ===== */
+        #checkoutDeliveryIssues {
+            margin-bottom: 16px;
+        }
+
+        #checkoutDeliveryIssues > div {
+            padding: 12px;
+            border: 1px solid #e0b4b4;
+            background: #fff5f5;
+            color: #8b3a3a;
+            border-radius: var(--radius-md);
+        }
+
+        /* ===== GCASH PAYMENT CONTAINER ===== */
+        #gcashPaymentContainer {
+            min-height: 300px;
+        }
+
+        /* ===== PROOF PREVIEW STYLES ===== */
+        #proofPreview_ {
+            margin-bottom: 12px;
+        }
+
+        #previewImg_ {
+            max-width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
         }
 
         /* Form Elements */
@@ -893,7 +1014,10 @@
             animation: spin 0.8s linear infinite;
         }
 
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes spin { 
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
 
         .empty-state {
             text-align: center;
@@ -1161,18 +1285,14 @@
             margin: 0 0.25rem;
         }
 
-        /* ─── Animations ─── */
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
         /* ─── Responsive ─── */
         @media (max-width: 900px) {
             .header-container { flex-wrap: wrap; padding: 1rem 1.25rem; gap: 1rem; }
             .search-container { order: 3; flex: 0 0 100%; max-width: 100%; }
             .footer-grid { grid-template-columns: 1fr 1fr; gap: 2rem; }
             .cart-sidebar { width: 100%; right: -100%; }
+            .checkout-progress { flex-wrap: wrap; gap: 8px; }
+            .progress-line { width: 30px; }
         }
 
         @media (max-width: 600px) {
@@ -1182,6 +1302,10 @@
             .footer-grid { grid-template-columns: 1fr; }
             .sync-modal { margin: 1rem; }
             .sync-modal-actions { flex-direction: column; }
+            .modal { max-width: 95%; }
+            .checkout-progress { gap: 4px; }
+            .progress-step .step-label { font-size: 9px; }
+            .step-number { width: 28px; height: 28px; font-size: 12px; }
         }
         .bag{
             margin-top: 5px;
@@ -1233,12 +1357,30 @@
 
     <!-- Checkout Modal -->
     <div class="modal-overlay" id="checkoutModal">
-        <div class="modal" style="max-width: 600px; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal">
             <div class="modal-header">
                 <h3>Checkout</h3>
                 <button class="cart-close" onclick="closeCheckout()"><i class="ri-close-line"></i></button>
             </div>
-            <div class="modal-body" style="flex: 1; overflow-y: auto;">
+            <div class="modal-body">
+                <!-- Progress Indicator -->
+                <div class="checkout-progress" id="checkoutProgress">
+                    <div class="progress-step active" data-step="1">
+                        <span class="step-number">1</span>
+                        <span class="step-label">Address</span>
+                    </div>
+                    <div class="progress-line"></div>
+                    <div class="progress-step" data-step="2">
+                        <span class="step-number">2</span>
+                        <span class="step-label">Review</span>
+                    </div>
+                    <div class="progress-line"></div>
+                    <div class="progress-step" data-step="3">
+                        <span class="step-number">3</span>
+                        <span class="step-label">Payment</span>
+                    </div>
+                </div>
+
                 <div id="checkoutStep1" style="display: block;">
                     <h4 style="font-size: 14px; margin-bottom: 12px; font-weight: 600;">Select Delivery Address</h4>
                     <div id="checkoutAddressList" style="margin-bottom: 16px;"></div>
@@ -1476,18 +1618,28 @@
     <div class="toast" id="toast"></div>
 
     <script>
-
-// Add this debug helper at the top of your base.html script section
 const DEBUG = {
     enabled: true,
     log: function(step, data) {
         if (!this.enabled) return;
         console.log(`%c🔍 CART DEBUG - ${step}`, 'background: #b5445a; color: white; padding: 2px 5px; border-radius: 3px;');
-        console.log('Data:', JSON.parse(JSON.stringify(data))); // Deep clone to avoid reference issues
+        if (data !== undefined && data !== null) {
+            try {
+                console.log('Data:', JSON.parse(JSON.stringify(data)));
+            } catch (e) {
+                console.log('Data:', data);
+            }
+        } else {
+            console.log('Data: undefined/null');
+        }
     },
     table: function(data) {
         if (!this.enabled) return;
-        console.table(data);
+        if (data && Array.isArray(data)) {
+            console.table(data);
+        } else {
+            console.log('Table data: not an array or empty');
+        }
     },    
     group: function(name) {
         if (!this.enabled) return;
@@ -1504,10 +1656,94 @@ let isLoadingCart = false;
 let checkoutStep = 1;
 let checkoutOrders = [];
 let uploadedProofs = {};
-let uploadedProofData = {}; // Add this to store full proof data including preview
+let uploadedProofData = {};
 let currentOrderIndex = 0;
 let checkoutAddresses = [];
 let selectedCheckoutAddressId = null;
+let currentCheckoutSession = null;
+let checkoutModalCloseHandler = null;
+let isCreatingOrders = false;  // ADDED: Prevents duplicate order creation
+
+// ===== CHECKOUT SESSION MANAGEMENT =====
+function startCheckoutSession() {
+    currentCheckoutSession = 'checkout_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
+    sessionStorage.setItem('active_checkout', currentCheckoutSession);
+    
+    const tempProofs = JSON.parse(sessionStorage.getItem(`${currentCheckoutSession}_proofs`) || '{}');
+    for (const [tempId, data] of Object.entries(tempProofs)) {
+        if (data.public_id) {
+            fetch('/api/v1/checkout/delete-temp-proof', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ public_id: data.public_id })
+            }).catch(console.error);
+        }
+    }
+    
+    sessionStorage.removeItem(`${currentCheckoutSession}_proofs`);
+}
+
+function cancelCheckout(showWarning = false) {
+    const sessionId = sessionStorage.getItem('active_checkout');
+    if (sessionId) {
+        const proofs = JSON.parse(sessionStorage.getItem(`${sessionId}_proofs`) || '{}');
+        for (const [tempId, data] of Object.entries(proofs)) {
+            if (data.public_id) {
+                fetch('/api/v1/checkout/delete-temp-proof', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ public_id: data.public_id })
+                }).catch(console.error);
+                console.log(`🗑️ Deleted orphaned proof: ${data.public_id}`);
+            }
+        }
+        sessionStorage.removeItem(`${sessionId}_proofs`);
+        sessionStorage.removeItem('active_checkout');
+    }
+    
+    if (showWarning) {
+        showToast('Checkout cancelled');
+    }
+    currentCheckoutSession = null;
+}
+
+function finalizeCheckoutSession() {
+    const sessionId = sessionStorage.getItem('active_checkout');
+    if (sessionId) {
+        sessionStorage.removeItem(`${sessionId}_proofs`);
+        sessionStorage.removeItem('active_checkout');
+    }
+
+    Object.keys(uploadedProofData || {}).forEach(tempId => {
+        localStorage.removeItem(`checkout_proof_${tempId}`);
+    });
+
+    currentCheckoutSession = null;
+    uploadedProofs = {};
+    uploadedProofData = {};
+}
+
+function updateProgressIndicator(step) {
+    const steps = document.querySelectorAll('.progress-step');
+    const lines = document.querySelectorAll('.progress-line');
+    
+    steps.forEach((stepEl, idx) => {
+        const stepNum = idx + 1;
+        stepEl.classList.remove('active', 'completed');
+        if (stepNum === step) {
+            stepEl.classList.add('active');
+        } else if (stepNum < step) {
+            stepEl.classList.add('completed');
+        }
+        lines.forEach((line, lineIdx) => {
+            if (lineIdx < step - 1) {
+                line.classList.add('active');
+            } else {
+                line.classList.remove('active');
+            }
+        });
+    });
+}
 
 // ===== PERSISTENCE FUNCTIONS FOR UPLOADED PROOFS =====
 function saveProofData(tempId, proofData) {
@@ -1515,9 +1751,9 @@ function saveProofData(tempId, proofData) {
     uploadedProofData[tempId] = {
         url: proofData.url,
         preview: proofData.preview,
+        public_id: proofData.public_id,
         timestamp: Date.now()
     };
-    // Save to localStorage for persistence
     localStorage.setItem(`checkout_proof_${tempId}`, JSON.stringify(uploadedProofData[tempId]));
 }
 
@@ -1547,10 +1783,8 @@ document.addEventListener('DOMContentLoaded', function() {
     loadCart();
 
     {% if session.get('user_id') %}
-    // Check if there's a guest cart to sync
     const guestCart = localStorage.getItem('cart');
     if (guestCart && JSON.parse(guestCart).length > 0) {
-        // Small delay to ensure everything is loaded
         setTimeout(() => {
             showCartSyncModal(JSON.parse(guestCart));
         }, 1000);
@@ -1558,15 +1792,12 @@ document.addEventListener('DOMContentLoaded', function() {
     {% endif %}
 });
 
-// Show cart sync modal with preview
 function showCartSyncModal(guestCart) {
     const modal = document.getElementById('cartSyncModal');
     const preview = document.getElementById('cartPreview');
     
-    // Calculate total
     const total = guestCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
-    // Generate preview HTML
     let previewHTML = '';
     guestCart.forEach(item => {
         previewHTML += `
@@ -1594,47 +1825,35 @@ function showCartSyncModal(guestCart) {
     modal.classList.add('active');
 }
 
-// Decline cart sync
 function declineCartSync() {
     localStorage.removeItem('cart');
     document.getElementById('cartSyncModal').classList.remove('active');
     showToast('Guest cart cleared. Start shopping with your account!');
 }
 
-// Replace your loadCart function with this:
 function loadCart() {
     {% if session.get('user_id') %}
-    // For logged-in users, load from server
     fetch('/api/cart')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Check the actual structure of the response
-                DEBUG.log('Raw server cart data', data);
-                
-                // Handle different possible response structures
                 let cartItems = [];
                 
                 if (data.cart && Array.isArray(data.cart)) {
-                    // If cart is directly an array
                     cartItems = data.cart;
                 } else if (data.cart && data.cart.items && Array.isArray(data.cart.items)) {
-                    // If cart has items property
                     cartItems = data.cart.items;
                 } else if (data.items && Array.isArray(data.items)) {
-                    // If items is directly on data
                     cartItems = data.items;
                 }
                 
                 cart = cartItems.map(item => {
-                    // Handle different possible item structures
                     const productId = item.product_id || (item.product && item.product.id);
                     const variantId = item.variant_id || (item.variant && item.variant.id);
                     const productName = item.product ? item.product.name : item.name;
                     const variantName = item.variant ? item.variant.name : null;
                     const storeName = item.store_name || (item.store && item.store.name) || 'Flower Shop';
                     
-                    // Determine price (variant price takes precedence)
                     let price = item.price;
                     if (item.variant && item.variant.price) {
                         price = item.variant.price;
@@ -1642,7 +1861,6 @@ function loadCart() {
                         price = item.product.price;
                     }
                     
-                    // Determine image URL
                     let imageUrl = item.image_url;
                     if (item.variant && item.variant.image_url) {
                         imageUrl = item.variant.image_url;
@@ -1668,8 +1886,6 @@ function loadCart() {
                 
                 updateCartCount();
                 updateCartDisplay();
-                
-                DEBUG.log('Cart loaded from server with variants', cart);
             }
         })
         .catch(error => {
@@ -1677,7 +1893,6 @@ function loadCart() {
             loadCartFromLocal();
         });
     {% else %}
-    // For guest users, load from localStorage
     loadCartFromLocal();
     {% endif %}
 }
@@ -1687,7 +1902,6 @@ function updateCartCount() {
     document.getElementById('cartCount').textContent = total;
 }
 
-// Enhanced updateCartDisplay with store grouping
 function updateCartDisplay() {
     const cartItems = document.getElementById('cartItems');
     const cartTotal = document.getElementById('cartTotal');
@@ -1705,7 +1919,6 @@ function updateCartDisplay() {
         return;
     }
 
-    // Group items by store
     const storesMap = {};
     cart.forEach((item, index) => {
         const store = item.store_name || 'Unknown Store';
@@ -1716,14 +1929,12 @@ function updateCartDisplay() {
     let html = '';
     let total = 0;
 
-    // Render each store section
     Object.entries(storesMap).forEach(([storeName, storeItems]) => {
         const storeTotal = storeItems.reduce((sum, item) => sum + (item.is_selected ? item.price * item.quantity : 0), 0);
         total += storeTotal;
 
         html += `
             <div style="margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--cream);">
-                <!-- Store Header -->
                 <div style="background: var(--warm-white); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
                     <input type="checkbox" class="store-checkbox" data-store="${storeName}" onclick="toggleStore('${storeName}')" ${isStoreFullySelected(storeName, storeItems) ? 'checked' : ''} style="cursor: pointer;">
                     <div style="flex: 1;">
@@ -1732,8 +1943,6 @@ function updateCartDisplay() {
                     </div>
                     <div style="font-weight: 600; color: var(--deep-rose);">₱${storeTotal.toFixed(2)}</div>
                 </div>
-
-                <!-- Items -->
                 <div>
         `;
 
@@ -1840,323 +2049,100 @@ async function toggleItem(index) {
     }
 }
 
-// Add a debug function to inspect cart state
 function inspectCart() {
-    DEBUG.group('CART INSPECTION');
-    
-    console.log('Current cart array:', cart);
-    console.log('LocalStorage cart:', JSON.parse(localStorage.getItem('cart')));
-    
-    console.log('\n📊 CART SUMMARY:');
-    console.log('Total items:', cart.length);
-    
-    const summary = cart.map((item, i) => ({
-        'Index': i,
-        'Name': item.name,
-        'Product ID': item.id,
-        'Variant ID': item.variant_id || 'MAIN PRODUCT',
-        'Quantity': item.quantity,
-        'Price': `₱${item.price}`,
-        'Store': item.store_name
-    }));
-    
-    console.table(summary);
-    
-    // Check for potential issues
-    console.log('\n🔍 VALIDATION CHECKS:');
-    
-    // Check for duplicate combinations
-    const combinations = cart.map(item => `${item.id}-${item.variant_id || 'main'}`);
-    const duplicates = combinations.filter((c, i) => combinations.indexOf(c) !== i);
-    
-    if (duplicates.length > 0) {
-        console.warn('⚠️ Found duplicate product/variant combinations:', duplicates);
-    } else {
-        console.log('✅ No duplicate combinations found');
-    }
-    
-    // Check for missing variant_id on variants
-    const variantsWithoutId = cart.filter(item => 
-        item.name.toLowerCase().includes('variant') && !item.variant_id
-    );
-    
-    if (variantsWithoutId.length > 0) {
-        console.warn('⚠️ Items that appear to be variants but missing variant_id:', variantsWithoutId);
-    }
-    
-    // Show unique product/variant pairs
-    const uniquePairs = [...new Set(combinations)].map(pair => {
-        const [productId, variantId] = pair.split('-');
-        return {
-            'Product ID': productId,
-            'Variant ID': variantId === 'main' ? 'MAIN' : variantId,
-            'Count': combinations.filter(c => c === pair).length
-        };
-    });
-    
-    console.log('\n📦 UNIQUE PRODUCT/VARIANT PAIRS:');
-    console.table(uniquePairs);
-    
-    DEBUG.groupEnd();
-    
+    console.log('Current cart:', cart);
     return cart;
 }
-
-// Make inspectCart globally available
 window.inspectCart = inspectCart;
-     
-// Replace your addToCart function with this debug version:
+
 function addToCart(product) {
-    DEBUG.group('ADD TO CART - ENTRY POINT');
-    DEBUG.log('Raw product received', product);
-    
-    // ═════════════════════════════════════════════════════════════
-    // VALIDATE PRODUCT
-    // ═════════════════════════════════════════════════════════════
     if (!product || !product.id) {
-        console.error('❌ Invalid product - missing id');
-        showToast('Error: Invalid product. Please try again.', 'error');
-        DEBUG.groupEnd();
+        showToast('Error: Invalid product', 'error');
         return false;
     }
     
-    // ═════════════════════════════════════════════════════════════
-    // DETERMINE IF VARIANT OR MAIN PRODUCT
-    // ═════════════════════════════════════════════════════════════
-    const isVariant = !!product.variant_id;
     const displayName = product.name || 'Product';
     
-    DEBUG.log('Product classification', {
-        isVariant: isVariant,
-        product_id: product.id,
-        variant_id: product.variant_id || 'none (main product)',
-        displayName: displayName
-    });
-    
-    // ═════════════════════════════════════════════════════════════
-    // QUANTITY (default 1 if not specified)
-    // ═════════════════════════════════════════════════════════════
-    const quantity = product.quantity || 1;
-    DEBUG.log('Quantity', quantity);
-    
-    // ═════════════════════════════════════════════════════════════
-    // LOGGED IN: ADD TO SERVER CART
-    // ═════════════════════════════════════════════════════════════
     {% if session.get('user_id') %}
-    DEBUG.log('USER STATE', 'Logged in - sending to server');
-    
     const cartPayload = {
         product_id: product.id,
-        quantity: quantity
+        quantity: product.quantity || 1
     };
-    
-    // ✅ Include variant_id if present
     if (product.variant_id) {
         cartPayload.variant_id = product.variant_id;
-        DEBUG.log('Variant ID included in payload', product.variant_id);
     }
-    
-    DEBUG.log('Server payload', cartPayload);
     
     fetch('/api/cart/items', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cartPayload)
     })
     .then(response => response.json())
     .then(data => {
-        DEBUG.log('Server response', data);
-        
         if (data.success) {
-            DEBUG.log('SUCCESS', 'Item added to server cart');
-            // ✅ Reload cart from server
             loadCart();
             showToast(`✓ Added to basket — ${displayName}`);
         } else {
-            console.error('❌ Server error:', data.error);
             showToast('Error: ' + (data.error || 'Could not add item'), 'error');
         }
-        DEBUG.groupEnd();
     })
     .catch(error => {
-        console.error('❌ Fetch error:', error);
-        DEBUG.log('FALLBACK', 'Server error, falling back to localStorage');
+        console.error('Fetch error:', error);
         addToCartLocalStorage(product);
-        DEBUG.groupEnd();
     });
-    
     {% else %}
-    // ═════════════════════════════════════════════════════════════
-    // NOT LOGGED IN: ADD TO LOCAL CART (GUEST)
-    // ═════════════════════════════════════════════════════════════
-    DEBUG.log('USER STATE', 'Guest user - saving to localStorage');
     addToCartLocalStorage(product);
     showToast(`✓ Added to basket — ${displayName}`);
-    DEBUG.groupEnd();
-    
     {% endif %}
 }
 
-// Enhanced localStorage version with better debugging
 function addToCartLocalStorage(product) {
-    DEBUG.group('ADD TO LOCAL STORAGE');
-    DEBUG.log('Product to add', product);
+    cart = JSON.parse(localStorage.getItem('cart')) || [];
     
-    // Load current cart
-    let cart = JSON.parse(localStorage.getItem('cart')) || [];
-    DEBUG.log('Current cart (before)', cart);
-    DEBUG.table(cart.map(item => ({
-        Name: item.name,
-        ProductID: item.id,
-        VariantID: item.variant_id || 'none',
-        Quantity: item.quantity,
-        Price: item.price
-    })));
-    
-    // ═════════════════════════════════════════════════════════════
-    // CREATE CART ITEM OBJECT
-    // ═════════════════════════════════════════════════════════════
     const cartItem = {
-        id: product.id,                    // ✅ Main product ID
-        variant_id: product.variant_id || null,  // ✅ May be null for main products
+        id: product.id,
+        variant_id: product.variant_id || null,
         name: product.name,
         quantity: product.quantity || 1,
         price: product.price,
         store_id: product.store_id,
         store_name: product.store_name || 'Flower Shop',
-        image_url: product.image_url || null
+        image_url: product.image_url || null,
+        is_selected: true
     };
     
-    DEBUG.log('Cart item created', cartItem);
-    
-    // ═════════════════════════════════════════════════════════════
-    // CHECK FOR EXISTING ITEM - DETAILED MATCHING LOGIC
-    // ═════════════════════════════════════════════════════════════
-    DEBUG.log('Looking for existing item with:', {
-        searchProductId: cartItem.id,
-        searchVariantId: cartItem.variant_id || 'null'
-    });
-    
     let existingIndex = -1;
-    let matchReason = '';
-    
     for (let i = 0; i < cart.length; i++) {
         const item = cart[i];
-        const itemDesc = `Item ${i}: ${item.name} (ID:${item.id}, Variant:${item.variant_id || 'none'})`;
-        
-        if (!cartItem.variant_id && !item.variant_id) {
-            // Both are main products
-            if (item.id === cartItem.id) {
-                existingIndex = i;
-                matchReason = 'Both are main products with same ID';
-                DEBUG.log(`✅ Match found: ${itemDesc} - ${matchReason}`);
-                break;
-            }
-        } 
-        else if (cartItem.variant_id && item.variant_id) {
-            // Both are variants
-            if (item.id === cartItem.id && item.variant_id === cartItem.variant_id) {
-                existingIndex = i;
-                matchReason = 'Both are variants with same product ID and variant ID';
-                DEBUG.log(`✅ Match found: ${itemDesc} - ${matchReason}`);
-                break;
-            }
-        }
-        else {
-            // One is variant, one is main product
-            DEBUG.log(`❌ No match: ${itemDesc} - Type mismatch (one is variant, one is main)`);
+        if (!cartItem.variant_id && !item.variant_id && item.id === cartItem.id) {
+            existingIndex = i;
+            break;
+        } else if (cartItem.variant_id && item.variant_id && item.id === cartItem.id && item.variant_id === cartItem.variant_id) {
+            existingIndex = i;
+            break;
         }
     }
     
     if (existingIndex > -1) {
-        // ═════════════════════════════════════════════════════════════
-        // ITEM ALREADY IN CART - INCREMENT QUANTITY
-        // ═════════════════════════════════════════════════════════════
-        DEBUG.log('EXISTING ITEM FOUND', {
-            index: existingIndex,
-            reason: matchReason,
-            beforeQuantity: cart[existingIndex].quantity,
-            addQuantity: cartItem.quantity
-        });
-        
         cart[existingIndex].quantity += cartItem.quantity;
-        
-        DEBUG.log('After increment', {
-            newQuantity: cart[existingIndex].quantity,
-            item: cart[existingIndex]
-        });
     } else {
-        // ═════════════════════════════════════════════════════════════
-        // NEW ITEM - ADD TO CART
-        // ═════════════════════════════════════════════════════════════
-        DEBUG.log('NEW ITEM - No existing match found, adding to cart');
         cart.push(cartItem);
     }
     
-    // ═════════════════════════════════════════════════════════════
-    // SAVE TO LOCALSTORAGE
-    // ═════════════════════════════════════════════════════════════
     localStorage.setItem('cart', JSON.stringify(cart));
-    DEBUG.log('Cart saved to localStorage');
-    
-    // Verify save
-    const savedCart = JSON.parse(localStorage.getItem('cart'));
-    DEBUG.log('Verification - cart after save', savedCart);
-    DEBUG.table(savedCart.map(item => ({
-        Name: item.name,
-        ProductID: item.id,
-        VariantID: item.variant_id || 'none',
-        Quantity: item.quantity
-    })));
-    
-    // ═════════════════════════════════════════════════════════════
-    // UPDATE UI
-    // ═════════════════════════════════════════════════════════════
     updateCartCount();
     updateCartDisplay();
-    
-    DEBUG.log('UI updated');
-    DEBUG.groupEnd();
 }
 
-// Enhanced loadCartFromLocal with verification
 function loadCartFromLocal() {
-    DEBUG.group('LOAD CART FROM LOCAL');
-    
     const rawCart = localStorage.getItem('cart');
-    DEBUG.log('Raw localStorage data', rawCart);
-    
     cart = JSON.parse(rawCart) || [];
-    DEBUG.log('Parsed cart', cart);
-    
-    // Ensure all items have variant_id property
-    cart = cart.map(item => {
-        const normalized = {
-            ...item,
-            variant_id: item.variant_id || null
-        };
-        return normalized;
-    });
-    
-    DEBUG.log('Normalized cart', cart);
-    DEBUG.table(cart.map(item => ({
-        Name: item.name,
-        ProductID: item.id,
-        VariantID: item.variant_id || 'none',
-        Quantity: item.quantity
-    })));
-    
+    cart = cart.map(item => ({ ...item, variant_id: item.variant_id || null }));
     updateCartCount();
     updateCartDisplay();
-    
-    DEBUG.groupEnd();
 }
 
 function updateQuantity(index, change) {
-    console.log(`Updating quantity at index ${index} by ${change}`);
-    
     const item = cart[index];
     const newQuantity = item.quantity + change;
     
@@ -2164,15 +2150,12 @@ function updateQuantity(index, change) {
         removeFromCart(index);
         return;
     }
- 
+    
     {% if session.get('user_id') %}
-    // For logged-in users with server cart
     if (item.cart_item_id) {
         fetch(`/api/cart/items/${item.cart_item_id}`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ quantity: newQuantity })
         })
         .then(response => response.json())
@@ -2182,7 +2165,6 @@ function updateQuantity(index, change) {
             }
         })
         .catch(error => {
-            console.error('Error updating cart:', error);
             updateQuantityLocal(index, change);
         });
     } else {
@@ -2192,7 +2174,7 @@ function updateQuantity(index, change) {
     updateQuantityLocal(index, change);
     {% endif %}
 }
- 
+
 function updateQuantityLocal(index, change) {
     cart[index].quantity += change;
     if (cart[index].quantity <= 0) cart.splice(index, 1);
@@ -2203,10 +2185,9 @@ function updateQuantityLocal(index, change) {
 
 function removeFromCart(index) {
     const item = cart[index];
- 
+    
     {% if session.get('user_id') %}
     if (item.cart_item_id) {
-        // For logged-in users with server cart
         fetch(`/api/cart/items/${item.cart_item_id}`, {
             method: 'DELETE'
         })
@@ -2217,7 +2198,6 @@ function removeFromCart(index) {
             }
         })
         .catch(error => {
-            console.error('Error removing from cart:', error);
             removeFromCartLocal(index);
         });
     } else {
@@ -2227,22 +2207,19 @@ function removeFromCart(index) {
     removeFromCartLocal(index);
     {% endif %}
 }
- 
+
 function removeFromCartLocal(index) {
     const removedItem = cart[index];
-    console.log('🗑️ Removing item:', removedItem.name);
-    
     cart.splice(index, 1);
     localStorage.setItem('cart', JSON.stringify(cart));
     updateCartCount();
     updateCartDisplay();
-    
     showToast(`Removed from basket — ${removedItem.name}`);
 }
- 
+
 function clearCart() {
     if (!confirm('Clear your entire basket?')) return;
- 
+    
     {% if session.get('user_id') %}
     fetch('/api/cart/clear', {
         method: 'POST'
@@ -2255,14 +2232,13 @@ function clearCart() {
         }
     })
     .catch(error => {
-        console.error('Error clearing cart:', error);
         clearCartLocal();
     });
     {% else %}
     clearCartLocal();
     {% endif %}
 }
- 
+
 function clearCartLocal() {
     cart = [];
     localStorage.setItem('cart', JSON.stringify(cart));
@@ -2281,21 +2257,49 @@ function toggleCart() {
 
 document.getElementById('closeCart').addEventListener('click', toggleCart);
 
-function checkout() {
+async function fetchCheckoutAddresses() {
+    const response = await fetch('/api/account/addresses');
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to load addresses');
+    }
+
+    return Array.isArray(result.addresses) ? result.addresses : [];
+}
+
+async function checkout() {
     const selectedItems = cart.filter(item => item.is_selected);
     if (!selectedItems.length) { 
         showToast('Please select at least one item to checkout'); 
         return; 
     }
     {% if session.get('user_id') %}
-    // Reset checkout flow
+    try {
+        const addresses = await fetchCheckoutAddresses();
+        if (!addresses.length) {
+            showToast('Please add a delivery address before checkout');
+            setTimeout(() => {
+                window.location.href = "{{ url_for('templates.my_account') }}?page=profile";
+            }, 900);
+            return;
+        }
+    } catch (error) {
+        console.error('Checkout address precheck error:', error);
+        showToast('Could not verify your saved addresses right now');
+        return;
+    }
+
+    startCheckoutSession();
+    
     checkoutStep = 1;
     checkoutOrders = [];
     uploadedProofs = {};
-    uploadedProofData = {};  // Clear proof data
+    uploadedProofData = {};
     currentOrderIndex = 0;
+    isCreatingOrders = false;  // Reset flag on new checkout
+    updateProgressIndicator(1);
     
-    // Clear stored proofs from localStorage
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -2310,9 +2314,23 @@ function checkout() {
     document.getElementById('checkoutStep3').style.display = 'none';
     document.getElementById('checkoutBackBtn').style.display = 'none';
     document.getElementById('checkoutNextBtn').textContent = '→ Continue';
-    
     document.getElementById('checkoutNextBtn').disabled = false;
     document.getElementById('checkoutModal').classList.add('active');
+    
+    if (checkoutModalCloseHandler) {
+        document.getElementById('checkoutModal').removeEventListener('click', checkoutModalCloseHandler);
+    }
+    checkoutModalCloseHandler = function(e) {
+        if (e.target === document.getElementById('checkoutModal') && checkoutStep > 1) {
+            if (confirm('You have uploaded payment proofs. Are you sure you want to cancel checkout? Unused uploads will be deleted.')) {
+                cancelCheckout(true);
+                document.getElementById('checkoutModal').classList.remove('active');
+                isCreatingOrders = false;  // Reset flag on cancel
+            }
+        }
+    };
+    document.getElementById('checkoutModal').addEventListener('click', checkoutModalCloseHandler);
+    
     loadCheckoutAddresses();
     {% else %}
     showToast('Please sign in to checkout');
@@ -2324,23 +2342,34 @@ function checkout() {
 }
 
 function closeCheckout() {
+    if (checkoutStep > 1) {
+        if (confirm('You have uploaded payment proofs. Are you sure you want to cancel checkout? Unused uploads will be deleted.')) {
+            cancelCheckout(true);
+            isCreatingOrders = false;
+        } else {
+            return;
+        }
+    }
     document.getElementById('checkoutModal').classList.remove('active');
+    cancelCheckout();
 }
 
 function goBackCheckout() {
     if (checkoutStep === 3) {
         checkoutStep = 2;
+        updateProgressIndicator(2);
         document.getElementById('checkoutStep3').style.display = 'none';
         document.getElementById('checkoutStep2').style.display = 'block';
         document.getElementById('checkoutBackBtn').style.display = 'inline-block';
         document.getElementById('checkoutBackBtn').textContent = 'Back';
         document.getElementById('checkoutNextBtn').disabled = false;
-        document.getElementById('checkoutNextBtn').textContent = '→ Payment';
+        document.getElementById('checkoutNextBtn').textContent = '→ Proceed to Payment';
         return;
     }
 
     if (checkoutStep === 2) {
         checkoutStep = 1;
+        updateProgressIndicator(1);
         document.getElementById('checkoutStep2').style.display = 'none';
         document.getElementById('checkoutStep1').style.display = 'block';
         document.getElementById('checkoutBackBtn').style.display = 'none';
@@ -2348,7 +2377,7 @@ function goBackCheckout() {
         document.getElementById('checkoutNextBtn').textContent = '→ Continue';
         return;
     }
-
+    
     closeCheckout();
 }
 
@@ -2365,14 +2394,7 @@ async function loadCheckoutAddresses() {
     issuesEl.innerHTML = '';
 
     try {
-        const response = await fetch('/api/account/addresses');
-        const result = await response.json();
-
-        if (!response.ok || !result.success) {
-            throw new Error(result.error || 'Failed to load addresses');
-        }
-
-        checkoutAddresses = result.addresses || [];
+        checkoutAddresses = await fetchCheckoutAddresses();
         const defaultAddress = checkoutAddresses.find(address => address.is_default) || checkoutAddresses[0] || null;
         selectedCheckoutAddressId = defaultAddress ? defaultAddress.id : null;
         renderCheckoutAddresses();
@@ -2439,10 +2461,8 @@ function renderCheckoutDeliveryIssues(issues) {
     `;
 }
 
-// ===== UPDATED PROCEED CHECKOUT FUNCTION =====
 async function proceedCheckout() {
     if (checkoutStep === 1) {
-        // Step 1: Validate delivery address and calculate totals
         const selectedItems = cart.filter(item => item.is_selected);
         if (!selectedCheckoutAddressId) {
             showToast('Please select a saved delivery address');
@@ -2456,7 +2476,6 @@ async function proceedCheckout() {
         try {
             renderCheckoutDeliveryIssues([]);
             
-            // Step 1: Validate delivery and get order totals (but DON'T create order yet)
             const response = await fetch('/api/v1/checkout/validate', {
                 method: 'POST',
                 headers: {
@@ -2476,14 +2495,13 @@ async function proceedCheckout() {
             const result = await response.json();
             
             if (result.success && result.orders) {
-                // Store order data temporarily (not created in DB yet)
                 checkoutOrders = result.orders;
                 uploadedProofs = {};
                 uploadedProofData = {};
                 displayOrderSummary();
                 
-                // Move to step 2 (order summary)
                 checkoutStep = 2;
+                updateProgressIndicator(2);
                 document.getElementById('checkoutStep1').style.display = 'none';
                 document.getElementById('checkoutStep2').style.display = 'block';
                 document.getElementById('checkoutBackBtn').style.display = 'inline-block';
@@ -2498,9 +2516,9 @@ async function proceedCheckout() {
         }
     }
     else if (checkoutStep === 2) {
-        // Step 2: Move to payment (still no order created)
         checkoutStep = 3;
         currentOrderIndex = 0;
+        updateProgressIndicator(3);
         displayGCashPayment();
         
         document.getElementById('checkoutStep2').style.display = 'none';
@@ -2510,8 +2528,9 @@ async function proceedCheckout() {
         document.getElementById('checkoutNextBtn').disabled = true;
     }
     else if (checkoutStep === 3) {
-        // Step 3: Check if current order has uploaded payment proof
+        const nextBtn = document.getElementById('checkoutNextBtn');
         const currentOrder = checkoutOrders[currentOrderIndex];
+        
         if (!uploadedProofs[currentOrder.temp_id]) {
             showToast('Please upload payment proof for this order first', 'error');
             return;
@@ -2521,29 +2540,47 @@ async function proceedCheckout() {
             currentOrderIndex++;
             displayGCashPayment();
         } else {
-            // All orders have uploaded proofs, now create the orders!
+            // Prevent double click
+            if (nextBtn.disabled) return;
+            
+            nextBtn.disabled = true;
+            nextBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+            
             await createOrders();
         }
     }
 }
 
-// ===== UPDATED CREATE ORDERS FUNCTION =====
 async function createOrders() {
+    // Prevent multiple submissions
+    if (isCreatingOrders) {
+        console.log('⚠️ Order creation already in progress, ignoring duplicate click');
+        return;
+    }
+    
+    const nextBtn = document.getElementById('checkoutNextBtn');
+    const originalText = nextBtn.textContent;
+    
+    nextBtn.disabled = true;
+    nextBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+    
+    isCreatingOrders = true;
+    
     showToast('Creating orders...', 'info');
     
     try {
         const token = await getAuthToken();
-        
-        // Make sure we have the address_id from the selected address
         const addressId = selectedCheckoutAddressId;
         const deliveryNotes = document.getElementById('deliveryNotes').value;
         
         if (!addressId) {
             showToast('Error: No delivery address selected', 'error');
+            nextBtn.disabled = false;
+            nextBtn.textContent = originalText;
+            isCreatingOrders = false;
             return;
         }
         
-        // Prepare orders data with all required fields
         const ordersPayload = {
             address_id: addressId,
             delivery_notes: deliveryNotes,
@@ -2561,11 +2598,10 @@ async function createOrders() {
                     quantity: item.quantity,
                     price: item.price
                 })),
-                payment_proof_url: uploadedProofs[order.temp_id]
+                payment_proof_url: uploadedProofs[order.temp_id],
+                payment_proof_public_id: uploadedProofData[order.temp_id]?.public_id || null
             }))
         };
-        
-        console.log('Creating orders with payload:', ordersPayload);
         
         const response = await fetch('/api/v1/checkout/create-orders', {
             method: 'POST',
@@ -2580,14 +2616,54 @@ async function createOrders() {
         
         if (response.ok && result.success) {
             showToast('✅ Orders created successfully!');
-            completeCheckout();
+            await completeCheckout();
         } else {
             showToast('Error creating orders: ' + (result.error || 'Unknown error'), 'error');
+            nextBtn.disabled = false;
+            nextBtn.textContent = originalText;
+            isCreatingOrders = false;
         }
     } catch (error) {
         console.error('Error creating orders:', error);
         showToast('Error creating orders. Please try again.', 'error');
+        nextBtn.disabled = false;
+        nextBtn.textContent = originalText;
+        isCreatingOrders = false;
     }
+}
+
+async function completeCheckout() {
+    const nextBtn = document.getElementById('checkoutNextBtn');
+    
+    // Clear cart and update UI immediately
+    cart = cart.filter(item => !item.is_selected);
+    localStorage.setItem('cart', JSON.stringify(cart));
+    updateCartCount();
+    updateCartDisplay();
+    
+    // Close the modal first (prevents double clicks)
+    document.getElementById('checkoutModal').classList.remove('active');
+    
+    // Clear checkout state without deleting the uploaded proofs that are now attached to orders
+    finalizeCheckoutSession();
+    
+    showToast('🎉 Orders submitted for verification!');
+    
+    // Remove any lingering modal handlers
+    if (checkoutModalCloseHandler) {
+        document.getElementById('checkoutModal').removeEventListener('click', checkoutModalCloseHandler);
+        checkoutModalCloseHandler = null;
+    }
+    
+    // Reset button state
+    nextBtn.disabled = false;
+    nextBtn.textContent = '✓ Complete';
+    isCreatingOrders = false;
+    
+    // Redirect to orders page after a short delay
+    setTimeout(() => {
+        window.location.href = "{{ url_for('templates.my_account') }}?page=orders";
+    }, 1500);
 }
 
 function displayOrderSummary() {
@@ -2597,7 +2673,6 @@ function displayOrderSummary() {
 
     if (checkoutOrders && Array.isArray(checkoutOrders)) {
         checkoutOrders.forEach((order, index) => {
-            // Add a temporary ID for this order
             if (!order.temp_id) {
                 order.temp_id = 'temp_' + Date.now() + '_' + index;
             }
@@ -2623,17 +2698,14 @@ function displayOrderSummary() {
     document.getElementById('step2Total').textContent = '₱' + total.toFixed(2);
 }
 
-// ===== UPDATED DISPLAY GCASH PAYMENT WITH PERSISTENCE =====
 function displayGCashPayment() {
     const order = checkoutOrders[currentOrderIndex];
     const container = document.getElementById('gcashPaymentContainer');
     
-    // Check if this order already has uploaded proof - try to load from localStorage if not in memory
     let hasProof = !!uploadedProofs[order.temp_id];
     let existingProof = null;
     
     if (!hasProof) {
-        // Try to load from localStorage
         existingProof = loadProofData(order.temp_id);
         if (existingProof) {
             hasProof = true;
@@ -2656,7 +2728,6 @@ function displayGCashPayment() {
         </div>
     `;
     
-    // Add GCash instructions if available
     if (order.gcash_instructions) {
         html += `
             <div style="margin-bottom: 16px; font-size: 12px; color: var(--muted); padding: 12px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md);">
@@ -2685,7 +2756,6 @@ function displayGCashPayment() {
             <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Upload Payment Receipt</div>
     `;
     
-    // If there's an existing proof, show it
     if (hasProof && existingProof) {
         html += `
             <div id="proofPreview_${order.temp_id}" style="display: block; margin-bottom: 12px;">
@@ -2722,11 +2792,22 @@ function displayGCashPayment() {
 
     container.innerHTML = html;
     
-    // Update button text based on whether proof is already uploaded
-    document.getElementById('checkoutNextBtn').textContent = hasProof 
-        ? (currentOrderIndex < checkoutOrders.length - 1 ? '→ Next Order' : '✓ Complete')
-        : '⏳ Waiting for upload...';
-    document.getElementById('checkoutNextBtn').disabled = !hasProof;
+    const nextBtn = document.getElementById('checkoutNextBtn');
+    if (hasProof) {
+        if (currentOrderIndex < checkoutOrders.length - 1) {
+            nextBtn.textContent = '→ Next Order';
+            nextBtn.disabled = false;
+        } else {
+            nextBtn.textContent = '✓ Complete';
+            nextBtn.disabled = false;
+        }
+    } else {
+        nextBtn.textContent = '⏳ Waiting for upload...';
+        nextBtn.disabled = true;
+    }
+    
+    // Reset the creating orders flag when moving between orders
+    isCreatingOrders = false;
 }
 
 function handleProofSelect(tempId, event) {
@@ -2738,7 +2819,6 @@ function handleProofSelect(tempId, event) {
             document.getElementById(`previewImg_${tempId}`).src = previewUrl;
             document.getElementById(`proofPreview_${tempId}`).style.display = 'block';
             
-            // Store preview temporarily
             if (!uploadedProofData[tempId]) {
                 uploadedProofData[tempId] = {};
             }
@@ -2749,9 +2829,7 @@ function handleProofSelect(tempId, event) {
     }
 }
 
-// ===== UPDATED UPLOAD PROOF FUNCTION WITH PERSISTENCE =====
 async function uploadProof(tempId) {
-    // Check if we have a file in memory
     let file = uploadedProofData[tempId]?.file;
     const input = document.getElementById(`proofInput_${tempId}`);
     
@@ -2769,31 +2847,33 @@ async function uploadProof(tempId) {
 
     const formData = new FormData();
     formData.append('file', file);
+    
+    const sessionId = sessionStorage.getItem('active_checkout') || 'temp_' + Date.now();
+    formData.append('checkout_session', sessionId);
 
     try {
         const token = await getAuthToken();
-        
-        // Upload to temporary storage (Cloudinary) without creating order
         const response = await fetch('/api/v1/checkout/upload-proof', {
             method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + token
-            },
+            headers: { 'Authorization': 'Bearer ' + token },
             body: formData
         });
 
         const result = await response.json();
 
         if (response.ok && result.success) {
-            // Save the proof data permanently
+            const proofs = JSON.parse(sessionStorage.getItem(`${sessionId}_proofs`) || '{}');
+            proofs[tempId] = { url: result.url, public_id: result.public_id };
+            sessionStorage.setItem(`${sessionId}_proofs`, JSON.stringify(proofs));
+            
             saveProofData(tempId, {
                 url: result.url,
-                preview: uploadedProofData[tempId]?.preview || result.url
+                preview: uploadedProofData[tempId]?.preview || result.url,
+                public_id: result.public_id
             });
             
             statusDiv.innerHTML = '<span style="color: var(--sage);">✓ Receipt uploaded successfully</span>';
             
-            // Auto-enable next button after successful upload
             const currentOrder = checkoutOrders[currentOrderIndex];
             if (currentOrder.temp_id === tempId) {
                 document.getElementById('checkoutNextBtn').disabled = false;
@@ -2809,19 +2889,7 @@ async function uploadProof(tempId) {
     }
 }
 
-async function completeCheckout() {
-    showToast('🎉 All orders submitted for verification!');
-    cart = cart.filter(item => !item.is_selected);
-    localStorage.setItem('cart', JSON.stringify(cart));
-    updateCartCount();
-    updateCartDisplay();
-    closeCheckout();
-    if (document.getElementById('cartSidebar').classList.contains('active')) toggleCart();
-    setTimeout(() => window.location.href = "{{ url_for('templates.my_account') }}?page=orders", 1500);
-}
-
 async function getAuthToken() {
-    // Get token from localStorage (adjust based on your auth implementation)
     return localStorage.getItem('jwt_token') || '';
 }
 
@@ -2836,44 +2904,81 @@ function clearProof(tempId) {
     document.getElementById(`proofPreview_${tempId}`).style.display = 'none';
     clearProofData(tempId);
     
-    // Show the file input again
     const fileInput = document.getElementById(`proofInput_${tempId}`);
     if (fileInput) {
         fileInput.style.display = 'block';
     }
     
-    // Update button state
     document.getElementById('checkoutNextBtn').disabled = true;
     document.getElementById('checkoutNextBtn').textContent = '⏳ Waiting for upload...';
     
-    // Update status
     const statusDiv = document.getElementById(`uploadStatus_${tempId}`);
     if (statusDiv) {
         statusDiv.innerHTML = '';
     }
 }
 
-// User Menu
-let menuTimeout;
-function showUserMenu() { clearTimeout(menuTimeout); document.getElementById('userMenu')?.classList.add('show'); }
-function hideUserMenu() { menuTimeout = setTimeout(() => document.getElementById('userMenu')?.classList.remove('show'), 200); }
-
-document.addEventListener('DOMContentLoaded', function() {
-    const container = document.getElementById('userAvatarContainer');
-    const menu = document.getElementById('userMenu');
-    if (container && menu) {
-        container.addEventListener('mouseenter', showUserMenu);
-        container.addEventListener('mouseleave', hideUserMenu);
-        menu.addEventListener('mouseenter', () => clearTimeout(menuTimeout));
-        menu.addEventListener('mouseleave', hideUserMenu);
-        document.getElementById('userAvatar')?.addEventListener('click', e => { e.stopPropagation(); menu.classList.toggle('show'); });
+async function syncGuestCart() {
+    const guestCart = JSON.parse(localStorage.getItem('cart')) || [];
+    if (guestCart.length === 0) {
+        document.getElementById('cartSyncModal').classList.remove('active');
+        showToast('No items to sync');
+        return;
     }
-    document.addEventListener('click', e => {
-        if (!document.getElementById('userAvatarContainer')?.contains(e.target)) {
-            document.getElementById('userMenu')?.classList.remove('show');
+    
+    showToast('Transferring items to your account...', 'info');
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    try {
+        for (const item of guestCart) {
+            const payload = {
+                product_id: item.id,
+                quantity: item.quantity
+            };
+            
+            if (item.variant_id) {
+                payload.variant_id = item.variant_id;
+            }
+            
+            try {
+                const response = await fetch('/api/cart/items', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                }
+            } catch (err) {
+                errorCount++;
+            }
         }
-    });
-});
+        
+        localStorage.removeItem('cart');
+        document.getElementById('cartSyncModal').classList.remove('active');
+        await loadCart();
+        
+        if (successCount > 0) {
+            showToast(`✓ Added ${successCount} item(s) to your cart!${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+        } else if (errorCount > 0) {
+            showToast(`⚠️ Failed to sync ${errorCount} item(s). Please try adding them manually.`, 'error');
+        } else {
+            showToast('Cart synced successfully!');
+        }
+        
+    } catch (error) {
+        console.error('Error syncing cart:', error);
+        showToast('Error transferring items. Please try again.', 'error');
+        document.getElementById('cartSyncModal').classList.remove('active');
+    }
+}
 
 function handleAccountNavigation(page) {
     document.getElementById('userMenu')?.classList.remove('show');
@@ -2887,24 +2992,11 @@ function handleAccountNavigation(page) {
 }
 
 function debugCart() {
-    console.group('🐛 CART DEBUG');
-    console.log('Total items:', cart.length);
-    
+    console.log('Cart items:', cart.length);
     cart.forEach((item, index) => {
-        console.group(`Item ${index + 1}: ${item.name}`);
-        console.log('ID:', item.id);
-        console.log('Product ID:', item.product_id);
-        console.log('Variant ID:', item.variant_id || '(none - main product)');
-        console.log('Quantity:', item.quantity);
-        console.log('Price:', item.price);
-        console.log('Store:', item.store_name);
-        console.groupEnd();
+        console.log(`${index + 1}: ${item.name} (x${item.quantity}) - ₱${item.price}`);
     });
-    
-    console.groupEnd();
 }
- 
-// Make debug function available globally
 window.debugCart = debugCart;
 
 function showToast(message, type = 'success') {
@@ -2922,10 +3014,9 @@ function showToast(message, type = 'success') {
 // Initialize cart display
 updateCartCount();
 updateCartDisplay();
-            </script>
+    </script>
 
-        {% block extra_js %}
-    
+    {% block extra_js %}
     {% endblock %}
-    </body>
+</body>
 </html>

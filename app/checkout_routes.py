@@ -24,10 +24,8 @@ from app.models import Cart, CartItem, Order, OrderItem, Store, User, UserAddres
 # Create blueprint
 checkout_bp = Blueprint("checkout", __name__)
 print(f"✅ checkout_bp created: {checkout_bp}")
-print(f"   Blueprint name: {checkout_bp.name}")
-print(f"   Blueprint url_prefix: {checkout_bp.url_prefix}")
 
-# Test route - add this immediately after blueprint creation
+# Test route
 @checkout_bp.route("/test", methods=["GET"])
 def test_checkout():
     """Simple test route to verify blueprint is working"""
@@ -39,6 +37,7 @@ def test_checkout():
             "/validate",
             "/create-orders",
             "/upload-proof",
+            "/delete-temp-proof",
             "/process",
             "/cart/items/<int:item_id>/toggle",
             "/cart/store/<int:store_id>/toggle",
@@ -51,6 +50,71 @@ print("✅ Test route added to checkout_bp")
 print("=" * 60)
 
 
+def _build_stock_lookup(cart_items):
+    """Aggregate requested quantities by product/variant from cart items."""
+    stock_lookup = {}
+
+    for cart_item in cart_items:
+        if not cart_item.product:
+            raise ValueError(f"Cart item {cart_item.id} has no product")
+
+        key = (cart_item.product_id, cart_item.variant_id)
+        if key not in stock_lookup:
+            stock_lookup[key] = {
+                "product": cart_item.product,
+                "variant": cart_item.variant,
+                "quantity": 0,
+            }
+
+        stock_lookup[key]["quantity"] += int(cart_item.quantity or 0)
+
+    return stock_lookup
+
+
+def _validate_stock_lookup(stock_lookup):
+    """Validate that all requested product or variant stock is available."""
+    for entry in stock_lookup.values():
+        product = entry["product"]
+        variant = entry["variant"]
+        quantity = entry["quantity"]
+
+        if quantity < 1:
+            raise ValueError(f'Invalid quantity for "{product.name}"')
+
+        if not product.is_available:
+            raise ValueError(f'"{product.name}" is no longer available')
+
+        if variant:
+            if not variant.is_available:
+                raise ValueError(f'"{product.name}" - {variant.name} is no longer available')
+            if variant.stock_quantity < quantity:
+                raise ValueError(
+                    f'Insufficient stock for "{product.name}" - {variant.name}. '
+                    f"Available: {variant.stock_quantity}, requested: {quantity}."
+                )
+        else:
+            if product.stock_quantity < quantity:
+                raise ValueError(
+                    f'Insufficient stock for "{product.name}". '
+                    f"Available: {product.stock_quantity}, requested: {quantity}."
+                )
+
+
+def _reduce_stock_lookup(stock_lookup, user_id, reason_notes):
+    """Reduce stock with audit trail after an order has been created."""
+    for entry in stock_lookup.values():
+        product = entry["product"]
+        variant = entry["variant"]
+        quantity = entry["quantity"]
+        product.reduce_stock(
+            quantity,
+            "other",
+            user_id,
+            reason_notes=reason_notes,
+            variant=variant,
+        )
+
+
 def customer_only(f):
     """Decorator: Session or JWT required + must be customer role."""
     @wraps(f)
@@ -58,10 +122,8 @@ def customer_only(f):
         # First check session (for web users)
         if 'user_id' in session:
             role = session.get('role')
-            # Allow customers only (for production)
             if role == 'customer':
                 print(f"✅ User authenticated via session as customer (ID: {session['user_id']})")
-                # Add user_id to request context for the route
                 request.user_id = session['user_id']
                 return f(*args, **kwargs)
             else:
@@ -242,7 +304,6 @@ def validate_checkout():
                     "distance_km": round(delivery_check["distance_km"], 2) if delivery_check["distance_km"] is not None else None,
                 })
             else:
-                # Create temporary order data (not saved to DB)
                 store_checkout_data.append({
                     "temp_id": f"temp_{uuid.uuid4().hex[:8]}",
                     "store_id": store.id,
@@ -276,7 +337,44 @@ def validate_checkout():
         return jsonify({"error": str(e)}), 500
 
 
-# ===== NEW ENDPOINT: Upload proof without creating order =====
+# ===== NEW ENDPOINT: Delete temporary proof (for abandoned checkouts) =====
+@checkout_bp.route("/delete-temp-proof", methods=["POST"])
+@customer_only
+def delete_temp_proof():
+    """Delete a temporary payment proof that was not used in checkout."""
+    print("🔵🔵🔵 DELETE TEMP PROOF ROUTE WAS CALLED! 🔵🔵🔵")
+    try:
+        data = request.get_json()
+        public_id = data.get("public_id")
+        
+        if not public_id:
+            return jsonify({"error": "public_id required"}), 400
+        
+        from app.utils.cloudinary_helper import delete_from_cloudinary
+        
+        result = delete_from_cloudinary(public_id)
+        
+        if result:
+            print(f"✅ Deleted temp proof: {public_id}")
+            return jsonify({
+                "success": True,
+                "message": "Temp proof deleted"
+            })
+        else:
+            print(f"⚠️ Failed to delete temp proof: {public_id}")
+            return jsonify({
+                "success": False,
+                "message": "Delete failed"
+            }), 500
+        
+    except Exception as e:
+        print(f"Delete temp proof error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ===== UPLOAD PROOF WITHOUT CREATING ORDER =====
 @checkout_bp.route("/upload-proof", methods=["POST"])
 @customer_only
 def upload_proof_temp():
@@ -322,7 +420,7 @@ def upload_proof_temp():
         return jsonify({"error": str(e)}), 500
 
 
-# ===== UPDATED CREATE ORDERS ENDPOINT =====
+# ===== CREATE ORDERS ENDPOINT =====
 @checkout_bp.route("/create-orders", methods=["POST"])
 @customer_only
 def create_orders():
@@ -352,18 +450,14 @@ def create_orders():
         if not address:
             return jsonify({"error": "Delivery address not found"}), 404
 
-        # Get the cart to clear items after order creation
         cart = Cart.query.filter_by(user_id=user_id).first()
         if not cart:
             return jsonify({"error": "Cart not found"}), 404
 
-        # Collect all selected items to remove from cart
         selected_items = []
         
-        # Collect all selected items to remove from cart
         for order_data in orders_data:
             for item in order_data.get("items", []):
-                # Find the cart item
                 cart_item = CartItem.query.filter_by(
                     cart_id=cart.id,
                     product_id=item.get("product_id"),
@@ -372,6 +466,9 @@ def create_orders():
                 if cart_item and cart_item.is_selected:
                     selected_items.append(cart_item)
                     print(f"  ✅ Found cart item: {cart_item.id} - {cart_item.product.name}")
+
+        stock_lookup = _build_stock_lookup(selected_items)
+        _validate_stock_lookup(stock_lookup)
 
         delivery_point = from_shape(Point(address.longitude, address.latitude), srid=4326)
         orders_created = []
@@ -382,7 +479,6 @@ def create_orders():
                 print(f"⚠️ Store not found: {order_data.get('store_id')}")
                 continue
 
-            # Create the order
             order = Order(
                 customer_id=user_id,
                 store_id=store.id,
@@ -393,7 +489,7 @@ def create_orders():
                 distance_km=order_data.get("distance_km"),
                 total_amount=order_data.get("total", 0),
                 payment_method="gcash",
-                payment_status="pending_verification",  # Already have proof uploaded
+                payment_status="pending_verification",
                 delivery_location=delivery_point,
                 delivery_address=address.address_line,
                 delivery_notes=delivery_notes,
@@ -402,18 +498,17 @@ def create_orders():
                 mapbox_place_id=address.place_id,
             )
 
-            # Add payment proof URL if provided
             payment_proof_url = order_data.get("payment_proof_url")
+            payment_proof_public_id = order_data.get("payment_proof_public_id")
             if payment_proof_url:
                 order.payment_proof_url = payment_proof_url
-                order.payment_proof_public_id = f"temp_{order_data.get('temp_id', 'unknown')}"
+                order.payment_proof_public_id = payment_proof_public_id
                 print(f"  📸 Added payment proof: {payment_proof_url}")
 
             db.session.add(order)
             db.session.flush()
             print(f"  ✅ Created order #{order.id} for store {store.name}")
 
-            # Add order items
             for item_data in order_data.get("items", []):
                 db.session.add(OrderItem(
                     order_id=order.id,
@@ -427,7 +522,12 @@ def create_orders():
             db.session.flush()
             orders_created.append(order.to_dict())
 
-        # Clear selected items from cart
+        _reduce_stock_lookup(
+            stock_lookup,
+            user_id,
+            f"Reduced automatically after online checkout by customer #{user_id}",
+        )
+
         print(f"🗑️ Removing {len(selected_items)} selected items from cart")
         for item in selected_items:
             db.session.delete(item)
@@ -547,6 +647,9 @@ def process_checkout():
         if not selected_items:
             return jsonify({"error": "No items selected for checkout"}), 400
 
+        stock_lookup = _build_stock_lookup(selected_items)
+        _validate_stock_lookup(stock_lookup)
+
         items_by_store = {}
         for item in selected_items:
             if not item.product:
@@ -654,6 +757,12 @@ def process_checkout():
             order_dict["selected_address"] = address.to_dict()
 
             orders_created.append(order_dict)
+
+        _reduce_stock_lookup(
+            stock_lookup,
+            user_id,
+            f"Reduced automatically after online checkout by customer #{user_id}",
+        )
 
         CartItem.query.filter(
             CartItem.id.in_([item.id for item in selected_items])
