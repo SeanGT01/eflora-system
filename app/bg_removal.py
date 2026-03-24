@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
-from PIL import Image
+#from PIL import Image
 from rembg import remove
 import io
 import base64
@@ -15,6 +15,8 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
+'''
 @bg_removal_bp.route('/remove', methods=['POST'])
 def remove_background():
     """
@@ -106,3 +108,5 @@ def remove_and_save():
     except Exception as e:
         print(f"Background removal error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+'''

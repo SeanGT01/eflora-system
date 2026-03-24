@@ -11,7 +11,7 @@ from decimal import Decimal
 import uuid
 import time
 import jwt
-from PIL import Image
+#from PIL import Image
 import io
 from flask import send_file
 from app.laguna_addresses import get_municipalities, get_barangays, get_coordinates, format_address, LAGUNA_ADDRESSES
@@ -3439,7 +3439,7 @@ def get_resized_product_image(filename):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 '''
-
+'''
 @templates_bp.route('/api/product-image/<path:filename>')
 @limiter.limit("100 per minute")
 def get_resized_product_image(filename):
@@ -3629,7 +3629,7 @@ def get_resized_product_image(filename):
         traceback.print_exc()
         # Don't expose internal errors to client
         return jsonify({'error': 'An error occurred processing the image'}), 500
-
+'''
     
 
 @templates_bp.route('/seller/archive')
