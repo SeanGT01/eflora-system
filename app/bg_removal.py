@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app
 #from PIL import Image
-from rembg import remove
+# from rembg import remove
 import io
 import base64
 import os
