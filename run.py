@@ -20,10 +20,14 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
+# For Gunicorn - expose the app object at module level
+# Gunicorn will import 'app' from this module
+# The 'app' variable is already created above
+
 if __name__ == '__main__':
-    # Only run in debug mode if explicitly set
+    # Only run in debug mode when executing directly (not via Gunicorn)
     debug_mode = os.getenv('FLASK_ENV') == 'development'
-    port = int(os.getenv('PORT', 5000))
+    port = int(os.getenv('PORT', 8000))  # Changed from 5000 to 8000
     
     print(f"🎯 Starting Flask on 0.0.0.0:{port} (debug={debug_mode})", file=sys.stderr)
     app.run(debug=debug_mode, host='0.0.0.0', port=port)
