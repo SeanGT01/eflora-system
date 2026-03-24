@@ -1,7 +1,7 @@
 # app/customer.py
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider
+from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant
 from app.extensions import db
 from functools import wraps
 import jwt
@@ -206,14 +206,15 @@ def get_cart():
 @customer_bp.route('/cart/items', methods=['POST'])
 @customer_only
 def add_to_cart():
-    """Add a product to the cart. Increments quantity if already present."""
+    """Add a product to the cart. Supports variants. Increments quantity if same product/variant already present."""
     try:
         user_id = int(get_jwt_identity())
         data = request.get_json() or {}
         product_id = data.get('product_id')
+        variant_id = data.get('variant_id')  # ✅ GET variant_id from payload
         quantity = int(data.get('quantity', 1))
 
-        print(f"🛒 Adding to cart - User: {user_id}, Product: {product_id}, Quantity: {quantity}")
+        print(f"🛒 Adding to cart - User: {user_id}, Product: {product_id}, Variant: {variant_id}, Quantity: {quantity}")
 
         if not product_id or quantity < 1:
             return jsonify({'error': 'product_id and quantity >= 1 are required'}), 400
@@ -221,8 +222,24 @@ def add_to_cart():
         product = Product.query.get(product_id)
         if not product or not product.is_available:
             return jsonify({'error': 'Product not available'}), 404
-        if product.stock_quantity < quantity:
-            return jsonify({'error': f'Only {product.stock_quantity} in stock'}), 400
+
+        # ✅ ALIGNED: If variant_id is provided, check variant exists and has stock
+        variant = None
+        if variant_id:
+            variant = ProductVariant.query.get(variant_id)
+            if not variant:
+                return jsonify({'error': 'Variant not found'}), 404
+            if variant.product_id != product_id:
+                return jsonify({'error': 'Variant does not belong to this product'}), 400
+            if variant.stock_quantity < quantity:
+                return jsonify({'error': f'Only {variant.stock_quantity} of this variant available'}), 400
+            print(f"📦 Variant: {variant.name}, Stock: {variant.stock_quantity}")
+        else:
+            # Check main product stock
+            if product.stock_quantity < quantity:
+                return jsonify({'error': f'Only {product.stock_quantity} available'}), 400
+
+        print(f"📦 Product: {product.name}, Available: {product.is_available}")
 
         cart = Cart.query.filter_by(user_id=user_id).first()
         if not cart:
@@ -231,15 +248,26 @@ def add_to_cart():
             db.session.add(cart)
             db.session.flush()
 
-        item = CartItem.query.filter_by(cart_id=cart.id, product_id=product_id).first()
+        # ✅ FIXED: Check if product/variant combination already in cart
+        item = CartItem.query.filter_by(
+            cart_id=cart.id, 
+            product_id=product_id,
+            variant_id=variant_id  # Include variant_id in the query!
+        ).first()
+        
         if item:
-            if product.stock_quantity < (item.quantity + quantity):
-                return jsonify({'error': f'Only {product.stock_quantity} available total'}), 400
+            # Check total quantity against stock
+            if variant:
+                if variant.stock_quantity < (item.quantity + quantity):
+                    return jsonify({'error': f'Only {variant.stock_quantity} available total'}), 400
+            else:
+                if product.stock_quantity < (item.quantity + quantity):
+                    return jsonify({'error': f'Only {product.stock_quantity} available total'}), 400
             print(f"🔄 Updating existing cart item from {item.quantity} to {item.quantity + quantity}")
             item.quantity += quantity
         else:
             print(f"➕ Adding new cart item")
-            item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity)
+            item = CartItem(cart_id=cart.id, product_id=product_id, variant_id=variant_id, quantity=quantity)
             db.session.add(item)
 
         db.session.commit()
@@ -275,21 +303,32 @@ def add_to_cart():
                     'description': prod.description,
                     'price': float(prod.price),
                     'stock_quantity': prod.stock_quantity,
-                    'category': prod.category,
+                    'main_category_id': prod.main_category_id,
+                    'main_category_name': prod.main_category.name if prod.main_category else 'Uncategorized',
+                    'store_category_name': prod.store_category.name if prod.store_category else None,
+                    'category_display': prod.category_display,
                     'is_available': prod.is_available,
                     'store_id': prod.store_id,
                     'images': images,
                     'store_name': prod.store.name if prod.store else None
                 }
                 
+                # ✅ ALIGNED: Include variant data if present
+                variant_data = None
+                if cart_item.variant:
+                    variant_data = cart_item.variant.to_dict()
+                
                 item_data = {
                     'id': cart_item.id,
                     'cart_id': cart_item.cart_id,
                     'product_id': cart_item.product_id,
+                    'variant_id': cart_item.variant_id,
                     'quantity': cart_item.quantity,
+                    'is_selected': cart_item.is_selected,
                     'created_at': cart_item.created_at.isoformat() if cart_item.created_at else None,
                     'updated_at': cart_item.updated_at.isoformat() if cart_item.updated_at else None,
-                    'product': product_data
+                    'product': product_data,
+                    'variant': variant_data  # ✅ Include variant if present
                 }
                 cart_data['items'].append(item_data)
         

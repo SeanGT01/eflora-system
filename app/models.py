@@ -1320,11 +1320,40 @@ class Cart(db.Model):
     
     def to_dict(self):
         items_list = [item.to_dict() for item in self.items.all()]
+        
+        # Group items by store
+        stores_dict = {}
+        for item in items_list:
+            if item['product']:
+                store_id = item['product']['store_id']
+                store_name = item['product'].get('store').get('name') if item['product'].get('store') else f'Store {store_id}'
+                
+                if store_id not in stores_dict:
+                    stores_dict[store_id] = {
+                        'store_id': store_id,
+                        'store_name': store_name,
+                        'items': [],
+                        'subtotal': 0,
+                        'item_count': 0
+                    }
+                
+                stores_dict[store_id]['items'].append(item)
+                stores_dict[store_id]['item_count'] += item['quantity']
+                if item['is_selected']:
+                    stores_dict[store_id]['subtotal'] += item['subtotal']
+        
+        stores_list = list(stores_dict.values())
+        
+        # Calculate selected total (only selected items)
+        selected_total = sum(item['subtotal'] for item in items_list if item['is_selected'])
+        
         return {
             'id': self.id,
             'user_id': self.user_id,
             'items': items_list,
-            'total': sum(item['subtotal'] for item in items_list),
+            'stores': stores_list,  # Grouped by store
+            'total': sum(item['subtotal'] for item in items_list),  # All items
+            'selected_total': selected_total,  # Only selected items
             'item_count': sum(item['quantity'] for item in items_list),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
@@ -1339,6 +1368,7 @@ class CartItem(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
     variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='CASCADE'), nullable=True)
     quantity = db.Column(db.Integer, nullable=False, default=1)
+    is_selected = db.Column(db.Boolean, default=True)  # Checkbox for checkout selection
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -1374,6 +1404,7 @@ class CartItem(db.Model):
             'product': product_dict,
             'variant': variant_dict,
             'quantity': self.quantity,
+            'is_selected': self.is_selected,  # Selection status
             'subtotal': float(self.subtotal),
             'image_url': self.item_image,  # Cloudinary only
             'created_at': self.created_at.isoformat() if self.created_at else None,

@@ -1161,6 +1161,12 @@
             margin: 0 0.25rem;
         }
 
+        /* ─── Animations ─── */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
         /* ─── Responsive ─── */
         @media (max-width: 900px) {
             .header-container { flex-wrap: wrap; padding: 1rem 1.25rem; gap: 1rem; }
@@ -1227,40 +1233,48 @@
 
     <!-- Checkout Modal -->
     <div class="modal-overlay" id="checkoutModal">
-        <div class="modal">
+        <div class="modal" style="max-width: 600px; max-height: 85vh; display: flex; flex-direction: column;">
             <div class="modal-header">
-                <h3>Complete Order</h3>
+                <h3>Checkout</h3>
                 <button class="cart-close" onclick="closeCheckout()"><i class="ri-close-line"></i></button>
             </div>
-            <div class="modal-body">
-                <form id="checkoutForm">
-                    <div class="form-group">
-                        <label class="form-label">Delivery Address</label>
-                        <textarea class="form-control" name="address" rows="3" required placeholder="Enter your full delivery address..."></textarea>
+            <div class="modal-body" style="flex: 1; overflow-y: auto;">
+                <div id="checkoutStep1" style="display: block;">
+                    <h4 style="font-size: 14px; margin-bottom: 12px; font-weight: 600;">Select Delivery Address</h4>
+                    <div id="checkoutAddressList" style="margin-bottom: 16px;"></div>
+                    <div id="checkoutAddressEmpty" style="display:none; padding: 12px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px;">
+                        <div style="font-weight: 600; margin-bottom: 4px;">No saved address yet</div>
+                        <div style="font-size: 13px; color: var(--muted);">Please add a customer address first before checking out.</div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Special Notes</label>
-                        <textarea class="form-control" name="notes" rows="2" placeholder="Any special instructions for your order..."></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Payment Method</label>
-                        <select class="form-select" name="payment_method" required>
-                            <option value="gcash">GCash</option>
-                            <option value="cash_on_delivery">Cash on Delivery</option>
-                        </select>
-                    </div>
-                    <div id="paymentProofSection" style="display:none;">
-                        <div class="form-group">
-                            <label class="form-label">Upload Payment Proof</label>
-                            <input type="file" class="form-control" name="payment_proof" accept="image/*">
+                    <div id="checkoutDeliveryIssues" style="display:none; margin-bottom: 16px;"></div>
+
+                    <h4 style="font-size: 14px; margin-bottom: 12px; font-weight: 600;">Special Notes (Optional)</h4>
+                    <textarea class="form-control" id="deliveryNotes" rows="2" placeholder="Any special instructions for your order..."></textarea>
+                </div>
+
+                <div id="checkoutStep2" style="display: none;">
+                    <h4 style="font-size: 14px; margin-bottom: 12px; font-weight: 600;">Order Summary</h4>
+                    <div id="ordersByStore" style="margin-bottom: 16px;"></div>
+                    <div style="border-top: 1px solid var(--border); padding-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>Subtotal</span>
+                            <span id="step2Subtotal">₱0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-weight: 600; color: var(--deep-rose); font-size: 16px;">
+                            <span>Total</span>
+                            <span id="step2Total">₱0.00</span>
                         </div>
                     </div>
-                </form>
+                </div>
+
+                <div id="checkoutStep3" style="display: none;">
+                    <div id="gcashPaymentContainer"></div>
+                </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline" onclick="closeCheckout()">Cancel</button>
-                <button class="btn btn-rose" onclick="submitOrder()">
-                    <i class="ri-check-line"></i> Place Order
+                <button class="btn btn-outline" id="checkoutBackBtn" onclick="goBackCheckout()" style="display: none;">Back</button>
+                <button class="btn btn-rose" id="checkoutNextBtn" onclick="proceedCheckout()">
+                    <i class="ri-arrow-right-line"></i> Continue
                 </button>
             </div>
         </div>
@@ -1463,7 +1477,6 @@
 
     <script>
 
-
 // Add this debug helper at the top of your base.html script section
 const DEBUG = {
     enabled: true,
@@ -1475,7 +1488,8 @@ const DEBUG = {
     table: function(data) {
         if (!this.enabled) return;
         console.table(data);
-    },    group: function(name) {
+    },    
+    group: function(name) {
         if (!this.enabled) return;
         console.group(`%c📦 ${name}`, 'color: #b5445a; font-weight: bold;');
     },
@@ -1485,77 +1499,109 @@ const DEBUG = {
     }
 };
 
+let cart = [];
+let isLoadingCart = false;
+let checkoutStep = 1;
+let checkoutOrders = [];
+let uploadedProofs = {};
+let uploadedProofData = {}; // Add this to store full proof data including preview
+let currentOrderIndex = 0;
+let checkoutAddresses = [];
+let selectedCheckoutAddressId = null;
 
-        let cart = [];
-        let isLoadingCart = false;
+// ===== PERSISTENCE FUNCTIONS FOR UPLOADED PROOFS =====
+function saveProofData(tempId, proofData) {
+    uploadedProofs[tempId] = proofData.url;
+    uploadedProofData[tempId] = {
+        url: proofData.url,
+        preview: proofData.preview,
+        timestamp: Date.now()
+    };
+    // Save to localStorage for persistence
+    localStorage.setItem(`checkout_proof_${tempId}`, JSON.stringify(uploadedProofData[tempId]));
+}
 
-        // Initialize cart on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadCart();
-            
-            const paymentSelect = document.querySelector('select[name="payment_method"]');
-            if (paymentSelect) {
-                paymentSelect.addEventListener('change', e => {
-                    document.getElementById('paymentProofSection').style.display = e.target.value === 'gcash' ? 'block' : 'none';
-                });
-            }
+function loadProofData(tempId) {
+    const saved = localStorage.getItem(`checkout_proof_${tempId}`);
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            uploadedProofData[tempId] = data;
+            uploadedProofs[tempId] = data.url;
+            return data;
+        } catch (e) {
+            console.error('Error loading proof data:', e);
+        }
+    }
+    return null;
+}
 
-            {% if session.get('user_id') %}
-            // Check if there's a guest cart to sync
-            const guestCart = localStorage.getItem('cart');
-            if (guestCart && JSON.parse(guestCart).length > 0) {
-                // Small delay to ensure everything is loaded
-                setTimeout(() => {
-                    showCartSyncModal(JSON.parse(guestCart));
-                }, 1000);
-            }
-            {% endif %}
-        });
+function clearProofData(tempId) {
+    delete uploadedProofs[tempId];
+    delete uploadedProofData[tempId];
+    localStorage.removeItem(`checkout_proof_${tempId}`);
+}
 
-        // Show cart sync modal with preview
-        function showCartSyncModal(guestCart) {
-            const modal = document.getElementById('cartSyncModal');
-            const preview = document.getElementById('cartPreview');
-            
-            // Calculate total
-            const total = guestCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            
-            // Generate preview HTML
-            let previewHTML = '';
-            guestCart.forEach(item => {
-                previewHTML += `
-                    <div class="cart-preview-item">
-                        <div class="cart-preview-item-image">
-                            ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}">` : '<i class="ri-image-line"></i>'}
-                        </div>
-                        <div class="cart-preview-item-details">
-                            <div class="cart-preview-item-name">${item.name}</div>
-                            <div class="cart-preview-item-meta">Qty: ${item.quantity} • ${item.store_name || 'Flower Shop'}</div>
-                        </div>
-                        <div class="cart-preview-item-price">₱${(item.price * item.quantity).toFixed(2)}</div>
-                    </div>
-                `;
-            });
-            
-            previewHTML += `
-                <div class="cart-preview-total">
-                    <span class="cart-preview-total-label">Total:</span>
-                    <span class="cart-preview-total-value">₱${total.toFixed(2)}</span>
+// Initialize cart on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadCart();
+
+    {% if session.get('user_id') %}
+    // Check if there's a guest cart to sync
+    const guestCart = localStorage.getItem('cart');
+    if (guestCart && JSON.parse(guestCart).length > 0) {
+        // Small delay to ensure everything is loaded
+        setTimeout(() => {
+            showCartSyncModal(JSON.parse(guestCart));
+        }, 1000);
+    }
+    {% endif %}
+});
+
+// Show cart sync modal with preview
+function showCartSyncModal(guestCart) {
+    const modal = document.getElementById('cartSyncModal');
+    const preview = document.getElementById('cartPreview');
+    
+    // Calculate total
+    const total = guestCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    // Generate preview HTML
+    let previewHTML = '';
+    guestCart.forEach(item => {
+        previewHTML += `
+            <div class="cart-preview-item">
+                <div class="cart-preview-item-image">
+                    ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}">` : '<i class="ri-image-line"></i>'}
                 </div>
-            `;
-            
-            preview.innerHTML = previewHTML;
-            modal.classList.add('active');
-        }
+                <div class="cart-preview-item-details">
+                    <div class="cart-preview-item-name">${item.name}</div>
+                    <div class="cart-preview-item-meta">Qty: ${item.quantity} • ${item.store_name || 'Flower Shop'}</div>
+                </div>
+                <div class="cart-preview-item-price">₱${(item.price * item.quantity).toFixed(2)}</div>
+            </div>
+        `;
+    });
+    
+    previewHTML += `
+        <div class="cart-preview-total">
+            <span class="cart-preview-total-label">Total:</span>
+            <span class="cart-preview-total-value">₱${total.toFixed(2)}</span>
+        </div>
+    `;
+    
+    preview.innerHTML = previewHTML;
+    modal.classList.add('active');
+}
 
-        // Decline cart sync
-        function declineCartSync() {
-            localStorage.removeItem('cart');
-            document.getElementById('cartSyncModal').classList.remove('active');
-            showToast('Guest cart cleared. Start shopping with your account!');
-        }
+// Decline cart sync
+function declineCartSync() {
+    localStorage.removeItem('cart');
+    document.getElementById('cartSyncModal').classList.remove('active');
+    showToast('Guest cart cleared. Start shopping with your account!');
+}
 
-        // Replace your loadCart function with this:
+// Replace your loadCart function with this:
 function loadCart() {
     {% if session.get('user_id') %}
     // For logged-in users, load from server
@@ -1615,7 +1661,8 @@ function loadCart() {
                         store_name: storeName,
                         image_url: imageUrl,
                         quantity: item.quantity || 1,
-                        cart_item_id: item.id || item.cart_item_id
+                        cart_item_id: item.id || item.cart_item_id,
+                        is_selected: item.is_selected !== false
                     };
                 });
                 
@@ -1635,12 +1682,12 @@ function loadCart() {
     {% endif %}
 }
 
-        function updateCartCount() {
-            const total = cart.reduce((s, i) => s + i.quantity, 0);
-            document.getElementById('cartCount').textContent = total;
-        }
+function updateCartCount() {
+    const total = cart.reduce((s, i) => s + i.quantity, 0);
+    document.getElementById('cartCount').textContent = total;
+}
 
-      // Enhanced updateCartDisplay to show variant info clearly
+// Enhanced updateCartDisplay with store grouping
 function updateCartDisplay() {
     const cartItems = document.getElementById('cartItems');
     const cartTotal = document.getElementById('cartTotal');
@@ -1658,48 +1705,139 @@ function updateCartDisplay() {
         return;
     }
 
-    let html = '', total = 0;
-    
-    DEBUG.group('Rendering Cart Display');
-    DEBUG.log('Cart items to render', cart);
-    
-    cart.forEach((item, i) => {
-        total += item.price * item.quantity;
-        const isVariant = !!item.variant_id;
-        
-        DEBUG.log(`Rendering item ${i}`, {
-            name: item.name,
-            isVariant: isVariant,
-            productId: item.id,
-            variantId: item.variant_id || 'none'
-        });
-        
+    // Group items by store
+    const storesMap = {};
+    cart.forEach((item, index) => {
+        const store = item.store_name || 'Unknown Store';
+        if (!storesMap[store]) storesMap[store] = [];
+        storesMap[store].push({ ...item, cartIndex: index });
+    });
+
+    let html = '';
+    let total = 0;
+
+    // Render each store section
+    Object.entries(storesMap).forEach(([storeName, storeItems]) => {
+        const storeTotal = storeItems.reduce((sum, item) => sum + (item.is_selected ? item.price * item.quantity : 0), 0);
+        total += storeTotal;
+
         html += `
-            <div class="cart-item" data-index="${i}" data-product-id="${item.id}" data-variant-id="${item.variant_id || ''}">
-                <div class="cart-item-image">
-                    ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}">` : ''}
+            <div style="margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--cream);">
+                <!-- Store Header -->
+                <div style="background: var(--warm-white); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" class="store-checkbox" data-store="${storeName}" onclick="toggleStore('${storeName}')" ${isStoreFullySelected(storeName, storeItems) ? 'checked' : ''} style="cursor: pointer;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; color: var(--charcoal);">${storeName}</div>
+                        <div style="font-size: 12px; color: var(--muted);">${storeItems.length} item${storeItems.length > 1 ? 's' : ''}</div>
+                    </div>
+                    <div style="font-weight: 600; color: var(--deep-rose);">₱${storeTotal.toFixed(2)}</div>
                 </div>
-                <div class="cart-item-info">
-                    <div class="cart-item-title">${item.name}</div>
-                    ${isVariant ? '<div class="cart-item-store" style="color: var(--deep-rose);">✨ Variant Option</div>' : ''}
-                    <div class="cart-item-store">${item.store_name || ''}</div>
-                    <div class="cart-item-price">₱${item.price.toFixed(2)}</div>
-                    <div class="cart-item-controls">
-                        <button class="quantity-btn" onclick="updateQuantity(${i},-1)">−</button>
-                        <input class="quantity-input" value="${item.quantity}" readonly>
-                        <button class="quantity-btn" onclick="updateQuantity(${i},1)">+</button>
-                        <button class="cart-item-remove" onclick="removeFromCart(${i})"><i class="ri-delete-bin-line"></i></button>
+
+                <!-- Items -->
+                <div>
+        `;
+
+        storeItems.forEach((item, idx) => {
+            const isVariant = !!item.variant_id;
+            html += `
+                <div class="cart-item" data-index="${item.cartIndex}" data-product-id="${item.id}" data-variant-id="${item.variant_id || ''}" style="border-bottom: ${idx < storeItems.length - 1 ? '1px solid var(--border)' : 'none'}; display: flex; gap: 12px; padding: 12px 16px;">
+                    <input type="checkbox" class="item-checkbox" data-index="${item.cartIndex}" onchange="toggleItem(${item.cartIndex})" ${item.is_selected ? 'checked' : ''} style="cursor: pointer; margin-top: 4px;">
+                    <div class="cart-item-image" style="width: 60px; height: 60px; border-radius: var(--radius-md); overflow: hidden; flex-shrink: 0; background: linear-gradient(145deg, #f5ede6, #ede3d8);">
+                        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover;">` : '<i class="ri-image-line" style="font-size: 24px; display: flex; align-items: center; justify-content: center; height: 100%;"></i>'}
+                    </div>
+                    <div class="cart-item-info" style="flex: 1;">
+                        <div style="font-weight: 500; color: var(--charcoal); margin-bottom: 2px;">${item.name}</div>
+                        ${isVariant ? '<div style="font-size: 11px; color: var(--deep-rose); margin-bottom: 2px;">✨ Variant</div>' : ''}
+                        <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;">₱${item.price.toFixed(2)} each</div>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <button class="quantity-btn" onclick="updateQuantity(${item.cartIndex},-1)" style="width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px;">−</button>
+                            <input class="quantity-input" value="${item.quantity}" readonly style="width: 30px; text-align: center; border: none; background: transparent; font-weight: 600;">
+                            <button class="quantity-btn" onclick="updateQuantity(${item.cartIndex},1)" style="width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px;">+</button>
+                        </div>
+                    </div>
+                    <div style="text-align: right; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div style="font-weight: 600; color: var(--charcoal);">₱${(item.price * item.quantity).toFixed(2)}</div>
+                        <button class="cart-item-remove" onclick="removeFromCart(${item.cartIndex})" style="background: transparent; border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; cursor: pointer; color: var(--deep-rose);"><i class="ri-delete-bin-line"></i></button>
                     </div>
                 </div>
-            </div>`;
+            `;
+        });
+
+        html += `
+                </div>
+            </div>
+        `;
     });
 
     cartItems.innerHTML = html;
     cartTotal.textContent = `₱${total.toFixed(2)}`;
     if (cartSubtotal) cartSubtotal.textContent = `₱${total.toFixed(2)}`;
-    
-    DEBUG.log('Cart display updated', { totalItems: cart.length, totalAmount: total });
-    DEBUG.groupEnd();
+}
+
+function isStoreFullySelected(storeName, storeItems) {
+    return storeItems.length > 0 && storeItems.every(item => item.is_selected);
+}
+
+async function toggleStore(storeName) {
+    const storeCheckbox = document.querySelector(`input.store-checkbox[data-store="${storeName}"]`);
+    const isChecked = storeCheckbox.checked;
+
+    cart.forEach(item => {
+        if (item.store_name === storeName) {
+            item.is_selected = isChecked;
+        }
+    });
+    updateCartDisplay();
+
+    try {
+        const token = await getAuthToken();
+        const storeItem = cart.find(item => item.store_name === storeName);
+        if (!storeItem || !storeItem.store_id) return;
+
+        const response = await fetch(`/api/v1/checkout/cart/store/${storeItem.store_id}/toggle`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ selected: isChecked })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update store selection');
+        }
+    } catch (error) {
+        console.error('Store selection error:', error);
+        showToast('Could not update selected items');
+        loadCart();
+    }
+}
+
+async function toggleItem(index) {
+    const item = cart[index];
+    if (!item) return;
+
+    const checkbox = document.querySelector(`input.item-checkbox[data-index="${index}"]`);
+    item.is_selected = checkbox ? checkbox.checked : !item.is_selected;
+    updateCartDisplay();
+
+    try {
+        const token = await getAuthToken();
+        const response = await fetch(`/api/v1/checkout/cart/items/${item.cart_item_id}/toggle`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update item selection');
+        }
+    } catch (error) {
+        console.error('Item selection error:', error);
+        showToast('Could not update selected item');
+        loadCart();
+    }
 }
 
 // Add a debug function to inspect cart state
@@ -2016,10 +2154,7 @@ function loadCartFromLocal() {
     DEBUG.groupEnd();
 }
 
-
-        
-
-       function updateQuantity(index, change) {
+function updateQuantity(index, change) {
     console.log(`Updating quantity at index ${index} by ${change}`);
     
     const item = cart[index];
@@ -2066,7 +2201,7 @@ function updateQuantityLocal(index, change) {
     updateCartDisplay();
 }
 
-    function removeFromCart(index) {
+function removeFromCart(index) {
     const item = cart[index];
  
     {% if session.get('user_id') %}
@@ -2105,7 +2240,7 @@ function removeFromCartLocal(index) {
     showToast(`Removed from basket — ${removedItem.name}`);
 }
  
-       function clearCart() {
+function clearCart() {
     if (!confirm('Clear your entire basket?')) return;
  
     {% if session.get('user_id') %}
@@ -2136,121 +2271,622 @@ function clearCartLocal() {
     showToast('Basket cleared');
 }
 
-        function toggleCart() {
-            const sidebar = document.getElementById('cartSidebar');
-            const overlay = document.getElementById('cartOverlay');
-            sidebar.classList.toggle('active');
-            overlay.classList.toggle('active');
-            if (sidebar.classList.contains('active')) updateCartDisplay();
+function toggleCart() {
+    const sidebar = document.getElementById('cartSidebar');
+    const overlay = document.getElementById('cartOverlay');
+    sidebar.classList.toggle('active');
+    overlay.classList.toggle('active');
+    if (sidebar.classList.contains('active')) updateCartDisplay();
+}
+
+document.getElementById('closeCart').addEventListener('click', toggleCart);
+
+function checkout() {
+    const selectedItems = cart.filter(item => item.is_selected);
+    if (!selectedItems.length) { 
+        showToast('Please select at least one item to checkout'); 
+        return; 
+    }
+    {% if session.get('user_id') %}
+    // Reset checkout flow
+    checkoutStep = 1;
+    checkoutOrders = [];
+    uploadedProofs = {};
+    uploadedProofData = {};  // Clear proof data
+    currentOrderIndex = 0;
+    
+    // Clear stored proofs from localStorage
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('checkout_proof_')) {
+            keysToRemove.push(key);
+        }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    
+    document.getElementById('checkoutStep1').style.display = 'block';
+    document.getElementById('checkoutStep2').style.display = 'none';
+    document.getElementById('checkoutStep3').style.display = 'none';
+    document.getElementById('checkoutBackBtn').style.display = 'none';
+    document.getElementById('checkoutNextBtn').textContent = '→ Continue';
+    
+    document.getElementById('checkoutNextBtn').disabled = false;
+    document.getElementById('checkoutModal').classList.add('active');
+    loadCheckoutAddresses();
+    {% else %}
+    showToast('Please sign in to checkout');
+    localStorage.setItem('redirectAfterLogin', window.location.href);
+    setTimeout(() => {
+        window.location.href = "{{ url_for('templates.login') }}?next=" + encodeURIComponent(window.location.href);
+    }, 1200);
+    {% endif %}
+}
+
+function closeCheckout() {
+    document.getElementById('checkoutModal').classList.remove('active');
+}
+
+function goBackCheckout() {
+    if (checkoutStep === 3) {
+        checkoutStep = 2;
+        document.getElementById('checkoutStep3').style.display = 'none';
+        document.getElementById('checkoutStep2').style.display = 'block';
+        document.getElementById('checkoutBackBtn').style.display = 'inline-block';
+        document.getElementById('checkoutBackBtn').textContent = 'Back';
+        document.getElementById('checkoutNextBtn').disabled = false;
+        document.getElementById('checkoutNextBtn').textContent = '→ Payment';
+        return;
+    }
+
+    if (checkoutStep === 2) {
+        checkoutStep = 1;
+        document.getElementById('checkoutStep2').style.display = 'none';
+        document.getElementById('checkoutStep1').style.display = 'block';
+        document.getElementById('checkoutBackBtn').style.display = 'none';
+        document.getElementById('checkoutNextBtn').disabled = false;
+        document.getElementById('checkoutNextBtn').textContent = '→ Continue';
+        return;
+    }
+
+    closeCheckout();
+}
+
+async function loadCheckoutAddresses() {
+    const listEl = document.getElementById('checkoutAddressList');
+    const emptyEl = document.getElementById('checkoutAddressEmpty');
+    const issuesEl = document.getElementById('checkoutDeliveryIssues');
+
+    if (!listEl) return;
+
+    listEl.innerHTML = '<div style="padding:12px; border:1px solid var(--border); border-radius: var(--radius-md); color: var(--muted);">Loading addresses...</div>';
+    emptyEl.style.display = 'none';
+    issuesEl.style.display = 'none';
+    issuesEl.innerHTML = '';
+
+    try {
+        const response = await fetch('/api/account/addresses');
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Failed to load addresses');
         }
 
-        document.getElementById('closeCart').addEventListener('click', toggleCart);
+        checkoutAddresses = result.addresses || [];
+        const defaultAddress = checkoutAddresses.find(address => address.is_default) || checkoutAddresses[0] || null;
+        selectedCheckoutAddressId = defaultAddress ? defaultAddress.id : null;
+        renderCheckoutAddresses();
+    } catch (error) {
+        console.error('Checkout address load error:', error);
+        listEl.innerHTML = '<div style="padding:12px; border:1px solid #e0b4b4; background:#fff5f5; color:#8b3a3a; border-radius: var(--radius-md);">Could not load saved addresses.</div>';
+    }
+}
 
-        function checkout() {
-            if (!cart.length) { showToast('Your basket is empty'); return; }
-            {% if session.get('user_id') %}
-            document.getElementById('checkoutModal').classList.add('active');
-            {% else %}
-            // For guest users, redirect to login with return URL
-            showToast('Please sign in to checkout');
-            // Store current page to return after login
-            localStorage.setItem('redirectAfterLogin', window.location.href);
-            setTimeout(() => {
-                window.location.href = "{{ url_for('templates.login') }}?next=" + encodeURIComponent(window.location.href);
-            }, 1200);
-            {% endif %}
+function renderCheckoutAddresses() {
+    const listEl = document.getElementById('checkoutAddressList');
+    const emptyEl = document.getElementById('checkoutAddressEmpty');
+    if (!listEl || !emptyEl) return;
+
+    if (!checkoutAddresses.length) {
+        listEl.innerHTML = '';
+        emptyEl.style.display = 'block';
+        return;
+    }
+
+    emptyEl.style.display = 'none';
+    listEl.innerHTML = checkoutAddresses.map(address => `
+        <label style="display:block; border:1px solid ${selectedCheckoutAddressId === address.id ? 'var(--deep-rose)' : 'var(--border)'}; background:${selectedCheckoutAddressId === address.id ? 'rgba(176,74,98,0.06)' : 'white'}; border-radius: var(--radius-md); padding: 12px; margin-bottom: 10px; cursor:pointer;">
+            <div style="display:flex; gap:10px; align-items:flex-start;">
+                <input type="radio" name="checkoutAddress" value="${address.id}" ${selectedCheckoutAddressId === address.id ? 'checked' : ''} onchange="selectCheckoutAddress(${address.id})" style="margin-top:4px;">
+                <div style="flex:1;">
+                    <div style="font-weight:600; margin-bottom:4px;">
+                        ${address.address_label || 'Address'}
+                        ${address.is_default ? '<span style="font-size:11px; color: var(--deep-rose); margin-left:6px;">Default</span>' : ''}
+                    </div>
+                    <div style="font-size:13px; color: var(--charcoal);">${address.address_line}</div>
+                    <div style="font-size:12px; color: var(--muted); margin-top:4px;">${address.municipality}, ${address.barangay}</div>
+                </div>
+            </div>
+        </label>
+    `).join('');
+}
+
+function selectCheckoutAddress(addressId) {
+    selectedCheckoutAddressId = addressId;
+    renderCheckoutAddresses();
+}
+
+function renderCheckoutDeliveryIssues(issues) {
+    const issuesEl = document.getElementById('checkoutDeliveryIssues');
+    if (!issuesEl) return;
+
+    if (!issues || !issues.length) {
+        issuesEl.style.display = 'none';
+        issuesEl.innerHTML = '';
+        return;
+    }
+
+    issuesEl.style.display = 'block';
+    issuesEl.innerHTML = `
+        <div style="padding:12px; border:1px solid #e0b4b4; background:#fff5f5; color:#8b3a3a; border-radius: var(--radius-md);">
+            <div style="font-weight:600; margin-bottom:8px;">Some stores cannot deliver to this address</div>
+            ${issues.map(issue => `
+                <div style="font-size:13px; margin-bottom:6px;">
+                    <strong>${issue.store_name}</strong>: ${issue.reason}${issue.distance_km !== null && issue.distance_km !== undefined ? ` (${issue.distance_km} km)` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// ===== UPDATED PROCEED CHECKOUT FUNCTION =====
+async function proceedCheckout() {
+    if (checkoutStep === 1) {
+        // Step 1: Validate delivery address and calculate totals
+        const selectedItems = cart.filter(item => item.is_selected);
+        if (!selectedCheckoutAddressId) {
+            showToast('Please select a saved delivery address');
+            return;
+        }
+        if (!selectedItems.length) {
+            showToast('Please select at least one item to checkout');
+            return;
         }
 
-        function closeCheckout() {
-            document.getElementById('checkoutModal').classList.remove('active');
-        }
-
-        async function submitOrder() {
-            const form = document.getElementById('checkoutForm');
-            const formData = new FormData(form);
+        try {
+            renderCheckoutDeliveryIssues([]);
             
-            if (!formData.get('address').trim()) { 
-                showToast('Please enter a delivery address'); 
-                return; 
-            }
+            // Step 1: Validate delivery and get order totals (but DON'T create order yet)
+            const response = await fetch('/api/v1/checkout/validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (await getAuthToken())
+                },
+                body: JSON.stringify({
+                    delivery_address_id: selectedCheckoutAddressId,
+                    delivery_notes: document.getElementById('deliveryNotes').value,
+                    items: selectedItems.map(item => ({
+                        item_id: item.cart_item_id,
+                        quantity: item.quantity
+                    }))
+                })
+            });
 
-            const orderData = { 
-                cart: cart.map(item => ({
-                    product_id: item.id,
+            const result = await response.json();
+            
+            if (result.success && result.orders) {
+                // Store order data temporarily (not created in DB yet)
+                checkoutOrders = result.orders;
+                uploadedProofs = {};
+                uploadedProofData = {};
+                displayOrderSummary();
+                
+                // Move to step 2 (order summary)
+                checkoutStep = 2;
+                document.getElementById('checkoutStep1').style.display = 'none';
+                document.getElementById('checkoutStep2').style.display = 'block';
+                document.getElementById('checkoutBackBtn').style.display = 'inline-block';
+                document.getElementById('checkoutNextBtn').textContent = '→ Proceed to Payment';
+            } else {
+                renderCheckoutDeliveryIssues(result.undeliverable_stores || []);
+                showToast(result.error || 'Failed to validate delivery');
+            }
+        } catch (error) {
+            console.error('Checkout error:', error);
+            showToast('Error: ' + error.message);
+        }
+    }
+    else if (checkoutStep === 2) {
+        // Step 2: Move to payment (still no order created)
+        checkoutStep = 3;
+        currentOrderIndex = 0;
+        displayGCashPayment();
+        
+        document.getElementById('checkoutStep2').style.display = 'none';
+        document.getElementById('checkoutStep3').style.display = 'block';
+        document.getElementById('checkoutBackBtn').textContent = '← Back';
+        document.getElementById('checkoutNextBtn').textContent = '⏳ Waiting for upload...';
+        document.getElementById('checkoutNextBtn').disabled = true;
+    }
+    else if (checkoutStep === 3) {
+        // Step 3: Check if current order has uploaded payment proof
+        const currentOrder = checkoutOrders[currentOrderIndex];
+        if (!uploadedProofs[currentOrder.temp_id]) {
+            showToast('Please upload payment proof for this order first', 'error');
+            return;
+        }
+        
+        if (currentOrderIndex < checkoutOrders.length - 1) {
+            currentOrderIndex++;
+            displayGCashPayment();
+        } else {
+            // All orders have uploaded proofs, now create the orders!
+            await createOrders();
+        }
+    }
+}
+
+// ===== UPDATED CREATE ORDERS FUNCTION =====
+async function createOrders() {
+    showToast('Creating orders...', 'info');
+    
+    try {
+        const token = await getAuthToken();
+        
+        // Make sure we have the address_id from the selected address
+        const addressId = selectedCheckoutAddressId;
+        const deliveryNotes = document.getElementById('deliveryNotes').value;
+        
+        if (!addressId) {
+            showToast('Error: No delivery address selected', 'error');
+            return;
+        }
+        
+        // Prepare orders data with all required fields
+        const ordersPayload = {
+            address_id: addressId,
+            delivery_notes: deliveryNotes,
+            orders: checkoutOrders.map(order => ({
+                temp_id: order.temp_id,
+                store_id: order.store_id,
+                store_name: order.store_name,
+                subtotal: order.subtotal,
+                delivery_fee: order.delivery_fee,
+                distance_km: order.distance_km,
+                total: order.total,
+                items: order.items.map(item => ({
+                    product_id: item.product_id,
+                    variant_id: item.variant_id,
                     quantity: item.quantity,
                     price: item.price
-                })), 
-                address: formData.get('address'), 
-                notes: formData.get('notes'), 
-                payment_method: formData.get('payment_method') 
-            };
-
-            try {
-                const response = await fetch('/api/order/create', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify(orderData) 
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    cart = [];
-                    localStorage.removeItem('cart');
-                    updateCartCount();
-                    updateCartDisplay();
-                    closeCheckout();
-                    if (document.getElementById('cartSidebar').classList.contains('active')) toggleCart();
-                    showToast('🌸 Order placed successfully!');
-                    setTimeout(() => window.location.href = "{{ url_for('templates.my_account') }}?page=orders", 1500);
-                } else { 
-                    showToast('Error: ' + result.message); 
-                }
-            } catch (error) {
-                console.error('Error placing order:', error);
-                showToast('Network error. Please try again.'); 
-            }
+                })),
+                payment_proof_url: uploadedProofs[order.temp_id]
+            }))
+        };
+        
+        console.log('Creating orders with payload:', ordersPayload);
+        
+        const response = await fetch('/api/v1/checkout/create-orders', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify(ordersPayload)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            showToast('✅ Orders created successfully!');
+            completeCheckout();
+        } else {
+            showToast('Error creating orders: ' + (result.error || 'Unknown error'), 'error');
         }
+    } catch (error) {
+        console.error('Error creating orders:', error);
+        showToast('Error creating orders. Please try again.', 'error');
+    }
+}
 
-        function searchProducts(event) {
-            event.preventDefault();
-            const query = document.getElementById('searchInput').value.trim();
-            if (query) window.location.href = "{{ url_for('templates.search') }}?q=" + encodeURIComponent(query);
-        }
+function displayOrderSummary() {
+    const container = document.getElementById('ordersByStore');
+    let html = '';
+    let total = 0;
 
-        // User Menu
-        let menuTimeout;
-        function showUserMenu() { clearTimeout(menuTimeout); document.getElementById('userMenu')?.classList.add('show'); }
-        function hideUserMenu() { menuTimeout = setTimeout(() => document.getElementById('userMenu')?.classList.remove('show'), 200); }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            const container = document.getElementById('userAvatarContainer');
-            const menu = document.getElementById('userMenu');
-            if (container && menu) {
-                container.addEventListener('mouseenter', showUserMenu);
-                container.addEventListener('mouseleave', hideUserMenu);
-                menu.addEventListener('mouseenter', () => clearTimeout(menuTimeout));
-                menu.addEventListener('mouseleave', hideUserMenu);
-                document.getElementById('userAvatar')?.addEventListener('click', e => { e.stopPropagation(); menu.classList.toggle('show'); });
+    if (checkoutOrders && Array.isArray(checkoutOrders)) {
+        checkoutOrders.forEach((order, index) => {
+            // Add a temporary ID for this order
+            if (!order.temp_id) {
+                order.temp_id = 'temp_' + Date.now() + '_' + index;
             }
-            document.addEventListener('click', e => {
-                if (!document.getElementById('userAvatarContainer')?.contains(e.target)) {
-                    document.getElementById('userMenu')?.classList.remove('show');
-                }
-            });
+            
+            const items = order.items || [];
+            const grandTotal = order.total || 0;
+            total += grandTotal;
+
+            html += `
+                <div style="margin-bottom: 12px; padding: 12px; background: var(--cream); border-radius: var(--radius-md); border: 1px solid var(--border);">
+                    <div style="font-weight: 600; margin-bottom: 6px;">${order.store_name || 'Store'}</div>
+                    <div style="font-size: 13px; color: var(--muted); margin-bottom: 6px;">${items.length} item${items.length > 1 ? 's' : ''}</div>
+                    <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Delivery fee: ₱${Number(order.delivery_fee || 0).toFixed(2)}</div>
+                    <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;">Distance: ${Number(order.distance_km || 0).toFixed(2)} km</div>
+                    <div style="text-align: right; font-weight: 600; color: var(--deep-rose);">₱${grandTotal.toFixed(2)}</div>
+                </div>
+            `;
+        });
+    }
+
+    container.innerHTML = html;
+    document.getElementById('step2Subtotal').textContent = '₱' + total.toFixed(2);
+    document.getElementById('step2Total').textContent = '₱' + total.toFixed(2);
+}
+
+// ===== UPDATED DISPLAY GCASH PAYMENT WITH PERSISTENCE =====
+function displayGCashPayment() {
+    const order = checkoutOrders[currentOrderIndex];
+    const container = document.getElementById('gcashPaymentContainer');
+    
+    // Check if this order already has uploaded proof - try to load from localStorage if not in memory
+    let hasProof = !!uploadedProofs[order.temp_id];
+    let existingProof = null;
+    
+    if (!hasProof) {
+        // Try to load from localStorage
+        existingProof = loadProofData(order.temp_id);
+        if (existingProof) {
+            hasProof = true;
+        }
+    } else {
+        existingProof = uploadedProofData[order.temp_id];
+    }
+
+    let html = `
+        <div style="text-align: center; margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Order ${currentOrderIndex + 1} of ${checkoutOrders.length}</div>
+            <div style="font-size: 18px; font-weight: 600;">${order.store_name || 'Store'}</div>
+        </div>
+
+        <div style="padding: 12px; background: var(--cream); border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="color: var(--muted);">Order Reference: ${order.temp_id}</span>
+                <span style="font-weight: 600;">Amount: <span style="color: var(--deep-rose); font-size: 18px;">₱${order.total || 0}</span></span>
+            </div>
+        </div>
+    `;
+    
+    // Add GCash instructions if available
+    if (order.gcash_instructions) {
+        html += `
+            <div style="margin-bottom: 16px; font-size: 12px; color: var(--muted); padding: 12px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md);">
+                ${order.gcash_instructions}
+            </div>
+        `;
+    }
+
+    html += `
+        <div style="margin-bottom: 16px;">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">GCash QR Code</div>
+            <div style="padding: 16px; background: white; border: 1px solid var(--border); border-radius: var(--radius-md); text-align: center;">
+    `;
+
+    if (order.gcash_qr_codes && order.gcash_qr_codes.length > 0) {
+        html += `<img src="${order.gcash_qr_codes[0].url}" style="max-width: 200px; height: auto; border-radius: var(--radius-md);">`;
+    } else {
+        html += `<div style="padding: 40px; color: var(--muted);"><i class="ri-qr-code-2-line" style="font-size: 48px;"></i><div style="margin-top: 12px;">No QR code available</div></div>`;
+    }
+
+    html += `
+            </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Upload Payment Receipt</div>
+    `;
+    
+    // If there's an existing proof, show it
+    if (hasProof && existingProof) {
+        html += `
+            <div id="proofPreview_${order.temp_id}" style="display: block; margin-bottom: 12px;">
+                <img id="previewImg_${order.temp_id}" src="${existingProof.preview || existingProof.url}" style="max-width: 100%; height: 200px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                <button type="button" onclick="clearProof('${order.temp_id}')" style="width: 100%; margin-top: 8px; padding: 8px; background: #f0f0f0; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">Remove Image</button>
+            </div>
+            <input type="file" id="proofInput_${order.temp_id}" accept="image/*" onchange="handleProofSelect('${order.temp_id}', event)" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; display: none;">
+            <button type="button" onclick="document.getElementById('proofInput_${order.temp_id}').click()" style="width: 100%; padding: 8px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; margin-top: 8px;">
+                <i class="ri-image-add-line"></i> Replace Image
+            </button>
+        `;
+    } else {
+        html += `
+            <div id="proofPreview_${order.temp_id}" style="display: none; margin-bottom: 12px;">
+                <img id="previewImg_${order.temp_id}" style="max-width: 100%; height: 200px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                <button type="button" onclick="clearProof('${order.temp_id}')" style="width: 100%; margin-top: 8px; padding: 8px; background: #f0f0f0; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">Clear Image</button>
+            </div>
+            <input type="file" id="proofInput_${order.temp_id}" accept="image/*" onchange="handleProofSelect('${order.temp_id}', event)" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">
+        `;
+    }
+
+    html += `
+            <small style="display: block; margin-top: 8px; color: var(--muted);">Select screenshot or photo of your GCash payment</small>
+        </div>
+
+        <button type="button" onclick="uploadProof('${order.temp_id}')" style="width: 100%; padding: 12px; background: var(--deep-rose); color: white; border: none; border-radius: var(--radius-pill); font-weight: 600; cursor: pointer; margin-bottom: 16px;">
+            ☁️ Upload Receipt
+        </button>
+
+        <div id="uploadStatus_${order.temp_id}" style="text-align: center; font-size: 13px; color: var(--muted);">
+            ${hasProof ? '<span style="color: var(--sage);">✓ Receipt uploaded</span>' : ''}
+        </div>
+    `;
+
+    container.innerHTML = html;
+    
+    // Update button text based on whether proof is already uploaded
+    document.getElementById('checkoutNextBtn').textContent = hasProof 
+        ? (currentOrderIndex < checkoutOrders.length - 1 ? '→ Next Order' : '✓ Complete')
+        : '⏳ Waiting for upload...';
+    document.getElementById('checkoutNextBtn').disabled = !hasProof;
+}
+
+function handleProofSelect(tempId, event) {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const previewUrl = e.target.result;
+            document.getElementById(`previewImg_${tempId}`).src = previewUrl;
+            document.getElementById(`proofPreview_${tempId}`).style.display = 'block';
+            
+            // Store preview temporarily
+            if (!uploadedProofData[tempId]) {
+                uploadedProofData[tempId] = {};
+            }
+            uploadedProofData[tempId].preview = previewUrl;
+            uploadedProofData[tempId].file = file;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+// ===== UPDATED UPLOAD PROOF FUNCTION WITH PERSISTENCE =====
+async function uploadProof(tempId) {
+    // Check if we have a file in memory
+    let file = uploadedProofData[tempId]?.file;
+    const input = document.getElementById(`proofInput_${tempId}`);
+    
+    if (!file && input) {
+        file = input.files[0];
+    }
+
+    if (!file) {
+        showToast('Please select an image');
+        return;
+    }
+
+    const statusDiv = document.getElementById(`uploadStatus_${tempId}`);
+    statusDiv.innerHTML = '<i class="ri-loader-4-line" style="animation: spin 1s linear infinite;"></i> Uploading...';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const token = await getAuthToken();
+        
+        // Upload to temporary storage (Cloudinary) without creating order
+        const response = await fetch('/api/v1/checkout/upload-proof', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            },
+            body: formData
         });
 
-        function handleAccountNavigation(page) {
-            document.getElementById('userMenu')?.classList.remove('show');
-            const isOnAccount = window.location.pathname.includes('/my-account');
-            if (isOnAccount && typeof loadAccountPage === 'function') {
-                loadAccountPage(page);
-            } else {
-                window.location.href = "{{ url_for('templates.my_account') }}?page=" + page;
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            // Save the proof data permanently
+            saveProofData(tempId, {
+                url: result.url,
+                preview: uploadedProofData[tempId]?.preview || result.url
+            });
+            
+            statusDiv.innerHTML = '<span style="color: var(--sage);">✓ Receipt uploaded successfully</span>';
+            
+            // Auto-enable next button after successful upload
+            const currentOrder = checkoutOrders[currentOrderIndex];
+            if (currentOrder.temp_id === tempId) {
+                document.getElementById('checkoutNextBtn').disabled = false;
+                document.getElementById('checkoutNextBtn').textContent = currentOrderIndex < checkoutOrders.length - 1 ? '→ Next Order' : '✓ Complete';
             }
-            return false;
+        } else {
+            statusDiv.innerHTML = '<span style="color: var(--deep-rose);">✗ Upload failed</span>';
+            showToast('Upload failed: ' + (result.error || 'Unknown error'));
         }
-        function debugCart() {
+    } catch (error) {
+        statusDiv.innerHTML = '<span style="color: var(--deep-rose);">✗ Error uploading</span>';
+        console.error('Upload error:', error);
+    }
+}
+
+async function completeCheckout() {
+    showToast('🎉 All orders submitted for verification!');
+    cart = cart.filter(item => !item.is_selected);
+    localStorage.setItem('cart', JSON.stringify(cart));
+    updateCartCount();
+    updateCartDisplay();
+    closeCheckout();
+    if (document.getElementById('cartSidebar').classList.contains('active')) toggleCart();
+    setTimeout(() => window.location.href = "{{ url_for('templates.my_account') }}?page=orders", 1500);
+}
+
+async function getAuthToken() {
+    // Get token from localStorage (adjust based on your auth implementation)
+    return localStorage.getItem('jwt_token') || '';
+}
+
+function searchProducts(event) {
+    event.preventDefault();
+    const query = document.getElementById('searchInput').value.trim();
+    if (query) window.location.href = "{{ url_for('templates.search') }}?q=" + encodeURIComponent(query);
+}
+
+function clearProof(tempId) {
+    document.getElementById(`proofInput_${tempId}`).value = '';
+    document.getElementById(`proofPreview_${tempId}`).style.display = 'none';
+    clearProofData(tempId);
+    
+    // Show the file input again
+    const fileInput = document.getElementById(`proofInput_${tempId}`);
+    if (fileInput) {
+        fileInput.style.display = 'block';
+    }
+    
+    // Update button state
+    document.getElementById('checkoutNextBtn').disabled = true;
+    document.getElementById('checkoutNextBtn').textContent = '⏳ Waiting for upload...';
+    
+    // Update status
+    const statusDiv = document.getElementById(`uploadStatus_${tempId}`);
+    if (statusDiv) {
+        statusDiv.innerHTML = '';
+    }
+}
+
+// User Menu
+let menuTimeout;
+function showUserMenu() { clearTimeout(menuTimeout); document.getElementById('userMenu')?.classList.add('show'); }
+function hideUserMenu() { menuTimeout = setTimeout(() => document.getElementById('userMenu')?.classList.remove('show'), 200); }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('userAvatarContainer');
+    const menu = document.getElementById('userMenu');
+    if (container && menu) {
+        container.addEventListener('mouseenter', showUserMenu);
+        container.addEventListener('mouseleave', hideUserMenu);
+        menu.addEventListener('mouseenter', () => clearTimeout(menuTimeout));
+        menu.addEventListener('mouseleave', hideUserMenu);
+        document.getElementById('userAvatar')?.addEventListener('click', e => { e.stopPropagation(); menu.classList.toggle('show'); });
+    }
+    document.addEventListener('click', e => {
+        if (!document.getElementById('userAvatarContainer')?.contains(e.target)) {
+            document.getElementById('userMenu')?.classList.remove('show');
+        }
+    });
+});
+
+function handleAccountNavigation(page) {
+    document.getElementById('userMenu')?.classList.remove('show');
+    const isOnAccount = window.location.pathname.includes('/my-account');
+    if (isOnAccount && typeof loadAccountPage === 'function') {
+        loadAccountPage(page);
+    } else {
+        window.location.href = "{{ url_for('templates.my_account') }}?page=" + page;
+    }
+    return false;
+}
+
+function debugCart() {
     console.group('🐛 CART DEBUG');
     console.log('Total items:', cart.length);
     
@@ -2270,25 +2906,26 @@ function clearCartLocal() {
  
 // Make debug function available globally
 window.debugCart = debugCart;
- 
 
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.classList.add('show');
-            if (type === 'error') {
-                toast.style.background = '#c0392b';
-            } else {
-                toast.style.background = 'var(--charcoal)';
-            }
-            setTimeout(() => toast.classList.remove('show'), 3000);
-        }
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    if (type === 'error') {
+        toast.style.background = '#c0392b';
+    } else {
+        toast.style.background = 'var(--charcoal)';
+    }
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
 
-        // Initialize cart display
-        updateCartCount();
-        updateCartDisplay();
-    </script>
+// Initialize cart display
+updateCartCount();
+updateCartDisplay();
+            </script>
 
-    {% block extra_js %}{% endblock %}
-</body>
+        {% block extra_js %}
+    
+    {% endblock %}
+    </body>
 </html>

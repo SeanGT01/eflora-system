@@ -26,6 +26,8 @@ from app import limiter
 templates_bp = Blueprint('templates', __name__)
 
 
+
+
 # Configure upload folder
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
@@ -2195,6 +2197,11 @@ def seller_orders():
     orders_data = []
     for order in orders:
         order_dict = order.to_dict()
+        order_dict['items'] = [item.to_dict() for item in order.items]
+        order_dict['items_count'] = sum(item.quantity for item in order.items)
+        order_dict['customer_phone'] = order.customer.phone if order.customer else None
+        order_dict['payment_proof'] = order.payment_proof
+        order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
         
         # Add formatted dates
         if order.created_at:
@@ -3166,8 +3173,10 @@ def get_cart():
             item_dict = {
                 'id': item.id,
                 'product_id': product.id,
+                'store_id': product.store_id,
                 'variant_id': item.variant_id,
                 'quantity': item.quantity,
+                'is_selected': item.is_selected,
                 'product': product_dict,  # Full product dict with all image data
                 'store_name': product.store.name if product.store else None,
                 'price': price,

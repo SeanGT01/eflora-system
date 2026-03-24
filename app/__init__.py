@@ -155,6 +155,8 @@ def create_app(config_class='default'):
     from app.bg_removal import bg_removal_bp  
     from app.archive_routes import archive_bp
     from app.cloudinary_routes import cloudinary_bp  # Import Cloudinary blueprint
+    from app.checkout_routes import checkout_bp  # Import Checkout blueprint
+    from app.payment_verification_routes import payment_verification_bp  # Seller payment verification
     
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(admin_bp, url_prefix='/api/v1/admin')
@@ -165,6 +167,8 @@ def create_app(config_class='default'):
     app.register_blueprint(bg_removal_bp)
     app.register_blueprint(archive_bp)
     app.register_blueprint(cloudinary_bp, url_prefix='/api/v1/cloudinary')  # Register Cloudinary blueprint
+    app.register_blueprint(checkout_bp, url_prefix='/api/v1/checkout')
+    app.register_blueprint(payment_verification_bp)  # Register Payment Verification blueprint
     
     # Set session secret key
     app.secret_key = app.config['SECRET_KEY']

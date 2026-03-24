@@ -133,7 +133,116 @@ def create_product():
     
     return jsonify({'message': 'Product created', 'product': product.to_dict()}), 201
 
-# Add more routes as needed, but keep the @wraps decorator pattern
+def serialize_seller_order(order):
+    order_dict = order.to_dict()
+    order_dict['items'] = [item.to_dict() for item in order.items]
+    order_dict['items_count'] = sum(item.quantity for item in order.items)
+    order_dict['customer_phone'] = order.customer.phone if order.customer else None
+    order_dict['payment_proof'] = order.payment_proof
+    order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
+    return order_dict
 
-# Import OrderItem at the top if not already
-from app.models import OrderItem
+
+@seller_bp.route('/orders', methods=['GET'])
+@seller_required
+def get_orders():
+    user_id = get_jwt_identity()
+    store = get_seller_store(user_id)
+    
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+    
+    status = request.args.get('status')
+    payment_status = request.args.get('payment_status')
+    
+    query = Order.query.filter_by(store_id=store.id)
+    if status:
+        query = query.filter_by(status=status)
+    if payment_status:
+        query = query.filter_by(payment_status=payment_status)
+    
+    orders = query.order_by(Order.created_at.desc()).all()
+    
+    return jsonify({
+        'success': True,
+        'orders': [serialize_seller_order(order) for order in orders]
+    }), 200
+
+
+@seller_bp.route('/orders/<int:order_id>', methods=['GET'])
+@seller_required
+def get_order(order_id):
+    user_id = get_jwt_identity()
+    store = get_seller_store(user_id)
+    
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+    
+    order = Order.query.filter_by(id=order_id, store_id=store.id).first_or_404()
+    return jsonify(serialize_seller_order(order)), 200
+
+
+@seller_bp.route('/orders/<int:order_id>/items', methods=['GET'])
+@seller_required
+def get_order_items(order_id):
+    user_id = get_jwt_identity()
+    store = get_seller_store(user_id)
+    
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+    
+    order = Order.query.filter_by(id=order_id, store_id=store.id).first_or_404()
+    return jsonify([item.to_dict() for item in order.items]), 200
+
+
+@seller_bp.route('/orders/<int:order_id>/status', methods=['PUT'])
+@seller_required
+def update_order_status(order_id):
+    user_id = get_jwt_identity()
+    store = get_seller_store(user_id)
+    
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+    
+    order = Order.query.filter_by(id=order_id, store_id=store.id).first_or_404()
+    data = request.get_json() or {}
+    new_status = data.get('status')
+    
+    allowed_statuses = {'pending', 'accepted', 'preparing', 'on_delivery', 'delivered', 'cancelled'}
+    if new_status not in allowed_statuses:
+        return jsonify({'error': 'Invalid status'}), 400
+    
+    order.status = new_status
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Order status updated',
+        'order': serialize_seller_order(order)
+    }), 200
+
+
+@seller_bp.route('/orders/<int:order_id>/verify-payment', methods=['PUT'])
+@seller_required
+def verify_order_payment(order_id):
+    user_id = get_jwt_identity()
+    store = get_seller_store(user_id)
+    
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+    
+    order = Order.query.filter_by(id=order_id, store_id=store.id).first_or_404()
+    if not order.payment_proof_url:
+        return jsonify({'error': 'No payment proof uploaded'}), 400
+    
+    order.payment_status = 'verified'
+    if order.status == 'pending':
+        order.status = 'accepted'
+    order.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Payment verified successfully',
+        'order': serialize_seller_order(order)
+    }), 200
