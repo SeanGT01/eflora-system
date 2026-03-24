@@ -152,21 +152,44 @@ def create_app(config_class='default'):
     from app.customer import customer_bp
     from app.rider import rider_bp
     from app.templates_routes import templates_bp
-    from app.bg_removal import bg_removal_bp  
     from app.archive_routes import archive_bp
     from app.cloudinary_routes import cloudinary_bp  # Import Cloudinary blueprint
     from app.checkout_routes import checkout_bp  # Import Checkout blueprint
     from app.payment_verification_routes import payment_verification_bp  # Seller payment verification
     
+    # ====================================================
+    # OPTIONAL: Background removal module (requires rembg)
+    # If rembg is not installed, this will gracefully skip
+    # ====================================================
+    bg_removal_bp = None
+    BG_REMOVAL_AVAILABLE = False
+    
+    try:
+        from app.bg_removal import bg_removal_bp as bg_removal_bp_import
+        bg_removal_bp = bg_removal_bp_import
+        BG_REMOVAL_AVAILABLE = True
+        print("✅ Background removal module found (rembg installed)")
+    except ImportError as e:
+        print(f"⚠️ Background removal module not available: {e}")
+        print("   (rembg not installed - background removal features disabled)")
+    
+    # Register all blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(admin_bp, url_prefix='/api/v1/admin')
     app.register_blueprint(seller_bp, url_prefix='/api/v1/seller')
     app.register_blueprint(customer_bp, url_prefix='/api/v1/customer')
     app.register_blueprint(rider_bp, url_prefix='/api/v1/rider')
     app.register_blueprint(templates_bp)
-    app.register_blueprint(bg_removal_bp)
+    
+    # Register bg_removal blueprint only if available
+    if BG_REMOVAL_AVAILABLE and bg_removal_bp:
+        app.register_blueprint(bg_removal_bp)
+        print("✅ Background removal blueprint registered")
+    else:
+        print("⚠️ Background removal blueprint NOT registered (module unavailable)")
+    
     app.register_blueprint(archive_bp)
-    app.register_blueprint(cloudinary_bp, url_prefix='/api/v1/cloudinary')  # Register Cloudinary blueprint
+    app.register_blueprint(cloudinary_bp, url_prefix='/api/v1/cloudinary')
     app.register_blueprint(checkout_bp, url_prefix='/api/v1/checkout')
     app.register_blueprint(payment_verification_bp)  # Register Payment Verification blueprint
     
