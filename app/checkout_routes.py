@@ -762,12 +762,6 @@ def process_checkout():
                 customer_longitude=address.longitude,
                 mapbox_place_id=address.place_id,
             )
-                delivery_address=address.address_line,
-                delivery_notes=delivery_notes,
-                customer_latitude=address.latitude,
-                customer_longitude=address.longitude,
-                mapbox_place_id=address.place_id,
-            )
 
             db.session.add(order)
             db.session.flush()
