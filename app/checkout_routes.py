@@ -640,6 +640,8 @@ def process_checkout():
         requested_items = data.get("items") or []
         payment_proof_url = data.get("payment_proof_url")
         payment_proof_public_id = data.get("payment_proof_public_id")
+        requested_delivery_date = data.get("requested_delivery_date")
+        requested_delivery_time = data.get("requested_delivery_time")
 
         if not address_id:
             return jsonify({"error": "delivery_address_id is required"}), 400
@@ -752,6 +754,14 @@ def process_checkout():
                 delivery_location=delivery_point,
                 payment_proof_url=payment_proof_url,
                 payment_proof_public_id=payment_proof_public_id,
+                delivery_address=address.address_line,
+                delivery_notes=delivery_notes,
+                requested_delivery_date=datetime.strptime(requested_delivery_date, '%Y-%m-%d').date() if requested_delivery_date else None,
+                requested_delivery_time=requested_delivery_time,
+                customer_latitude=address.latitude,
+                customer_longitude=address.longitude,
+                mapbox_place_id=address.place_id,
+            )
                 delivery_address=address.address_line,
                 delivery_notes=delivery_notes,
                 customer_latitude=address.latitude,
