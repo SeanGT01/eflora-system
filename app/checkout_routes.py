@@ -642,6 +642,12 @@ def process_checkout():
         if not address_id:
             return jsonify({"error": "delivery_address_id is required"}), 400
 
+        # Ensure address_id is an integer
+        try:
+            address_id = int(address_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "delivery_address_id must be a valid integer"}), 400
+
         address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
         if not address:
             return jsonify({"error": "Delivery address not found"}), 404
