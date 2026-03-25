@@ -2288,226 +2288,277 @@
     
     // Register event listeners when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
-    
-    // Edit button
-    if (document.getElementById('edit-basic-info')) {
-        document.getElementById('edit-basic-info').addEventListener('click', () => {
-            toggleBasicInfoSection(true);
-        });
-    }
-    
-    // Cancel button
-    if (document.getElementById('cancel-basic-info')) {
-        document.getElementById('cancel-basic-info').addEventListener('click', () => {
-            toggleBasicInfoSection(false);
-        });
-    }
-    
-    // Save button
-    if (document.getElementById('save-basic-info')) {
-        document.getElementById('save-basic-info').addEventListener('click', async () => {
-        const btn = document.getElementById('save-basic-info');
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
+        console.log('DOMContentLoaded fired - registering event listeners');
         
-        try {
-            const storeName = document.getElementById('store-name').value.trim();
-            const contactNumber = document.getElementById('contact-number').value.trim();
-            const status = document.getElementById('store-status').value;
-            const description = document.getElementById('store-description').value.trim();
-            const municipality = document.getElementById('municipality').value;
-            const barangay = document.getElementById('barangay').value;
-            const street = document.getElementById('street-address').value.trim();
+        // ─────── BASIC INFO BUTTONS ───────
+        const editBasicBtn = document.getElementById('edit-basic-info');
+        if (editBasicBtn) {
+            editBasicBtn.addEventListener('click', function() {
+                console.log('Edit basic info clicked');
+                toggleBasicInfoSection(true);
+            });
+        } else {
+            console.warn('edit-basic-info button not found');
+        }
+        
+        const cancelBasicBtn = document.getElementById('cancel-basic-info');
+        if (cancelBasicBtn) {
+            cancelBasicBtn.addEventListener('click', function() {
+                console.log('Cancel basic info clicked');
+                toggleBasicInfoSection(false);
+            });
+        } else {
+            console.warn('cancel-basic-info button not found');
+        }
+        
+        // ─────── BASIC INFO SAVE BUTTON ───────
+        const saveBasicBtn = document.getElementById('save-basic-info');
+        if (saveBasicBtn) {
+            saveBasicBtn.addEventListener('click', async function() {
+                console.log('Save basic info clicked');
+                const btn = this;
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
+        
+                try {
+                    const storeName = document.getElementById('store-name').value.trim();
+                    const contactNumber = document.getElementById('contact-number').value.trim();
+                    const status = document.getElementById('store-status').value;
+                    const description = document.getElementById('store-description').value.trim();
+                    const municipality = document.getElementById('municipality').value;
+                    const barangay = document.getElementById('barangay').value;
+                    const street = document.getElementById('street-address').value.trim();
             
-            if (!storeName || !municipality || !barangay) {
-                showToast('Please fill in all required fields', 'error');
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                return;
-            }
+                    if (!storeName || !municipality || !barangay) {
+                        showToast('Please fill in all required fields', 'error');
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        return;
+                    }
             
-            const formData = new FormData();
-            formData.append('store_name', storeName);
-            formData.append('contact_number', contactNumber);
-            formData.append('status', status);
-            formData.append('description', description);
-            formData.append('municipality', municipality);
-            formData.append('barangay', barangay);
-            formData.append('street_address', street);
+                    const formData = new FormData();
+                    formData.append('store_name', storeName);
+                    formData.append('contact_number', contactNumber);
+                    formData.append('status', status);
+                    formData.append('description', description);
+                    formData.append('municipality', municipality);
+                    formData.append('barangay', barangay);
+                    formData.append('street_address', street);
             
-            // INCLUDE LOCATION DATA (from map pin or currentLocation)
-            if (currentLocation) {
-                formData.append('latitude', currentLocation.lat.toString());
-                formData.append('longitude', currentLocation.lng.toString());
-                formData.append('formatted_address', currentLocation.address || '');
-                if (currentLocation.place_id) {
-                    formData.append('place_id', currentLocation.place_id);
+                    // INCLUDE LOCATION DATA (from map pin or currentLocation)
+                    if (typeof currentLocation !== 'undefined' && currentLocation) {
+                        formData.append('latitude', currentLocation.lat.toString());
+                        formData.append('longitude', currentLocation.lng.toString());
+                        formData.append('formatted_address', currentLocation.address || '');
+                        if (currentLocation.place_id) {
+                            formData.append('place_id', currentLocation.place_id);
+                        }
+                    }
+            
+                    const response = await fetch('/api/seller/store/settings', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': document.getElementById('csrf_token')?.value || ''
+                        },
+                        body: formData
+                    });
+            
+                    const data = await response.json();
+            
+                    if (!data.success) {
+                        showToast(data.error || 'Failed to save', 'error');
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        return;
+                    }
+            
+                    // Update summary display
+                    document.getElementById('sum-store-name').textContent = storeName;
+                    document.getElementById('sum-contact').textContent = contactNumber || 'Not provided';
+                    document.getElementById('sum-contact').classList.toggle('empty', !contactNumber);
+                    document.getElementById('sum-status').innerHTML = `<span style="text-transform: capitalize;">${status}</span>`;
+                    document.getElementById('sum-description').textContent = description || 'Not provided';
+                    document.getElementById('sum-description').classList.toggle('empty', !description);
+                    document.getElementById('sum-location').textContent = 
+                        (street ? `${street}, ` : '') + `Brgy. ${barangay}, ${municipality}`;
+            
+                    showToast('Store information and location saved successfully!', 'success');
+                    if (typeof locationChanged !== 'undefined') {
+                        locationChanged = false;
+                    }
+                    toggleBasicInfoSection(false);
+            
+                } catch (error) {
+                    console.error('Error:', error);
+                    showToast('Error saving: ' + error.message, 'error');
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
                 }
-            }
-            
-            const response = await fetch('/api/seller/store/settings', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': document.getElementById('csrf_token')?.value || ''
-                },
-                body: formData
             });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                showToast(data.error || 'Failed to save', 'error');
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                return;
-            }
-            
-            // Update summary display
-            document.getElementById('sum-store-name').textContent = storeName;
-            document.getElementById('sum-contact').textContent = contactNumber || 'Not provided';
-            document.getElementById('sum-contact').classList.toggle('empty', !contactNumber);
-            document.getElementById('sum-status').innerHTML = `<span style="text-transform: capitalize;">${status}</span>`;
-            document.getElementById('sum-description').textContent = description || 'Not provided';
-            document.getElementById('sum-description').classList.toggle('empty', !description);
-            document.getElementById('sum-location').textContent = 
-                (street ? `${street}, ` : '') + `Brgy. ${barangay}, ${municipality}`;
-            
-            showToast('Store information and location saved successfully!', 'success');
-            locationChanged = false; // Reset location change flag
-            toggleBasicInfoSection(false);
-            
-        } catch (error) {
-            console.error('Error:', error);
-            showToast('Error saving: ' + error.message, 'error');
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
+        } else {
+            console.warn('save-basic-info button not found');
         }
-    });
-    }
-    
-    // Delivery and QR event listeners
-    if (document.getElementById('edit-delivery-settings')) {
-        document.getElementById('edit-delivery-settings').addEventListener('click', () => {
-            toggleDeliverySettingsSection(true);
-        });
-    }
-    
-    if (document.getElementById('cancel-delivery-settings')) {
-        document.getElementById('cancel-delivery-settings').addEventListener('click', () => {
-            toggleDeliverySettingsSection(false);
-        });
-    }
-    
-    if (document.getElementById('save-delivery-settings')) {
-        document.getElementById('save-delivery-settings').addEventListener('click', async () => {
-        const btn = document.getElementById('save-delivery-settings');
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
         
-        try {
-            const formData = new FormData();
-            const deliveryMethod = document.querySelector('input[name="delivery-method"]:checked').value;
-            
-            formData.append('delivery_method', deliveryMethod);
-            
-            // Collect delivery settings based on method
-            if (deliveryMethod === 'radius') {
-                formData.append('delivery_radius_km', document.getElementById('delivery-radius')?.value || 15);
-                formData.append('max_delivery_distance', document.getElementById('max-distance')?.value || 15);
-                formData.append('base_delivery_fee', document.getElementById('base-fee')?.value || 50);
-                formData.append('delivery_rate_per_km', document.getElementById('rate-per-km')?.value || 20);
-                formData.append('free_delivery_minimum', document.getElementById('free-minimum')?.value || 500);
-            } else if (deliveryMethod === 'zone') {
-                formData.append('base_delivery_fee', document.getElementById('zone-base-fee')?.value || 50);
-                formData.append('free_delivery_minimum', document.getElementById('zone-free-minimum')?.value || 500);
-            } else if (deliveryMethod === 'municipality') {
-                const selectedMunicipalities = Array.from(document.querySelectorAll('.municipality-check:checked')).map(cb => cb.value);
-                formData.append('selected_municipalities', JSON.stringify(selectedMunicipalities));
-            }
-            
-            const response = await fetch('/api/seller/store/settings', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': document.getElementById('csrf_token')?.value || ''
-                },
-                body: formData
+        // ─────── DELIVERY SETTINGS BUTTONS ───────
+        const editDeliveryBtn = document.getElementById('edit-delivery-settings');
+        if (editDeliveryBtn) {
+            editDeliveryBtn.addEventListener('click', function() {
+                console.log('Edit delivery settings clicked');
+                toggleDeliverySettingsSection(true);
             });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                showToast(data.error || 'Failed to save', 'error');
-            } else {
-                showToast('Delivery settings saved successfully!', 'success');
-                toggleDeliverySettingsSection(false);  // Collapse back to view mode
-            }
-            
-        } catch (error) {
-            console.error('Error:', error);
-            showToast('Error saving: ' + error.message, 'error');
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
+        } else {
+            console.warn('edit-delivery-settings button not found');
         }
-    });
-    }
-    
-    // ─── QR SETTINGS SECTION ───
-    if (document.getElementById('save-qr-settings')) {
-        document.getElementById('save-qr-settings').addEventListener('click', async () => {
-        const btn = document.getElementById('save-qr-settings');
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
         
-        try {
-            const gcashInstructions = document.getElementById('gcashInstructions')?.value || '';
-            
-            const formData = new FormData();
-            formData.append('gcash_instructions', gcashInstructions);
-            
-            // Collect QR data if needed (will be handled by existing code)
-            // For now, just save the instructions
-            
-            const response = await fetch('/api/seller/store/settings', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': document.getElementById('csrf_token')?.value || ''
-                },
-                body: formData
+        const cancelDeliveryBtn = document.getElementById('cancel-delivery-settings');
+        if (cancelDeliveryBtn) {
+            cancelDeliveryBtn.addEventListener('click', function() {
+                console.log('Cancel delivery settings clicked');
+                toggleDeliverySettingsSection(false);
             });
+        } else {
+            console.warn('cancel-delivery-settings button not found');
+        }
+        
+        // ─────── DELIVERY SETTINGS SAVE BUTTON ───────
+        const saveDeliveryBtn = document.getElementById('save-delivery-settings');
+        if (saveDeliveryBtn) {
+            saveDeliveryBtn.addEventListener('click', async function() {
+                console.log('Save delivery settings clicked');
+                const btn = this;
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
+        
+                try {
+                    const formData = new FormData();
+                    const deliveryMethod = document.querySelector('input[name="delivery-method"]:checked').value;
             
-            const data = await response.json();
+                    formData.append('delivery_method', deliveryMethod);
             
-            if (!data.success) {
-                showToast(data.error || 'Failed to save', 'error');
-            } else {
-                // Update summary display
-                const qrCount = document.querySelectorAll('.qr-slot.has-image').length;
-                document.getElementById('sum-qr-count').textContent = qrCount;
-                document.getElementById('sum-gcash-instructions').textContent = gcashInstructions || 'No instructions provided';
-                document.getElementById('sum-gcash-instructions').classList.toggle('empty', !gcashInstructions);
+                    // Collect delivery settings based on method
+                    if (deliveryMethod === 'radius') {
+                        formData.append('delivery_radius_km', document.getElementById('delivery-radius')?.value || 15);
+                        formData.append('max_delivery_distance', document.getElementById('max-distance')?.value || 15);
+                        formData.append('base_delivery_fee', document.getElementById('base-fee')?.value || 50);
+                        formData.append('delivery_rate_per_km', document.getElementById('rate-per-km')?.value || 20);
+                        formData.append('free_delivery_minimum', document.getElementById('free-minimum')?.value || 500);
+                    } else if (deliveryMethod === 'zone') {
+                        formData.append('base_delivery_fee', document.getElementById('zone-base-fee')?.value || 50);
+                        formData.append('free_delivery_minimum', document.getElementById('zone-free-minimum')?.value || 500);
+                    } else if (deliveryMethod === 'municipality') {
+                        const selectedMunicipalities = Array.from(document.querySelectorAll('.municipality-check:checked')).map(cb => cb.value);
+                        formData.append('selected_municipalities', JSON.stringify(selectedMunicipalities));
+                    }
+            
+                    const response = await fetch('/api/seller/store/settings', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': document.getElementById('csrf_token')?.value || ''
+                        },
+                        body: formData
+                    });
+            
+                    const data = await response.json();
+            
+                    if (!data.success) {
+                        showToast(data.error || 'Failed to save', 'error');
+                    } else {
+                        showToast('Delivery settings saved successfully!', 'success');
+                        toggleDeliverySettingsSection(false);  // Collapse back to view mode
+                    }
+            
+                } catch (error) {
+                    console.error('Error:', error);
+                    showToast('Error saving: ' + error.message, 'error');
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            });
+        } else {
+            console.warn('save-delivery-settings button not found');
+        }
+        
+        // ─────── QR SETTINGS BUTTONS ───────
+        const editQRBtn = document.getElementById('edit-qr-settings');
+        if (editQRBtn) {
+            editQRBtn.addEventListener('click', function() {
+                console.log('Edit QR settings clicked');
+                toggleQRSettingsSection(true);
+            });
+        } else {
+            console.warn('edit-qr-settings button not found');
+        }
+        
+        const cancelQRBtn = document.getElementById('cancel-qr-settings');
+        if (cancelQRBtn) {
+            cancelQRBtn.addEventListener('click', function() {
+                console.log('Cancel QR settings clicked');
+                toggleQRSettingsSection(false);
+            });
+        } else {
+            console.warn('cancel-qr-settings button not found');
+        }
+        
+        // ─────── QR SETTINGS SAVE BUTTON ───────
+        const saveQRBtn = document.getElementById('save-qr-settings');
+        if (saveQRBtn) {
+            saveQRBtn.addEventListener('click', async function() {
+                console.log('Save QR settings clicked');
+                const btn = this;
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
+        
+                try {
+                    const gcashInstructions = document.getElementById('gcashInstructions')?.value || '';
+            
+                    const formData = new FormData();
+                    formData.append('gcash_instructions', gcashInstructions);
+            
+                    const response = await fetch('/api/seller/store/settings', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': document.getElementById('csrf_token')?.value || ''
+                        },
+                        body: formData
+                    });
+            
+                    const data = await response.json();
+            
+                    if (!data.success) {
+                        showToast(data.error || 'Failed to save', 'error');
+                    } else {
+                        // Update summary display
+                        const qrCount = document.querySelectorAll('.qr-slot.has-image').length;
+                        document.getElementById('sum-qr-count').textContent = qrCount;
+                        document.getElementById('sum-gcash-instructions').textContent = gcashInstructions || 'No instructions provided';
+                        document.getElementById('sum-gcash-instructions').classList.toggle('empty', !gcashInstructions);
                 
-                showToast('QR settings saved successfully!', 'success');
-                toggleQRSettingsSection(false);  // Collapse back to view mode
-            }
+                        showToast('QR settings saved successfully!', 'success');
+                        toggleQRSettingsSection(false);  // Collapse back to view mode
+                    }
             
-        } catch (error) {
-            console.error('Error:', error);
-            showToast('Error saving: ' + error.message, 'error');
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
+                } catch (error) {
+                    console.error('Error:', error);
+                    showToast('Error saving: ' + error.message, 'error');
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            });
+        } else {
+            console.warn('save-qr-settings button not found');
         }
-    });
-    }
     
     }); // End of DOMContentLoaded for event listeners
 
-    // ═══════ QR CODE INITIALIZATION - ALWAYS VISIBLE ═══════
+    // ═════════════════════════════════════════════════════════
+    // ═══════ QR CODE INITIALIZATION - ALWAYS VISIBLE ═════════
+    // ═════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
     initializeQRSlots();
 });
