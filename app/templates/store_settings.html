@@ -1258,6 +1258,56 @@
                                            value="{{ store.street or '' }}" placeholder="e.g., Unit 123, Building Name, Landmark">
                                     <div class="form-hint">Optional - Add specific street name, building, or landmark</div>
                                 </div>
+                                
+                                <!-- LOCATION MAP - PART OF BASIC INFO NOW -->
+                                <div class="form-group form-group-full">
+                                    <label class="form-label">Store Location <span class="required-star">*</span></label>
+                                    <div class="form-hint" style="margin-bottom: 1rem;">Pin your exact location on the map or search for your address</div>
+                                    
+                                    <!-- Address Search -->
+                                    <div class="geocoder-container" style="margin-bottom: 1rem;">
+                                        <div id="geocoder"></div>
+                                    </div>
+                                    
+                                    <!-- Map -->
+                                    <div class="map-container" style="margin-bottom: 1rem;">
+                                        <div id="map"></div>
+                                    </div>
+                                    
+                                    <div class="map-instructions" style="margin-bottom: 1rem;">
+                                        <i class="ri-information-line"></i>
+                                        <span>Drag the red pin to your exact location, or search for your address above</span>
+                                    </div>
+                                    
+                                    <!-- Location Coordinates Display -->
+                                    <div class="location-preview">
+                                        <div class="preview-row">
+                                            <span class="preview-label">Address:</span>
+                                            <span class="preview-value" id="preview-address">
+                                                {{ store.formatted_address or 'Not set' }}
+                                            </span>
+                                        </div>
+                                        <div class="coordinates-preview">
+                                            <div class="coord-box">
+                                                <div class="coord-label">Latitude</div>
+                                                <div class="coord-value" id="preview-lat">
+                                                    {{ "%.6f"|format(store.latitude) if store.latitude else '—' }}
+                                                </div>
+                                            </div>
+                                            <div class="coord-box">
+                                                <div class="coord-label">Longitude</div>
+                                                <div class="coord-value" id="preview-lng">
+                                                    {{ "%.6f"|format(store.longitude) if store.longitude else '—' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Hidden inputs to store location data for form submission -->
+                                    <input type="hidden" id="form-latitude" value="{{ store.latitude or '' }}">
+                                    <input type="hidden" id="form-longitude" value="{{ store.longitude or '' }}">
+                                    <input type="hidden" id="form-formatted-address" value="{{ store.formatted_address or '' }}">
+                                </div>
                             </div>
                         </form>
                         
@@ -1305,74 +1355,6 @@
                 </div>
             </div>
             
-            <!-- Location & Map Card -->
-            <div class="settings-card">
-                <div class="card-header">
-                    <div class="card-header-left">
-                        <div class="card-header-icon"><i class="ri-map-pin-line"></i></div>
-                        <div>
-                            <div class="card-header-title">Store Location</div>
-                            <div class="card-header-subtitle">Pin your exact location on the map</div>
-                        </div>
-                    </div>
-                    <div id="location-status" class="location-status {% if store.latitude %}active{% endif %}">
-                        {% if store.latitude %}
-                            <i class="ri-check-line"></i> Location Set
-                        {% else %}
-                            <i class="ri-hourglass-line"></i> Not Set
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="card-body">
-                    <!-- Address Search -->
-                    <div class="geocoder-container">
-                        <div id="geocoder"></div>
-                    </div>
-                    
-                    <!-- Map -->
-                    <div class="map-container">
-                        <div id="map"></div>
-                    </div>
-                    <div class="map-instructions">
-                        <i class="ri-information-line"></i>
-                        <span>Drag the red pin to your exact location, or search for your address above</span>
-                    </div>
-                    
-                    <!-- Location Save/Cancel Buttons - VISIBLE ABOVE COORDINATES -->
-                    <div style="margin-bottom: 1rem; display: flex; gap: 0.75rem;">
-                        <button type="button" class="btn btn-primary" id="save-location-button" style="flex: 1; display: none;">
-                            <i class="ri-save-line"></i> Save Location
-                        </button>
-                        <button type="button" class="btn btn-outline" id="cancel-location-button" style="flex: 1; display: none;">
-                            <i class="ri-close-line"></i> Cancel
-                        </button>
-                    </div>
-                    
-                    <!-- Location Preview -->
-                    <div class="location-preview">
-                        <div class="preview-row">
-                            <span class="preview-label">Address:</span>
-                            <span class="preview-value" id="preview-address">
-                                {{ store.formatted_address or 'Not set' }}
-                            </span>
-                        </div>
-                        <div class="coordinates-preview">
-                            <div class="coord-box">
-                                <div class="coord-label">Latitude</div>
-                                <div class="coord-value" id="preview-lat">
-                                    {{ "%.6f"|format(store.latitude) if store.latitude else '—' }}
-                                </div>
-                            </div>
-                            <div class="coord-box">
-                                <div class="coord-label">Longitude</div>
-                                <div class="coord-value" id="preview-lng">
-                                    {{ "%.6f"|format(store.longitude) if store.longitude else '—' }}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
         
         <!-- Right Column - Delivery & Settings -->
@@ -2308,6 +2290,16 @@
             formData.append('barangay', barangay);
             formData.append('street_address', street);
             
+            // INCLUDE LOCATION DATA (from map pin or currentLocation)
+            if (currentLocation) {
+                formData.append('latitude', currentLocation.lat.toString());
+                formData.append('longitude', currentLocation.lng.toString());
+                formData.append('formatted_address', currentLocation.address || '');
+                if (currentLocation.place_id) {
+                    formData.append('place_id', currentLocation.place_id);
+                }
+            }
+            
             const response = await fetch('/api/seller/store/settings', {
                 method: 'POST',
                 headers: {
@@ -2335,7 +2327,8 @@
             document.getElementById('sum-location').textContent = 
                 (street ? `${street}, ` : '') + `Brgy. ${barangay}, ${municipality}`;
             
-            showToast('Basic information saved successfully!', 'success');
+            showToast('Store information and location saved successfully!', 'success');
+            locationChanged = false; // Reset location change flag
             toggleBasicInfoSection(false);
             
         } catch (error) {
@@ -4165,21 +4158,13 @@ async function handleQRFile(file, index) {
             const previewLat = document.getElementById('preview-lat');
             const previewLng = document.getElementById('preview-lng');
             const previewAddress = document.getElementById('preview-address');
-            const statusBadge = document.getElementById('location-status');
-            const saveBtn = document.getElementById('save-location-button');
-            const cancelBtn = document.getElementById('cancel-location-button');
             
             if (previewLat) previewLat.textContent = location.lat.toFixed(6);
             if (previewLng) previewLng.textContent = location.lng.toFixed(6);
             if (previewAddress) previewAddress.textContent = location.address || 'Not set';
             
-            // Show save/cancel buttons when location changes
-            if (saveBtn) saveBtn.style.display = 'block';
-            if (cancelBtn) cancelBtn.style.display = 'block';
-            
-            if (statusBadge) {
-                statusBadge.className = 'location-status active';
-                statusBadge.innerHTML = '<i class="ri-check-line"></i> Location Set';
+            // Show toast to indicate location changed and will be saved with Save Changes button
+            showToast('Location updated - click "Save Changes" to save', 'info');
             }
         }
         
@@ -4188,79 +4173,8 @@ async function handleQRFile(file, index) {
         
         // NOTE: Reset button functionality removed. Users now work with individual section collapse/expand to reset.
         
-        // ===== LOCATION SAVE HANDLER =====
-        document.getElementById('save-location-button')?.addEventListener('click', async () => {
-            const saveBtn = document.getElementById('save-location-button');
-            const cancelBtn = document.getElementById('cancel-location-button');
-            
-            if (!currentLocation) {
-                showToast('No location to save', 'error');
-                return;
-            }
-            
-            saveBtn.disabled = true;
-            const originalText = saveBtn.innerHTML;
-            saveBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
-            
-            try {
-                const formData = new FormData();
-                formData.append('latitude', currentLocation.lat.toString());
-                formData.append('longitude', currentLocation.lng.toString());
-                formData.append('formatted_address', currentLocation.address || '');
-                if (currentLocation.place_id) {
-                    formData.append('place_id', currentLocation.place_id);
-                }
-                
-                const response = await fetch('/api/seller/store/settings', {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': document.getElementById('csrf_token')?.value || ''
-                    },
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-                if (!data.success) {
-                    showToast(data.error || 'Failed to save location', 'error');
-                    saveBtn.innerHTML = originalText;
-                    saveBtn.disabled = false;
-                    return;
-                }
-                
-                showToast('Location saved successfully!', 'success');
-                locationChanged = false;
-                saveBtn.style.display = 'none';
-                cancelBtn.style.display = 'none';
-                saveBtn.innerHTML = originalText;
-                saveBtn.disabled = false;
-                
-            } catch (error) {
-                console.error('Error saving location:', error);
-                showToast('Error saving location: ' + error.message, 'error');
-                saveBtn.innerHTML = originalText;
-                saveBtn.disabled = false;
-            }
-        });
-        
-        // ===== LOCATION CANCEL HANDLER =====
-        document.getElementById('cancel-location-button')?.addEventListener('click', () => {
-            const saveBtn = document.getElementById('save-location-button');
-            const cancelBtn = document.getElementById('cancel-location-button');
-            
-            // Reset to original coordinates
-            const previewLat = document.getElementById('preview-lat');
-            const previewLng = document.getElementById('preview-lng');
-            
-            if (previewLat) previewLat.textContent = previewLat.dataset.original || previewLat.textContent;
-            if (previewLng) previewLng.textContent = previewLng.dataset.original || previewLng.textContent;
-            
-            locationChanged = false;
-            saveBtn.style.display = 'none';
-            cancelBtn.style.display = 'none';
-            
-            showToast('Location changes discarded', 'info');
-        });
+        // NOTE: Location is now integrated into basic info section! The "Save Changes" button in basic info
+        // will save both store information AND location/coordinates together.
         
         // Initialize map
         initMap();
