@@ -692,10 +692,10 @@ def process_checkout():
                 item_price = item.variant.price if item.variant else item.product.price
                 subtotal += item_price * item.quantity
                 order_items_data.append({
-                    "product_id": item.product_id,
-                    "variant_id": item.variant_id,
-                    "quantity": item.quantity,
-                    "price": item_price,
+                    "product_id": int(item.product_id),
+                    "variant_id": int(item.variant_id) if item.variant_id else None,
+                    "quantity": int(item.quantity),
+                    "price": float(item_price),
                 })
 
             store_checkout_data[store_id] = {
@@ -737,13 +737,13 @@ def process_checkout():
             delivery_fee = delivery_check["delivery_fee"]
 
             order = Order(
-                customer_id=user_id,
-                store_id=store.id,
+                customer_id=int(user_id),
+                store_id=int(store.id),
                 order_type="online",
                 status="pending",
                 subtotal_amount=float(subtotal),
                 delivery_fee=float(delivery_fee),
-                distance_km=distance,
+                distance_km=float(distance) if distance else None,
                 total_amount=float(subtotal + delivery_fee),
                 payment_method="gcash",
                 payment_status="pending",
