@@ -1893,6 +1893,11 @@
         }
     };
 
+    // ===== SHARED VARIABLES (outer scope so save handler + toggle can access) =====
+    let map, marker, geocoder, draw;
+    let currentLocation = null;
+    let locationChanged = false;
+
     // ===== LAGUNA BOUNDARY DEFINITIONS =====
     const LAGUNA_BOUNDARY = {
         "type": "Polygon",
@@ -2237,13 +2242,12 @@
         if (expanded) {
             content.classList.remove('collapsed');
             summary.classList.remove('collapsed');
-            // Initialize map on first expand so it gets correct container dimensions
-            if (!mapInitialized) {
-                mapInitialized = true;
-                setTimeout(() => initMap(), 50);
-            } else if (map) {
-                setTimeout(() => map.resize(), 150);
-            }
+            // Resize map after the section becomes visible
+            setTimeout(() => {
+                if (typeof map !== 'undefined' && map) {
+                    map.resize();
+                }
+            }, 200);
         } else {
             content.classList.add('collapsed');
             summary.classList.add('collapsed');
@@ -2965,6 +2969,15 @@ async function handleQRFile(file, index) {
         }
     }
 
+    // Count selected municipalities
+    function updateSelectedCount() {
+        const checkboxes = document.querySelectorAll('.municipality-check:checked');
+        const countElement = document.getElementById('selected-count');
+        if (countElement) {
+            countElement.textContent = checkboxes.length;
+        }
+    }
+
     // Municipality initialization function
     function initializeMunicipalityCheckboxes(storeData) {
         console.log('📍 Initializing municipality checkboxes with store data:', storeData.selected_municipalities);
@@ -2996,7 +3009,9 @@ async function handleQRFile(file, index) {
             
             // If we're in municipality mode, validate
             if (storeData.delivery_method === 'municipality') {
-                validateMunicipalitySelection();
+                if (typeof validateMunicipalitySelection === 'function') {
+                    validateMunicipalitySelection();
+                }
             }
         } else {
             console.log('📍 No saved municipalities to initialize');
@@ -3127,16 +3142,15 @@ async function handleQRFile(file, index) {
         const defaultLat = 14.5995;
         const defaultLng = 120.9842;
         
-        let currentLocation = {
+        currentLocation = {
             lat: storeData.latitude || defaultLat,
             lng: storeData.longitude || defaultLng,
             address: storeData.formatted_address || '',
             place_id: storeData.place_id || ''
         };
         
-        let map, marker, geocoder, draw;
-        let locationChanged = false;
-        let mapInitialized = false;
+        // map, marker, geocoder, draw, locationChanged declared at outer scope
+
 
         
         // ===== PERSISTENT STORAGE FOR ALL DELIVERY METHODS =====
@@ -3641,13 +3655,7 @@ async function handleQRFile(file, index) {
         // ===== MUNICIPALITY SELECTION FUNCTIONS =====
         let municipalityBoundaries = null;
         
-        function updateSelectedCount() {
-            const checkboxes = document.querySelectorAll('.municipality-check:checked');
-            const countElement = document.getElementById('selected-count');
-            if (countElement) {
-                countElement.textContent = checkboxes.length;
-            }
-        }
+        // updateSelectedCount is now defined at outer scope (near initializeMunicipalityCheckboxes)
         
         function getSelectedMunicipalities() {
             const checkboxes = document.querySelectorAll('.municipality-check:checked');
@@ -3931,25 +3939,13 @@ async function handleQRFile(file, index) {
         }
         
         // ===== VISUALIZATION BUTTONS =====
-        // Helper: ensure map is visible before visualization
-        function ensureMapVisible() {
-            if (!mapInitialized || !map) {
-                toggleBasicInfoSection(true);
-                return false; // map still loading, caller should retry after delay
-            }
-            const content = document.getElementById('basic-info-content');
-            if (content && content.classList.contains('collapsed')) {
-                toggleBasicInfoSection(true);
-                setTimeout(() => map.resize(), 150);
-            }
-            return true;
-        }
-
         // Show Radius button
         const showRadiusBtn = document.getElementById('show-radius-btn');
         if (showRadiusBtn) {
             showRadiusBtn.addEventListener('click', function() {
-                if (!ensureMapVisible()) return;
+                if (!map) return;
+                // Ensure basic info is expanded so map is visible
+                toggleBasicInfoSection(true);
                 
                 const radiusGeojson = storeData.radius_geojson;
                 
@@ -4072,7 +4068,9 @@ async function handleQRFile(file, index) {
         const showZoneBtn = document.getElementById('show-zone-btn');
         if (showZoneBtn) {
             showZoneBtn.addEventListener('click', function() {
-                if (!ensureMapVisible()) return;
+                if (!map) return;
+                // Ensure basic info is expanded so map is visible
+                toggleBasicInfoSection(true);
                 
                 if (!zoneDeliveryData || !isGeoJSONFormat(zoneDeliveryData)) {
                     showToast('No delivery zone saved yet. Draw one first!', 'info');
@@ -4191,8 +4189,8 @@ async function handleQRFile(file, index) {
         // NOTE: Location is now saved via the basic info "Save Changes" button.
         // No separate location save/cancel handlers needed.
         
-        // Map is initialized lazily on first basic info expand
-        // to ensure the container has correct dimensions
+        // Initialize map
+        initMap();
         
         // Initialize QR count in summary
         setTimeout(() => {
