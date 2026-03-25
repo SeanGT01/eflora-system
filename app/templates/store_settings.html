@@ -1361,6 +1361,16 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Location Save Button -->
+                    <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                        <button type="button" class="btn btn-primary" id="save-location-button" style="flex: 1; display: none;">
+                            <i class="ri-save-line"></i> Save Location
+                        </button>
+                        <button type="button" class="btn btn-outline" id="cancel-location-button" style="flex: 1; display: none;">
+                            <i class="ri-close-line"></i> Cancel
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -4156,10 +4166,16 @@ async function handleQRFile(file, index) {
             const previewLng = document.getElementById('preview-lng');
             const previewAddress = document.getElementById('preview-address');
             const statusBadge = document.getElementById('location-status');
+            const saveBtn = document.getElementById('save-location-button');
+            const cancelBtn = document.getElementById('cancel-location-button');
             
             if (previewLat) previewLat.textContent = location.lat.toFixed(6);
             if (previewLng) previewLng.textContent = location.lng.toFixed(6);
             if (previewAddress) previewAddress.textContent = location.address || 'Not set';
+            
+            // Show save/cancel buttons when location changes
+            if (saveBtn) saveBtn.style.display = 'block';
+            if (cancelBtn) cancelBtn.style.display = 'block';
             
             if (statusBadge) {
                 statusBadge.className = 'location-status active';
@@ -4171,6 +4187,80 @@ async function handleQRFile(file, index) {
         // See: save-basic-info, save-delivery-settings, save-qr-settings
         
         // NOTE: Reset button functionality removed. Users now work with individual section collapse/expand to reset.
+        
+        // ===== LOCATION SAVE HANDLER =====
+        document.getElementById('save-location-button')?.addEventListener('click', async () => {
+            const saveBtn = document.getElementById('save-location-button');
+            const cancelBtn = document.getElementById('cancel-location-button');
+            
+            if (!currentLocation) {
+                showToast('No location to save', 'error');
+                return;
+            }
+            
+            saveBtn.disabled = true;
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('latitude', currentLocation.lat.toString());
+                formData.append('longitude', currentLocation.lng.toString());
+                formData.append('formatted_address', currentLocation.address || '');
+                if (currentLocation.place_id) {
+                    formData.append('place_id', currentLocation.place_id);
+                }
+                
+                const response = await fetch('/api/seller/store/settings', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.getElementById('csrf_token')?.value || ''
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    showToast(data.error || 'Failed to save location', 'error');
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.disabled = false;
+                    return;
+                }
+                
+                showToast('Location saved successfully!', 'success');
+                locationChanged = false;
+                saveBtn.style.display = 'none';
+                cancelBtn.style.display = 'none';
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+                
+            } catch (error) {
+                console.error('Error saving location:', error);
+                showToast('Error saving location: ' + error.message, 'error');
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            }
+        });
+        
+        // ===== LOCATION CANCEL HANDLER =====
+        document.getElementById('cancel-location-button')?.addEventListener('click', () => {
+            const saveBtn = document.getElementById('save-location-button');
+            const cancelBtn = document.getElementById('cancel-location-button');
+            
+            // Reset to original coordinates
+            const previewLat = document.getElementById('preview-lat');
+            const previewLng = document.getElementById('preview-lng');
+            
+            if (previewLat) previewLat.textContent = previewLat.dataset.original || previewLat.textContent;
+            if (previewLng) previewLng.textContent = previewLng.dataset.original || previewLng.textContent;
+            
+            locationChanged = false;
+            saveBtn.style.display = 'none';
+            cancelBtn.style.display = 'none';
+            
+            showToast('Location changes discarded', 'info');
+        });
         
         // Initialize map
         initMap();

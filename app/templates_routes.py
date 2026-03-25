@@ -4065,16 +4065,26 @@ def update_store_settings():
         print(f"📋 Form data keys: {list(data.keys())}")
         
         # ===== BASIC INFO =====
-        if 'name' in data:
+        # Handle both 'name' and 'store_name' for backwards compatibility
+        if 'store_name' in data:
+            store.name = data['store_name']
+            print(f"✅ Updated store name to: {data['store_name']}")
+        elif 'name' in data:
             store.name = data['name']
+            print(f"✅ Updated store name to: {data['name']}")
         
         # ===== ADDRESS FIELDS =====
         if 'municipality' in data:
             store.municipality = data['municipality']
         if 'barangay' in data:
             store.barangay = data['barangay']
-        if 'street' in data:
+        # Handle both 'street' and 'street_address' for backwards compatibility
+        if 'street_address' in data:
+            store.street = data['street_address']
+            print(f"✅ Updated street to: {data['street_address']}")
+        elif 'street' in data:
             store.street = data['street']
+            print(f"✅ Updated street to: {data['street']}")
         
         # Update full address
         if 'address' in data:
