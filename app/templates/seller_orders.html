@@ -878,6 +878,21 @@
         }
     }
 
+    function formatDate(value) {
+        if (!value) return 'N/A';
+        try {
+            // Handle both date strings (YYYY-MM-DD) and full ISO strings
+            return new Intl.DateTimeFormat('en-PH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                weekday: 'short'
+            }).format(new Date(value + 'T00:00:00'));
+        } catch (error) {
+            return value;
+        }
+    }
+
     function applySellerFilters() {
         const search = (document.getElementById('sellerOrderSearch').value || '').trim().toLowerCase();
         const status = document.getElementById('sellerStatusSelect').value;
@@ -951,6 +966,8 @@
                                 <tr><td>Address</td><td>${order.delivery_address || 'N/A'}</td></tr>
                                 <tr><td>Notes</td><td>${order.delivery_notes || 'None'}</td></tr>
                                 <tr><td>Distance</td><td>${order.distance_km ? `${Number(order.distance_km).toFixed(2)} km` : 'N/A'}</td></tr>
+                                <tr><td>Requested Date</td><td>${order.requested_delivery_date ? formatDate(order.requested_delivery_date) : 'Not specified'}</td></tr>
+                                <tr><td>Requested Time</td><td>${order.requested_delivery_time || 'Not specified'}</td></tr>
                             </table>
                         </div>
                         <div class="details-card full">

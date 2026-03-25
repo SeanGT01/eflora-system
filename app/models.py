@@ -1021,6 +1021,8 @@ class Order(db.Model):
     delivery_location = db.Column(Geometry('POINT', srid=4326))
     delivery_address = db.Column(db.Text)
     delivery_notes = db.Column(db.Text)
+    requested_delivery_date = db.Column(db.Date, nullable=True)  # Format: YYYY-MM-DD
+    requested_delivery_time = db.Column(db.String(50), nullable=True)  # Format: "8:00 AM - 12:00 PM"
     
     # ===== MAPBOX CUSTOMER FIELDS =====
     customer_latitude = db.Column(db.Float, nullable=True)
@@ -1062,6 +1064,8 @@ class Order(db.Model):
             'payment_proof_public_id': self.payment_proof_public_id,
             'delivery_address': self.delivery_address,
             'delivery_notes': self.delivery_notes,
+            'requested_delivery_date': self.requested_delivery_date.isoformat() if self.requested_delivery_date else None,
+            'requested_delivery_time': self.requested_delivery_time,
             'customer_latitude': self.customer_latitude,
             'customer_longitude': self.customer_longitude,
             'mapbox_place_id': self.mapbox_place_id,

@@ -479,6 +479,18 @@ def create_orders():
                 print(f"⚠️ Store not found: {order_data.get('store_id')}")
                 continue
 
+            # Phase 1: Extract and parse per-store delivery date/time
+            order_delivery_date_str = order_data.get("requested_delivery_date")
+            order_delivery_time = order_data.get("requested_delivery_time")
+            order_delivery_date = None
+            
+            if order_delivery_date_str:
+                try:
+                    order_delivery_date = datetime.strptime(order_delivery_date_str, '%Y-%m-%d').date()
+                    print(f"✅ Parsed delivery date for {store.name}: {order_delivery_date}")
+                except ValueError as e:
+                    print(f"⚠️ Failed to parse delivery date '{order_delivery_date_str}': {e}")
+
             order = Order(
                 customer_id=user_id,
                 store_id=store.id,
@@ -493,6 +505,8 @@ def create_orders():
                 delivery_location=delivery_point,
                 delivery_address=address.address_line,
                 delivery_notes=delivery_notes,
+                requested_delivery_date=order_delivery_date,  # Phase 1: Per-store date
+                requested_delivery_time=order_delivery_time,  # Phase 1: Per-store time
                 customer_latitude=address.latitude,
                 customer_longitude=address.longitude,
                 mapbox_place_id=address.place_id,

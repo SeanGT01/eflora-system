@@ -1410,6 +1410,7 @@
                 </div>
 
                 <div id="checkoutStep3" style="display: none;">
+                    <!-- Per-store delivery date/time will be displayed here -->
                     <div id="gcashPaymentContainer"></div>
                 </div>
             </div>
@@ -1683,6 +1684,44 @@ function startCheckoutSession() {
     sessionStorage.removeItem(`${currentCheckoutSession}_proofs`);
 }
 
+// Phase 1: Per-store delivery date/time preferences
+let storeDeliveryPreferences = {};
+
+function getStoreDeliveryPreferences() {
+    const prefs = JSON.parse(sessionStorage.getItem('deliveryPreferences') || '{}');
+    return storeDeliveryPreferences || { selectedDate: prefs.selectedDate, selectedTime: prefs.selectedTime };
+}
+
+function setStoreDeliveryPreference(tempId, date, time) {
+    if (!storeDeliveryPreferences) {
+        storeDeliveryPreferences = {};
+    }
+    storeDeliveryPreferences[tempId] = { selectedDate: date, selectedTime: time };
+    console.log(`✅ Saved delivery preferences for ${tempId}:`, storeDeliveryPreferences[tempId]);
+}
+
+function getStoreDeliveryDate(tempId) {
+    if (storeDeliveryPreferences[tempId]?.selectedDate) {
+        return storeDeliveryPreferences[tempId].selectedDate;
+    }
+    const prefs = JSON.parse(sessionStorage.getItem('deliveryPreferences') || '{}');
+    return prefs.selectedDate || getTodayDateString();
+}
+
+function getStoreDeliveryTime(tempId) {
+    if (storeDeliveryPreferences[tempId]?.selectedTime) {
+        return storeDeliveryPreferences[tempId].selectedTime;
+    }
+    const prefs = JSON.parse(sessionStorage.getItem('deliveryPreferences') || '{}');
+    return prefs.selectedTime || '08:00-12:00';
+}
+
+function getTodayDateString() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today.toISOString().split('T')[0];
+}
+
 function cancelCheckout(showWarning = false) {
     const sessionId = sessionStorage.getItem('active_checkout');
     if (sessionId) {
@@ -1776,6 +1815,49 @@ function clearProofData(tempId) {
     delete uploadedProofs[tempId];
     delete uploadedProofData[tempId];
     localStorage.removeItem(`checkout_proof_${tempId}`);
+}
+
+function getProofState(tempId) {
+    let uploaded = null;
+
+    if (uploadedProofs[tempId]) {
+        uploaded = uploadedProofData[tempId] || { url: uploadedProofs[tempId] };
+    } else {
+        uploaded = loadProofData(tempId);
+    }
+
+    const pending = uploadedProofData[tempId]?.file ? uploadedProofData[tempId] : null;
+
+    return {
+        uploaded,
+        pending,
+        hasUploaded: !!uploaded?.url,
+        hasPending: !!pending?.file,
+        previewSrc: pending?.preview || uploaded?.preview || uploaded?.url || ''
+    };
+}
+
+function updateCheckoutPaymentAction() {
+    const nextBtn = document.getElementById('checkoutNextBtn');
+    const order = checkoutOrders[currentOrderIndex];
+    if (!nextBtn || !order) return;
+
+    const proofState = getProofState(order.temp_id);
+
+    if (proofState.hasUploaded) {
+        nextBtn.textContent = currentOrderIndex < checkoutOrders.length - 1 ? 'Next Order' : 'Complete';
+        nextBtn.disabled = false;
+        return;
+    }
+
+    if (proofState.hasPending) {
+        nextBtn.textContent = currentOrderIndex < checkoutOrders.length - 1 ? 'Upload & Next Order' : 'Upload & Complete';
+        nextBtn.disabled = false;
+        return;
+    }
+
+    nextBtn.textContent = 'Waiting for upload...';
+    nextBtn.disabled = true;
 }
 
 // Initialize cart on page load
@@ -2315,6 +2397,10 @@ async function checkout() {
     document.getElementById('checkoutBackBtn').style.display = 'none';
     document.getElementById('checkoutNextBtn').textContent = '→ Continue';
     document.getElementById('checkoutNextBtn').disabled = false;
+    
+    // Phase 1: Initialize per-store delivery preferences
+    storeDeliveryPreferences = {};
+    
     document.getElementById('checkoutModal').classList.add('active');
     
     if (checkoutModalCloseHandler) {
@@ -2516,24 +2602,30 @@ async function proceedCheckout() {
         }
     }
     else if (checkoutStep === 2) {
+        // Proceed to payment (per-store date/time will be validated there)
         checkoutStep = 3;
         currentOrderIndex = 0;
         updateProgressIndicator(3);
-        displayGCashPayment();
-        
         document.getElementById('checkoutStep2').style.display = 'none';
         document.getElementById('checkoutStep3').style.display = 'block';
-        document.getElementById('checkoutBackBtn').textContent = '← Back';
-        document.getElementById('checkoutNextBtn').textContent = '⏳ Waiting for upload...';
-        document.getElementById('checkoutNextBtn').disabled = true;
+        document.getElementById('checkoutBackBtn').textContent = 'Back';
+        displayGCashPayment();
     }
     else if (checkoutStep === 3) {
         const nextBtn = document.getElementById('checkoutNextBtn');
         const currentOrder = checkoutOrders[currentOrderIndex];
-        
-        if (!uploadedProofs[currentOrder.temp_id]) {
-            showToast('Please upload payment proof for this order first', 'error');
-            return;
+        const proofState = getProofState(currentOrder.temp_id);
+
+        if (!proofState.hasUploaded) {
+            if (!proofState.hasPending) {
+                showToast('Please choose a payment proof for this order first', 'error');
+                return;
+            }
+
+            const uploaded = await uploadProof(currentOrder.temp_id);
+            if (!uploaded) {
+                return;
+            }
         }
         
         if (currentOrderIndex < checkoutOrders.length - 1) {
@@ -2581,6 +2673,7 @@ async function createOrders() {
             return;
         }
         
+        // Phase 1: Collect per-store delivery preferences
         const ordersPayload = {
             address_id: addressId,
             delivery_notes: deliveryNotes,
@@ -2592,6 +2685,8 @@ async function createOrders() {
                 delivery_fee: order.delivery_fee,
                 distance_km: order.distance_km,
                 total: order.total,
+                requested_delivery_date: getStoreDeliveryDate(order.temp_id),  // Phase 1: Per-store date
+                requested_delivery_time: getStoreDeliveryTime(order.temp_id),  // Phase 1: Per-store time
                 items: order.items.map(item => ({
                     product_id: item.product_id,
                     variant_id: item.variant_id,
@@ -2602,6 +2697,8 @@ async function createOrders() {
                 payment_proof_public_id: uploadedProofData[order.temp_id]?.public_id || null
             }))
         };
+        
+        console.log('📦 Orders payload with per-store delivery preferences:', ordersPayload);
         
         const response = await fetch('/api/v1/checkout/create-orders', {
             method: 'POST',
@@ -2701,18 +2798,12 @@ function displayOrderSummary() {
 function displayGCashPayment() {
     const order = checkoutOrders[currentOrderIndex];
     const container = document.getElementById('gcashPaymentContainer');
-    
-    let hasProof = !!uploadedProofs[order.temp_id];
-    let existingProof = null;
-    
-    if (!hasProof) {
-        existingProof = loadProofData(order.temp_id);
-        if (existingProof) {
-            hasProof = true;
-        }
-    } else {
-        existingProof = uploadedProofData[order.temp_id];
-    }
+    const proofState = getProofState(order.temp_id);
+    const hasPreview = proofState.hasUploaded || proofState.hasPending;
+    const previewSrc = proofState.previewSrc;
+    const deliveryDate = getStoreDeliveryDate(order.temp_id);
+    const deliveryTime = getStoreDeliveryTime(order.temp_id);
+    const minDate = getTodayDateString();
 
     let html = `
         <div style="text-align: center; margin-bottom: 16px;">
@@ -2723,15 +2814,37 @@ function displayGCashPayment() {
         <div style="padding: 12px; background: var(--cream); border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 16px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                 <span style="color: var(--muted);">Order Reference: ${order.temp_id}</span>
-                <span style="font-weight: 600;">Amount: <span style="color: var(--deep-rose); font-size: 18px;">₱${order.total || 0}</span></span>
+                <span style="font-weight: 600;">Amount: <span style="color: var(--deep-rose); font-size: 18px;">&#8369;${order.total || 0}</span></span>
+            </div>
+        </div>
+
+        <!-- Phase 1: Per-store delivery date/time picker -->
+        <div style="margin-bottom: 16px; padding: 12px; background: #f9f5f3; border-radius: var(--radius-md); border: 1px solid var(--border);">
+            <h5 style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--charcoal);">Requested Delivery</h5>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--muted);">Date</label>
+                    <input type="date" id="storeDeliveryDate_${order.temp_id}" value="${deliveryDate}" min="${minDate}" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12px;" required>
+                </div>
+                <div>
+                    <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--muted);">Time Slot</label>
+                    <select id="storeDeliveryTime_${order.temp_id}" value="${deliveryTime}" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12px;" required>
+                        <option value="08:00-12:00" ${deliveryTime === '08:00-12:00' ? 'selected' : ''}>8:00 AM - 12:00 PM</option>
+                        <option value="12:00-15:00" ${deliveryTime === '12:00-15:00' ? 'selected' : ''}>12:00 PM - 3:00 PM</option>
+                        <option value="15:00-18:00" ${deliveryTime === '15:00-18:00' ? 'selected' : ''}>3:00 PM - 6:00 PM</option>
+                    </select>
+                </div>
             </div>
         </div>
     `;
-    
+
     if (order.gcash_instructions) {
         html += `
-            <div style="margin-bottom: 16px; font-size: 12px; color: var(--muted); padding: 12px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md);">
-                ${order.gcash_instructions}
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Payment Instructions</div>
+                <div style="font-size: 12px; color: var(--muted); padding: 12px; background: #fff8f6; border: 1px solid var(--border); border-radius: var(--radius-md); line-height: 1.6;">
+                    ${order.gcash_instructions}
+                </div>
             </div>
         `;
     }
@@ -2743,7 +2856,9 @@ function displayGCashPayment() {
     `;
 
     if (order.gcash_qr_codes && order.gcash_qr_codes.length > 0) {
-        html += `<img src="${order.gcash_qr_codes[0].url}" style="max-width: 200px; height: auto; border-radius: var(--radius-md);">`;
+        // Find primary QR or use first one
+        const primaryQR = order.gcash_qr_codes.find(q => q.is_primary) || order.gcash_qr_codes[0];
+        html += `<img src="${primaryQR.url}" style="max-width: 200px; height: auto; border-radius: var(--radius-md);">`;
     } else {
         html += `<div style="padding: 40px; color: var(--muted);"><i class="ri-qr-code-2-line" style="font-size: 48px;"></i><div style="margin-top: 12px;">No QR code available</div></div>`;
     }
@@ -2754,58 +2869,44 @@ function displayGCashPayment() {
 
         <div style="margin-bottom: 16px;">
             <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Upload Payment Receipt</div>
-    `;
-    
-    if (hasProof && existingProof) {
-        html += `
-            <div id="proofPreview_${order.temp_id}" style="display: block; margin-bottom: 12px;">
-                <img id="previewImg_${order.temp_id}" src="${existingProof.preview || existingProof.url}" style="max-width: 100%; height: 200px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                <button type="button" onclick="clearProof('${order.temp_id}')" style="width: 100%; margin-top: 8px; padding: 8px; background: #f0f0f0; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">Remove Image</button>
+            <div id="proofPreview_${order.temp_id}" style="display: ${hasPreview ? 'block' : 'none'}; margin-bottom: 12px;">
+                <img id="previewImg_${order.temp_id}" ${previewSrc ? `src="${previewSrc}"` : ''} style="max-width: 100%; height: 200px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                <button type="button" onclick="clearProof('${order.temp_id}')" style="width: 100%; margin-top: 8px; padding: 8px; background: #f0f0f0; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">
+                    ${proofState.hasUploaded ? 'Remove Image' : 'Clear Image'}
+                </button>
             </div>
-            <input type="file" id="proofInput_${order.temp_id}" accept="image/*" onchange="handleProofSelect('${order.temp_id}', event)" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; display: none;">
-            <button type="button" onclick="document.getElementById('proofInput_${order.temp_id}').click()" style="width: 100%; padding: 8px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; margin-top: 8px;">
-                <i class="ri-image-add-line"></i> Replace Image
+            <input type="file" id="proofInput_${order.temp_id}" accept="image/*" onchange="handleProofSelect('${order.temp_id}', event)" style="display: none;">
+            <button type="button" onclick="document.getElementById('proofInput_${order.temp_id}').click()" style="width: 100%; padding: 8px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">
+                <i class="ri-image-add-line"></i> ${hasPreview ? 'Replace Image' : 'Choose Image'}
             </button>
-        `;
-    } else {
-        html += `
-            <div id="proofPreview_${order.temp_id}" style="display: none; margin-bottom: 12px;">
-                <img id="previewImg_${order.temp_id}" style="max-width: 100%; height: 200px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                <button type="button" onclick="clearProof('${order.temp_id}')" style="width: 100%; margin-top: 8px; padding: 8px; background: #f0f0f0; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">Clear Image</button>
-            </div>
-            <input type="file" id="proofInput_${order.temp_id}" accept="image/*" onchange="handleProofSelect('${order.temp_id}', event)" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">
-        `;
-    }
-
-    html += `
             <small style="display: block; margin-top: 8px; color: var(--muted);">Select screenshot or photo of your GCash payment</small>
         </div>
 
-        <button type="button" onclick="uploadProof('${order.temp_id}')" style="width: 100%; padding: 12px; background: var(--deep-rose); color: white; border: none; border-radius: var(--radius-pill); font-weight: 600; cursor: pointer; margin-bottom: 16px;">
-            ☁️ Upload Receipt
-        </button>
-
         <div id="uploadStatus_${order.temp_id}" style="text-align: center; font-size: 13px; color: var(--muted);">
-            ${hasProof ? '<span style="color: var(--sage);">✓ Receipt uploaded</span>' : ''}
+            ${proofState.hasUploaded ? '<span style="color: var(--sage);">Receipt uploaded</span>' : proofState.hasPending ? '<span style="color: var(--muted);">Image selected. Use the button below to upload.</span>' : ''}
         </div>
     `;
 
     container.innerHTML = html;
     
-    const nextBtn = document.getElementById('checkoutNextBtn');
-    if (hasProof) {
-        if (currentOrderIndex < checkoutOrders.length - 1) {
-            nextBtn.textContent = '→ Next Order';
-            nextBtn.disabled = false;
-        } else {
-            nextBtn.textContent = '✓ Complete';
-            nextBtn.disabled = false;
-        }
-    } else {
-        nextBtn.textContent = '⏳ Waiting for upload...';
-        nextBtn.disabled = true;
+    // Phase 1: Add event listeners for per-store delivery date/time
+    const dateInput = document.getElementById(`storeDeliveryDate_${order.temp_id}`);
+    const timeInput = document.getElementById(`storeDeliveryTime_${order.temp_id}`);
+    
+    if (dateInput) {
+        dateInput.addEventListener('change', (e) => {
+            setStoreDeliveryPreference(order.temp_id, e.target.value, getStoreDeliveryTime(order.temp_id));
+        });
     }
     
+    if (timeInput) {
+        timeInput.addEventListener('change', (e) => {
+            setStoreDeliveryPreference(order.temp_id, getStoreDeliveryDate(order.temp_id), e.target.value);
+        });
+    }
+    
+    updateCheckoutPaymentAction();
+
     // Reset the creating orders flag when moving between orders
     isCreatingOrders = false;
 }
@@ -2816,14 +2917,22 @@ function handleProofSelect(tempId, event) {
         const reader = new FileReader();
         reader.onload = (e) => {
             const previewUrl = e.target.result;
-            document.getElementById(`previewImg_${tempId}`).src = previewUrl;
-            document.getElementById(`proofPreview_${tempId}`).style.display = 'block';
+            const previewImg = document.getElementById(`previewImg_${tempId}`);
+            const previewBox = document.getElementById(`proofPreview_${tempId}`);
+
+            if (previewImg) {
+                previewImg.src = previewUrl;
+            }
+            if (previewBox) {
+                previewBox.style.display = 'block';
+            }
             
             if (!uploadedProofData[tempId]) {
                 uploadedProofData[tempId] = {};
             }
             uploadedProofData[tempId].preview = previewUrl;
             uploadedProofData[tempId].file = file;
+            updateCheckoutPaymentAction();
         };
         reader.readAsDataURL(file);
     }
@@ -2839,7 +2948,7 @@ async function uploadProof(tempId) {
 
     if (!file) {
         showToast('Please select an image');
-        return;
+        return false;
     }
 
     const statusDiv = document.getElementById(`uploadStatus_${tempId}`);
@@ -2872,20 +2981,18 @@ async function uploadProof(tempId) {
                 public_id: result.public_id
             });
             
-            statusDiv.innerHTML = '<span style="color: var(--sage);">✓ Receipt uploaded successfully</span>';
-            
-            const currentOrder = checkoutOrders[currentOrderIndex];
-            if (currentOrder.temp_id === tempId) {
-                document.getElementById('checkoutNextBtn').disabled = false;
-                document.getElementById('checkoutNextBtn').textContent = currentOrderIndex < checkoutOrders.length - 1 ? '→ Next Order' : '✓ Complete';
-            }
-        } else {
-            statusDiv.innerHTML = '<span style="color: var(--deep-rose);">✗ Upload failed</span>';
-            showToast('Upload failed: ' + (result.error || 'Unknown error'));
+            statusDiv.innerHTML = '<span style="color: var(--sage);">Receipt uploaded successfully</span>';
+            updateCheckoutPaymentAction();
+            return true;
         }
+
+        statusDiv.innerHTML = '<span style="color: var(--deep-rose);">Upload failed</span>';
+        showToast('Upload failed: ' + (result.error || 'Unknown error'));
+        return false;
     } catch (error) {
-        statusDiv.innerHTML = '<span style="color: var(--deep-rose);">✗ Error uploading</span>';
+        statusDiv.innerHTML = '<span style="color: var(--deep-rose);">Error uploading</span>';
         console.error('Upload error:', error);
+        return false;
     }
 }
 
@@ -2900,22 +3007,29 @@ function searchProducts(event) {
 }
 
 function clearProof(tempId) {
-    document.getElementById(`proofInput_${tempId}`).value = '';
-    document.getElementById(`proofPreview_${tempId}`).style.display = 'none';
-    clearProofData(tempId);
-    
-    const fileInput = document.getElementById(`proofInput_${tempId}`);
-    if (fileInput) {
-        fileInput.style.display = 'block';
+    const input = document.getElementById(`proofInput_${tempId}`);
+    if (input) {
+        input.value = '';
     }
-    
-    document.getElementById('checkoutNextBtn').disabled = true;
-    document.getElementById('checkoutNextBtn').textContent = '⏳ Waiting for upload...';
+
+    const preview = document.getElementById(`proofPreview_${tempId}`);
+    if (preview) {
+        preview.style.display = 'none';
+    }
+
+    const previewImg = document.getElementById(`previewImg_${tempId}`);
+    if (previewImg) {
+        previewImg.removeAttribute('src');
+    }
+
+    clearProofData(tempId);
     
     const statusDiv = document.getElementById(`uploadStatus_${tempId}`);
     if (statusDiv) {
         statusDiv.innerHTML = '';
     }
+
+    updateCheckoutPaymentAction();
 }
 
 async function syncGuestCart() {

@@ -41,6 +41,42 @@ def inject_csrf_token():
     return dict(csrf_token=generate_csrf)
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# AUTHENTICATION HELPER - Supports both Flask Sessions & JWT Tokens
+# ═════════════════════════════════════════════════════════════════════════════
+def get_authenticated_user_id():
+    """
+    Get user ID from either:
+    1. Flask session (for web browsers)
+    2. JWT token in Authorization header (for mobile apps)
+    
+    Returns: user_id (int) or None if not authenticated
+    """
+    # Try session first (for web)
+    if 'user_id' in session:
+        return session['user_id']
+    
+    # Try JWT token (for mobile apps like Flutter)
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        try:
+            from flask_jwt_extended import decode_token
+            payload = decode_token(token)
+            # Extract user_id from token claims
+            user_id = payload.get('user_id') or payload.get('sub')
+            if user_id:
+                # Convert string user_id to int if needed
+                try:
+                    return int(user_id)
+                except (ValueError, TypeError):
+                    return None
+        except Exception as e:
+            print(f"⚠️ JWT validation failed: {e}")
+    
+    return None
+
+
 def _serialize_customer_order(order):
     """Shape order data for the customer account order UI."""
     items_payload = []
@@ -4401,34 +4437,39 @@ def get_municipality_barangays(municipality):
 
 @templates_bp.route('/api/account/addresses', methods=['GET'])
 def get_user_addresses():
-    """Get all addresses for the logged-in user"""
-    if 'user_id' not in session:
+    """Get all addresses for the logged-in user (supports JWT and sessions)"""
+    user_id = get_authenticated_user_id()
+    if not user_id:
         return jsonify({'error': 'Not logged in'}), 401
     
     try:
-        addresses = UserAddress.query.filter_by(user_id=session['user_id']).order_by(
+        addresses = UserAddress.query.filter_by(user_id=user_id).order_by(
             UserAddress.is_default.desc(),
             UserAddress.created_at.desc()
         ).all()
+        
+        print(f"✅ Retrieved {len(addresses)} addresses for user {user_id}")
         
         return jsonify({
             'success': True,
             'addresses': [addr.to_dict() for addr in addresses]
         })
     except Exception as e:
+        print(f"❌ Error fetching addresses: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
 @templates_bp.route('/api/account/addresses', methods=['POST'])
 def add_user_address():
-    """Add a new address for the user"""
-    if 'user_id' not in session:
+    """Add a new address for the user (supports JWT and sessions)"""
+    user_id = get_authenticated_user_id()
+    if not user_id:
         return jsonify({'error': 'Not logged in'}), 401
     
     try:
         data = request.get_json()
         
-        # Validate required fields - including place_id (optional)
+        # Validate required fields
         required = ['municipality', 'barangay', 'address_label', 'latitude', 'longitude']
         for field in required:
             if field not in data or data[field] is None:
@@ -4445,13 +4486,13 @@ def add_user_address():
         # If this is set as default, unset other defaults
         if data.get('is_default'):
             UserAddress.query.filter_by(
-                user_id=session['user_id'],
+                user_id=user_id,
                 is_default=True
             ).update({'is_default': False})
         
         # Create new address with EXACT coordinates and place_id from Mapbox
         address = UserAddress(
-            user_id=session['user_id'],
+            user_id=user_id,
             municipality=data['municipality'],
             barangay=data['barangay'],
             street=data.get('street'),
@@ -4467,6 +4508,8 @@ def add_user_address():
         db.session.add(address)
         db.session.commit()
         
+        print(f"✅ Address created for user {user_id}: {address_line}")
+        
         return jsonify({
             'success': True,
             'message': 'Address added successfully',
@@ -4481,14 +4524,15 @@ def add_user_address():
 
 @templates_bp.route('/api/account/addresses/<int:address_id>', methods=['PUT'])
 def update_user_address(address_id):
-    """Update an existing address"""
-    if 'user_id' not in session:
+    """Update an existing address (supports JWT and sessions)"""
+    user_id = get_authenticated_user_id()
+    if not user_id:
         return jsonify({'error': 'Not logged in'}), 401
     
     try:
         address = UserAddress.query.filter_by(
             id=address_id,
-            user_id=session['user_id']
+            user_id=user_id
         ).first()
         
         if not address:
@@ -4529,7 +4573,7 @@ def update_user_address(address_id):
         # Handle default status
         if data.get('is_default'):
             UserAddress.query.filter_by(
-                user_id=session['user_id'],
+                user_id=user_id,
                 is_default=True
             ).filter(UserAddress.id != address_id).update({'is_default': False})
             address.is_default = True
@@ -4553,14 +4597,15 @@ def update_user_address(address_id):
 
 @templates_bp.route('/api/account/addresses/<int:address_id>', methods=['DELETE'])
 def delete_user_address(address_id):
-    """Delete an address"""
-    if 'user_id' not in session:
+    """Delete an address (supports JWT and sessions)"""
+    user_id = get_authenticated_user_id()
+    if not user_id:
         return jsonify({'error': 'Not logged in'}), 401
     
     try:
         address = UserAddress.query.filter_by(
             id=address_id,
-            user_id=session['user_id']
+            user_id=user_id
         ).first()
         
         if not address:
@@ -4569,7 +4614,7 @@ def delete_user_address(address_id):
         # If this was the default, make another address default
         if address.is_default:
             next_address = UserAddress.query.filter_by(
-                user_id=session['user_id']
+                user_id=user_id
             ).filter(UserAddress.id != address_id).first()
             
             if next_address:
@@ -4591,14 +4636,15 @@ def delete_user_address(address_id):
 
 @templates_bp.route('/api/account/addresses/<int:address_id>/set-default', methods=['POST'])
 def set_default_address(address_id):
-    """Set an address as default"""
-    if 'user_id' not in session:
+    """Set an address as default (supports JWT and sessions)"""
+    user_id = get_authenticated_user_id()
+    if not user_id:
         return jsonify({'error': 'Not logged in'}), 401
     
     try:
         address = UserAddress.query.filter_by(
             id=address_id,
-            user_id=session['user_id']
+            user_id=user_id
         ).first()
         
         if not address:
@@ -4606,7 +4652,7 @@ def set_default_address(address_id):
         
         # Unset all other defaults
         UserAddress.query.filter_by(
-            user_id=session['user_id'],
+            user_id=user_id,
             is_default=True
         ).update({'is_default': False})
         
