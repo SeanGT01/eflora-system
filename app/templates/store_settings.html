@@ -2237,12 +2237,13 @@
         if (expanded) {
             content.classList.remove('collapsed');
             summary.classList.remove('collapsed');
-            // Resize map after the section becomes visible
-            setTimeout(() => {
-                if (typeof map !== 'undefined' && map) {
-                    map.resize();
-                }
-            }, 150);
+            // Initialize map on first expand so it gets correct container dimensions
+            if (!mapInitialized) {
+                mapInitialized = true;
+                setTimeout(() => initMap(), 50);
+            } else if (map) {
+                setTimeout(() => map.resize(), 150);
+            }
         } else {
             content.classList.add('collapsed');
             summary.classList.add('collapsed');
@@ -3135,6 +3136,7 @@ async function handleQRFile(file, index) {
         
         let map, marker, geocoder, draw;
         let locationChanged = false;
+        let mapInitialized = false;
 
         
         // ===== PERSISTENT STORAGE FOR ALL DELIVERY METHODS =====
@@ -3929,11 +3931,25 @@ async function handleQRFile(file, index) {
         }
         
         // ===== VISUALIZATION BUTTONS =====
+        // Helper: ensure map is visible before visualization
+        function ensureMapVisible() {
+            if (!mapInitialized || !map) {
+                toggleBasicInfoSection(true);
+                return false; // map still loading, caller should retry after delay
+            }
+            const content = document.getElementById('basic-info-content');
+            if (content && content.classList.contains('collapsed')) {
+                toggleBasicInfoSection(true);
+                setTimeout(() => map.resize(), 150);
+            }
+            return true;
+        }
+
         // Show Radius button
         const showRadiusBtn = document.getElementById('show-radius-btn');
         if (showRadiusBtn) {
             showRadiusBtn.addEventListener('click', function() {
-                if (!map) return;
+                if (!ensureMapVisible()) return;
                 
                 const radiusGeojson = storeData.radius_geojson;
                 
@@ -4056,7 +4072,7 @@ async function handleQRFile(file, index) {
         const showZoneBtn = document.getElementById('show-zone-btn');
         if (showZoneBtn) {
             showZoneBtn.addEventListener('click', function() {
-                if (!map) return;
+                if (!ensureMapVisible()) return;
                 
                 if (!zoneDeliveryData || !isGeoJSONFormat(zoneDeliveryData)) {
                     showToast('No delivery zone saved yet. Draw one first!', 'info');
@@ -4175,8 +4191,8 @@ async function handleQRFile(file, index) {
         // NOTE: Location is now saved via the basic info "Save Changes" button.
         // No separate location save/cancel handlers needed.
         
-        // Initialize map
-        initMap();
+        // Map is initialized lazily on first basic info expand
+        // to ensure the container has correct dimensions
         
         // Initialize QR count in summary
         setTimeout(() => {
