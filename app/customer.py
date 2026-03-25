@@ -59,7 +59,7 @@ def customer_only(f):
 @customer_bp.route('/products', methods=['GET'])
 def get_products():
     """Public — no auth needed."""
-    category = request.args.get('category')
+    category = request.args.get('category')  # Can be main_category slug
     store_id = request.args.get('store_id', type=int)
     search   = request.args.get('q', '')
     page     = request.args.get('page', 1, type=int)
@@ -70,8 +70,14 @@ def get_products():
         Store.status == 'active',
         Product.stock_quantity > 0
     )
-    if category:
-        q = q.filter(Product.category == category)
+    
+    # Filter by main category slug if provided
+    if category and category != 'all':
+        from app.models import Category
+        main_cat = Category.query.filter_by(slug=category).first()
+        if main_cat:
+            q = q.filter(Product.main_category_id == main_cat.id)
+    
     if store_id:
         q = q.filter(Product.store_id == store_id)
     if search:
@@ -103,6 +109,28 @@ def get_product(product_id):
     if p.store:
         data['store'] = p.store.to_dict()
     return jsonify(data)
+
+
+@customer_bp.route('/categories', methods=['GET'])
+def get_categories():
+    """Get all active main categories — public (no auth needed)."""
+    from app.models import Category
+    
+    try:
+        # Fetch all active main categories, sorted by sort_order
+        categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+        
+        return jsonify({
+            'success': True,
+            'categories': [cat.to_dict() for cat in categories],
+            'total': len(categories)
+        })
+    except Exception as e:
+        print(f'❌ Error fetching categories: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': f'Failed to fetch categories: {str(e)}'
+        }), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -148,29 +176,9 @@ def get_cart():
         for item in cart.items:
             product = item.product
             if product:
-                # Get product images
-                images = []
-                for img in product.images:
-                    images.append({
-                        'id': img.id,
-                        'filename': img.filename,
-                        'is_primary': img.is_primary,
-                        'sort_order': img.sort_order
-                    })
-                
-                # Build product data with images
-                product_data = {
-                    'id': product.id,
-                    'name': product.name,
-                    'description': product.description,
-                    'price': float(product.price),
-                    'stock_quantity': product.stock_quantity,
-                    'category': product.category,
-                    'is_available': product.is_available,
-                    'store_id': product.store_id,
-                    'images': images,  # CRITICAL: Include images array
-                    'store_name': product.store.name if product.store else None
-                }
+                # Use product.to_dict() to get complete product data with all category fields
+                product_data = product.to_dict()
+                product_data['store_name'] = product.store.name if product.store else None
                 
                 # Build cart item data
                 item_data = {
@@ -180,7 +188,7 @@ def get_cart():
                     'quantity': item.quantity,
                     'created_at': item.created_at.isoformat() if item.created_at else None,
                     'updated_at': item.updated_at.isoformat() if item.updated_at else None,
-                    'product': product_data  # This includes the images
+                    'product': product_data
                 }
                 cart_data['items'].append(item_data)
         
