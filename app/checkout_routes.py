@@ -750,7 +750,7 @@ def process_checkout():
                 distance_km=float(distance) if distance else None,
                 total_amount=float(subtotal + delivery_fee),
                 payment_method="gcash",
-                payment_status="pending",
+                payment_status="pending_verification",
                 delivery_location=delivery_point,
                 payment_proof_url=payment_proof_url,
                 payment_proof_public_id=payment_proof_public_id,
