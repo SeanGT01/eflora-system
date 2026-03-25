@@ -638,6 +638,8 @@ def process_checkout():
         address_id = data.get("delivery_address_id")
         delivery_notes = data.get("delivery_notes", "")
         requested_items = data.get("items") or []
+        payment_proof_url = data.get("payment_proof_url")
+        payment_proof_public_id = data.get("payment_proof_public_id")
 
         if not address_id:
             return jsonify({"error": "delivery_address_id is required"}), 400
@@ -748,6 +750,8 @@ def process_checkout():
                 payment_method="gcash",
                 payment_status="pending",
                 delivery_location=delivery_point,
+                payment_proof_url=payment_proof_url,
+                payment_proof_public_id=payment_proof_public_id,
                 delivery_address=address.address_line,
                 delivery_notes=delivery_notes,
                 customer_latitude=address.latitude,
