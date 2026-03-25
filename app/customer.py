@@ -65,10 +65,15 @@ def get_products():
     page     = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 20, type=int), 100)
 
+    # NOTE: We used to filter by stock_quantity > 0, but now we return all available products.
+    # The frontend (web/mobile) handles visibility logic:
+    # - Show all products where is_available=true and store is active
+    # - Products with no main stock but variant stock show "Select Variant" button
+    # - Products with no sellable stock show "Out of Stock" overlay
+    # This matches the web landing page behavior exactly
     q = Product.query.join(Store).filter(
         Product.is_available == True,
-        Store.status == 'active',
-        Product.stock_quantity > 0
+        Store.status == 'active'
     )
     
     # Filter by main category slug if provided
