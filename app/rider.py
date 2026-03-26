@@ -131,10 +131,10 @@ def get_available_orders():
     if not rider:
         return jsonify({'error': 'Rider profile not found'}), 404
     
-    # Get orders from rider's store that are accepted but not assigned
+    # Get orders from rider's store that are ready for pickup (accepted or done_preparing) and not assigned
     orders = Order.query.filter(
         Order.store_id == rider.store_id,
-        Order.status == 'accepted',
+        Order.status.in_(['accepted', 'done_preparing']),
         Order.rider_id.is_(None)
     ).order_by(Order.created_at).all()
     
@@ -179,7 +179,7 @@ def accept_order(order_id):
     if not order or order.store_id != rider.store_id:
         return jsonify({'error': 'Order not found'}), 404
     
-    if order.status != 'accepted' or order.rider_id is not None:
+    if order.status not in ('accepted', 'done_preparing') or order.rider_id is not None:
         return jsonify({'error': 'Order cannot be accepted'}), 400
     
     order.rider_id = rider.id
