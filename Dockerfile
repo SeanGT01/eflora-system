@@ -16,6 +16,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 RUN mkdir -p logs
 
+ENV FLASK_APP=run.py
+
 EXPOSE 8000
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0: run:app"]
