@@ -1,4 +1,6 @@
 import secrets
+import socket
+import threading
 from flask import current_app, url_for, request
 from flask_mail import Message
 from app.extensions import mail
@@ -9,18 +11,25 @@ def generate_verification_token():
     return secrets.token_urlsafe(32)
 
 
+def _send_email_async(app, msg, recipient_email):
+    """Send email in a background thread with its own app context."""
+    # Set socket timeout for this thread only so SMTP doesn't hang forever
+    old_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(30)
+    with app.app_context():
+        try:
+            mail.send(msg)
+            app.logger.info(f"✅ Verification email sent to {recipient_email}")
+        except Exception as e:
+            app.logger.error(f"❌ Failed to send verification email to {recipient_email}: {e}")
+        finally:
+            socket.setdefaulttimeout(old_timeout)
+
+
 def send_rider_verification_email(recipient_email, verification_token, store_name, seller_name):
     """
-    Send a verification link email to a new rider.
-    
-    Args:
-        recipient_email: Rider's email address
-        verification_token: The secure token for email verification
-        store_name: Name of the store adding the rider
-        seller_name: Name of the seller who initiated
-    
-    Returns:
-        bool: True if email sent successfully, False otherwise
+    Send a verification link email to a new rider (async via thread).
+    Returns True immediately — email is sent in background.
     """
     try:
         base_url = current_app.config.get('APP_BASE_URL') or request.host_url.rstrip('/')
@@ -86,10 +95,15 @@ def send_rider_verification_email(recipient_email, verification_token, store_nam
             html=html_body
         )
         
-        mail.send(msg)
-        current_app.logger.info(f"✅ Verification email sent to {recipient_email}")
+        # Send in background thread so the API response returns immediately
+        app = current_app._get_current_object()
+        thread = threading.Thread(target=_send_email_async, args=(app, msg, recipient_email))
+        thread.daemon = True
+        thread.start()
+        
+        current_app.logger.info(f"📧 Verification email queued for {recipient_email}")
         return True
         
     except Exception as e:
-        current_app.logger.error(f"❌ Failed to send verification email to {recipient_email}: {e}")
+        current_app.logger.error(f"❌ Failed to queue verification email to {recipient_email}: {e}")
         return False

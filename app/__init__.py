@@ -81,6 +81,14 @@ def create_app(config_class='default'):
     limiter.init_app(app)
     mail.init_app(app)
     
+    # Log mail config for debugging (mask password)
+    mail_user = app.config.get('MAIL_USERNAME', '')
+    mail_server = app.config.get('MAIL_SERVER', '')
+    mail_port = app.config.get('MAIL_PORT', '')
+    mail_tls = app.config.get('MAIL_USE_TLS', False)
+    mail_pass = '***SET***' if app.config.get('MAIL_PASSWORD') else '***MISSING***'
+    print(f"📧 Mail config: server={mail_server}:{mail_port} TLS={mail_tls} user={mail_user} password={mail_pass}")
+    
     # ====================================================
     # INITIALIZE CLOUDINARY
     # ====================================================
