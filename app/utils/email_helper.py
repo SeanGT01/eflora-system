@@ -1,6 +1,8 @@
 import secrets
 import socket
 import threading
+import smtplib
+import time
 from flask import current_app, url_for, request
 from flask_mail import Message
 from app.extensions import mail
@@ -20,20 +22,64 @@ def generate_verification_token():
 
 
 def _send_email_async(app, msg, recipient_email):
-    """Send email in a background thread with its own app context."""
+    """Send email in a background thread with its own app context.
+    
+    Uses direct SMTP with detailed logging to diagnose timeout issues.
+    """
     old_timeout = socket.getdefaulttimeout()
-    socket.setdefaulttimeout(30)
-    # Patch getaddrinfo to force IPv4 in this thread
+    old_getaddrinfo = socket.getaddrinfo
+    socket.setdefaulttimeout(60)  # Increased from 30 to 60 seconds
     socket.getaddrinfo = _ipv4_getaddrinfo
+    
     with app.app_context():
         try:
-            mail.send(msg)
+            server = app.config.get('MAIL_SERVER', 'smtp.gmail.com')
+            port = app.config.get('MAIL_PORT', 587)
+            username = app.config.get('MAIL_USERNAME', '')
+            password = app.config.get('MAIL_PASSWORD', '')
+            use_tls = app.config.get('MAIL_USE_TLS', True)
+            use_ssl = app.config.get('MAIL_USE_SSL', False)
+            
+            app.logger.info(f"📧 Connecting to {server}:{port}...")
+            start = time.time()
+            
+            if use_ssl:
+                smtp = smtplib.SMTP_SSL(server, port, timeout=60)
+            else:
+                smtp = smtplib.SMTP(server, port, timeout=60)
+            
+            elapsed = time.time() - start
+            app.logger.info(f"📧 Connected in {elapsed:.2f}s, sending EHLO...")
+            
+            smtp.ehlo()
+            
+            if use_tls and not use_ssl:
+                app.logger.info(f"📧 Starting TLS...")
+                smtp.starttls()
+                smtp.ehlo()
+            
+            if username and password:
+                app.logger.info(f"📧 Logging in as {username}...")
+                smtp.login(username, password)
+            
+            app.logger.info(f"📧 Sending email to {recipient_email}...")
+            smtp.send_message(msg)
+            smtp.quit()
+            
             app.logger.info(f"✅ Verification email sent to {recipient_email}")
+        
+        except socket.timeout as e:
+            app.logger.error(f"❌ SMTP timeout to {server}:{port} - {e}")
+        except smtplib.SMTPAuthenticationError as e:
+            app.logger.error(f"❌ SMTP auth failed for {username} - {e}")
+        except smtplib.SMTPException as e:
+            app.logger.error(f"❌ SMTP error sending to {recipient_email} - {e}")
         except Exception as e:
-            app.logger.error(f"❌ Failed to send verification email to {recipient_email}: {e}")
+            app.logger.error(f"❌ Failed to send verification email to {recipient_email}: {type(e).__name__}: {e}")
+        
         finally:
             socket.setdefaulttimeout(old_timeout)
-            socket.getaddrinfo = _original_getaddrinfo
+            socket.getaddrinfo = old_getaddrinfo
 
 
 def send_rider_verification_email(recipient_email, verification_token, store_name, seller_name):
