@@ -1457,6 +1457,37 @@ class UserAddress(db.Model):
         }
 
 
+class RiderOTP(db.Model):
+    """Email verification for rider account creation"""
+    __tablename__ = 'rider_otps'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False, index=True)
+    verification_token = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    rider_data = db.Column(db.JSON, nullable=False)  # Stores pending rider info
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # Seller who initiated
+    is_verified = db.Column(db.Boolean, default=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    store = db.relationship('Store', backref='rider_otps')
+    creator = db.relationship('User', backref='created_rider_otps')
+    
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'store_id': self.store_id,
+            'is_verified': self.is_verified,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
 class MunicipalityBoundary(db.Model):
     __tablename__ = 'municipality_boundaries'
     

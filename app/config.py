@@ -16,6 +16,7 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jwt-secret-key")
     JWT_IDENTITY_CLAIM = "sub"
     MAPBOX_PUBLIC_TOKEN = os.getenv('MAPBOX_PUBLIC_TOKEN', '')
+    APP_BASE_URL = os.getenv('APP_BASE_URL', '')
 
     # =============================
     # JWT Configuration
@@ -137,6 +138,17 @@ class Config:
     # PostGIS
     # =============================
     POSTGIS_VERSION = (3, 3, 0)
+
+    # =============================
+    # Email / SMTP (Flask-Mail)
+    # =============================
+    MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+    MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
+    MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
+    MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
+    MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
+    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')  # Gmail App Password
+    MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME', 'noreply@eflowers.com'))
 
 
 # =================================

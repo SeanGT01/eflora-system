@@ -4,7 +4,7 @@ import os
 import mimetypes
 
 # Import extensions from the new extensions module
-from app.extensions import db, migrate, jwt
+from app.extensions import db, migrate, jwt, mail
 
 # ====================================================
 # ADD CSRF AND RATE LIMITING IMPORTS
@@ -79,6 +79,7 @@ def create_app(config_class='default'):
     jwt.init_app(app)
     csrf.init_app(app)
     limiter.init_app(app)
+    mail.init_app(app)
     
     # ====================================================
     # INITIALIZE CLOUDINARY

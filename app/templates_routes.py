@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary, GCashQR, StockReduction
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -2405,6 +2405,361 @@ def seller_riders():
         return redirect(url_for('templates.dashboard'))
     return render_template('seller_riders.html')
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PUBLIC RIDER EMAIL VERIFICATION (rider clicks link from email)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@templates_bp.route('/verify-rider/<token>')
+def verify_rider_token(token):
+    """Public page — rider clicks the verify link from their email."""
+    import secrets as _secrets
+
+    rider_otp = RiderOTP.query.filter_by(
+        verification_token=token, is_verified=False
+    ).first()
+
+    if not rider_otp:
+        return render_template('rider_verify_result.html',
+                               success=False,
+                               message='This verification link is invalid or has already been used.')
+
+    if rider_otp.is_expired():
+        return render_template('rider_verify_result.html',
+                               success=False,
+                               message='This invitation has expired. Please ask the seller to resend it.')
+
+    # Verification valid — create the rider account
+    rider_data = rider_otp.rider_data
+    email = rider_otp.email
+
+    rider_user = User.query.filter_by(email=email).first()
+    if not rider_user:
+        temp_password = _secrets.token_urlsafe(12)
+        rider_user = User(
+            full_name=rider_data['full_name'],
+            email=email,
+            phone=rider_data.get('phone'),
+            role='rider',
+            status='active'
+        )
+        rider_user.set_password(temp_password)
+        db.session.add(rider_user)
+        db.session.flush()
+
+    existing_rider = Rider.query.filter_by(
+        user_id=rider_user.id, store_id=rider_otp.store_id
+    ).first()
+
+    if not existing_rider:
+        new_rider = Rider(
+            user_id=rider_user.id,
+            store_id=rider_otp.store_id,
+            vehicle_type=rider_data.get('vehicle_type', ''),
+            license_plate=rider_data.get('license_plate', ''),
+            is_active=True
+        )
+        db.session.add(new_rider)
+
+    rider_otp.is_verified = True
+    db.session.commit()
+
+    store = Store.query.get(rider_otp.store_id)
+    store_name = store.name if store else 'the store'
+
+    return render_template('rider_verify_result.html',
+                           success=True,
+                           message=f'Welcome, {rider_data["full_name"]}! You have been verified as a rider for {store_name}.')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RIDER MANAGEMENT API (session-based, for web dashboard)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@templates_bp.route('/api/seller/riders', methods=['GET'])
+def seller_riders_api():
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    riders = Rider.query.filter_by(store_id=store.id).all()
+
+    riders_data = []
+    for rider in riders:
+        rider_dict = rider.to_dict()
+        total_deliveries = Order.query.filter_by(rider_id=rider.id, status='delivered').count()
+        active_delivery = Order.query.filter(
+            Order.rider_id == rider.id,
+            Order.status.in_(['on_delivery', 'accepted', 'preparing'])
+        ).first()
+        rider_dict['total_deliveries'] = total_deliveries
+        rider_dict['has_active_delivery'] = active_delivery is not None
+        rider_dict['active_order_id'] = active_delivery.id if active_delivery else None
+        riders_data.append(rider_dict)
+
+    pending_otps = RiderOTP.query.filter_by(
+        store_id=store.id, is_verified=False
+    ).filter(RiderOTP.expires_at > datetime.utcnow()).all()
+
+    return jsonify({
+        'success': True,
+        'riders': riders_data,
+        'pending_invitations': [otp.to_dict() for otp in pending_otps],
+        'stats': {
+            'total': len(riders),
+            'active': sum(1 for r in riders if r.is_active),
+            'inactive': sum(1 for r in riders if not r.is_active)
+        }
+    }), 200
+
+
+@templates_bp.route('/api/seller/riders', methods=['POST'])
+def seller_invite_rider_api():
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user_id = session['user_id']
+    user = User.query.get(user_id)
+    store = Store.query.filter_by(seller_id=user_id, status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request'}), 400
+
+    email = (data.get('email') or '').lower().strip()
+    full_name = (data.get('full_name') or '').strip()
+    phone = (data.get('phone') or '').strip()
+    vehicle_type = data.get('vehicle_type', '')
+    license_plate = (data.get('license_plate') or '').strip()
+
+    if not email or not full_name:
+        return jsonify({'error': 'Email and full name are required'}), 400
+
+    existing_user = User.query.filter_by(email=email).first()
+    if existing_user:
+        existing_rider = Rider.query.filter_by(user_id=existing_user.id, store_id=store.id).first()
+        if existing_rider:
+            return jsonify({'error': 'This email is already registered as a rider for your store'}), 409
+
+    existing_otp = RiderOTP.query.filter_by(
+        email=email, store_id=store.id, is_verified=False
+    ).filter(RiderOTP.expires_at > datetime.utcnow()).first()
+    if existing_otp:
+        return jsonify({'error': 'An invitation is already pending for this email.'}), 409
+
+    from app.utils.email_helper import generate_verification_token, send_rider_verification_email
+    token = generate_verification_token()
+
+    rider_otp = RiderOTP(
+        email=email,
+        verification_token=token,
+        rider_data={
+            'full_name': full_name,
+            'phone': phone,
+            'vehicle_type': vehicle_type,
+            'license_plate': license_plate
+        },
+        store_id=store.id,
+        created_by=user_id,
+        expires_at=datetime.utcnow() + timedelta(hours=24)
+    )
+    db.session.add(rider_otp)
+    db.session.commit()
+
+    email_sent = send_rider_verification_email(
+        recipient_email=email,
+        verification_token=token,
+        store_name=store.name,
+        seller_name=user.full_name
+    )
+
+    if not email_sent:
+        return jsonify({'error': 'Failed to send verification email.'}), 500
+
+    return jsonify({
+        'success': True,
+        'message': f'Verification email sent to {email}'
+    }), 201
+
+
+@templates_bp.route('/api/seller/riders/resend-invitation', methods=['POST'])
+def seller_resend_rider_invitation_api():
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user_id = session['user_id']
+    user = User.query.get(user_id)
+    store = Store.query.filter_by(seller_id=user_id, status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    data = request.get_json()
+    otp_id = data.get('otp_id')
+    if not otp_id:
+        return jsonify({'error': 'Invitation ID is required'}), 400
+
+    rider_otp = RiderOTP.query.filter_by(id=otp_id, store_id=store.id, is_verified=False).first()
+    if not rider_otp:
+        return jsonify({'error': 'Invitation not found'}), 404
+
+    from app.utils.email_helper import generate_verification_token, send_rider_verification_email
+    new_token = generate_verification_token()
+    rider_otp.verification_token = new_token
+    rider_otp.expires_at = datetime.utcnow() + timedelta(hours=24)
+    db.session.commit()
+
+    email_sent = send_rider_verification_email(
+        recipient_email=rider_otp.email,
+        verification_token=new_token,
+        store_name=store.name,
+        seller_name=user.full_name
+    )
+
+    if not email_sent:
+        return jsonify({'error': 'Failed to resend email'}), 500
+
+    return jsonify({'success': True, 'message': f'New invitation sent to {rider_otp.email}'}), 200
+
+
+@templates_bp.route('/api/seller/riders/cancel-invitation', methods=['POST'])
+def seller_cancel_rider_invitation_api():
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    data = request.get_json()
+    otp_id = data.get('otp_id')
+    if not otp_id:
+        return jsonify({'error': 'OTP ID is required'}), 400
+
+    rider_otp = RiderOTP.query.filter_by(id=otp_id, store_id=store.id, is_verified=False).first()
+    if not rider_otp:
+        return jsonify({'error': 'Invitation not found'}), 404
+
+    db.session.delete(rider_otp)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Invitation cancelled'}), 200
+
+
+@templates_bp.route('/api/seller/riders/<int:rider_id>', methods=['GET'])
+def seller_rider_detail_api(rider_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    rider = Rider.query.filter_by(id=rider_id, store_id=store.id).first()
+    if not rider:
+        return jsonify({'error': 'Rider not found'}), 404
+
+    rider_dict = rider.to_dict()
+    total_deliveries = Order.query.filter_by(rider_id=rider.id, status='delivered').count()
+    recent_orders = Order.query.filter_by(rider_id=rider.id).order_by(Order.created_at.desc()).limit(10).all()
+
+    rider_dict['total_deliveries'] = total_deliveries
+    rider_dict['recent_orders'] = [o.to_dict() for o in recent_orders]
+
+    return jsonify({'success': True, 'rider': rider_dict}), 200
+
+
+@templates_bp.route('/api/seller/riders/<int:rider_id>', methods=['PUT'])
+def seller_update_rider_api(rider_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    rider = Rider.query.filter_by(id=rider_id, store_id=store.id).first()
+    if not rider:
+        return jsonify({'error': 'Rider not found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request'}), 400
+
+    if 'vehicle_type' in data:
+        rider.vehicle_type = data['vehicle_type']
+    if 'license_plate' in data:
+        rider.license_plate = data['license_plate']
+    if 'is_active' in data:
+        rider.is_active = bool(data['is_active'])
+
+    if rider.user:
+        if 'full_name' in data:
+            rider.user.full_name = data['full_name']
+        if 'phone' in data:
+            rider.user.phone = data['phone']
+
+    rider.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Rider updated successfully', 'rider': rider.to_dict()}), 200
+
+
+@templates_bp.route('/api/seller/riders/<int:rider_id>/status', methods=['PUT'])
+def seller_rider_status_api(rider_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    rider = Rider.query.filter_by(id=rider_id, store_id=store.id).first()
+    if not rider:
+        return jsonify({'error': 'Rider not found'}), 404
+
+    data = request.get_json()
+    if data and 'is_active' in data:
+        rider.is_active = bool(data['is_active'])
+
+    rider.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'Rider {"activated" if rider.is_active else "deactivated"}',
+        'rider': rider.to_dict()
+    }), 200
+
+
+@templates_bp.route('/api/seller/riders/<int:rider_id>', methods=['DELETE'])
+def seller_delete_rider_api(rider_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    rider = Rider.query.filter_by(id=rider_id, store_id=store.id).first()
+    if not rider:
+        return jsonify({'error': 'Rider not found'}), 404
+
+    active_delivery = Order.query.filter(
+        Order.rider_id == rider.id,
+        Order.status.in_(['on_delivery', 'accepted', 'preparing'])
+    ).first()
+    if active_delivery:
+        return jsonify({'error': 'Cannot remove rider with active deliveries'}), 400
+
+    db.session.delete(rider)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Rider removed successfully'}), 200
 
 
 # ─── Helper ───────────────────────────────────────────────────────────────────

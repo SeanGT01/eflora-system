@@ -250,3 +250,10 @@ def debug_token_check():
         'config': config_info,
         'token_test': token_info
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PUBLIC RIDER EMAIL VERIFICATION (rider clicks link from email)
+# ═══════════════════════════════════════════════════════════════════════════════
+# The verification is handled via GET /verify-rider/<token> in templates_routes.py
+# since it renders an HTML page for the rider.
