@@ -130,6 +130,74 @@ def health_check():
     return jsonify({'status': 'ok'}), 200
 
 
+@templates_bp.route('/debug/test-email')
+@limiter.exempt
+def debug_test_email():
+    """Temporary endpoint to diagnose SMTP issues on Railway."""
+    import smtplib
+    import socket
+    result = {
+        'mail_server': current_app.config.get('MAIL_SERVER', ''),
+        'mail_port': current_app.config.get('MAIL_PORT', ''),
+        'mail_use_tls': current_app.config.get('MAIL_USE_TLS', False),
+        'mail_use_ssl': current_app.config.get('MAIL_USE_SSL', False),
+        'mail_username': current_app.config.get('MAIL_USERNAME', ''),
+        'mail_password_set': bool(current_app.config.get('MAIL_PASSWORD')),
+        'mail_default_sender': current_app.config.get('MAIL_DEFAULT_SENDER', ''),
+    }
+    
+    server = result['mail_server']
+    port = result['mail_port']
+    
+    # Test DNS resolution
+    try:
+        ip = socket.getaddrinfo(server, port)
+        result['dns_resolved'] = True
+        result['resolved_ip'] = str(ip[0][4]) if ip else 'none'
+    except Exception as e:
+        result['dns_resolved'] = False
+        result['dns_error'] = str(e)
+        return jsonify(result), 200
+    
+    # Test SMTP connection
+    try:
+        old_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(15)
+        
+        if result['mail_use_ssl']:
+            smtp = smtplib.SMTP_SSL(server, port, timeout=15)
+        else:
+            smtp = smtplib.SMTP(server, port, timeout=15)
+        
+        smtp.ehlo()
+        
+        if result['mail_use_tls'] and not result['mail_use_ssl']:
+            smtp.starttls()
+            smtp.ehlo()
+        
+        result['smtp_connected'] = True
+        
+        # Test login
+        username = current_app.config.get('MAIL_USERNAME', '')
+        password = current_app.config.get('MAIL_PASSWORD', '')
+        if username and password:
+            try:
+                smtp.login(username, password)
+                result['smtp_login'] = True
+            except Exception as e:
+                result['smtp_login'] = False
+                result['smtp_login_error'] = str(e)
+        
+        smtp.quit()
+        socket.setdefaulttimeout(old_timeout)
+        
+    except Exception as e:
+        result['smtp_connected'] = False
+        result['smtp_error'] = str(e)
+    
+    return jsonify(result), 200
+
+
 @templates_bp.route('/')
 @limiter.limit("5 per minute")
 def index():
