@@ -3,9 +3,29 @@ import socket
 import threading
 import smtplib
 import time
+from datetime import datetime
 from flask import current_app, url_for, request
 from flask_mail import Message
 from app.extensions import mail
+
+# ================================================================
+# EMAIL THROTTLING (prevent SendGrid rate limits)
+# ================================================================
+_email_lock = threading.Lock()
+_last_email_time = 0
+_min_email_interval = 0.5  # Minimum 500ms between emails (120 emails/min max)
+
+def _throttle_email():
+    """Enforce minimum interval between email sends to avoid rate limiting."""
+    global _last_email_time
+    with _email_lock:
+        now = time.time()
+        time_since_last = now - _last_email_time
+        if time_since_last < _min_email_interval:
+            sleep_time = _min_email_interval - time_since_last
+            current_app.logger.info(f"⏳ Email throttle: sleeping {sleep_time:.2f}s to avoid rate limits")
+            time.sleep(sleep_time)
+        _last_email_time = time.time()
 
 
 def generate_verification_token():
@@ -13,8 +33,12 @@ def generate_verification_token():
     return secrets.token_urlsafe(32)
 
 
-def _send_email_sendgrid(recipient_email, subject, html_body, sender_email):
-    """Send email via SendGrid API (preferred for production)."""
+def _send_email_sendgrid(recipient_email, subject, html_body, sender_email, retry_count=0, max_retries=3):
+    """
+    Send email via SendGrid API with exponential backoff for rate limits.
+    
+    Handles 429 (rate limit) responses by waiting and retrying.
+    """
     try:
         from sendgrid import SendGridAPIClient
         from sendgrid.helpers.mail import Mail
@@ -22,6 +46,9 @@ def _send_email_sendgrid(recipient_email, subject, html_body, sender_email):
         sendgrid_api_key = current_app.config.get('SENDGRID_API_KEY')
         if not sendgrid_api_key:
             return False
+        
+        # Apply throttling to space out requests
+        _throttle_email()
         
         message = Mail(
             from_email=sender_email,
@@ -36,12 +63,32 @@ def _send_email_sendgrid(recipient_email, subject, html_body, sender_email):
         if response.status_code in (200, 201, 202):
             current_app.logger.info(f"✅ Email sent via SendGrid to {recipient_email}")
             return True
+        elif response.status_code == 429:
+            # Rate limited by SendGrid
+            if retry_count < max_retries:
+                # Exponential backoff: 1s, 2s, 4s
+                wait_time = 2 ** retry_count
+                current_app.logger.warning(
+                    f"⚠️  SendGrid rate limit (429). "
+                    f"Retrying in {wait_time}s (attempt {retry_count + 1}/{max_retries})..."
+                )
+                time.sleep(wait_time)
+                return _send_email_sendgrid(
+                    recipient_email, subject, html_body, sender_email,
+                    retry_count=retry_count + 1, max_retries=max_retries
+                )
+            else:
+                current_app.logger.error(
+                    f"❌ SendGrid rate limit (429) - Max retries exceeded for {recipient_email}"
+                )
+                return False
         else:
-            current_app.logger.error(f"❌ SendGrid returned {response.status_code}: {response.body}")
+            error_msg = response.body.decode() if hasattr(response.body, 'decode') else str(response.body)
+            current_app.logger.error(f"❌ SendGrid error {response.status_code}: {error_msg}")
             return False
         
     except Exception as e:
-        current_app.logger.error(f"❌ SendGrid error: {e}")
+        current_app.logger.error(f"❌ SendGrid error: {type(e).__name__}: {e}")
         return False
 
 
