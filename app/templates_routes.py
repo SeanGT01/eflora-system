@@ -124,6 +124,12 @@ def _serialize_customer_order(order):
     }
 
 
+@templates_bp.route('/health')
+@limiter.exempt
+def health_check():
+    return jsonify({'status': 'ok'}), 200
+
+
 @templates_bp.route('/')
 @limiter.limit("5 per minute")
 def index():
