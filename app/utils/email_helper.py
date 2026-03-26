@@ -5,6 +5,14 @@ from flask import current_app, url_for, request
 from flask_mail import Message
 from app.extensions import mail
 
+# Force IPv4 for SMTP — Railway containers often lack IPv6 routing
+_original_getaddrinfo = socket.getaddrinfo
+
+def _ipv4_getaddrinfo(*args, **kwargs):
+    results = _original_getaddrinfo(*args, **kwargs)
+    ipv4 = [r for r in results if r[0] == socket.AF_INET]
+    return ipv4 if ipv4 else results
+
 
 def generate_verification_token():
     """Generate a secure URL-safe verification token."""
@@ -13,9 +21,10 @@ def generate_verification_token():
 
 def _send_email_async(app, msg, recipient_email):
     """Send email in a background thread with its own app context."""
-    # Set socket timeout for this thread only so SMTP doesn't hang forever
     old_timeout = socket.getdefaulttimeout()
     socket.setdefaulttimeout(30)
+    # Patch getaddrinfo to force IPv4 in this thread
+    socket.getaddrinfo = _ipv4_getaddrinfo
     with app.app_context():
         try:
             mail.send(msg)
@@ -24,6 +33,7 @@ def _send_email_async(app, msg, recipient_email):
             app.logger.error(f"❌ Failed to send verification email to {recipient_email}: {e}")
         finally:
             socket.setdefaulttimeout(old_timeout)
+            socket.getaddrinfo = _original_getaddrinfo
 
 
 def send_rider_verification_email(recipient_email, verification_token, store_name, seller_name):

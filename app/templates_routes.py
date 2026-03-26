@@ -149,25 +149,32 @@ def debug_test_email():
     server = result['mail_server']
     port = result['mail_port']
     
-    # Test DNS resolution
+    # Test DNS resolution (IPv4 only)
     try:
-        ip = socket.getaddrinfo(server, port)
+        all_addrs = socket.getaddrinfo(server, port)
+        ipv4_addrs = [a for a in all_addrs if a[0] == socket.AF_INET]
+        ipv6_addrs = [a for a in all_addrs if a[0] == socket.AF_INET6]
         result['dns_resolved'] = True
-        result['resolved_ip'] = str(ip[0][4]) if ip else 'none'
+        result['ipv4_addrs'] = [str(a[4]) for a in ipv4_addrs]
+        result['ipv6_addrs'] = [str(a[4]) for a in ipv6_addrs]
+        result['using_ipv4'] = str(ipv4_addrs[0][4]) if ipv4_addrs else 'none'
     except Exception as e:
         result['dns_resolved'] = False
         result['dns_error'] = str(e)
         return jsonify(result), 200
     
-    # Test SMTP connection
+    # Test SMTP connection forcing IPv4
     try:
         old_timeout = socket.getdefaulttimeout()
         socket.setdefaulttimeout(15)
         
+        # Force IPv4 for this connection
+        ipv4_ip = ipv4_addrs[0][4][0] if ipv4_addrs else server
+        
         if result['mail_use_ssl']:
-            smtp = smtplib.SMTP_SSL(server, port, timeout=15)
+            smtp = smtplib.SMTP_SSL(ipv4_ip, port, timeout=15)
         else:
-            smtp = smtplib.SMTP(server, port, timeout=15)
+            smtp = smtplib.SMTP(ipv4_ip, port, timeout=15)
         
         smtp.ehlo()
         
