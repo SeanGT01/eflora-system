@@ -2493,9 +2493,10 @@ def seller_riders():
 
 @templates_bp.route('/verify-rider/<token>')
 def verify_rider_token(token):
-    """Public page — rider clicks the verify link from their email."""
-    import secrets as _secrets
-
+    """
+    Public page — rider clicks the verify link from their email.
+    Shows a form to set their password before account is fully activated.
+    """
     rider_otp = RiderOTP.query.filter_by(
         verification_token=token, is_verified=False
     ).first()
@@ -2510,31 +2511,94 @@ def verify_rider_token(token):
                                success=False,
                                message='This invitation has expired. Please ask the seller to resend it.')
 
-    # Verification valid — create the rider account
+    # Verification valid — prepare to create the rider account
     rider_data = rider_otp.rider_data
     email = rider_otp.email
 
+    # Check if User already exists for this email
     rider_user = User.query.filter_by(email=email).first()
     if not rider_user:
-        temp_password = _secrets.token_urlsafe(12)
+        # Create User with status='inactive' (not active until password is set)
         rider_user = User(
             full_name=rider_data['full_name'],
             email=email,
             phone=rider_data.get('phone'),
             role='rider',
-            status='active'
+            status='inactive'  # Not active until password is set
         )
-        rider_user.set_password(temp_password)
+        # Don't set password yet — rider will set it on the form
         db.session.add(rider_user)
         db.session.flush()
 
+    # Don't create the Rider record yet — wait until password is set
+    # Just mark the OTP as verified (email was verified)
+    rider_otp.is_verified = True
+    db.session.commit()
+
+    store = Store.query.get(rider_otp.store_id)
+    store_name = store.name if store else 'the store'
+
+    # Show form to set password
+    return render_template('rider_set_password.html',
+                           token=token,
+                           full_name=rider_data['full_name'],
+                           email=email,
+                           store_name=store_name)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RIDER PASSWORD SETUP (after email verification)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@templates_bp.route('/api/rider/set-password', methods=['POST'])
+@limiter.limit('5 per minute')
+def rider_set_password():
+    """
+    Rider sets their password after verifying their email.
+    Creates the Rider record and activates their account.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request'}), 400
+
+    token = data.get('token', '').strip()
+    password = data.get('password', '').strip()
+
+    if not token or not password:
+        return jsonify({'error': 'Token and password are required'}), 400
+
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+
+    # Find the RiderOTP by verification token
+    rider_otp = RiderOTP.query.filter_by(
+        verification_token=token, is_verified=True
+    ).first()
+
+    if not rider_otp:
+        return jsonify({'error': 'Invalid or expired verification link'}), 400
+
+    if rider_otp.is_expired():
+        return jsonify({'error': 'This invitation has expired'}), 400
+
+    # Find the User that was created during verification
+    user = User.query.filter_by(email=rider_otp.email).first()
+    if not user:
+        return jsonify({'error': 'User account not found'}), 400
+
+    # Set the password and activate the account
+    user.set_password(password)
+    user.status = 'active'
+
+    # Now create the Rider record
     existing_rider = Rider.query.filter_by(
-        user_id=rider_user.id, store_id=rider_otp.store_id
+        user_id=user.id, store_id=rider_otp.store_id
     ).first()
 
     if not existing_rider:
+        rider_data = rider_otp.rider_data
         new_rider = Rider(
-            user_id=rider_user.id,
+            user_id=user.id,
             store_id=rider_otp.store_id,
             vehicle_type=rider_data.get('vehicle_type', ''),
             license_plate=rider_data.get('license_plate', ''),
@@ -2542,15 +2606,18 @@ def verify_rider_token(token):
         )
         db.session.add(new_rider)
 
-    rider_otp.is_verified = True
+    # Clean up — delete the OTP record after successful setup
+    db.session.delete(rider_otp)
     db.session.commit()
 
     store = Store.query.get(rider_otp.store_id)
     store_name = store.name if store else 'the store'
 
-    return render_template('rider_verify_result.html',
-                           success=True,
-                           message=f'Welcome, {rider_data["full_name"]}! You have been verified as a rider for {store_name}.')
+    return jsonify({
+        'success': True,
+        'message': f'Account activated! You can now log in to {store_name} as a rider.',
+        'email': user.email
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

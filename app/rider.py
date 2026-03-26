@@ -65,9 +65,28 @@ def rider_dashboard():
             'today_orders': today_orders,
             'today_delivered': today_delivered
         },
-        'current_order': current_order.to_dict() if current_order else None,
-        'recent_orders': [order.to_dict() for order in recent_orders]
+        'current_order': None,
+        'recent_orders': []
     }
+    
+    if current_order:
+        co = current_order.to_dict()
+        co['items'] = [item.to_dict() for item in current_order.items]
+        co['customer_contact'] = current_order.customer.phone if current_order.customer and hasattr(current_order.customer, 'phone') else None
+        if current_order.store:
+            co['store_latitude'] = current_order.store.latitude
+            co['store_longitude'] = current_order.store.longitude
+            co['store_address'] = current_order.store.address
+        dashboard_data['current_order'] = co
+    
+    for order in recent_orders:
+        od = order.to_dict()
+        od['items'] = [item.to_dict() for item in order.items]
+        if order.store:
+            od['store_latitude'] = order.store.latitude
+            od['store_longitude'] = order.store.longitude
+            od['store_address'] = order.store.address
+        dashboard_data['recent_orders'].append(od)
     
     return jsonify(dashboard_data), 200
 
@@ -94,6 +113,11 @@ def get_assigned_orders():
         order_dict['customer_name'] = order.customer.full_name if order.customer else None
         order_dict['customer_contact'] = order.customer.phone if hasattr(order.customer, 'phone') else None
         order_dict['delivery_address'] = order.delivery_address
+        # Include store coordinates for map routing
+        if order.store:
+            order_dict['store_latitude'] = order.store.latitude
+            order_dict['store_longitude'] = order.store.longitude
+            order_dict['store_address'] = order.store.address
         order_data.append(order_dict)
     
     return jsonify({'orders': order_data}), 200
@@ -121,6 +145,13 @@ def get_available_orders():
         order_dict['customer_name'] = order.customer.full_name if order.customer else None
         order_dict['delivery_address'] = order.delivery_address
         
+        # Include store coordinates for map routing
+        store = Store.query.get(rider.store_id)
+        if store:
+            order_dict['store_latitude'] = store.latitude
+            order_dict['store_longitude'] = store.longitude
+            order_dict['store_address'] = store.address
+
         # Calculate distance from store to delivery location
         store = Store.query.get(rider.store_id)
         if store and store.location and order.delivery_location:
