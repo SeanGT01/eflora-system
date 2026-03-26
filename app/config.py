@@ -149,6 +149,9 @@ class Config:
     MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')  # Gmail App Password
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME', 'noreply@eflowers.com'))
+    
+    # SendGrid API (preferred for production)
+    SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
 
 
 # =================================

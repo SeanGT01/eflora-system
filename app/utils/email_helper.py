@@ -7,107 +7,130 @@ from flask import current_app, url_for, request
 from flask_mail import Message
 from app.extensions import mail
 
-# Force IPv4 for SMTP — Railway containers often lack IPv6 routing
-_original_getaddrinfo = socket.getaddrinfo
-
-def _ipv4_getaddrinfo(*args, **kwargs):
-    results = _original_getaddrinfo(*args, **kwargs)
-    ipv4 = [r for r in results if r[0] == socket.AF_INET]
-    return ipv4 if ipv4 else results
-
 
 def generate_verification_token():
     """Generate a secure URL-safe verification token."""
     return secrets.token_urlsafe(32)
 
 
-def _send_email_async(app, msg, recipient_email):
-    """Send email in a background thread with its own app context.
-    
-    Uses direct SMTP with detailed logging to diagnose timeout issues.
-    """
+def _send_email_sendgrid(recipient_email, subject, html_body, sender_email):
+    """Send email via SendGrid API (preferred for production)."""
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
+        
+        sendgrid_api_key = current_app.config.get('SENDGRID_API_KEY')
+        if not sendgrid_api_key:
+            return False
+        
+        message = Mail(
+            from_email=sender_email,
+            to_emails=recipient_email,
+            subject=subject,
+            html_content=html_body
+        )
+        
+        sg = SendGridAPIClient(sendgrid_api_key)
+        response = sg.send(message)
+        
+        if response.status_code in (200, 201, 202):
+            current_app.logger.info(f"✅ Email sent via SendGrid to {recipient_email}")
+            return True
+        else:
+            current_app.logger.error(f"❌ SendGrid returned {response.status_code}: {response.body}")
+            return False
+        
+    except Exception as e:
+        current_app.logger.error(f"❌ SendGrid error: {e}")
+        return False
+
+
+def _send_email_smtp(recipient_email, subject, html_body, sender_email):
+    """Fallback: Send email via SMTP (for local development)."""
     old_timeout = socket.getdefaulttimeout()
-    old_getaddrinfo = socket.getaddrinfo
-    socket.setdefaulttimeout(60)  # Global timeout for socket ops
-    socket.getaddrinfo = _ipv4_getaddrinfo
+    socket.setdefaulttimeout(60)
     
-    with app.app_context():
+    with current_app.app_context():
         try:
-            server = app.config.get('MAIL_SERVER', 'smtp.gmail.com')
-            port = app.config.get('MAIL_PORT', 587)
-            username = app.config.get('MAIL_USERNAME', '')
-            password = app.config.get('MAIL_PASSWORD', '')
-            use_tls = app.config.get('MAIL_USE_TLS', True)
-            use_ssl = app.config.get('MAIL_USE_SSL', False)
+            server = current_app.config.get('MAIL_SERVER', 'smtp.gmail.com')
+            port = current_app.config.get('MAIL_PORT', 587)
+            username = current_app.config.get('MAIL_USERNAME', '')
+            password = current_app.config.get('MAIL_PASSWORD', '')
+            use_tls = current_app.config.get('MAIL_USE_TLS', True)
+            use_ssl = current_app.config.get('MAIL_USE_SSL', False)
             
-            # Resolve hostname first
-            app.logger.info(f"📧 Resolving {server}...")
+            current_app.logger.info(f"📧 Resolving {server}...")
             try:
-                # Force IPv4
-                addrs = _ipv4_getaddrinfo(server, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
-                if addrs:
-                    resolved_ip = addrs[0][4][0]
-                    app.logger.info(f"📧 Resolved to {resolved_ip}, connecting (5s timeout)...")
-                else:
-                    app.logger.error(f"❌ No IPv4 addresses found for {server}")
-                    return
+                addrs = socket.getaddrinfo(server, port)
+                ipv4 = [a for a in addrs if a[0] == socket.AF_INET]
+                if not ipv4:
+                    current_app.logger.error(f"❌ No IPv4 addresses for {server}")
+                    return False
+                resolved_ip = ipv4[0][4][0]
+                current_app.logger.info(f"📧 Resolved to {resolved_ip}, connecting (5s timeout)...")
             except Exception as e:
-                app.logger.error(f"❌ DNS resolution failed for {server}: {e}")
-                return
+                current_app.logger.error(f"❌ DNS resolution failed: {e}")
+                return False
             
-            start = time.time()
-            
-            # 5-second timeout for initial connection
             try:
                 if use_ssl:
                     smtp = smtplib.SMTP_SSL(server, port, timeout=5)
                 else:
                     smtp = smtplib.SMTP(server, port, timeout=5)
             except socket.timeout:
-                app.logger.error(f"❌ Connection timeout after 5s to {server}:{port} ({resolved_ip})")
-                app.logger.error(f"   → Railway may block outbound SMTP. Consider using AWS SES, SendGrid, or Mailgun.")
-                return
+                current_app.logger.error(f"❌ SMTP connection timeout. If on Railway, use SendGrid instead.")
+                return False
             
-            elapsed = time.time() - start
-            app.logger.info(f"📧 Connected in {elapsed:.2f}s, sending EHLO...")
-            
-            # Increase timeout for remaining ops
             smtp.settimeout(30)
             smtp.ehlo()
             
             if use_tls and not use_ssl:
-                app.logger.info(f"📧 Starting TLS...")
+                current_app.logger.info(f"📧 Starting TLS...")
                 smtp.starttls()
                 smtp.ehlo()
             
             if username and password:
-                app.logger.info(f"📧 Logging in as {username}...")
+                current_app.logger.info(f"📧 Logging in...")
                 smtp.login(username, password)
             
-            app.logger.info(f"📧 Sending email to {recipient_email}...")
+            current_app.logger.info(f"📧 Sending email...")
+            msg = Message(
+                subject=subject,
+                recipients=[recipient_email],
+                html=html_body,
+                sender=sender_email
+            )
             smtp.send_message(msg)
             smtp.quit()
             
-            app.logger.info(f"✅ Verification email sent to {recipient_email}")
+            current_app.logger.info(f"✅ Email sent via SMTP to {recipient_email}")
+            return True
         
-        except socket.timeout as e:
-            app.logger.error(f"❌ SMTP timeout - {e}")
-        except smtplib.SMTPAuthenticationError as e:
-            app.logger.error(f"❌ SMTP auth failed for {username} - {e}")
-        except smtplib.SMTPException as e:
-            app.logger.error(f"❌ SMTP error sending to {recipient_email} - {e}")
         except Exception as e:
-            app.logger.error(f"❌ Failed to send verification email to {recipient_email}: {type(e).__name__}: {e}")
+            current_app.logger.error(f"❌ SMTP error: {type(e).__name__}: {e}")
+            return False
         
         finally:
             socket.setdefaulttimeout(old_timeout)
-            socket.getaddrinfo = old_getaddrinfo
+
+
+def _send_email_async(app, recipient_email, subject, html_body, sender_email):
+    """Send email in background thread, trying SendGrid first, then SMTP fallback."""
+    with app.app_context():
+        sendgrid_key = app.config.get('SENDGRID_API_KEY')
+        
+        if sendgrid_key:
+            # Use SendGrid for production
+            _send_email_sendgrid(recipient_email, subject, html_body, sender_email)
+        else:
+            # Fallback to SMTP for local development
+            _send_email_smtp(recipient_email, subject, html_body, sender_email)
 
 
 def send_rider_verification_email(recipient_email, verification_token, store_name, seller_name):
     """
     Send a verification link email to a new rider (async via thread).
-    Returns True immediately — email is sent in background.
+    Uses SendGrid for production, SMTP for local development.
     """
     try:
         base_url = current_app.config.get('APP_BASE_URL') or request.host_url.rstrip('/')
@@ -167,21 +190,20 @@ def send_rider_verification_email(recipient_email, verification_token, store_nam
         </div>
         """
         
-        msg = Message(
-            subject=subject,
-            recipients=[recipient_email],
-            html=html_body
-        )
+        sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
         
-        # Send in background thread so the API response returns immediately
+        # Send in background thread
         app = current_app._get_current_object()
-        thread = threading.Thread(target=_send_email_async, args=(app, msg, recipient_email))
+        thread = threading.Thread(
+            target=_send_email_async,
+            args=(app, recipient_email, subject, html_body, sender)
+        )
         thread.daemon = True
         thread.start()
         
-        current_app.logger.info(f"📧 Verification email queued for {recipient_email}")
+        current_app.logger.info(f"📧 Email sending queued for {recipient_email}")
         return True
         
     except Exception as e:
-        current_app.logger.error(f"❌ Failed to queue verification email to {recipient_email}: {e}")
+        current_app.logger.error(f"❌ Failed to queue email for {recipient_email}: {e}")
         return False
