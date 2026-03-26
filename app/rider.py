@@ -154,13 +154,17 @@ def get_available_orders():
 
         # Calculate distance from store to delivery location
         store = Store.query.get(rider.store_id)
-        if store and store.location and order.delivery_location:
-            from app.map_utils import calculate_distance
-            distance = calculate_distance(
-                store.location.x, store.location.y,
-                order.delivery_location.x, order.delivery_location.y
-            )
-            order_dict['distance_from_store_km'] = round(distance, 2)
+        try:
+            if store and store.location and order.delivery_location:
+                from app.map_utils import calculate_distance
+                distance = calculate_distance(
+                    store.location.x, store.location.y,
+                    order.delivery_location.x, order.delivery_location.y
+                )
+                order_dict['distance_from_store_km'] = round(distance, 2)
+        except (AttributeError, TypeError):
+            # Location extraction failed, skip distance calculation
+            pass
         
         order_data.append(order_dict)
     
