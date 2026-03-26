@@ -148,18 +148,35 @@ class Config:
     MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
     MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')  # Gmail App Password
-    # IMPORTANT: MAIL_DEFAULT_SENDER MUST match MAIL_USERNAME for Gmail SMTP (DMARC alignment)
-    # For production, use SendGrid instead (set SENDGRID_API_KEY)
-    _mail_default = os.getenv('MAIL_DEFAULT_SENDER')
-    if _mail_default:
-        MAIL_DEFAULT_SENDER = _mail_default
-    elif os.getenv('MAIL_USERNAME'):
-        MAIL_DEFAULT_SENDER = os.getenv('MAIL_USERNAME')  # Gmail requires this match
-    else:
-        MAIL_DEFAULT_SENDER = 'noreply@eflowers.com'
     
     # SendGrid API (preferred for production)
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
+    
+    # Gmail API (free @gmail.com sending, works on Railway)
+    GMAIL_API_CREDENTIALS = os.getenv('GMAIL_API_CREDENTIALS', '')  # JSON string or base64
+    GMAIL_SENDER_EMAIL = os.getenv('GMAIL_SENDER_EMAIL', '')  # The gmail.com address to send from
+    
+    # Email sender logic:
+    # - If GMAIL_API_CREDENTIALS is set, use Gmail API (free, no DMARC issues)
+    # - If MAIL_DEFAULT_SENDER is explicitly set, use it
+    # - If SendGrid is configured, use noreply@eflowers.com (avoid gmail.com DMARC issues)
+    # - If only SMTP is available, use MAIL_USERNAME (Gmail requires this for DMARC)
+    # - Fallback to generic noreply address
+    _mail_default = os.getenv('MAIL_DEFAULT_SENDER')
+    if GMAIL_API_CREDENTIALS and GMAIL_SENDER_EMAIL:
+        # Gmail API uses the actual sender email address
+        MAIL_DEFAULT_SENDER = GMAIL_SENDER_EMAIL
+    elif _mail_default:
+        MAIL_DEFAULT_SENDER = _mail_default
+    elif SENDGRID_API_KEY:
+        # When using SendGrid, gmail.com addresses cause DMARC failures
+        # because Gmail's DMARC policy only allows Gmail's own servers
+        MAIL_DEFAULT_SENDER = 'noreply@eflowers.com'
+    elif os.getenv('MAIL_USERNAME'):
+        # SMTP-based sending (local/dev): Gmail requires sender = MAIL_USERNAME for DMARC
+        MAIL_DEFAULT_SENDER = os.getenv('MAIL_USERNAME')
+    else:
+        MAIL_DEFAULT_SENDER = 'noreply@eflowers.com'
 
 
 # =================================
