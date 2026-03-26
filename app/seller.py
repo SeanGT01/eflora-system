@@ -298,7 +298,7 @@ def get_riders():
 @seller_bp.route('/riders', methods=['POST'])
 @seller_required
 def invite_rider():
-    """Invite a new rider by email - sends verification link"""
+    """Invite a new rider — sends a 6-digit OTP to their email for verification"""
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     store = get_seller_store(user_id)
@@ -333,12 +333,12 @@ def invite_rider():
     if existing_otp:
         return jsonify({'error': 'An invitation is already pending for this email.'}), 409
     
-    from app.utils.email_helper import generate_verification_token, send_rider_verification_email
-    token = generate_verification_token()
+    from app.utils.email_helper import generate_otp_code, send_rider_otp_email
+    otp_code = generate_otp_code()
     
     rider_otp = RiderOTP(
         email=email,
-        verification_token=token,
+        verification_token=otp_code,
         rider_data={
             'full_name': full_name,
             'phone': phone,
@@ -347,31 +347,32 @@ def invite_rider():
         },
         store_id=store.id,
         created_by=user_id,
-        expires_at=datetime.utcnow() + timedelta(hours=24)
+        expires_at=datetime.utcnow() + timedelta(minutes=10)
     )
     db.session.add(rider_otp)
     db.session.commit()
     
-    email_sent = send_rider_verification_email(
+    email_sent = send_rider_otp_email(
         recipient_email=email,
-        verification_token=token,
+        otp_code=otp_code,
         store_name=store.name,
         seller_name=user.full_name
     )
     
     if not email_sent:
-        return jsonify({'error': 'Failed to send verification email.'}), 500
+        return jsonify({'error': 'Failed to send OTP email.'}), 500
     
     return jsonify({
         'success': True,
-        'message': f'Verification email sent to {email}'
+        'message': f'OTP sent to {email}. Ask the rider for the 6-digit code.',
+        'otp_id': rider_otp.id
     }), 201
 
 
 @seller_bp.route('/riders/resend-invitation', methods=['POST'])
 @seller_required
 def resend_rider_invitation():
-    """Resend verification email for a pending rider invitation"""
+    """Resend OTP for a pending rider invitation"""
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     store = get_seller_store(user_id)
@@ -391,26 +392,113 @@ def resend_rider_invitation():
     if not rider_otp:
         return jsonify({'error': 'Invitation not found'}), 404
     
-    from app.utils.email_helper import generate_verification_token, send_rider_verification_email
-    new_token = generate_verification_token()
-    rider_otp.verification_token = new_token
-    rider_otp.expires_at = datetime.utcnow() + timedelta(hours=24)
+    from app.utils.email_helper import generate_otp_code, send_rider_otp_email
+    new_otp = generate_otp_code()
+    rider_otp.verification_token = new_otp
+    rider_otp.expires_at = datetime.utcnow() + timedelta(minutes=10)
     db.session.commit()
     
-    email_sent = send_rider_verification_email(
+    email_sent = send_rider_otp_email(
         recipient_email=rider_otp.email,
-        verification_token=new_token,
+        otp_code=new_otp,
         store_name=store.name,
         seller_name=user.full_name
     )
     
     if not email_sent:
-        return jsonify({'error': 'Failed to resend email'}), 500
+        return jsonify({'error': 'Failed to resend OTP email'}), 500
     
     return jsonify({
         'success': True,
-        'message': f'New invitation sent to {rider_otp.email}'
+        'message': f'New OTP sent to {rider_otp.email}'
     }), 200
+
+
+@seller_bp.route('/riders/verify-otp', methods=['POST'])
+@seller_required
+def verify_rider_otp():
+    """Seller verifies the OTP from the rider, creates the account with a default password"""
+    user_id = get_jwt_identity()
+    store = get_seller_store(user_id)
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+    
+    data = request.get_json()
+    otp_id = data.get('otp_id')
+    otp_code = (data.get('otp_code') or '').strip()
+    
+    if not otp_id or not otp_code:
+        return jsonify({'error': 'OTP ID and code are required'}), 400
+    
+    rider_otp = RiderOTP.query.filter_by(
+        id=otp_id, store_id=store.id, is_verified=False
+    ).first()
+    
+    if not rider_otp:
+        return jsonify({'error': 'Invitation not found'}), 404
+    
+    if rider_otp.is_expired():
+        return jsonify({'error': 'OTP has expired. Please resend a new one.'}), 400
+    
+    if rider_otp.verification_token != otp_code:
+        return jsonify({'error': 'Invalid OTP code. Please try again.'}), 400
+    
+    # OTP is correct — create the rider account with a default password
+    from app.utils.email_helper import generate_default_password, send_rider_credentials_email
+    
+    rider_data = rider_otp.rider_data
+    default_password = generate_default_password()
+    
+    # Find or create the User
+    user_account = User.query.filter_by(email=rider_otp.email).first()
+    
+    if not user_account:
+        user_account = User(
+            full_name=rider_data['full_name'],
+            email=rider_otp.email,
+            phone=rider_data.get('phone'),
+            role='rider',
+            status='active'
+        )
+        user_account.set_password(default_password)
+        db.session.add(user_account)
+        db.session.flush()
+    else:
+        user_account.set_password(default_password)
+        user_account.status = 'active'
+    
+    # Create Rider record if not exists
+    existing_rider = Rider.query.filter_by(
+        user_id=user_account.id, store_id=store.id
+    ).first()
+    
+    if not existing_rider:
+        new_rider = Rider(
+            user_id=user_account.id,
+            store_id=store.id,
+            vehicle_type=rider_data.get('vehicle_type', ''),
+            license_plate=rider_data.get('license_plate', ''),
+            is_active=True
+        )
+        db.session.add(new_rider)
+    
+    # Mark OTP as verified and delete it
+    rider_otp.is_verified = True
+    db.session.delete(rider_otp)
+    db.session.commit()
+    
+    # Send credentials email to the rider
+    send_rider_credentials_email(
+        recipient_email=rider_otp.email,
+        full_name=rider_data['full_name'],
+        default_password=default_password,
+        store_name=store.name
+    )
+    
+    return jsonify({
+        'success': True,
+        'message': f'Rider account created for {rider_data["full_name"]}! Credentials sent to {rider_otp.email}.'
+    }), 201
 
 
 @seller_bp.route('/riders/<int:rider_id>', methods=['GET'])

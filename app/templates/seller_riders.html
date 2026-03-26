@@ -734,7 +734,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline" onclick="closeModal('inviteOverlay')">Cancel</button>
                 <button type="submit" class="btn btn-rose" id="inviteSubmitBtn">
-                    <i class="ri-send-plane-line"></i> Send Invitation
+                    <i class="ri-send-plane-line"></i> Send OTP
                 </button>
             </div>
         </form>
@@ -919,7 +919,7 @@ function renderPendingInvitations(invitations) {
     list.innerHTML = invitations.map(inv => {
         const expiresAt = new Date(inv.expires_at);
         const now = new Date();
-        const expiresHrs = Math.max(0, Math.round((expiresAt - now) / 3600000));
+        const expiresMins = Math.max(0, Math.round((expiresAt - now) / 60000));
 
         return `
         <div class="pending-card">
@@ -929,13 +929,19 @@ function renderPendingInvitations(invitations) {
                     <div class="pending-email">${escapeHtml(inv.email)}</div>
                     <div class="pending-time">
                         Sent ${formatDate(inv.created_at)} · 
-                        <span class="status-badge ${expiresHrs > 0 ? 'badge-pending' : 'badge-cancelled'}">
-                            ${expiresHrs > 0 ? expiresHrs + 'h left' : 'Expired'}
+                        <span class="status-badge ${expiresMins > 0 ? 'badge-pending' : 'badge-cancelled'}">
+                            ${expiresMins > 0 ? expiresMins + 'm left' : 'Expired'}
                         </span>
                     </div>
                 </div>
             </div>
-            <div class="pending-actions">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <input type="text" class="form-control" id="otpInput_${inv.id}" 
+                       placeholder="6-digit OTP" maxlength="6" pattern="[0-9]{6}"
+                       style="width: 120px; text-align: center; font-family: 'Courier New', monospace; font-size: 16px; letter-spacing: 4px;">
+                <button class="btn btn-sm btn-rose" onclick="verifyOtp(${inv.id})" id="verifyBtn_${inv.id}">
+                    <i class="ri-check-line"></i> Verify
+                </button>
                 <button class="btn btn-sm btn-outline" onclick="resendInvitation(${inv.id})">
                     <i class="ri-refresh-line"></i> Resend
                 </button>
@@ -1038,7 +1044,7 @@ document.getElementById('inviteRiderForm').addEventListener('submit', async func
     };
 
     btn.disabled = true;
-    btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Sending…';
+    btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Sending OTP…';
 
     try {
         const data = await apiFetch(`${API_BASE}/riders`, {
@@ -1052,16 +1058,48 @@ document.getElementById('inviteRiderForm').addEventListener('submit', async func
         loadRiders();
 
     } catch (err) {
-        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${escapeHtml(err.error || 'Failed to send invitation')}`;
+        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${escapeHtml(err.error || 'Failed to send OTP')}`;
         errorDiv.style.display = 'flex';
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="ri-send-plane-line"></i> Send Invitation';
+        btn.innerHTML = '<i class="ri-send-plane-line"></i> Send OTP';
     }
 });
 
 // ───────────────────────────────────────────────────
-// RESEND INVITATION
+// VERIFY OTP (seller enters the code from rider)
+// ───────────────────────────────────────────────────
+async function verifyOtp(otpId) {
+    const input = document.getElementById(`otpInput_${otpId}`);
+    const btn = document.getElementById(`verifyBtn_${otpId}`);
+    const code = (input.value || '').trim();
+
+    if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+        showToast('error', 'Please enter a valid 6-digit OTP code');
+        input.focus();
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>';
+
+    try {
+        const data = await apiFetch(`${API_BASE}/riders/verify-otp`, {
+            method: 'POST',
+            body: JSON.stringify({ otp_id: otpId, otp_code: code })
+        });
+        showToast('success', data.message);
+        loadRiders();
+    } catch (err) {
+        showToast('error', err.error || 'OTP verification failed');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri-check-line"></i> Verify';
+    }
+}
+
+// ───────────────────────────────────────────────────
+// RESEND INVITATION (resends OTP)
 // ───────────────────────────────────────────────────
 async function resendInvitation(otpId) {
     try {
