@@ -1306,7 +1306,8 @@ def update_analytics(target, value, oldvalue, initiator):
             analytics = OrderAnalytics(store_id=target.store_id, date=today)
             db.session.add(analytics)
         
-        analytics.completed_orders += 1
+        # Fix: Handle None values (from existing NULL records in database)
+        analytics.completed_orders = (analytics.completed_orders or 0) + 1
         if target.total_amount:
             analytics.total_revenue = (analytics.total_revenue or 0) + target.total_amount
 
