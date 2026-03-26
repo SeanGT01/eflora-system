@@ -2558,27 +2558,18 @@ def verify_rider_token(token):
                                success=False,
                                message='This invitation has expired. Please ask the seller to resend it.')
 
-    # Verification valid — prepare to create the rider account
+    # Verification valid — mark token as verified (don't create User yet)
     rider_data = rider_otp.rider_data
     email = rider_otp.email
 
-    # Check if User already exists for this email
+    # Check if User already exists for this email (shouldn't happen, but check anyway)
     rider_user = User.query.filter_by(email=email).first()
-    if not rider_user:
-        # Create User with status='inactive' (not active until password is set)
-        rider_user = User(
-            full_name=rider_data['full_name'],
-            email=email,
-            phone=rider_data.get('phone'),
-            role='rider',
-            status='inactive'  # Not active until password is set
-        )
-        # Don't set password yet — rider will set it on the form
-        db.session.add(rider_user)
-        db.session.flush()
-
-    # Don't create the Rider record yet — wait until password is set
-    # Just mark the OTP as verified (email was verified)
+    if rider_user:
+        # User somehow already exists, just show password form
+        pass
+    
+    # Mark the OTP as verified (email was verified)
+    # DO NOT create User yet — it will be created when password is set
     rider_otp.is_verified = True
     db.session.commit()
 
@@ -2628,14 +2619,26 @@ def rider_set_password():
     if rider_otp.is_expired():
         return jsonify({'error': 'This invitation has expired'}), 400
 
-    # Find the User that was created during verification
+    # Find or create the User
     user = User.query.filter_by(email=rider_otp.email).first()
+    
     if not user:
-        return jsonify({'error': 'User account not found'}), 400
-
-    # Set the password and activate the account
-    user.set_password(password)
-    user.status = 'active'
+        # Create new User with password
+        rider_data = rider_otp.rider_data
+        user = User(
+            full_name=rider_data['full_name'],
+            email=rider_otp.email,
+            phone=rider_data.get('phone'),
+            role='rider',
+            status='active'  # Active after password is set
+        )
+        user.set_password(password)
+        db.session.add(user)
+        db.session.flush()
+    else:
+        # User already exists (shouldn't happen normally), just set password and activate
+        user.set_password(password)
+        user.status = 'active'
 
     # Now create the Rider record
     existing_rider = Rider.query.filter_by(
