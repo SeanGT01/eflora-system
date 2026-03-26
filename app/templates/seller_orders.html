@@ -756,6 +756,12 @@
                                     Receipt
                                 </button>
                                 {% endif %}
+                                {% if order.status == 'preparing' %}
+                                <button type="button" class="orders-action-btn btn-success seller-mark-done" data-order-id="{{ order.id }}" style="background:#22c55e;border-color:#22c55e;color:white;">
+                                    <i class="ri-checkbox-line"></i>
+                                    Done
+                                </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -782,6 +788,7 @@
             </button>
         </div>
         <div class="custom-modal-body" id="sellerOrderDetailsBody"></div>
+        <div class="custom-modal-foot" id="sellerOrderDetailsFooter"></div>
     </div>
 </div>
 
@@ -991,6 +998,69 @@
             } catch (error) {
                 body.innerHTML = `<div class="text-danger">${error.message || 'Failed to load order.'}</div>`;
             }
+
+            // Update footer with action button
+            const footer = document.getElementById('sellerOrderDetailsFooter');
+            if (footer) {
+                if (order && order.status === 'preparing') {
+                    footer.innerHTML = `
+                        <button type="button" class="btn btn-outline-secondary" data-close-modal="sellerOrderDetailsModal">Close</button>
+                        <button type="button" class="btn btn-success" id="markDonePreparingBtn"><i class="ri-checkbox-line"></i> Mark as Done Preparing</button>
+                    `;
+                    document.getElementById('markDonePreparingBtn').addEventListener('click', () => markOrderDonePreparing(order.id));
+                } else {
+                    footer.innerHTML = `<button type="button" class="btn btn-outline-secondary" data-close-modal="sellerOrderDetailsModal">Close</button>`;
+                }
+            }
+        });
+    });
+
+    async function markOrderDonePreparing(orderId) {
+        const btn = document.getElementById('markDonePreparingBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ri-loader-4-line" style="animation:spin 1s linear infinite;"></i> Updating...';
+        try {
+            const response = await sellerFetch(`/api/seller/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ status: 'done_preparing' })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update status');
+            closeModal(sellerOrderDetailsModal);
+            showSellerAlert('success', 'Order marked as Done Preparing.');
+            window.location.reload();
+        } catch (error) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ri-checkbox-line"></i> Mark as Done Preparing';
+            showSellerAlert('danger', error.message || 'Could not update order status.');
+        }
+    }
+
+    document.querySelectorAll('.seller-mark-done').forEach(button => {
+        button.addEventListener('click', async () => {
+            const orderId = button.dataset.orderId;
+            button.disabled = true;
+            button.innerHTML = '<i class="ri-loader-4-line" style="animation:spin 1s linear infinite;"></i> Updating...';
+            try {
+                const response = await sellerFetch(`/api/seller/orders/${orderId}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: 'done_preparing' })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update status');
+                showSellerAlert('success', 'Order marked as Done Preparing.');
+                window.location.reload();
+            } catch (error) {
+                button.disabled = false;
+                button.innerHTML = '<i class="ri-checkbox-line"></i> Done';
+                showSellerAlert('danger', error.message || 'Could not update order status.');
+            }
         });
     });
 
@@ -1014,7 +1084,7 @@
             const data = await response.json();
             if (!response.ok || !data.success) throw new Error(data.error || 'Could not verify payment');
             closeModal(sellerPaymentProofModal);
-            showSellerAlert('success', 'Payment verified successfully.');
+            showSellerAlert('success', 'Payment verified. Order status changed to Preparing.');
             window.location.reload();
         } catch (error) {
             showSellerAlert('danger', error.message || 'Could not verify payment.');
@@ -1040,6 +1110,13 @@
         button.addEventListener('click', () => {
             closeModal(document.getElementById(button.getAttribute('data-close-modal')));
         });
+    });
+
+    // Use event delegation for dynamically added close buttons
+    document.addEventListener('click', function(e) {
+        if (e.target.hasAttribute('data-close-modal')) {
+            closeModal(document.getElementById(e.target.getAttribute('data-close-modal')));
+        }
     });
 
     [sellerOrderDetailsModal, sellerPaymentProofModal].forEach(modal => {

@@ -2436,7 +2436,7 @@ def seller_order_status_api(order_id):
 
     data = request.get_json() or {}
     new_status = data.get('status')
-    allowed_statuses = {'pending', 'accepted', 'preparing', 'on_delivery', 'delivered', 'cancelled'}
+    allowed_statuses = {'pending', 'accepted', 'preparing', 'done_preparing', 'on_delivery', 'delivered', 'cancelled'}
 
     if new_status not in allowed_statuses:
         return jsonify({'error': 'Invalid status'}), 400
@@ -2468,15 +2468,62 @@ def seller_order_verify_payment_api(order_id):
     if not order.payment_proof_url:
         return jsonify({'error': 'No payment proof uploaded'}), 400
 
+    # Verify payment and immediately set status to "preparing"
     order.payment_status = 'verified'
-    if order.status == 'pending':
-        order.status = 'accepted'
+    order.status = 'preparing'  # Changed from 'accepted' to 'preparing'
     order.updated_at = datetime.utcnow()
     db.session.commit()
 
+    current_app.logger.info(f"✅ Order #{order_id} payment verified, status changed to preparing")
+
     return jsonify({
         'success': True,
-        'message': 'Payment verified successfully',
+        'message': 'Payment verified. Order status changed to Preparing.',
+        'order': _serialize_seller_order_for_template(order)
+    }), 200
+
+
+@templates_bp.route('/api/seller/orders/<int:order_id>/update-status', methods=['PUT'])
+def seller_order_update_status(order_id):
+    """Update order status (e.g., accepted → preparing)"""
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request'}), 400
+
+    new_status = data.get('status', '').strip()
+    valid_statuses = ['preparing', 'on_delivery', 'delivered', 'cancelled']
+    
+    if new_status not in valid_statuses:
+        return jsonify({'error': 'Invalid status'}), 400
+
+    store = Store.query.filter_by(seller_id=session['user_id']).first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    order = Order.query.filter_by(id=order_id, store_id=store.id).first()
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    # Validate status transition
+    current_status = order.status
+    
+    # Only allow transition from 'accepted' to 'preparing'
+    if new_status == 'preparing' and current_status != 'accepted':
+        return jsonify({'error': 'Order must be in accepted status to mark as preparing'}), 400
+    
+    # Log status update
+    order.status = new_status
+    order.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    current_app.logger.info(f"✅ Order #{order_id} status updated: {current_status} → {new_status}")
+
+    return jsonify({
+        'success': True,
+        'message': f'Order status updated to {new_status.replace("_", " ").title()}',
         'order': _serialize_seller_order_for_template(order)
     }), 200
 

@@ -143,6 +143,8 @@
 }
 .badge-pending      { background: rgba(255,183,77,0.15); color: #8a5e00; }
 .badge-processing   { background: rgba(66,153,225,0.12); color: #1a5f9e; }
+.badge-preparing    { background: rgba(66,153,225,0.12); color: #1a5f9e; }
+.badge-done_preparing { background: rgba(34,197,94,0.12); color: #15803d; }
 .badge-on_delivery  { background: rgba(122,158,126,0.15); color: var(--deep-sage); }
 .badge-delivered    { background: rgba(72,187,120,0.12); color: #276749; }
 .badge-cancelled    { background: rgba(192,57,43,0.1);  color: #9b1c1c; }
@@ -565,17 +567,21 @@ let _searchQuery     = '';
 let _cartGroups      = [];
 
 const STATUS_CONFIG = {
-    pending:     { label: 'To Pay',     badge: 'badge-pending',     icon: 'ri-time-line',           progress: 0 },
-    processing:  { label: 'To Ship',    badge: 'badge-processing',  icon: 'ri-box-1-line',          progress: 1 },
-    on_delivery: { label: 'On the Way', badge: 'badge-on_delivery', icon: 'ri-e-bike-line',         progress: 2 },
+    pending:     { label: 'To Pay',      badge: 'badge-pending',     icon: 'ri-time-line',           progress: 0 },
+    accepted:    { label: 'Preparing',  badge: 'badge-preparing',   icon: 'ri-box-1-line',          progress: 1 },
+    preparing:   { label: 'Preparing',  badge: 'badge-preparing',   icon: 'ri-box-1-line',          progress: 1 },
+    done_preparing: { label: 'Ready',  badge: 'badge-done_preparing',   icon: 'ri-checkbox-line',          progress: 2 },
+    processing:  { label: 'Preparing',  badge: 'badge-processing',  icon: 'ri-box-1-line',          progress: 1 },
+    on_delivery: { label: 'In Transit',  badge: 'badge-on_delivery', icon: 'ri-e-bike-line',         progress: 2 },
     delivered:   { label: 'Delivered',  badge: 'badge-delivered',   icon: 'ri-checkbox-circle-line',progress: 3 },
     cancelled:   { label: 'Cancelled',  badge: 'badge-cancelled',   icon: 'ri-close-circle-line',   progress: -1 },
 };
 
 const PROGRESS_STEPS = [
     { key: 'pending',     label: 'Order\nPlaced',  icon: 'ri-shopping-bag-line' },
-    { key: 'processing',  label: 'Processing',     icon: 'ri-box-1-line' },
-    { key: 'on_delivery', label: 'On the Way',     icon: 'ri-e-bike-line' },
+    { key: 'preparing',   label: 'Preparing',      icon: 'ri-box-1-line' },
+    { key: 'done_preparing', label: 'Ready',       icon: 'ri-checkbox-line' },
+    { key: 'on_delivery', label: 'In Transit',     icon: 'ri-e-bike-line' },
     { key: 'delivered',   label: 'Delivered',      icon: 'ri-checkbox-circle-line' },
 ];
 
@@ -1274,6 +1280,9 @@ function getDisplayState(order) {
     if (status === 'on_delivery') {
         return { key: 'on_delivery', label: 'On the Way', progressKey: 'on_delivery' };
     }
+    if (status === 'done_preparing') {
+        return { key: 'processing', label: 'Ready', progressKey: 'done_preparing' };
+    }
 
     // Receipt uploaded but still waiting for seller/admin review.
     if (paymentStatus === 'pending_verification') {
@@ -1281,7 +1290,7 @@ function getDisplayState(order) {
     }
 
     if (status === 'accepted' || status === 'preparing' || paymentStatus === 'verified') {
-        return { key: 'processing', label: 'To Ship', progressKey: 'processing' };
+        return { key: 'processing', label: 'Processing', progressKey: 'processing' };
     }
 
     return { key: 'pending', label: 'To Pay', progressKey: 'pending' };
