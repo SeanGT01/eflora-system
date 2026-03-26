@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import User, Rider, Order, RiderLocation, Store
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import func
 
 rider_bp = Blueprint('rider', __name__)
@@ -284,7 +284,7 @@ def get_location_history():
         query = query.filter_by(order_id=order_id)
     
     # Get locations from last X hours
-    time_threshold = datetime.utcnow() - datetime.timedelta(hours=hours)
+    time_threshold = datetime.utcnow() - timedelta(hours=hours)
     query = query.filter(RiderLocation.timestamp >= time_threshold)
     
     locations = query.order_by(RiderLocation.timestamp.desc()).all()
@@ -311,7 +311,7 @@ def get_rider_stats():
         return jsonify({'error': 'Rider profile not found'}), 404
     
     # Weekly stats
-    week_ago = datetime.utcnow() - datetime.timedelta(days=7)
+    week_ago = datetime.utcnow() - timedelta(days=7)
     
     weekly_deliveries = Order.query.filter(
         Order.rider_id == rider.id,
@@ -320,7 +320,7 @@ def get_rider_stats():
     ).count()
     
     # Monthly stats
-    month_ago = datetime.utcnow() - datetime.timedelta(days=30)
+    month_ago = datetime.utcnow() - timedelta(days=30)
     
     monthly_deliveries = Order.query.filter(
         Order.rider_id == rider.id,
