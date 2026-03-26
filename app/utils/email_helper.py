@@ -28,7 +28,7 @@ def _send_email_async(app, msg, recipient_email):
     """
     old_timeout = socket.getdefaulttimeout()
     old_getaddrinfo = socket.getaddrinfo
-    socket.setdefaulttimeout(60)  # Increased from 30 to 60 seconds
+    socket.setdefaulttimeout(60)  # Global timeout for socket ops
     socket.getaddrinfo = _ipv4_getaddrinfo
     
     with app.app_context():
@@ -40,17 +40,39 @@ def _send_email_async(app, msg, recipient_email):
             use_tls = app.config.get('MAIL_USE_TLS', True)
             use_ssl = app.config.get('MAIL_USE_SSL', False)
             
-            app.logger.info(f"📧 Connecting to {server}:{port}...")
+            # Resolve hostname first
+            app.logger.info(f"📧 Resolving {server}...")
+            try:
+                # Force IPv4
+                addrs = _ipv4_getaddrinfo(server, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+                if addrs:
+                    resolved_ip = addrs[0][4][0]
+                    app.logger.info(f"📧 Resolved to {resolved_ip}, connecting (5s timeout)...")
+                else:
+                    app.logger.error(f"❌ No IPv4 addresses found for {server}")
+                    return
+            except Exception as e:
+                app.logger.error(f"❌ DNS resolution failed for {server}: {e}")
+                return
+            
             start = time.time()
             
-            if use_ssl:
-                smtp = smtplib.SMTP_SSL(server, port, timeout=60)
-            else:
-                smtp = smtplib.SMTP(server, port, timeout=60)
+            # 5-second timeout for initial connection
+            try:
+                if use_ssl:
+                    smtp = smtplib.SMTP_SSL(server, port, timeout=5)
+                else:
+                    smtp = smtplib.SMTP(server, port, timeout=5)
+            except socket.timeout:
+                app.logger.error(f"❌ Connection timeout after 5s to {server}:{port} ({resolved_ip})")
+                app.logger.error(f"   → Railway may block outbound SMTP. Consider using AWS SES, SendGrid, or Mailgun.")
+                return
             
             elapsed = time.time() - start
             app.logger.info(f"📧 Connected in {elapsed:.2f}s, sending EHLO...")
             
+            # Increase timeout for remaining ops
+            smtp.settimeout(30)
             smtp.ehlo()
             
             if use_tls and not use_ssl:
@@ -69,7 +91,7 @@ def _send_email_async(app, msg, recipient_email):
             app.logger.info(f"✅ Verification email sent to {recipient_email}")
         
         except socket.timeout as e:
-            app.logger.error(f"❌ SMTP timeout to {server}:{port} - {e}")
+            app.logger.error(f"❌ SMTP timeout - {e}")
         except smtplib.SMTPAuthenticationError as e:
             app.logger.error(f"❌ SMTP auth failed for {username} - {e}")
         except smtplib.SMTPException as e:
