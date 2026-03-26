@@ -148,7 +148,15 @@ class Config:
     MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
     MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')  # Gmail App Password
-    MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME', 'noreply@eflowers.com'))
+    # IMPORTANT: MAIL_DEFAULT_SENDER MUST match MAIL_USERNAME for Gmail SMTP (DMARC alignment)
+    # For production, use SendGrid instead (set SENDGRID_API_KEY)
+    _mail_default = os.getenv('MAIL_DEFAULT_SENDER')
+    if _mail_default:
+        MAIL_DEFAULT_SENDER = _mail_default
+    elif os.getenv('MAIL_USERNAME'):
+        MAIL_DEFAULT_SENDER = os.getenv('MAIL_USERNAME')  # Gmail requires this match
+    else:
+        MAIL_DEFAULT_SENDER = 'noreply@eflowers.com'
     
     # SendGrid API (preferred for production)
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')

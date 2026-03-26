@@ -83,11 +83,28 @@ def create_app(config_class='default'):
     
     # Log mail config for debugging (mask password)
     mail_user = app.config.get('MAIL_USERNAME', '')
+    mail_sender = app.config.get('MAIL_DEFAULT_SENDER', '')
     mail_server = app.config.get('MAIL_SERVER', '')
     mail_port = app.config.get('MAIL_PORT', '')
     mail_tls = app.config.get('MAIL_USE_TLS', False)
+    sendgrid_key = app.config.get('SENDGRID_API_KEY', '')
     mail_pass = '***SET***' if app.config.get('MAIL_PASSWORD') else '***MISSING***'
-    print(f"📧 Mail config: server={mail_server}:{mail_port} TLS={mail_tls} user={mail_user} password={mail_pass}")
+    
+    print(f"📧 Mail config: server={mail_server}:{mail_port} TLS={mail_tls}")
+    print(f"   SMTP user={mail_user}")
+    print(f"   Default sender={mail_sender}")
+    print(f"   Password={mail_pass}")
+    if sendgrid_key:
+        print(f"   SendGrid API: ***SET*** (preferred)")
+    
+    # Warn about DMARC issues if using Gmail SMTP
+    if mail_server == 'smtp.gmail.com' and mail_user and mail_sender:
+        if not mail_sender.endswith('@gmail.com') and '@gmail.com' in mail_user:
+            print(f"⚠️  WARNING: DMARC alignment issue detected!")
+            print(f"   MAIL_USERNAME: {mail_user}")
+            print(f"   MAIL_DEFAULT_SENDER: {mail_sender}")
+            print(f"   Gmail requires sender to match authenticated account!")
+            print(f"   SOLUTION: Set MAIL_DEFAULT_SENDER={mail_user}")
     
     # ====================================================
     # INITIALIZE CLOUDINARY

@@ -203,6 +203,9 @@ def update_order_status(order_id):
     user_id = get_jwt_identity()
     rider = get_rider_profile(user_id)
     
+    if not rider:
+        return jsonify({'error': 'Rider profile not found'}), 404
+    
     order = Order.query.get(order_id)
     if not order or order.rider_id != rider.id:
         return jsonify({'error': 'Order not found'}), 404
