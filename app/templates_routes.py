@@ -275,16 +275,18 @@ def index():
             
             product_list.append(product_dict)
         
-        # Get active stores
+        # Get active stores - logo_url property now handles seller_application lookup by seller_id
         stores = Store.query\
             .filter_by(status='active')\
             .order_by(Store.created_at.desc())\
             .limit(4)\
             .all()
         
-        print(f"\nStores found: {len(stores)}")
+        print(f"\n=== DEBUG STORES & LOGOS ===")
+        print(f"Total stores found: {len(stores)}")
         for s in stores:
-            print(f"Store: {s.id} - {s.name} - Status: {s.status}")
+            print(f"Store: {s.id} - {s.name} - Seller ID: {s.seller_id} - Logo URL: {s.logo_url}")
+        print(f"=== END DEBUG ===\n")
         
         store_list = [store.to_dict() for store in stores]
         
@@ -4643,6 +4645,36 @@ def update_store_settings():
             store.name = data['name']
             print(f"✅ Updated store name to: {data['name']}")
         
+        # ===== STORE LOGO HANDLING =====
+        if 'store_logo_url' in data and data['store_logo_url']:
+            # Get or create seller_application for this store
+            seller_app = store.seller_application
+            
+            # If no direct relationship, try to find one by seller_id
+            if not seller_app:
+                seller_app = SellerApplication.query.filter_by(user_id=store.seller_id).first()
+            
+            # If still no seller_application, create one
+            if not seller_app:
+                seller_app = SellerApplication(
+                    user_id=store.seller_id,
+                    store_name=store.name,
+                    status='approved'
+                )
+                db.session.add(seller_app)
+                db.session.flush()  # Get the ID
+                print(f"✅ Created new SellerApplication for seller {store.seller_id}")
+            
+            # Now save the logo
+            seller_app.store_logo_url = data['store_logo_url']
+            store.seller_application_id = seller_app.id
+            print(f"✅ Updated store logo URL: {data['store_logo_url']}")
+            print(f"✅ Linked store to seller_application ID: {seller_app.id}")
+            
+            if 'store_logo_public_id' in data and data['store_logo_public_id']:
+                seller_app.store_logo_public_id = data['store_logo_public_id']
+                print(f"✅ Stored logo public_id: {data['store_logo_public_id']}")
+        
         # ===== ADDRESS FIELDS =====
         if 'municipality' in data:
             store.municipality = data['municipality']
@@ -5924,6 +5956,109 @@ def delete_gcash_qr(filename):
         db.session.rollback()
         print(f"Error deleting QR code: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+# ─── STORE LOGO MANAGEMENT ENDPOINTS ───
+
+@templates_bp.route('/api/upload-cloudinary', methods=['POST'])
+@seller_required
+def upload_store_logo():
+    """Upload store logo to Cloudinary"""
+    try:
+        # Check if file exists
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if not file or not file.filename:
+            return jsonify({'success': False, 'error': 'Empty file'}), 400
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        if '.' in file.filename:
+            ext = file.filename.rsplit('.', 1)[1].lower()
+            if ext not in allowed_extensions:
+                return jsonify({
+                    'success': False, 
+                    'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'
+                }), 400
+        
+        # Validate file size (max 5MB for logos)
+        file.seek(0, 2)
+        file_size = file.tell()
+        file.seek(0)
+        max_size = 5 * 1024 * 1024  # 5MB
+        
+        if file_size > max_size:
+            return jsonify({
+                'success': False, 
+                'error': 'File too large. Maximum size is 5MB.'
+            }), 400
+        
+        # Import Cloudinary helper
+        from app.utils.cloudinary_helper import upload_to_cloudinary, should_use_cloudinary
+        
+        # Check if Cloudinary is configured
+        if not should_use_cloudinary():
+            return jsonify({
+                'success': False, 
+                'error': 'Cloudinary is not configured.'
+            }), 500
+        
+        # Upload to Cloudinary with folder
+        result = upload_to_cloudinary(file, 'e-flowers/store_logos')
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'public_id': result['public_id'],
+                'url': result['url']
+            })
+        else:
+            return jsonify({
+                'success': False, 
+                'error': result.get('error', 'Upload failed')
+            }), 500
+            
+    except Exception as e:
+        print(f"Error uploading logo: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': f'Server error: {str(e)}'
+        }), 500
+
+
+@templates_bp.route('/api/delete-cloudinary', methods=['POST'])
+@seller_required
+def delete_cloudinary_file():
+    """Delete a file from Cloudinary"""
+    try:
+        data = request.get_json()
+        public_id = data.get('public_id')
+        
+        if not public_id:
+            return jsonify({'success': False, 'error': 'No public_id provided'}), 400
+        
+        # Import Cloudinary helper
+        from app.utils.cloudinary_helper import delete_from_cloudinary
+        
+        # delete_from_cloudinary returns a boolean
+        success = delete_from_cloudinary(public_id)
+        
+        if success:
+            print(f"✅ Successfully deleted from Cloudinary: {public_id}")
+            return jsonify({'success': True})
+        else:
+            # Don't fail if deletion fails, just log it
+            print(f"⚠️ Warning: Could not delete {public_id} from Cloudinary")
+            return jsonify({'success': True})  # Still return success to frontend
+            
+    except Exception as e:
+        print(f"❌ Error deleting file: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': f'Server error: {str(e)}'
+        }), 500
     
 
 

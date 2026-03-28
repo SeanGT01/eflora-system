@@ -1738,6 +1738,65 @@
         #bag{
             margin-top: 5px;
         }
+        
+        /* ─── SCROLL BEHAVIOR FOR SMALL SCREENS ─── */
+        @media (max-width: 720px) {
+            .main-header .header-container {
+                position: relative;
+            }
+            
+            .main-header.scrolled .logo,
+            .main-header.scrolled .user-actions {
+                opacity: 0;
+                pointer-events: none;
+            }
+            
+            .main-header.scrolled .search-container {
+                position: absolute;
+                left: 0.75rem;
+                right: 0.75rem;
+                top: 50%;
+                transform: translateY(-50%);
+                max-width: none;
+                z-index: 2;
+            }
+            
+            /* Footer */
+            .footer-inner {
+                padding: 1.5rem 0.5rem 1rem;
+            }
+            
+            .footer-grid {
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 1rem;
+                margin-bottom: 1rem;
+                padding-bottom: 1rem;
+            }
+            
+            .footer-brand {
+                display: none;
+            }
+            
+            .footer-col h4 {
+                font-size: 9px;
+                margin-bottom: 0.5rem;
+            }
+            
+            .footer-links li {
+                margin-bottom: 0.3rem;
+            }
+            
+            .footer-links a {
+                font-size: 10px;
+            }
+            
+            .footer-bottom {
+                font-size: 8px;
+                flex-direction: column;
+                gap: 0.25rem;
+                padding: 0 0.5rem;
+            }
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -2076,6 +2135,33 @@ const DEBUG = {
         console.groupEnd();
     }
 };
+
+// ===== SCROLL BEHAVIOR FOR SMALL SCREENS =====
+let headerScrolled = false;
+window.addEventListener('scroll', () => {
+    if (window.innerWidth > 720) {
+        if (headerScrolled) {
+            document.querySelector('.main-header')?.classList.remove('scrolled');
+            headerScrolled = false;
+        }
+        return;
+    }
+    const header = document.querySelector('.main-header');
+    if (!header) return;
+    if (window.scrollY > 80 && !headerScrolled) {
+        header.classList.add('scrolled');
+        headerScrolled = true;
+    } else if (window.scrollY <= 30 && headerScrolled) {
+        header.classList.remove('scrolled');
+        headerScrolled = false;
+    }
+}, { passive: true });
+window.addEventListener('resize', () => {
+    if (window.innerWidth > 720 && headerScrolled) {
+        document.querySelector('.main-header')?.classList.remove('scrolled');
+        headerScrolled = false;
+    }
+});
 
 let cart = [];
 let isLoadingCart = false;

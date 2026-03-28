@@ -106,7 +106,11 @@
     {% for store in stores %}
     <div class="store-card">
         <div class="store-avatar">
-            {{ store.name[0] }}
+            {% if store.logo_url %}
+                <img src="{{ store.logo_url }}" alt="{{ store.name }}" onerror="this.style.display='none'; this.parentElement.innerHTML='{{ store.name[0] if store.name else 'S' }}'">
+            {% else %}
+                {{ store.name[0] if store.name else 'S' }}
+            {% endif %}
         </div>
         <div class="store-info">
             <h3 class="store-name">{{ store.name }}</h3>
@@ -160,6 +164,105 @@
         {% endfor %}
     </div>
 </section>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .store-card {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        padding: 1.5rem;
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        transition: all 0.3s ease;
+    }
+
+    .store-card:hover {
+        box-shadow: var(--shadow-md);
+        border-color: var(--primary);
+    }
+
+    .store-avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-md);
+        background: linear-gradient(135deg, var(--blush), var(--dusty-rose));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: var(--font-display);
+        font-size: 24px;
+        font-weight: 500;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .store-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .store-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .store-name {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 0.5rem;
+    }
+
+    .store-rating {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 14px;
+        color: var(--text-light);
+        margin-bottom: 0.5rem;
+    }
+
+    .store-stats {
+        display: flex;
+        gap: 1rem;
+        font-size: 14px;
+        color: var(--text-light);
+    }
+
+    .store-stats span {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    @media (max-width: 768px) {
+        .store-card {
+            flex-direction: column;
+            text-align: center;
+            gap: 1rem;
+        }
+
+        .store-info {
+            width: 100%;
+        }
+
+        .store-stats {
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .store-avatar {
+            width: 80px;
+            height: 80px;
+            font-size: 32px;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block extra_js %}
