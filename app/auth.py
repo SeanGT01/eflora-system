@@ -3,10 +3,8 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, decode_token, jwt_required, get_jwt_identity, get_jwt
 from app.models import User
 from app.extensions import db
-from datetime import timedelta
-import jwt as pyjwt
 from datetime import datetime, timedelta
-from flask import current_app
+import jwt as pyjwt
     
 
 auth_bp = Blueprint('auth', __name__)
@@ -250,6 +248,81 @@ def debug_token_check():
         'config': config_info,
         'token_test': token_info
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROFILE & PASSWORD MANAGEMENT (JWT-protected, for mobile app)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@auth_bp.route('/profile/update', methods=['POST'])
+@jwt_required()
+def update_profile():
+    """Update name and phone for the logged-in user (JWT auth)."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        data = request.get_json(silent=True) or {}
+        first_name = data.get('first_name', '').strip()
+        last_name  = data.get('last_name', '').strip()
+        phone      = data.get('phone', '').strip()
+
+        if first_name or last_name:
+            user.full_name = f"{first_name} {last_name}".strip()
+        if phone:
+            user.phone = phone
+        elif 'phone' in data:
+            user.phone = None  # allow clearing phone
+
+        user.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'success': True, 'user': user.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f'❌ UpdateProfile exception: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/password/change', methods=['POST'])
+@jwt_required()
+def change_password():
+    """Change password for the logged-in user (JWT auth)."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        data = request.get_json(silent=True) or {}
+        current_password = data.get('current_password', '')
+        new_password     = data.get('new_password', '')
+        confirm_password = data.get('confirm_password', '')
+
+        if not all([current_password, new_password, confirm_password]):
+            return jsonify({'error': 'All fields are required'}), 400
+        if new_password != confirm_password:
+            return jsonify({'error': 'New passwords do not match'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        if not user.check_password(current_password):
+            return jsonify({'error': 'Current password is incorrect'}), 400
+
+        user.set_password(new_password)
+        user.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': 'Password changed successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f'❌ ChangePassword exception: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
