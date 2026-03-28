@@ -429,6 +429,7 @@ class SellerApplication(db.Model):
     
     status = db.Column(db.String(20), default='pending')
     admin_notes = db.Column(db.Text)
+    rejection_details = db.Column(JSON, nullable=True)  # Per-field rejection: {"store_name": {"rejected": true, "reason": "..."}, ...}
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_at = db.Column(db.DateTime, nullable=True)
     reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -451,6 +452,8 @@ class SellerApplication(db.Model):
             'id': self.id,
             'user_id': self.user_id,
             'full_name': self.applicant.full_name if self.applicant else None,
+            'email': self.applicant.email if self.applicant else None,
+            'phone': self.applicant.phone if self.applicant else None,
             'store_name': self.store_name,
             'store_description': self.store_description,
             'store_logo_url': self.store_logo_url,  # Cloudinary only
@@ -459,9 +462,37 @@ class SellerApplication(db.Model):
             'government_id_public_id': self.government_id_public_id,
             'status': self.status,
             'admin_notes': self.admin_notes,
+            'rejection_details': self.rejection_details,
             'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
             'reviewer_name': self.reviewer.full_name if self.reviewer else None
+        }
+
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # seller_app_approved, seller_app_rejected, etc.
+    reference_id = db.Column(db.Integer, nullable=True)  # ID of related entity
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref=db.backref('notifications', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'title': self.title,
+            'message': self.message,
+            'type': self.type,
+            'reference_id': self.reference_id,
+            'is_read': self.is_read,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 

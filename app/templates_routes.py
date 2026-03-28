@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -527,8 +527,12 @@ def seller_application_status():
     return jsonify({
         'status': application.status,
         'store_name': application.store_name,
+        'store_description': application.store_description,
+        'store_logo_url': application.store_logo_url,
+        'government_id_url': application.government_id_url,
         'submitted_at': application.submitted_at.isoformat() if application.submitted_at else None,
-        'admin_notes': application.admin_notes
+        'admin_notes': application.admin_notes,
+        'rejection_details': application.rejection_details
     })
 
 
@@ -1227,7 +1231,7 @@ def admin_users():
         return redirect(url_for('templates.dashboard'))
     return render_template('admin_users.html')
 
-@templates_bp.route('/api/v1/admin/seller-applications')
+@templates_bp.route('/api/admin/seller-applications')
 def get_seller_applications():
     """Get all seller applications with user details"""
     if session.get('role') != 'admin':
@@ -1250,7 +1254,7 @@ def get_seller_applications():
 
 
 
-@templates_bp.route('/api/v1/admin/seller-applications/<int:app_id>/approve', methods=['POST'])
+@templates_bp.route('/api/admin/seller-applications/<int:app_id>/approve', methods=['POST'])
 def approve_seller_application(app_id):
     """Approve a seller application and convert user to seller"""
     if session.get('role') != 'admin':
@@ -1292,6 +1296,16 @@ def approve_seller_application(app_id):
             db.session.add(store)
             print(f"🆕 Created new store for user {user.id}")
 
+        # Create approval notification
+        notification = Notification(
+            user_id=application.user_id,
+            title='Seller Application Approved',
+            message=f'Congratulations! Your seller application for "{application.store_name}" has been approved. You can now start selling!',
+            type='seller_app_approved',
+            reference_id=application.id
+        )
+        db.session.add(notification)
+
         db.session.commit()
 
         return jsonify({
@@ -1307,7 +1321,7 @@ def approve_seller_application(app_id):
         return jsonify({'error': str(e)}), 500
 
 
-@templates_bp.route('/api/v1/admin/seller-applications/<int:app_id>/reject', methods=['POST'])
+@templates_bp.route('/api/admin/seller-applications/<int:app_id>/reject', methods=['POST'])
 def reject_seller_application(app_id):
     """Reject a seller application — deactivates store but preserves products"""
     if session.get('role') != 'admin':
@@ -1319,6 +1333,7 @@ def reject_seller_application(app_id):
 
         application.status = 'rejected'
         application.admin_notes = data.get('admin_notes', '')
+        application.rejection_details = data.get('rejection_details')
         application.reviewed_at = datetime.utcnow()
         application.reviewed_by = session['user_id']
 
@@ -1331,6 +1346,23 @@ def reject_seller_application(app_id):
             if existing_store:
                 existing_store.status = 'inactive'
                 print(f"🔒 Deactivated store ID {existing_store.id} for rejected user {user.id}")
+
+        # Create notification for the applicant
+        rejection_details = data.get('rejection_details', {})
+        rejected_items = [k.replace('_', ' ').title() for k, v in rejection_details.items() if isinstance(v, dict) and v.get('rejected')]
+        message = f'Your seller application for "{application.store_name}" was rejected.'
+        if rejected_items:
+            message += f' Issues: {", ".join(rejected_items)}.'
+        message += ' Please review and resubmit.'
+
+        notification = Notification(
+            user_id=application.user_id,
+            title='Seller Application Rejected',
+            message=message,
+            type='seller_app_rejected',
+            reference_id=application.id
+        )
+        db.session.add(notification)
 
         db.session.commit()
 

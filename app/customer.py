@@ -1,7 +1,7 @@
 # app/customer.py
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant
+from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User
 from app.extensions import db
 from functools import wraps
 import jwt
@@ -580,3 +580,171 @@ def customer_jwt_required(f):
             return jsonify({'msg': str(e)}), 422
     
     return decorated_function
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# SELLER APPLICATION
+# ══════════════════════════════════════════════════════════════════════════
+
+@customer_bp.route('/seller-application', methods=['POST'])
+@customer_only
+def submit_seller_application():
+    """Submit a new seller application (JWT)"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.get_json() or {}
+    store_name = data.get('store_name', '').strip()
+    store_description = data.get('store_description', '').strip()
+    store_logo_url = data.get('store_logo_url', '').strip()
+    store_logo_public_id = data.get('store_logo_public_id', '').strip()
+    government_id_url = data.get('government_id_url', '').strip()
+    government_id_public_id = data.get('government_id_public_id', '').strip()
+
+    # Validation
+    errors = {}
+    if not store_name:
+        errors['store_name'] = 'Store name is required'
+    if not store_description:
+        errors['store_description'] = 'Store description is required'
+    if not store_logo_url or not store_logo_public_id:
+        errors['store_logo'] = 'Store logo is required'
+    if not government_id_url or not government_id_public_id:
+        errors['government_id'] = 'Government ID is required'
+
+    if errors:
+        return jsonify({'error': 'Validation failed', 'field_errors': errors}), 400
+
+    # Check for existing pending application
+    existing = SellerApplication.query.filter_by(user_id=user_id, status='pending').first()
+    if existing:
+        return jsonify({'error': 'You already have a pending application'}), 400
+
+    application = SellerApplication(
+        user_id=user_id,
+        store_name=store_name,
+        store_description=store_description,
+        store_logo_url=store_logo_url,
+        store_logo_public_id=store_logo_public_id,
+        government_id_url=government_id_url,
+        government_id_public_id=government_id_public_id,
+        status='pending',
+    )
+    db.session.add(application)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Application submitted successfully', 'application': application.to_dict()}), 201
+
+
+@customer_bp.route('/seller-application', methods=['GET'])
+@customer_only
+def get_seller_application_status():
+    """Get the customer's latest seller application (JWT)"""
+    user_id = get_jwt_identity()
+    application = SellerApplication.query.filter_by(user_id=user_id)\
+        .order_by(SellerApplication.submitted_at.desc()).first()
+
+    if not application:
+        return jsonify({'application': None}), 200
+
+    return jsonify({'application': application.to_dict()}), 200
+
+
+@customer_bp.route('/seller-application/resubmit', methods=['PUT'])
+@customer_only
+def resubmit_seller_application():
+    """Resubmit a rejected seller application with updated fields (JWT)"""
+    user_id = get_jwt_identity()
+    application = SellerApplication.query.filter_by(user_id=user_id, status='rejected')\
+        .order_by(SellerApplication.submitted_at.desc()).first()
+
+    if not application:
+        return jsonify({'error': 'No rejected application found to resubmit'}), 404
+
+    data = request.get_json() or {}
+    rejection_details = application.rejection_details or {}
+
+    # Only update fields that were rejected
+    updated_fields = []
+    if rejection_details.get('store_name', {}).get('rejected') and 'store_name' in data:
+        val = data['store_name'].strip()
+        if not val:
+            return jsonify({'error': 'Store name cannot be empty'}), 400
+        application.store_name = val
+        updated_fields.append('store_name')
+
+    if rejection_details.get('store_description', {}).get('rejected') and 'store_description' in data:
+        val = data['store_description'].strip()
+        if not val:
+            return jsonify({'error': 'Store description cannot be empty'}), 400
+        application.store_description = val
+        updated_fields.append('store_description')
+
+    if rejection_details.get('store_logo', {}).get('rejected'):
+        if 'store_logo_url' in data and 'store_logo_public_id' in data:
+            application.store_logo_url = data['store_logo_url']
+            application.store_logo_public_id = data['store_logo_public_id']
+            updated_fields.append('store_logo')
+
+    if rejection_details.get('government_id', {}).get('rejected'):
+        if 'government_id_url' in data and 'government_id_public_id' in data:
+            application.government_id_url = data['government_id_url']
+            application.government_id_public_id = data['government_id_public_id']
+            updated_fields.append('government_id')
+
+    if not updated_fields:
+        return jsonify({'error': 'No rejected fields were updated'}), 400
+
+    # Reset to pending for re-review
+    application.status = 'pending'
+    application.admin_notes = None
+    application.rejection_details = None
+    application.reviewed_at = None
+    application.reviewed_by = None
+
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Application resubmitted', 'application': application.to_dict()}), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# NOTIFICATIONS
+# ══════════════════════════════════════════════════════════════════════════
+
+@customer_bp.route('/notifications', methods=['GET'])
+@customer_only
+def get_notifications():
+    """Get customer's notifications (JWT)"""
+    user_id = get_jwt_identity()
+    notifications = Notification.query.filter_by(user_id=user_id)\
+        .order_by(Notification.created_at.desc()).limit(50).all()
+    unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+    return jsonify({
+        'notifications': [n.to_dict() for n in notifications],
+        'unread_count': unread_count,
+    }), 200
+
+
+@customer_bp.route('/notifications/<int:notif_id>/read', methods=['POST'])
+@customer_only
+def mark_notification_read(notif_id):
+    """Mark a single notification as read (JWT)"""
+    user_id = get_jwt_identity()
+    notification = Notification.query.filter_by(id=notif_id, user_id=user_id).first()
+    if not notification:
+        return jsonify({'error': 'Notification not found'}), 404
+    notification.is_read = True
+    db.session.commit()
+    return jsonify({'success': True}), 200
+
+
+@customer_bp.route('/notifications/read-all', methods=['POST'])
+@customer_only
+def mark_all_notifications_read():
+    """Mark all notifications as read (JWT)"""
+    user_id = get_jwt_identity()
+    Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
+    db.session.commit()
+    return jsonify({'success': True}), 200

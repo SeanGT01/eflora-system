@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
-from app.models import User, Store, Order, Product, Rider, OrderAnalytics
+from app.models import User, Store, Order, Product, Rider, OrderAnalytics, SellerApplication, Notification
 from sqlalchemy import func, extract
 from datetime import datetime, timedelta
 
@@ -240,3 +240,127 @@ def get_analytics():
             for row in top_stores
         ]
     }), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# SELLER APPLICATIONS
+# ══════════════════════════════════════════════════════════════════════════
+
+@admin_bp.route('/seller-applications', methods=['GET'])
+@admin_required
+def get_seller_applications():
+    status = request.args.get('status')
+    query = SellerApplication.query
+    if status:
+        query = query.filter_by(status=status)
+    applications = query.order_by(SellerApplication.submitted_at.desc()).all()
+    return jsonify({'applications': [app.to_dict() for app in applications]}), 200
+
+
+@admin_bp.route('/seller-applications/<int:app_id>', methods=['GET'])
+@admin_required
+def get_seller_application(app_id):
+    application = SellerApplication.query.get(app_id)
+    if not application:
+        return jsonify({'error': 'Application not found'}), 404
+    return jsonify({'application': application.to_dict()}), 200
+
+
+@admin_bp.route('/seller-applications/<int:app_id>/approve', methods=['POST'])
+@admin_required
+def approve_seller_application(app_id):
+    application = SellerApplication.query.get(app_id)
+    if not application:
+        return jsonify({'error': 'Application not found'}), 404
+    if application.status != 'pending':
+        return jsonify({'error': f'Application is already {application.status}'}), 400
+
+    admin_id = get_jwt_identity()
+    data = request.get_json() or {}
+
+    # Update application status
+    application.status = 'approved'
+    application.admin_notes = data.get('admin_notes', '')
+    application.rejection_details = None
+    application.reviewed_at = datetime.utcnow()
+    application.reviewed_by = admin_id
+
+    # Upgrade user role to seller
+    user = application.applicant
+    user.role = 'seller'
+    user.status = 'active'
+
+    # Create the store
+    store = Store(
+        seller_id=user.id,
+        name=application.store_name,
+        address='To be updated',
+        description=application.store_description,
+        seller_application_id=application.id,
+        status='active',
+        approved_at=datetime.utcnow(),
+        approved_by=admin_id,
+    )
+    db.session.add(store)
+
+    # Create notification for the applicant
+    notification = Notification(
+        user_id=user.id,
+        title='Seller Application Approved',
+        message=f'Congratulations! Your seller application for "{application.store_name}" has been approved. You can now start selling on E-FLOWERS.',
+        type='seller_app_approved',
+        reference_id=application.id,
+    )
+    db.session.add(notification)
+
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Application approved', 'application': application.to_dict()}), 200
+
+
+@admin_bp.route('/seller-applications/<int:app_id>/reject', methods=['POST'])
+@admin_required
+def reject_seller_application(app_id):
+    application = SellerApplication.query.get(app_id)
+    if not application:
+        return jsonify({'error': 'Application not found'}), 404
+    if application.status != 'pending':
+        return jsonify({'error': f'Application is already {application.status}'}), 400
+
+    admin_id = get_jwt_identity()
+    data = request.get_json() or {}
+    admin_notes = data.get('admin_notes', '')
+    rejection_details = data.get('rejection_details')  # Per-field rejection dict
+
+    if not admin_notes and not rejection_details:
+        return jsonify({'error': 'Please provide a rejection reason'}), 400
+
+    application.status = 'rejected'
+    application.admin_notes = admin_notes
+    application.rejection_details = rejection_details
+    application.reviewed_at = datetime.utcnow()
+    application.reviewed_by = admin_id
+
+    # Build rejection message for notification
+    rejected_fields = []
+    if rejection_details:
+        for field, info in rejection_details.items():
+            if info.get('rejected'):
+                label = field.replace('_', ' ').title()
+                rejected_fields.append(f"- {label}: {info.get('reason', 'No reason given')}")
+
+    rejection_msg = f'Your seller application for "{application.store_name}" has been rejected.'
+    if rejected_fields:
+        rejection_msg += '\n\nRejected items:\n' + '\n'.join(rejected_fields)
+    rejection_msg += '\n\nYou may update the rejected items and resubmit your application.'
+
+    notification = Notification(
+        user_id=application.user_id,
+        title='Seller Application Rejected',
+        message=rejection_msg,
+        type='seller_app_rejected',
+        reference_id=application.id,
+    )
+    db.session.add(notification)
+
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Application rejected', 'application': application.to_dict()}), 200

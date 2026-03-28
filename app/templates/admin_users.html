@@ -233,8 +233,43 @@
                 </div>
                 
                 <div class="form-group" id="rejectionReasonGroup" style="display: none;">
-                    <label class="form-label">Rejection Reason <span class="required-star">*</span></label>
-                    <textarea class="form-control" name="admin_notes" rows="3" placeholder="Explain why this application is being rejected..."></textarea>
+                    <label class="form-label" style="margin-bottom: 0.75rem;">Select items to reject <span class="required-star">*</span></label>
+                    
+                    <div class="rejection-field-group" style="margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                            <input type="checkbox" class="reject-field-cb" data-field="store_name">
+                            <span style="font-weight: 500; color: var(--charcoal);">Store Name</span>
+                        </label>
+                        <input type="text" class="form-control reject-reason" data-field="store_name" placeholder="Reason for rejecting store name..." style="display: none; margin-left: 1.5rem; margin-bottom: 0.75rem;">
+                    </div>
+                    
+                    <div class="rejection-field-group" style="margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                            <input type="checkbox" class="reject-field-cb" data-field="store_description">
+                            <span style="font-weight: 500; color: var(--charcoal);">Store Description</span>
+                        </label>
+                        <input type="text" class="form-control reject-reason" data-field="store_description" placeholder="Reason for rejecting description..." style="display: none; margin-left: 1.5rem; margin-bottom: 0.75rem;">
+                    </div>
+                    
+                    <div class="rejection-field-group" style="margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                            <input type="checkbox" class="reject-field-cb" data-field="store_logo">
+                            <span style="font-weight: 500; color: var(--charcoal);">Store Logo</span>
+                        </label>
+                        <input type="text" class="form-control reject-reason" data-field="store_logo" placeholder="Reason for rejecting logo..." style="display: none; margin-left: 1.5rem; margin-bottom: 0.75rem;">
+                    </div>
+                    
+                    <div class="rejection-field-group" style="margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                            <input type="checkbox" class="reject-field-cb" data-field="government_id">
+                            <span style="font-weight: 500; color: var(--charcoal);">Government ID</span>
+                        </label>
+                        <input type="text" class="form-control reject-reason" data-field="government_id" placeholder="Reason for rejecting ID..." style="display: none; margin-left: 1.5rem; margin-bottom: 0.75rem;">
+                    </div>
+                    
+                    <hr style="margin: 1rem 0; border-color: var(--border);">
+                    <label class="form-label">Overall Notes (optional)</label>
+                    <textarea class="form-control" name="admin_notes" rows="2" placeholder="Additional notes for the applicant..."></textarea>
                 </div>
             </form>
         </div>
@@ -417,6 +452,16 @@
             });
         });
         
+        // Handle per-field rejection checkboxes
+        document.querySelectorAll('.reject-field-cb').forEach(cb => {
+            cb.addEventListener('change', function() {
+                const field = this.dataset.field;
+                const reasonInput = document.querySelector(`.reject-reason[data-field="${field}"]`);
+                reasonInput.style.display = this.checked ? 'block' : 'none';
+                if (!this.checked) reasonInput.value = '';
+            });
+        });
+        
         // Search functionality
         document.getElementById('searchInput').addEventListener('input', filterApplications);
     });
@@ -465,7 +510,7 @@
     }
     
     function loadApplications() {
-        fetch('/api/v1/admin/seller-applications')
+        fetch('/api/admin/seller-applications')
             .then(response => response.json())
             .then(data => {
                 currentApplications = data.applications || [];
@@ -727,6 +772,10 @@
         document.getElementById('rejectBtn').disabled = true;
         document.querySelector('textarea[name="admin_notes"]').value = '';
         
+        // Reset per-field rejection checkboxes
+        document.querySelectorAll('.reject-field-cb').forEach(cb => { cb.checked = false; });
+        document.querySelectorAll('.reject-reason').forEach(input => { input.value = ''; input.style.display = 'none'; });
+        
         // Load application details
         const detailsDiv = document.getElementById('applicationDetails');
         detailsDiv.innerHTML = `
@@ -764,21 +813,50 @@
         const applicationId = document.getElementById('reviewApplicationId').value;
         const adminNotes = document.querySelector('textarea[name="admin_notes"]').value;
         
-        if (decision === 'reject' && !adminNotes.trim()) {
-            showAlert('warning', 'Please provide a reason for rejection');
-            return;
+        let bodyData = { admin_notes: adminNotes };
+        
+        if (decision === 'reject') {
+            // Build per-field rejection details
+            const rejectionDetails = {};
+            let checkedCount = 0;
+            let missingReason = false;
+            
+            document.querySelectorAll('.reject-field-cb').forEach(cb => {
+                const field = cb.dataset.field;
+                if (cb.checked) {
+                    checkedCount++;
+                    const reason = document.querySelector(`.reject-reason[data-field="${field}"]`).value.trim();
+                    if (!reason) {
+                        showAlert('warning', `Please provide a reason for rejecting "${field.replace('_', ' ')}"`);
+                        missingReason = true;
+                        return;
+                    }
+                    rejectionDetails[field] = { rejected: true, reason: reason };
+                }
+            });
+            
+            if (checkedCount === 0) {
+                showAlert('warning', 'Please select at least one item to reject and provide reasons');
+                return;
+            }
+            
+            if (missingReason) {
+                return;
+            }
+            
+            bodyData.rejection_details = rejectionDetails;
         }
         
         const url = decision === 'approve' 
-            ? `/api/v1/admin/seller-applications/${applicationId}/approve`
-            : `/api/v1/admin/seller-applications/${applicationId}/reject`;
+            ? `/api/admin/seller-applications/${applicationId}/approve`
+            : `/api/admin/seller-applications/${applicationId}/reject`;
         
         fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ admin_notes: adminNotes })
+            body: JSON.stringify(bodyData)
         })
         .then(response => response.json())
         .then(data => {
