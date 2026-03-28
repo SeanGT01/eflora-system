@@ -77,11 +77,13 @@ class User(db.Model):
         return url
     
     def to_dict(self):
+        # Split on last space: everything before = first name, last word = last name
+        _name_parts = self.full_name.rsplit(' ', 1) if ' ' in self.full_name else [self.full_name]
         return {
             'id': self.id,
             'full_name': self.full_name,
-            'first_name': self.full_name.split()[0] if ' ' in self.full_name else self.full_name,
-            'last_name': self.full_name.split()[1] if ' ' in self.full_name and len(self.full_name.split()) > 1 else '',
+            'first_name': _name_parts[0] if len(_name_parts) > 0 else self.full_name,
+            'last_name': _name_parts[1] if len(_name_parts) > 1 else '',
             'email': self.email,
             'role': self.role,
             'status': self.status,
