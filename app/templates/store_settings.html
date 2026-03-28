@@ -2284,6 +2284,7 @@
     let map, marker, geocoder, draw;
     let currentLocation = null;
     let locationChanged = false;
+    let mapboxToken = null;
 
     // ===== LAGUNA BOUNDARY DEFINITIONS =====
     const LAGUNA_BOUNDARY = {
@@ -3589,6 +3590,78 @@ async function handleQRFile(file, index) {
             });
     }
 
+    // Geocode municipality and barangay to update map location
+    async function geocodeLocationByMunicipalityBarangay() {
+        const municipalitySelect = document.getElementById('municipality');
+        const barangaySelect = document.getElementById('barangay');
+        
+        if (!municipalitySelect || !barangaySelect) {
+            debug.warn('Municipality or barangay select element not found');
+            return;
+        }
+        
+        const municipality = municipalitySelect.value;
+        const barangay = barangaySelect.value;
+        
+        debug.log('Geocoding triggered:', { municipality, barangay, mapboxAvailable: !!mapboxToken });
+        
+        // Only geocode if both values are selected
+        if (!municipality || !barangay) {
+            debug.log('Skipping geocode - municipality or barangay not selected');
+            return;
+        }
+        
+        if (!mapboxToken) {
+            debug.error('Mapbox token not available for geocoding');
+            return;
+        }
+        
+        try {
+            // Build search query: "Barangay, Municipality, Laguna, Philippines"
+            const query = `${barangay}, ${municipality}, Laguna, Philippines`;
+            debug.log('Geocoding query:', query);
+            
+            // Use Mapbox Geocoding API
+            const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxToken}&country=ph&limit=1`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            debug.log('Geocoding response:', data);
+            
+            if (data.features && data.features.length > 0) {
+                const coordinates = data.features[0].geometry.coordinates;
+                const place_name = data.features[0].place_name;
+                
+                debug.success('Location found:', { coordinates, place_name });
+                
+                // Update marker position if map is initialized
+                if (marker && map) {
+                    debug.log('Updating marker and map...');
+                    marker.setLngLat(coordinates);
+                    map.flyTo({ 
+                        center: coordinates, 
+                        zoom: 15,
+                        duration: 1500
+                    });
+                    
+                    // Update location display
+                    updateLocationDisplay({
+                        lat: coordinates[1],
+                        lng: coordinates[0],
+                        address: place_name,
+                        place_id: ''
+                    });
+                } else {
+                    debug.warn('Map or marker not ready:', { mapReady: !!map, markerReady: !!marker });
+                }
+            } else {
+                debug.warn('No location found for:', query);
+            }
+        } catch (error) {
+            debug.error('Error geocoding municipality/barangay:', error);
+        }
+    }
+
     // Debug function to check form data before sending
     function debugFormData(formData) {
         console.log('📤 FormData contents:');
@@ -3739,17 +3812,17 @@ async function handleQRFile(file, index) {
         // Initialize QR slots
         initializeQRSlots();
         
-        // Initialize municipality dropdown
+        // Initialize municipality dropdown (loadBarangays only)
         const municipalitySelect = document.getElementById('municipality');
         if (municipalitySelect) {
-            // Add change event listener
+            // Add change event listener to load barangays
             municipalitySelect.addEventListener('change', function() {
                 loadBarangays(this.value);
             });
         }
         
         // Get Mapbox token
-        const mapboxToken = document.getElementById('mapbox-token').value;
+        mapboxToken = document.getElementById('mapbox-token').value;
         debug.log('Mapbox token from hidden input:', mapboxToken ? mapboxToken.substring(0, 15) + '...' : 'EMPTY');
         
         if (!mapboxToken || mapboxToken === 'None' || mapboxToken === '') {
@@ -4831,6 +4904,39 @@ async function handleQRFile(file, index) {
         
         // Initialize map
         initMap();
+        
+        // Setup municipality/barangay geocoding after map is initialized
+        setTimeout(() => {
+            debug.log('Setting up municipality/barangay event listeners...');
+            const municipalitySelect = document.getElementById('municipality');
+            const barangaySelect = document.getElementById('barangay');
+            
+            if (municipalitySelect) {
+                debug.success('Municipality select found, attaching listener');
+                municipalitySelect.addEventListener('change', function() {
+                    debug.log('Municipality changed to:', this.value);
+                    // Geocode when municipality changes (after barangay options load)
+                    setTimeout(() => {
+                        geocodeLocationByMunicipalityBarangay();
+                    }, 300);
+                });
+            } else {
+                debug.error('Municipality select NOT found');
+            }
+            
+            if (barangaySelect) {
+                debug.success('Barangay select found, attaching listener');
+                barangaySelect.addEventListener('change', function() {
+                    debug.log('Barangay changed to:', this.value);
+                    // Geocode immediately when barangay is selected
+                    if (this.value) {
+                        geocodeLocationByMunicipalityBarangay();
+                    }
+                });
+            } else {
+                debug.error('Barangay select NOT found');
+            }
+        }, 1500);
         
         // Initialize QR count in summary
         setTimeout(() => {

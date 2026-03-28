@@ -386,36 +386,37 @@
         position: relative;
         display: flex;
         flex-direction: column;
+        cursor: pointer;
     }
 
     .product-card:hover {
-        transform: translateY(-6px);
+        transform: translateY(-5px);
         box-shadow: var(--shadow-leaf);
         border-color: var(--border-strong);
     }
 
     .product-badge {
         position: absolute;
-        top: 0.875rem;
-        left: 0.875rem;
-        background: var(--terracotta);
+        top: 0.75rem;
+        left: 0.75rem;
         color: white;
-        font-size: 10px;
-        padding: 3px 10px;
+        font-size: 9px;
+        padding: 3px 8px;
         border-radius: var(--radius-pill);
-        font-weight: 600;
-        letter-spacing: 0.06em;
+        font-weight: 700;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
         z-index: 2;
         font-family: var(--font-sans);
     }
 
+    .badge-low { background: var(--terracotta); color: white; }
+    .badge-new { background: var(--deep-rose); color: white; }
+    .badge-out { background: rgba(107,76,59,0.15); color: var(--muted); }
+
     .product-image {
-        height: 220px;
+        height: 190px;
         background: linear-gradient(145deg, #f5ede6, #ede3d8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
         overflow: hidden;
         position: relative;
     }
@@ -427,27 +428,66 @@
         transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .product-card:hover .product-image img { transform: scale(1.06); }
+    .product-card:hover .product-image img { transform: scale(1.07); }
 
-    .product-content { 
-        padding: 1.25rem 1.5rem 1.5rem; 
+    .product-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(42,35,30,0);
+        transition: var(--transition);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .product-card:hover .product-overlay { background: rgba(42,35,30,0.25); }
+
+    .overlay-btn {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        background: white;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transform: translateY(10px);
+        opacity: 0;
+        transition: var(--transition);
+        font-size: 16px;
+        color: var(--charcoal);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .product-card:hover .overlay-btn {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    .overlay-btn:nth-child(2) { transition-delay: 0.05s; }
+    .overlay-btn:hover { background: var(--deep-rose); color: white; transform: scale(1.1) !important; }
+
+    .product-content {
+        padding: 1rem 1.25rem 1.25rem;
         flex: 1;
         display: flex;
         flex-direction: column;
     }
 
-    .product-store {
-        font-size: 11px;
-        color: var(--sage);
-        font-weight: 600;
-        letter-spacing: 0.08em;
+    .product-category {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
-        margin-bottom: 0.4rem;
+        color: var(--sage);
+        margin-bottom: 0.3rem;
+        font-family: var(--font-sans);
     }
 
     .product-title {
         font-family: var(--font-display);
-        font-size: 19px;
+        font-size: 17px;
         font-weight: 500;
         color: var(--charcoal);
         margin-bottom: 0.5rem;
@@ -456,23 +496,42 @@
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
-        min-height: 1.5rem;
+        min-height: 2.8rem;
+    }
+
+    .product-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: auto;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
     }
 
     .product-price {
-        font-size: 20px;
+        font-family: var(--font-display);
+        font-size: 19px;
         font-weight: 600;
         color: var(--deep-rose);
-        margin-bottom: 1rem;
-        font-family: var(--font-display);
     }
 
-    .product-actions { 
-        display: flex; 
-        gap: 0.5rem; 
+    .add-btn {
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        background: var(--deep-rose);
+        border: none;
+        display: flex;
         align-items: center;
-        margin-top: auto;
+        justify-content: center;
+        cursor: pointer;
+        color: white;
+        font-size: 18px;
+        transition: var(--transition);
+        flex-shrink: 0;
     }
+
+    .add-btn:hover { background: var(--dusty-rose); transform: scale(1.1) rotate(90deg); }
+    .add-btn:disabled { background: var(--border-strong); cursor: not-allowed; transform: none; }
 
     .product-actions .btn {
         flex: 1;
@@ -1784,11 +1843,11 @@
     {% if products and products|length > 0 %}
     <div class="product-grid">
         {% for product in products %}
-        <div class="product-card">
+        <div class="product-card" onclick="viewProduct({{ product.id }})" data-product-id="{{ product.id }}">
             {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
             {% set has_sellable_stock = product.is_available and (product.stock_quantity > 0 or has_variant_stock) %}
             {% if product.stock_quantity < 10 and not has_variant_stock %}
-            <div class="product-badge">Low Stock</div>
+            <div class="product-badge badge-low">Low Stock</div>
             {% endif %}
 
             <div class="product-image">
@@ -1798,38 +1857,52 @@
                 {% else %}
                 <div style="font-size:48px;opacity:0.2"><i class="ri-image-line"></i></div>
                 {% endif %}
+                <div class="product-overlay">
+                    <button class="overlay-btn" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="View Details">
+                        <i class="ri-eye-line"></i>
+                    </button>
+                    {% if product.stock_quantity > 0 and product.is_available %}
+                    <button class="overlay-btn" onclick="event.stopPropagation(); addToCart({
+                        id: {{ product.id }},
+                        name: '{{ product.name|replace('"', '\\"')|safe }}',
+                        price: {{ product.price }},
+                        store_id: {{ product.store_id }},
+                        store_name: '{{ product.store_name|replace('"', '\\"')|safe if product.store_name else 'Flower Shop' }}',
+                        image_url: '{{ product.image_url|safe if product.image_url else '' }}'
+                    })" title="Add to Cart">
+                        <i class="ri-shopping-bag-line"></i>
+                    </button>
+                    {% elif has_sellable_stock %}
+                    <button class="overlay-btn" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="Select Variant">
+                        <i class="ri-checkbox-circle-line"></i>
+                    </button>
+                    {% endif %}
+                </div>
             </div>
 
             <div class="product-content">
-                <div class="product-store">{{ product.store_name or 'Flower Shop' }}</div>
+                <div class="product-category">{{ product.store_name or 'Flower Shop' }}</div>
                 <h3 class="product-title">{{ product.name }}</h3>
-                <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
-
-                <div class="product-actions">
+                <div class="product-footer">
+                    <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
                     {% if product.stock_quantity > 0 and product.is_available %}
-                    <button class="btn btn-primary" onclick='addToCart({
+                    <button class="add-btn" onclick="event.stopPropagation(); addToCart({
                         id: {{ product.id }},
-                        name: "{{ product.name|replace('"', '\\"')|safe }}",
+                        name: '{{ product.name|replace('"', '\\"')|safe }}',
                         price: {{ product.price }},
                         store_id: {{ product.store_id }},
-                        store_name: "{{ product.store_name|replace('"', '\\"')|safe if product.store_name else 'Flower Shop' }}",
-                        image_url: "{{ product.image_url|safe if product.image_url else '' }}"
-                    })'>
-                        <i class="ri-shopping-bag-line"></i> Add to Basket
-                    </button>
-                    <button class="btn btn-outline btn-icon" onclick="viewProduct({{ product.id }})">
-                        <i class="ri-eye-line"></i>
+                        store_name: '{{ product.store_name|replace('"', '\\"')|safe if product.store_name else 'Flower Shop' }}',
+                        image_url: '{{ product.image_url|safe if product.image_url else '' }}'
+                    })" title="Add to Cart">
+                        <i class="ri-add-circle-fill"></i>
                     </button>
                     {% elif has_sellable_stock %}
-                    <button class="btn btn-outline" disabled style="flex:1;opacity:0.5;cursor:not-allowed;">
-                        Select Variant
-                    </button>
-                    <button class="btn btn-outline btn-icon" onclick="viewProduct({{ product.id }})">
-                        <i class="ri-eye-line"></i>
+                    <button class="add-btn" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="Select Variant">
+                        <i class="ri-checkbox-circle-line"></i>
                     </button>
                     {% else %}
-                    <button class="btn btn-outline" disabled style="flex:1;opacity:0.5;cursor:not-allowed;">
-                        Out of Stock
+                    <button class="add-btn" disabled style="opacity:0.4;cursor:not-allowed;" title="Out of Stock">
+                        <i class="ri-prohibition-line"></i>
                     </button>
                     {% endif %}
                 </div>
