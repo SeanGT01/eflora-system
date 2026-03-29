@@ -1,7 +1,7 @@
 """Add delivery proof fields to orders table
 
 Revision ID: add_delivery_proof_001
-Revises: add_delivery_date_time_001
+Revises: 70eec543ad44
 Create Date: 2026-03-29 11:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'add_delivery_proof_001'
-down_revision = 'add_delivery_date_time_001'
+down_revision = '70eec543ad44'
 branch_labels = None
 depends_on = None
 
