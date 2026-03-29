@@ -4,6 +4,7 @@ from app import db
 from app.models import User, Rider, Order, RiderLocation, Store
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from app.utils.cloudinary_helper import upload_delivery_proof
 
 rider_bp = Blueprint('rider', __name__)
 
@@ -229,6 +230,60 @@ def update_order_status(order_id):
         'message': f'Order marked as {new_status}',
         'order': order.to_dict()
     }), 200
+
+@rider_bp.route('/orders/<int:order_id>/upload-delivery-proof', methods=['POST'])
+@rider_required
+def upload_delivery_proof_handler(order_id):
+    user_id = get_jwt_identity()
+    rider = get_rider_profile(user_id)
+    
+    if not rider:
+        return jsonify({'success': False, 'error': 'Rider profile not found'}), 404
+    
+    order = Order.query.get(order_id)
+    if not order or order.rider_id != rider.id:
+        return jsonify({'success': False, 'error': 'Order not found'}), 404
+    
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+    
+    # Get proof index (1 or 2)
+    proof_index = request.form.get('proof_index', '1')
+    if proof_index not in ['1', '2']:
+        return jsonify({'success': False, 'error': 'Invalid proof_index. Must be 1 or 2'}), 400
+    
+    # Upload to Cloudinary
+    result = upload_delivery_proof(file, order_id)
+    
+    if not result['success']:
+        return jsonify({'success': False, 'error': result.get('error', 'Upload failed')}), 500
+    
+    # Save delivery proof metadata to order
+    if proof_index == '1':
+        order.delivery_proof = file.filename
+        order.delivery_proof_public_id = result['public_id']
+        order.delivery_proof_url = result['url']
+    else:  # proof_index == '2'
+        order.delivery_proof_2 = file.filename
+        order.delivery_proof_2_public_id = result['public_id']
+        order.delivery_proof_2_url = result['url']
+    
+    order.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Delivery proof {proof_index} uploaded successfully',
+        'public_id': result['public_id'],
+        'url': result['url'],
+        'proof_index': proof_index,
+        'order': order.to_dict()
+    }), 200
+
 
 @rider_bp.route('/location', methods=['POST'])
 @rider_required

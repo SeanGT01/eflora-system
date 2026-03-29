@@ -252,6 +252,21 @@ def upload_payment_proof(file, order_id):
         print(f"Error uploading payment proof: {e}")
         return {'success': False, 'error': str(e)}
 
+def upload_delivery_proof(file, order_id):
+    """Upload delivery proof to Cloudinary"""
+    try:
+        folder = f"e-flowers/orders/{order_id}/delivery"
+        result = upload_to_cloudinary(
+            file,
+            folder=folder,
+            transformation=current_app.config.get('CLOUDINARY_PRESETS', {}).get('product', {})
+        )
+        return result
+    except Exception as e:
+        print(f"Error uploading delivery proof: {e}")
+        return {'success': False, 'error': str(e)}
+
+
 def get_optimized_url(public_id, preset='product'):
     """Get optimized URL using preset configurations"""
     if not public_id:

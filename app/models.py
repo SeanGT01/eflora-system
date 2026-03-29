@@ -1063,6 +1063,17 @@ class Order(db.Model):
     mapbox_place_id = db.Column(db.String(100), nullable=True)
     # ==================================
     
+    # ===== DELIVERY PROOF FIELDS (NO LOCAL FALLBACK) =====
+    delivery_proof = db.Column(db.String(255), nullable=True)  # Original filename (metadata only)
+    delivery_proof_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    delivery_proof_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
+    
+    # Second delivery proof
+    delivery_proof_2 = db.Column(db.String(255), nullable=True)  # Original filename (metadata only)
+    delivery_proof_2_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    delivery_proof_2_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
+    # ======================================================
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -1097,6 +1108,10 @@ class Order(db.Model):
             'payment_proof_public_id': self.payment_proof_public_id,
             'delivery_address': self.delivery_address,
             'delivery_notes': self.delivery_notes,
+            'delivery_proof_url': self.delivery_proof_url,  # Cloudinary only
+            'delivery_proof_public_id': self.delivery_proof_public_id,
+            'delivery_proof_2_url': self.delivery_proof_2_url,  # Cloudinary only
+            'delivery_proof_2_public_id': self.delivery_proof_2_public_id,
             'requested_delivery_date': self.requested_delivery_date.isoformat() if self.requested_delivery_date else None,
             'requested_delivery_time': self.requested_delivery_time,
             'customer_latitude': self.customer_latitude,
