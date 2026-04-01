@@ -1549,8 +1549,7 @@
                             data-variant-price="{{ variant.price }}"
                             data-variant-stock="{{ variant.stock_quantity }}"
                             data-variant-image="{% if variant.image_url %}{{ variant.image_url }}{% endif %}"
-                            onclick="selectVariant(this)"
-                            {% if variant.stock_quantity <= 0 %}disabled{% endif %}>
+                            onclick="selectVariant(this)">
                         {{ variant.name }}
                     </button>
                     {% endfor %}
@@ -1652,7 +1651,7 @@
 
         <!-- CTA Buttons -->
         {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
-        {% if product.is_available and (product.stock_quantity > 0 or has_variant_stock) %}
+        {% if product.is_available %}
         <div class="cta-row">
             <button class="btn btn-outline" id="addToCartBtn" onclick="addToCartWithVariant()">
                 <i class="ri-shopping-bag-line"></i> Add to Basket
@@ -1798,24 +1797,40 @@ function syncPurchaseActions() {
     const addToCartBtn = document.getElementById('addToCartBtn');
     const buyNowBtn = document.getElementById('buyNowBtn');
     const stockDisplay = document.getElementById('stockDisplay');
-    const isPurchasable = {{ 'true' if product.is_available else 'false' }} && currentStock > 0;
+    const isAvailable = {{ 'true' if product.is_available else 'false' }};
 
     if (stockDisplay) {
         stockDisplay.textContent = currentStock > 0 ? `${currentStock} available` : 'Out of stock';
     }
 
+    // Update button text and state based on stock
+    const outOfStockText = '<i class="ri-close-circle-line"></i> Out of Stock';
+    const addToBasketText = '<i class="ri-shopping-bag-line"></i> Add to Basket';
+    const buyNowText = '<i class="ri-secure-payment-line"></i> Buy Now';
+
     if (addToCartBtn) {
-        addToCartBtn.disabled = !isPurchasable;
-        addToCartBtn.style.opacity = isPurchasable ? '1' : '0.5';
-        addToCartBtn.style.cursor = isPurchasable ? '' : 'not-allowed';
+        if (currentStock <= 0) {
+            addToCartBtn.innerHTML = outOfStockText;
+        } else {
+            addToCartBtn.innerHTML = addToBasketText;
+        }
+        addToCartBtn.disabled = false;
+        addToCartBtn.style.opacity = '1';
+        addToCartBtn.style.cursor = '';
     }
 
     if (buyNowBtn) {
-        buyNowBtn.disabled = !isPurchasable;
-        buyNowBtn.style.opacity = isPurchasable ? '1' : '0.5';
-        buyNowBtn.style.cursor = isPurchasable ? '' : 'not-allowed';
+        if (currentStock <= 0) {
+            buyNowBtn.innerHTML = outOfStockText;
+        } else {
+            buyNowBtn.innerHTML = buyNowText;
+        }
+        buyNowBtn.disabled = false;
+        buyNowBtn.style.opacity = '1';
+        buyNowBtn.style.cursor = '';
     }
 
+    // Only allow quantity adjustment if in stock
     const qtyPlus = document.getElementById('qtyPlus');
     const qtyMinus = document.getElementById('qtyMinus');
     if (qtyPlus) {
