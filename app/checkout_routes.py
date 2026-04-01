@@ -19,7 +19,7 @@ from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 
 from app.extensions import db
-from app.models import Cart, CartItem, Order, OrderItem, Store, User, UserAddress
+from app.models import Cart, CartItem, Order, OrderItem, Product, ProductVariant, Store, User, UserAddress
 
 # Create blueprint
 checkout_bp = Blueprint("checkout", __name__)
@@ -906,6 +906,243 @@ def get_order_payment_status(order_id):
         })
     except Exception as e:
         print(f"Error getting status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUY NOW — Skip cart, go directly to checkout
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@checkout_bp.route("/buy-now/validate", methods=["POST"])
+@customer_only
+def buy_now_validate():
+    """Validate delivery for a direct buy-now (no cart involved)."""
+    print("🔵🔵🔵 BUY NOW VALIDATE ROUTE WAS CALLED! 🔵🔵🔵")
+    try:
+        user_id = request.user_id
+        data = request.get_json() or {}
+
+        product_id = data.get("product_id")
+        variant_id = data.get("variant_id")
+        quantity = int(data.get("quantity", 1))
+        address_id = data.get("delivery_address_id")
+
+        if not product_id:
+            return jsonify({"error": "product_id is required"}), 400
+        if not address_id:
+            return jsonify({"error": "delivery_address_id is required"}), 400
+        if quantity < 1:
+            return jsonify({"error": "Quantity must be at least 1"}), 400
+
+        product = Product.query.get(product_id)
+        if not product:
+            return jsonify({"error": "Product not found"}), 404
+        if not product.is_available:
+            return jsonify({"error": f'"{product.name}" is no longer available'}), 400
+
+        variant = None
+        item_price = product.price
+        if variant_id:
+            variant = ProductVariant.query.filter_by(id=variant_id, product_id=product_id).first()
+            if not variant:
+                return jsonify({"error": "Variant not found"}), 404
+            if not variant.is_available:
+                return jsonify({"error": f'"{variant.name}" is no longer available'}), 400
+            if variant.stock_quantity < quantity:
+                return jsonify({"error": f'Insufficient stock for "{variant.name}". Available: {variant.stock_quantity}'}), 400
+            item_price = variant.price
+        else:
+            if product.stock_quantity < quantity:
+                return jsonify({"error": f'Insufficient stock for "{product.name}". Available: {product.stock_quantity}'}), 400
+
+        address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
+        if not address:
+            return jsonify({"error": "Delivery address not found"}), 404
+
+        store = Store.query.get(product.store_id)
+        if not store:
+            return jsonify({"error": "Store not found"}), 404
+
+        subtotal = Decimal(str(item_price)) * quantity
+        delivery_check = _check_store_delivery(store, address, subtotal)
+
+        if not delivery_check["can_deliver"]:
+            return jsonify({
+                "success": False,
+                "error": "Cannot deliver to this address.",
+                "undeliverable_stores": [{
+                    "store_id": store.id,
+                    "store_name": store.name,
+                    "reason": delivery_check["reason"],
+                    "distance_km": round(delivery_check["distance_km"], 2) if delivery_check["distance_km"] is not None else None,
+                }],
+            }), 400
+
+        return jsonify({
+            "success": True,
+            "orders": [{
+                "temp_id": f"buynow_{uuid.uuid4().hex[:8]}",
+                "store_id": store.id,
+                "store_name": store.name,
+                "subtotal": float(subtotal),
+                "delivery_fee": float(delivery_check["delivery_fee"]),
+                "distance_km": delivery_check["distance_km"],
+                "total": float(subtotal + delivery_check["delivery_fee"]),
+                "items": [{
+                    "product_id": product.id,
+                    "variant_id": variant.id if variant else None,
+                    "quantity": quantity,
+                    "price": float(item_price),
+                }],
+                "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
+                "gcash_instructions": store.gcash_instructions,
+            }],
+            "address": address.to_dict(),
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Buy now validate error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@checkout_bp.route("/buy-now/create-order", methods=["POST"])
+@customer_only
+def buy_now_create_order():
+    """Create an order directly from product data (no cart involved)."""
+    print("🔵🔵🔵 BUY NOW CREATE ORDER ROUTE WAS CALLED! 🔵🔵🔵")
+    try:
+        user_id = request.user_id
+        data = request.get_json() or {}
+
+        product_id = data.get("product_id")
+        variant_id = data.get("variant_id")
+        quantity = int(data.get("quantity", 1))
+        address_id = data.get("address_id")
+        delivery_notes = data.get("delivery_notes", "")
+        requested_delivery_date_str = data.get("requested_delivery_date")
+        requested_delivery_time = data.get("requested_delivery_time")
+        payment_proof_url = data.get("payment_proof_url")
+        payment_proof_public_id = data.get("payment_proof_public_id")
+
+        if not product_id:
+            return jsonify({"error": "product_id is required"}), 400
+        if not address_id:
+            return jsonify({"error": "address_id is required"}), 400
+        if quantity < 1:
+            return jsonify({"error": "Quantity must be at least 1"}), 400
+
+        product = Product.query.get(product_id)
+        if not product:
+            return jsonify({"error": "Product not found"}), 404
+        if not product.is_available:
+            return jsonify({"error": f'"{product.name}" is no longer available'}), 400
+
+        variant = None
+        item_price = product.price
+        if variant_id:
+            variant = ProductVariant.query.filter_by(id=variant_id, product_id=product_id).first()
+            if not variant:
+                return jsonify({"error": "Variant not found"}), 404
+            if not variant.is_available:
+                return jsonify({"error": f'"{variant.name}" is no longer available'}), 400
+            if variant.stock_quantity < quantity:
+                return jsonify({"error": f'Insufficient stock for "{variant.name}".'}), 400
+            item_price = variant.price
+        else:
+            if product.stock_quantity < quantity:
+                return jsonify({"error": f'Insufficient stock for "{product.name}".'}), 400
+
+        address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
+        if not address:
+            return jsonify({"error": "Delivery address not found"}), 404
+
+        store = Store.query.get(product.store_id)
+        if not store:
+            return jsonify({"error": "Store not found"}), 404
+
+        subtotal = Decimal(str(item_price)) * quantity
+        delivery_check = _check_store_delivery(store, address, subtotal)
+
+        if not delivery_check["can_deliver"]:
+            return jsonify({"error": delivery_check["reason"]}), 400
+
+        delivery_fee = delivery_check["delivery_fee"]
+        distance = delivery_check["distance_km"]
+        delivery_point = from_shape(Point(address.longitude, address.latitude), srid=4326)
+
+        requested_delivery_date = None
+        if requested_delivery_date_str:
+            try:
+                requested_delivery_date = datetime.strptime(requested_delivery_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        order = Order(
+            customer_id=int(user_id),
+            store_id=int(store.id),
+            order_type="online",
+            status="pending",
+            subtotal_amount=float(subtotal),
+            delivery_fee=float(delivery_fee),
+            distance_km=float(distance) if distance else None,
+            total_amount=float(subtotal + delivery_fee),
+            payment_method="gcash",
+            payment_status="pending_verification",
+            delivery_location=delivery_point,
+            payment_proof_url=payment_proof_url,
+            payment_proof_public_id=payment_proof_public_id,
+            delivery_address=address.address_line,
+            delivery_notes=delivery_notes,
+            requested_delivery_date=requested_delivery_date,
+            requested_delivery_time=requested_delivery_time,
+            customer_latitude=address.latitude,
+            customer_longitude=address.longitude,
+            mapbox_place_id=address.place_id,
+        )
+        db.session.add(order)
+        db.session.flush()
+
+        db.session.add(OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            variant_id=variant.id if variant else None,
+            quantity=quantity,
+            price=float(item_price),
+        ))
+        db.session.flush()
+
+        # Reduce stock
+        product.reduce_stock(
+            quantity,
+            "other",
+            user_id,
+            reason_notes=f"Buy Now order #{order.id} by customer #{user_id}",
+            variant=variant,
+        )
+
+        db.session.commit()
+        print(f"✅ Buy Now order #{order.id} created successfully")
+
+        order_dict = order.to_dict()
+        order_dict["items"] = [oi.to_dict() for oi in order.items]
+        order_dict["gcash_qr_codes"] = [qr.to_dict() for qr in store.gcash_qr_images]
+        order_dict["gcash_instructions"] = store.gcash_instructions
+        order_dict["distance_km"] = round(distance, 2) if distance is not None else None
+        order_dict["selected_address"] = address.to_dict()
+
+        return jsonify({
+            "success": True,
+            "message": "Order created successfully",
+            "orders": [order_dict],
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Buy now create order error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

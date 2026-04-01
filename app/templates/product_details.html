@@ -2359,32 +2359,24 @@ async function addToCartWithVariant() {
         showToast('Please select an in-stock option first.', 'error');
         return;
     }
-    const delivery = document.getElementById('deliveryInput').value;
-    if (!delivery) {
-        const field = document.getElementById('deliveryField');
-        field.style.borderColor = 'var(--deep-rose)';
-        field.style.animation = 'shake .3s ease';
-        setTimeout(() => field.style.animation = '', 300);
-        document.getElementById('deliveryInput').focus();
-        showToast('Please enter your delivery location first.', 'error');
-        return;
-    }
-    if (!selectedDate) {
-        showToast('Please select a delivery date.', 'error');
-        return;
-    }
-    if (!selectedTime) {
-        showToast('Please select a delivery time.', 'error');
-        return;
-    }
- 
-    // Add to cart then redirect to checkout
-    addToCartWithVariant();
- 
-    showToast('✓ Added to basket! Redirecting to checkout…', 'success');
-    setTimeout(() => {
-        window.location.href = "{{ url_for('templates.checkout') }}";
-    }, 800);
+
+    // Build item data from current selection
+    const item = {
+        product_id: mainProduct.id,
+        variant_id: selectedVariant ? selectedVariant.id : null,
+        quantity: qty,
+        price: currentPrice,
+        name: selectedVariant
+            ? selectedVariant.name + ' ' + mainProduct.name
+            : mainProduct.name,
+        store_name: mainProduct.store_name,
+        image_url: selectedVariant && selectedVariant.image_url
+            ? selectedVariant.image_url
+            : mainProduct.image_url,
+    };
+
+    // Open checkout modal in buy-now mode (defined in base.html)
+    buyNowDirect(item);
 }
    /* ════════════════════════════════
    VIEW PRODUCT

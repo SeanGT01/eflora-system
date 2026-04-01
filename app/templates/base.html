@@ -2175,6 +2175,8 @@ let selectedCheckoutAddressId = null;
 let currentCheckoutSession = null;
 let checkoutModalCloseHandler = null;
 let isCreatingOrders = false;  // ADDED: Prevents duplicate order creation
+let buyNowMode = false;  // True when using Buy Now (skip cart)
+let buyNowItem = null;   // { product_id, variant_id, quantity, price, name, store_name, image_url }
 
 // ===== CHECKOUT SESSION MANAGEMENT =====
 function startCheckoutSession() {
@@ -2861,6 +2863,74 @@ async function fetchCheckoutAddresses() {
     return Array.isArray(result.addresses) ? result.addresses : [];
 }
 
+async function buyNowDirect(item) {
+    // item = { product_id, variant_id, quantity, price, name, store_name, image_url }
+    {% if session.get('user_id') %}
+    buyNowMode = true;
+    buyNowItem = item;
+
+    try {
+        const addresses = await fetchCheckoutAddresses();
+        if (!addresses.length) {
+            showToast('Please add a delivery address before checkout');
+            setTimeout(() => {
+                window.location.href = "{{ url_for('templates.my_account') }}?page=profile";
+            }, 900);
+            buyNowMode = false;
+            buyNowItem = null;
+            return;
+        }
+    } catch (error) {
+        console.error('Buy now address precheck error:', error);
+        showToast('Could not verify your saved addresses right now');
+        buyNowMode = false;
+        buyNowItem = null;
+        return;
+    }
+
+    startCheckoutSession();
+    checkoutStep = 1;
+    checkoutOrders = [];
+    uploadedProofs = {};
+    uploadedProofData = {};
+    currentOrderIndex = 0;
+    isCreatingOrders = false;
+    storeDeliveryPreferences = {};
+    updateProgressIndicator(1);
+
+    document.getElementById('checkoutStep1').style.display = 'block';
+    document.getElementById('checkoutStep2').style.display = 'none';
+    document.getElementById('checkoutStep3').style.display = 'none';
+    document.getElementById('checkoutBackBtn').style.display = 'none';
+    document.getElementById('checkoutNextBtn').textContent = '→ Continue';
+    document.getElementById('checkoutNextBtn').disabled = false;
+    document.getElementById('checkoutModal').classList.add('active');
+
+    if (checkoutModalCloseHandler) {
+        document.getElementById('checkoutModal').removeEventListener('click', checkoutModalCloseHandler);
+    }
+    checkoutModalCloseHandler = function(e) {
+        if (e.target === document.getElementById('checkoutModal') && checkoutStep > 1) {
+            if (confirm('Are you sure you want to cancel? Unused uploads will be deleted.')) {
+                cancelCheckout(true);
+                document.getElementById('checkoutModal').classList.remove('active');
+                isCreatingOrders = false;
+                buyNowMode = false;
+                buyNowItem = null;
+            }
+        }
+    };
+    document.getElementById('checkoutModal').addEventListener('click', checkoutModalCloseHandler);
+    loadCheckoutAddresses();
+    {% else %}
+    showToast('Please sign in to buy');
+    localStorage.setItem('redirectAfterLogin', window.location.href);
+    setTimeout(() => {
+        window.location.href = "{{ url_for('templates.login') }}?next=" + encodeURIComponent(window.location.href);
+    }, 1200);
+    {% endif %}
+}
+
 async function checkout() {
     const selectedItems = cart.filter(item => item.is_selected);
     if (!selectedItems.length) { 
@@ -2949,6 +3019,8 @@ function closeCheckout() {
     }
     document.getElementById('checkoutModal').classList.remove('active');
     cancelCheckout();
+    buyNowMode = false;
+    buyNowItem = null;
 }
 
 function goBackCheckout() {
@@ -3060,36 +3132,55 @@ function renderCheckoutDeliveryIssues(issues) {
 
 async function proceedCheckout() {
     if (checkoutStep === 1) {
-        const selectedItems = cart.filter(item => item.is_selected);
         if (!selectedCheckoutAddressId) {
             showToast('Please select a saved delivery address');
-            return;
-        }
-        if (!selectedItems.length) {
-            showToast('Please select at least one item to checkout');
             return;
         }
 
         try {
             renderCheckoutDeliveryIssues([]);
-            
-            const response = await fetch('/api/v1/checkout/validate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + (await getAuthToken())
-                },
-                body: JSON.stringify({
-                    delivery_address_id: selectedCheckoutAddressId,
-                    delivery_notes: document.getElementById('deliveryNotes').value,
-                    items: selectedItems.map(item => ({
-                        item_id: item.cart_item_id,
-                        quantity: item.quantity
-                    }))
-                })
-            });
+            let response, result;
 
-            const result = await response.json();
+            if (buyNowMode && buyNowItem) {
+                // Buy Now mode: validate directly with product data
+                response = await fetch('/api/v1/checkout/buy-now/validate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + (await getAuthToken())
+                    },
+                    body: JSON.stringify({
+                        product_id: buyNowItem.product_id,
+                        variant_id: buyNowItem.variant_id || null,
+                        quantity: buyNowItem.quantity || 1,
+                        delivery_address_id: selectedCheckoutAddressId,
+                    })
+                });
+            } else {
+                // Normal cart checkout
+                const selectedItems = cart.filter(item => item.is_selected);
+                if (!selectedItems.length) {
+                    showToast('Please select at least one item to checkout');
+                    return;
+                }
+                response = await fetch('/api/v1/checkout/validate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + (await getAuthToken())
+                    },
+                    body: JSON.stringify({
+                        delivery_address_id: selectedCheckoutAddressId,
+                        delivery_notes: document.getElementById('deliveryNotes').value,
+                        items: selectedItems.map(item => ({
+                            item_id: item.cart_item_id,
+                            quantity: item.quantity
+                        }))
+                    })
+                });
+            }
+
+            result = await response.json();
             
             if (result.success && result.orders) {
                 checkoutOrders = result.orders;
@@ -3210,17 +3301,46 @@ async function createOrders() {
         };
         
         console.log('📦 Orders payload with per-store delivery preferences:', ordersPayload);
-        
-        const response = await fetch('/api/v1/checkout/create-orders', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + token
-            },
-            body: JSON.stringify(ordersPayload)
-        });
-        
-        const result = await response.json();
+
+        let response, result;
+
+        if (buyNowMode && buyNowItem) {
+            // Buy Now mode: create order directly from product data
+            const order = checkoutOrders[0];
+            const buyNowPayload = {
+                product_id: buyNowItem.product_id,
+                variant_id: buyNowItem.variant_id || null,
+                quantity: buyNowItem.quantity || 1,
+                address_id: addressId,
+                delivery_notes: deliveryNotes,
+                requested_delivery_date: getStoreDeliveryDate(order.temp_id),
+                requested_delivery_time: getStoreDeliveryTime(order.temp_id),
+                payment_proof_url: uploadedProofs[order.temp_id],
+                payment_proof_public_id: uploadedProofData[order.temp_id]?.public_id || null,
+            };
+            console.log('📦 Buy Now payload:', buyNowPayload);
+
+            response = await fetch('/api/v1/checkout/buy-now/create-order', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify(buyNowPayload)
+            });
+        } else {
+            // Normal cart checkout
+            response = await fetch('/api/v1/checkout/create-orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify(ordersPayload)
+            });
+        }
+
+        result = await response.json();
         
         if (response.ok && result.success) {
             showToast('✅ Orders created successfully!');
@@ -3243,11 +3363,17 @@ async function createOrders() {
 async function completeCheckout() {
     const nextBtn = document.getElementById('checkoutNextBtn');
     
-    // Clear cart and update UI immediately
-    cart = cart.filter(item => !item.is_selected);
-    localStorage.setItem('cart', JSON.stringify(cart));
-    updateCartCount();
-    updateCartDisplay();
+    if (buyNowMode) {
+        // Buy Now mode: don't touch the cart
+        buyNowMode = false;
+        buyNowItem = null;
+    } else {
+        // Normal checkout: clear selected cart items
+        cart = cart.filter(item => !item.is_selected);
+        localStorage.setItem('cart', JSON.stringify(cart));
+        updateCartCount();
+        updateCartDisplay();
+    }
     
     // Close the modal first (prevents double clicks)
     document.getElementById('checkoutModal').classList.remove('active');
