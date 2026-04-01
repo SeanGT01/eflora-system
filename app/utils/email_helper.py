@@ -64,17 +64,19 @@ def _send_email_gmail_api(recipient_email, subject, html_body, sender_email):
         
         service = build('gmail', 'v1', credentials=credentials)
         
-        # Create MIME message
+        # Create MIME message - use service account email as sender (no domain-wide delegation needed)
         from email.mime.text import MIMEText
         message = MIMEText(html_body, 'html')
         message['to'] = recipient_email
-        message['from'] = sender_email_override
+        message['from'] = sender_email_override  # Service account email
         message['subject'] = subject
         
         # Send via Gmail API
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
         send_message = {'raw': raw}
-        service.users().messages().send(userId='me', body=send_message).execute()
+        # Use the service account's email (extracted from credentials) as userId instead of 'me'
+        service_account_email = creds_dict.get('client_email', sender_email_override)
+        service.users().messages().send(userId=service_account_email, body=send_message).execute()
         
         current_app.logger.info(f"✅ Email sent via Gmail API to {recipient_email}")
         return True
