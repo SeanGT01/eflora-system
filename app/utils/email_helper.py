@@ -1,35 +1,14 @@
 import random
 import secrets
-import socket
-import string
 import threading
-import smtplib
 import time
 import base64
 import json
+import string
 from datetime import datetime
 from flask import current_app, url_for, request
 from flask_mail import Message
 from app.extensions import mail
-
-# ================================================================
-# EMAIL THROTTLING (prevent SendGrid rate limits)
-# ================================================================
-_email_lock = threading.Lock()
-_last_email_time = 0
-_min_email_interval = 0.5  # Minimum 500ms between emails (120 emails/min max)
-
-def _throttle_email():
-    """Enforce minimum interval between email sends to avoid rate limiting."""
-    global _last_email_time
-    with _email_lock:
-        now = time.time()
-        time_since_last = now - _last_email_time
-        if time_since_last < _min_email_interval:
-            sleep_time = _min_email_interval - time_since_last
-            current_app.logger.info(f"⏳ Email throttle: sleeping {sleep_time:.2f}s to avoid rate limits")
-            time.sleep(sleep_time)
-        _last_email_time = time.time()
 
 
 def generate_verification_token():
@@ -105,161 +84,29 @@ def _send_email_gmail_api(recipient_email, subject, html_body, sender_email):
         return False
 
 
-def _send_email_sendgrid(recipient_email, subject, html_body, sender_email, retry_count=0, max_retries=3):
-    """
-    Send email via SendGrid API with exponential backoff for rate limits.
-    
-    Handles 429 (rate limit) responses by waiting and retrying.
-    """
-    try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
-        
-        sendgrid_api_key = current_app.config.get('SENDGRID_API_KEY')
-        if not sendgrid_api_key:
-            return False
-        
-        # Apply throttling to space out requests
-        _throttle_email()
-        
-        message = Mail(
-            from_email=sender_email,
-            to_emails=recipient_email,
-            subject=subject,
-            html_content=html_body
-        )
-        
-        sg = SendGridAPIClient(sendgrid_api_key)
-        response = sg.send(message)
-        
-        if response.status_code in (200, 201, 202):
-            current_app.logger.info(f"✅ Email sent via SendGrid to {recipient_email}")
-            return True
-        elif response.status_code == 429:
-            # Rate limited by SendGrid
-            if retry_count < max_retries:
-                # Exponential backoff: 1s, 2s, 4s
-                wait_time = 2 ** retry_count
-                current_app.logger.warning(
-                    f"⚠️  SendGrid rate limit (429). "
-                    f"Retrying in {wait_time}s (attempt {retry_count + 1}/{max_retries})..."
-                )
-                time.sleep(wait_time)
-                return _send_email_sendgrid(
-                    recipient_email, subject, html_body, sender_email,
-                    retry_count=retry_count + 1, max_retries=max_retries
-                )
-            else:
-                current_app.logger.error(
-                    f"❌ SendGrid rate limit (429) - Max retries exceeded for {recipient_email}"
-                )
-                return False
-        else:
-            error_msg = response.body.decode() if hasattr(response.body, 'decode') else str(response.body)
-            current_app.logger.error(f"❌ SendGrid error {response.status_code}: {error_msg}")
-            return False
-        
-    except Exception as e:
-        current_app.logger.error(f"❌ SendGrid error: {type(e).__name__}: {e}")
-        return False
 
 
-def _send_email_smtp(recipient_email, subject, html_body, sender_email):
-    """Fallback: Send email via SMTP (for local development)."""
-    old_timeout = socket.getdefaulttimeout()
-    socket.setdefaulttimeout(60)
-    
-    with current_app.app_context():
-        try:
-            server = current_app.config.get('MAIL_SERVER', 'smtp.gmail.com')
-            port = current_app.config.get('MAIL_PORT', 587)
-            username = current_app.config.get('MAIL_USERNAME', '')
-            password = current_app.config.get('MAIL_PASSWORD', '')
-            use_tls = current_app.config.get('MAIL_USE_TLS', True)
-            use_ssl = current_app.config.get('MAIL_USE_SSL', False)
-            
-            current_app.logger.info(f"📧 Resolving {server}...")
-            try:
-                addrs = socket.getaddrinfo(server, port)
-                ipv4 = [a for a in addrs if a[0] == socket.AF_INET]
-                if not ipv4:
-                    current_app.logger.error(f"❌ No IPv4 addresses for {server}")
-                    return False
-                resolved_ip = ipv4[0][4][0]
-                current_app.logger.info(f"📧 Resolved to {resolved_ip}, connecting (5s timeout)...")
-            except Exception as e:
-                current_app.logger.error(f"❌ DNS resolution failed: {e}")
-                return False
-            
-            try:
-                if use_ssl:
-                    smtp = smtplib.SMTP_SSL(server, port, timeout=5)
-                else:
-                    smtp = smtplib.SMTP(server, port, timeout=5)
-            except socket.timeout:
-                current_app.logger.error(f"❌ SMTP connection timeout. If on Railway, use SendGrid instead.")
-                return False
-            
-            if smtp.sock:
-                smtp.sock.settimeout(30)
-            smtp.ehlo()
-            
-            if use_tls and not use_ssl:
-                current_app.logger.info(f"📧 Starting TLS...")
-                smtp.starttls()
-                smtp.ehlo()
-            
-            if username and password:
-                current_app.logger.info(f"📧 Logging in...")
-                smtp.login(username, password)
-            
-            current_app.logger.info(f"📧 Sending email...")
-            from email.mime.multipart import MIMEMultipart
-            from email.mime.text import MIMEText
-            
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = sender_email
-            msg['To'] = recipient_email
-            msg.attach(MIMEText(html_body, 'html'))
-            
-            smtp.sendmail(sender_email, [recipient_email], msg.as_string())
-            smtp.quit()
-            
-            current_app.logger.info(f"✅ Email sent via SMTP to {recipient_email}")
-            return True
-        
-        except Exception as e:
-            current_app.logger.error(f"❌ SMTP error: {type(e).__name__}: {e}")
-            return False
-        
-        finally:
-            socket.setdefaulttimeout(old_timeout)
+
+
 
 
 def _send_email_async(app, recipient_email, subject, html_body, sender_email):
-    """Send email in background thread. Priority: Gmail API > SendGrid."""
+    """Send email in background thread via Gmail API."""
     with app.app_context():
         gmail_creds = app.config.get('GMAIL_API_CREDENTIALS', '')
-        sendgrid_key = app.config.get('SENDGRID_API_KEY', '')
         
-        if gmail_creds and app.config.get('GMAIL_SENDER_EMAIL'):
-            # Use Gmail API (free, no DMARC issues, works on Railway)
-            _send_email_gmail_api(recipient_email, subject, html_body, sender_email)
-        elif sendgrid_key:
-            # Use SendGrid for production (no Gmail API configured)
-            _send_email_sendgrid(recipient_email, subject, html_body, sender_email)
-        else:
-            # No email service configured
+        if not gmail_creds or not app.config.get('GMAIL_SENDER_EMAIL'):
             current_app.logger.error(
-                f"❌ No email service configured. Please set either GMAIL_API_CREDENTIALS or SENDGRID_API_KEY."
+                f"❌ Gmail API not configured. Please set GMAIL_API_CREDENTIALS and GMAIL_SENDER_EMAIL environment variables."
             )
+            return
+        
+        _send_email_gmail_api(recipient_email, subject, html_body, sender_email)
 
 
 def send_rider_verification_email(recipient_email, verification_token, store_name, seller_name):
     """
-    Send a verification link email to a new rider (async via thread).
-    Uses SendGrid for production, SMTP for local development.
+    Send a verification link email to a new rider (async via thread via Gmail API).
     """
     try:
         base_url = current_app.config.get('APP_BASE_URL') or request.host_url.rstrip('/')
@@ -340,7 +187,7 @@ def send_rider_verification_email(recipient_email, verification_token, store_nam
 
 def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
     """
-    Send a 6-digit OTP code to a rider's email via SMTP.
+    Send a 6-digit OTP code to a rider's email via Gmail API.
     The seller will then enter this OTP on the dashboard to verify.
     """
     try:
@@ -391,7 +238,7 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
 
         sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
 
-        # Send via SendGrid (SMTP blocked on Railway)
+        # Send via Gmail API
         app = current_app._get_current_object()
         thread = threading.Thread(
             target=_send_email_async,
@@ -410,7 +257,7 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
 
 def send_rider_credentials_email(recipient_email, full_name, default_password, store_name):
     """
-    Send rider their account credentials after successful OTP verification via SendGrid.
+    Send rider their account credentials after successful OTP verification via Gmail API.
     """
     try:
         subject = f"E-Flowers Rider Account Created - {store_name}"
@@ -464,7 +311,7 @@ def send_rider_credentials_email(recipient_email, full_name, default_password, s
 
         sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
 
-        # Send via SendGrid (SMTP blocked on Railway)
+        # Send via Gmail API
         app = current_app._get_current_object()
         thread = threading.Thread(
             target=_send_email_async,
@@ -479,9 +326,3 @@ def send_rider_credentials_email(recipient_email, full_name, default_password, s
     except Exception as e:
         current_app.logger.error(f"❌ Failed to queue credentials email for {recipient_email}: {e}")
         return False
-
-
-def _send_smtp_only_async(app, recipient_email, subject, html_body, sender_email):
-    """Deprecated: SMTP is blocked on Railway. Use SendGrid instead."""
-    with app.app_context():
-        current_app.logger.warning(f"⚠️  SMTP not available on production. Ensure SENDGRID_API_KEY is configured.")
