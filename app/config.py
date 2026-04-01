@@ -140,43 +140,21 @@ class Config:
     POSTGIS_VERSION = (3, 3, 0)
 
     # =============================
-    # Email / SMTP (Flask-Mail)
+    # Email - Gmail OAuth2
     # =============================
-    MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
-    MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
-    MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
-    MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
-    MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
-    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')  # Gmail App Password
+    # Gmail OAuth2 configuration for sending verification & OTP emails
+    # See generate_gmail_oauth_token.py for setup instructions
+    GMAIL_REFRESH_TOKEN = os.getenv('GMAIL_REFRESH_TOKEN', '')
+    GMAIL_CLIENT_ID = os.getenv('GMAIL_CLIENT_ID', '')
+    GMAIL_CLIENT_SECRET = os.getenv('GMAIL_CLIENT_SECRET', '')
+    GMAIL_SENDER_EMAIL = os.getenv('GMAIL_SENDER_EMAIL', 'eflowers.verification@gmail.com')
     
-    # SendGrid API (preferred for production)
-    SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
-    
-    # Gmail API (free @gmail.com sending, works on Railway)
-    GMAIL_API_CREDENTIALS = os.getenv('GMAIL_API_CREDENTIALS', '')  # JSON string or base64
-    GMAIL_SENDER_EMAIL = os.getenv('GMAIL_SENDER_EMAIL', '')  # The gmail.com address to send from
-    
-    # Email sender logic:
-    # - If GMAIL_API_CREDENTIALS is set, use Gmail API (free, no DMARC issues)
-    # - If MAIL_DEFAULT_SENDER is explicitly set, use it
-    # - If SendGrid is configured, use noreply@eflowers.com (avoid gmail.com DMARC issues)
-    # - If only SMTP is available, use MAIL_USERNAME (Gmail requires this for DMARC)
-    # - Fallback to generic noreply address
+    # Email identity for sending via Gmail OAuth2
     _mail_default = os.getenv('MAIL_DEFAULT_SENDER')
-    if GMAIL_API_CREDENTIALS and GMAIL_SENDER_EMAIL:
-        # Gmail API uses the actual sender email address
-        MAIL_DEFAULT_SENDER = GMAIL_SENDER_EMAIL
-    elif _mail_default:
+    if _mail_default:
         MAIL_DEFAULT_SENDER = _mail_default
-    elif SENDGRID_API_KEY:
-        # When using SendGrid, gmail.com addresses cause DMARC failures
-        # because Gmail's DMARC policy only allows Gmail's own servers
-        MAIL_DEFAULT_SENDER = 'noreply@eflowers.com'
-    elif os.getenv('MAIL_USERNAME'):
-        # SMTP-based sending (local/dev): Gmail requires sender = MAIL_USERNAME for DMARC
-        MAIL_DEFAULT_SENDER = os.getenv('MAIL_USERNAME')
     else:
-        MAIL_DEFAULT_SENDER = 'noreply@eflowers.com'
+        MAIL_DEFAULT_SENDER = GMAIL_SENDER_EMAIL if GMAIL_SENDER_EMAIL else 'noreply@eflowers.com'
 
 
 # =================================

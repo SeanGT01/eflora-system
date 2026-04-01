@@ -28,87 +28,103 @@ def generate_default_password():
     return f"Rider@{suffix}"
 
 
-def _send_email_gmail_api(recipient_email, subject, html_body, sender_email):
+def _get_gmail_access_token():
     """
-    Send email via Gmail API (free, no DMARC issues, works on Railway).
-    Requires valid Google service account credentials and OAuth2 setup.
+    Get a fresh Gmail API access token using the refresh token.
+    Returns: access_token or None if failed
     """
     try:
-        from google.oauth2 import service_account
+        import requests
+        
+        refresh_token = current_app.config.get('GMAIL_REFRESH_TOKEN', '')
+        client_id = current_app.config.get('GMAIL_CLIENT_ID', '')
+        client_secret = current_app.config.get('GMAIL_CLIENT_SECRET', '')
+        
+        if not refresh_token or not client_id or not client_secret:
+            current_app.logger.error("❌ Gmail OAuth2: Missing GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, or GMAIL_CLIENT_SECRET")
+            return None
+        
+        token_url = 'https://oauth2.googleapis.com/token'
+        payload = {
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token'
+        }
+        
+        response = requests.post(token_url, data=payload, timeout=10)
+        
+        if response.status_code == 200:
+            token_data = response.json()
+            access_token = token_data.get('access_token')
+            current_app.logger.info("✅ Gmail OAuth2: Got new access token")
+            return access_token
+        else:
+            current_app.logger.error(f"❌ Gmail OAuth2: Failed to refresh token - {response.status_code}: {response.text}")
+            return None
+            
+    except Exception as e:
+        current_app.logger.error(f"❌ Gmail OAuth2 error: {type(e).__name__}: {e}")
+        return None
+
+
+def _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email):
+    """
+    Send email via Gmail API using OAuth2 refresh token.
+    No domain-wide delegation needed - works with regular Gmail accounts.
+    """
+    try:
         from googleapiclient.discovery import build
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
         
-        gmail_creds = current_app.config.get('GMAIL_API_CREDENTIALS', '')
-        sender_email_override = current_app.config.get('GMAIL_SENDER_EMAIL', '')
-        
-        if not gmail_creds or not sender_email_override:
-            current_app.logger.error("❌ Gmail API: Missing GMAIL_API_CREDENTIALS or GMAIL_SENDER_EMAIL config")
+        # Get fresh access token using refresh token
+        access_token = _get_gmail_access_token()
+        if not access_token:
             return False
         
-        # Parse credentials (could be base64 encoded or raw JSON string)
-        try:
-            if gmail_creds.startswith('{'):
-                # Raw JSON string
-                creds_dict = json.loads(gmail_creds)
-            else:
-                # Try base64 decoding
-                creds_dict = json.loads(base64.b64decode(gmail_creds).decode('utf-8'))
-        except Exception as e:
-            current_app.logger.error(f"❌ Gmail API: Invalid credentials format: {e}")
-            return False
-        
-        # Create service account credentials
-        credentials = service_account.Credentials.from_service_account_info(
-            creds_dict,
-            scopes=['https://www.googleapis.com/auth/gmail.send']
-        )
-        
+        # Create credentials object with just the access token
+        credentials = Credentials(token=access_token)
         service = build('gmail', 'v1', credentials=credentials)
         
-        # Create MIME message - use service account email as sender (no domain-wide delegation needed)
+        # Create MIME message
         from email.mime.text import MIMEText
         message = MIMEText(html_body, 'html')
         message['to'] = recipient_email
-        message['from'] = sender_email_override  # Service account email
+        message['from'] = sender_email
         message['subject'] = subject
         
         # Send via Gmail API
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
         send_message = {'raw': raw}
-        # Use the service account's email (extracted from credentials) as userId instead of 'me'
-        service_account_email = creds_dict.get('client_email', sender_email_override)
-        service.users().messages().send(userId=service_account_email, body=send_message).execute()
+        service.users().messages().send(userId='me', body=send_message).execute()
         
-        current_app.logger.info(f"✅ Email sent via Gmail API to {recipient_email}")
+        current_app.logger.info(f"✅ Email sent via Gmail OAuth2 API to {recipient_email}")
         return True
         
     except Exception as e:
-        current_app.logger.error(f"❌ Gmail API error: {type(e).__name__}: {e}")
+        current_app.logger.error(f"❌ Gmail OAuth2 API error: {type(e).__name__}: {e}")
         return False
 
 
-
-
-
-
-
-
 def _send_email_async(app, recipient_email, subject, html_body, sender_email):
-    """Send email in background thread via Gmail API."""
+    """Send email in background thread via Gmail OAuth2 API."""
     with app.app_context():
-        gmail_creds = app.config.get('GMAIL_API_CREDENTIALS', '')
+        refresh_token = app.config.get('GMAIL_REFRESH_TOKEN', '')
         
-        if not gmail_creds or not app.config.get('GMAIL_SENDER_EMAIL'):
+        if not refresh_token:
             current_app.logger.error(
-                f"❌ Gmail API not configured. Please set GMAIL_API_CREDENTIALS and GMAIL_SENDER_EMAIL environment variables."
+                f"❌ Gmail OAuth2 not configured. Please set GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, and GMAIL_CLIENT_SECRET environment variables."
             )
             return
         
-        _send_email_gmail_api(recipient_email, subject, html_body, sender_email)
+        _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email)
 
 
 def send_rider_verification_email(recipient_email, verification_token, store_name, seller_name):
     """
-    Send a verification link email to a new rider (async via thread via Gmail API).
+    Send a verification link email to a new rider (async via thread).
+    Uses SendGrid for production, SMTP for local development.
     """
     try:
         base_url = current_app.config.get('APP_BASE_URL') or request.host_url.rstrip('/')
@@ -189,7 +205,7 @@ def send_rider_verification_email(recipient_email, verification_token, store_nam
 
 def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
     """
-    Send a 6-digit OTP code to a rider's email via Gmail API.
+    Send a 6-digit OTP code to a rider's email via SMTP.
     The seller will then enter this OTP on the dashboard to verify.
     """
     try:
@@ -240,7 +256,7 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
 
         sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
 
-        # Send via Gmail API
+        # Send via SendGrid (SMTP blocked on Railway)
         app = current_app._get_current_object()
         thread = threading.Thread(
             target=_send_email_async,
@@ -259,7 +275,7 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
 
 def send_rider_credentials_email(recipient_email, full_name, default_password, store_name):
     """
-    Send rider their account credentials after successful OTP verification via Gmail API.
+    Send rider their account credentials after successful OTP verification via SendGrid.
     """
     try:
         subject = f"E-Flowers Rider Account Created - {store_name}"
@@ -313,7 +329,7 @@ def send_rider_credentials_email(recipient_email, full_name, default_password, s
 
         sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
 
-        # Send via Gmail API
+        # Send via SendGrid (SMTP blocked on Railway)
         app = current_app._get_current_object()
         thread = threading.Thread(
             target=_send_email_async,
@@ -328,3 +344,9 @@ def send_rider_credentials_email(recipient_email, full_name, default_password, s
     except Exception as e:
         current_app.logger.error(f"❌ Failed to queue credentials email for {recipient_email}: {e}")
         return False
+
+
+def _send_smtp_only_async(app, recipient_email, subject, html_body, sender_email):
+    """Deprecated: SMTP is blocked on Railway. Use SendGrid instead."""
+    with app.app_context():
+        current_app.logger.warning(f"⚠️  SMTP not available on production. Ensure SENDGRID_API_KEY is configured.")
