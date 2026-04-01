@@ -774,6 +774,7 @@ class Product(db.Model):
         data = {
             'id': self.id,
             'store_id': self.store_id,
+            'store_name': self.store.name if self.store else 'Unknown Store',
             'name': self.name,
             'description': self.description,
             'price': float(self.price) if self.price else 0,
@@ -1456,11 +1457,18 @@ class CartItem(db.Model):
         product_dict = self.product.to_dict() if self.product else None
         variant_dict = self.variant.to_dict() if self.variant else None
         
+        # Extract store name from product
+        store_name = 'Unknown Store'
+        if self.product and self.product.store:
+            store_name = self.product.store.name
+        
         return {
             'id': self.id,
             'cart_id': self.cart_id,
             'product_id': self.product_id,
             'variant_id': self.variant_id,
+            'store_id': self.product.store_id if self.product else None,
+            'store_name': store_name,
             'product': product_dict,
             'variant': variant_dict,
             'quantity': self.quantity,
