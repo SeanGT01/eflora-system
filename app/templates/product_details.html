@@ -1808,26 +1808,44 @@ function syncPurchaseActions() {
     const addToBasketText = '<i class="ri-shopping-bag-line"></i> Add to Basket';
     const buyNowText = '<i class="ri-secure-payment-line"></i> Buy Now';
 
+    const closedText = '<i class="ri-close-circle-line"></i> Store Closed';
+
     if (addToCartBtn) {
-        if (currentStock <= 0) {
+        if (!storeIsOpen) {
+            addToCartBtn.innerHTML = closedText;
+            addToCartBtn.disabled = true;
+            addToCartBtn.style.opacity = '0.5';
+            addToCartBtn.style.cursor = 'not-allowed';
+        } else if (currentStock <= 0) {
             addToCartBtn.innerHTML = outOfStockText;
+            addToCartBtn.disabled = true;
+            addToCartBtn.style.opacity = '0.5';
+            addToCartBtn.style.cursor = 'not-allowed';
         } else {
             addToCartBtn.innerHTML = addToBasketText;
+            addToCartBtn.disabled = false;
+            addToCartBtn.style.opacity = '1';
+            addToCartBtn.style.cursor = '';
         }
-        addToCartBtn.disabled = false;
-        addToCartBtn.style.opacity = '1';
-        addToCartBtn.style.cursor = '';
     }
 
     if (buyNowBtn) {
-        if (currentStock <= 0) {
+        if (!storeIsOpen) {
+            buyNowBtn.innerHTML = closedText;
+            buyNowBtn.disabled = true;
+            buyNowBtn.style.opacity = '0.5';
+            buyNowBtn.style.cursor = 'not-allowed';
+        } else if (currentStock <= 0) {
             buyNowBtn.innerHTML = outOfStockText;
+            buyNowBtn.disabled = true;
+            buyNowBtn.style.opacity = '0.5';
+            buyNowBtn.style.cursor = 'not-allowed';
         } else {
             buyNowBtn.innerHTML = buyNowText;
+            buyNowBtn.disabled = false;
+            buyNowBtn.style.opacity = '1';
+            buyNowBtn.style.cursor = '';
         }
-        buyNowBtn.disabled = false;
-        buyNowBtn.style.opacity = '1';
-        buyNowBtn.style.cursor = '';
     }
 
     // Only allow quantity adjustment if in stock
@@ -2177,13 +2195,31 @@ function filterAddons(cat, btn) {
     ════════════════════════════════ */
    let selectedDate = null;
    let selectedTime = null;
+   let storeIsOpen = true;
    
-   // Time slots available throughout the day
-   const timeSlots = [
+   // Time slots - will be fetched from store schedule API
+   let timeSlots = [
        { label: '8:00 AM - 12:00 PM', value: '08:00-12:00' },
        { label: '12:00 PM - 3:00 PM', value: '12:00-15:00' },
        { label: '3:00 PM - 6:00 PM', value: '15:00-18:00' }
    ];
+   
+   const STORE_ID = {{ product.store_id }};
+   
+   // Fetch time slots from store schedule API for a given date
+   async function fetchTimeSlots(dateStr) {
+       try {
+           const resp = await fetch(`/api/store/${STORE_ID}/time-slots?date=${dateStr}`);
+           const data = await resp.json();
+           if (data.success && data.time_slots && data.time_slots.length > 0) {
+               timeSlots = data.time_slots;
+           }
+           return data;
+       } catch (e) {
+           console.warn('Could not fetch store time slots, using defaults:', e);
+           return null;
+       }
+   }
  
 function buildDateOptions() {
     const container = document.getElementById('dateOptions');
@@ -2229,8 +2265,23 @@ function selectDate(el) {
     el.classList.add('selected');
     selectedDate = el.dataset.date;
     selectedTime = null;  // Reset time when date changes
-    buildTimeOptions();
-    saveDeliveryPreferences();
+    
+    // Fetch store-specific time slots for the selected date
+    const container = document.getElementById('timeOptions');
+    container.innerHTML = '<p style="color: var(--slate); font-size: 0.9rem;"><i class="ri-loader-4-line ri-spin"></i> Loading time slots...</p>';
+    
+    fetchTimeSlots(selectedDate).then(data => {
+        if (data && !data.is_open && data.has_schedule) {
+            container.innerHTML = '<p style="color: var(--terracotta); font-size: 0.9rem;"><i class="ri-close-circle-line"></i> Store is closed on this day</p>';
+            storeIsOpen = false;
+            syncPurchaseActions();
+            return;
+        }
+        storeIsOpen = true;
+        buildTimeOptions();
+        saveDeliveryPreferences();
+        syncPurchaseActions();
+    });
 }
 
 // Build time slot options

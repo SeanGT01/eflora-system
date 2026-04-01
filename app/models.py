@@ -198,6 +198,11 @@ class Store(db.Model):
     gcash_instructions = db.Column(db.Text, nullable=True)
     # ==================================
     
+    # ===== STORE SCHEDULE =====
+    # JSON format: {"schedules": [{"days": ["monday","tuesday",...], "open": "07:00", "close": "12:00"}, ...], "slot_duration": 2}
+    store_schedule = db.Column(db.JSON, nullable=True)
+    # ==================================
+    
     # Relationships
     products = db.relationship('Product', backref='store', lazy=True, cascade='all, delete-orphan')
     riders = db.relationship('Rider', backref='store', lazy=True)
@@ -385,7 +390,9 @@ class Store(db.Model):
             'current_delivery_geojson': self._get_current_delivery_geojson(),
             # GCash fields
             'gcash_qr_codes': [qr.to_dict() for qr in self.gcash_qr_images],
-            'gcash_instructions': self.gcash_instructions
+            'gcash_instructions': self.gcash_instructions,
+            # Store schedule
+            'store_schedule': self.store_schedule
         }
     
     def _get_current_delivery_geojson(self):

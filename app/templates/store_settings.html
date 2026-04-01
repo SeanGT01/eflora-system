@@ -2079,6 +2079,31 @@
                                            value="{{ store.street or '' }}" placeholder="e.g., Unit 123, Building Name, Landmark">
                                     <div class="form-hint">Optional - Add specific street name, building, or landmark</div>
                                 </div>
+
+                                <!-- STORE SCHEDULE / OPERATING HOURS -->
+                                <div class="form-group form-group-full">
+                                    <label class="form-label">Store Operating Hours</label>
+                                    <div class="form-hint" style="margin-bottom: 0.75rem;">Set the days and times your store is available for delivery. Time slots will be auto-generated for customers.</div>
+                                    
+                                    <div id="schedule-entries" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 0.75rem;">
+                                        <!-- Schedule entries will be populated by JS -->
+                                    </div>
+                                    
+                                    <button type="button" class="btn-section-cancel" id="add-schedule-entry" style="font-size: 13px; padding: 0.5rem 1rem;">
+                                        <i class="ri-add-line"></i> Add Time Block
+                                    </button>
+                                    
+                                    <!-- Slot Duration -->
+                                    <div style="margin-top: 1rem; display: flex; align-items: center; gap: 0.75rem;">
+                                        <label class="form-label" style="margin-bottom: 0;">Time Slot Duration:</label>
+                                        <select class="form-control" id="slot-duration" style="width: auto; min-width: 120px;">
+                                            <option value="1">1 Hour</option>
+                                            <option value="2" selected>2 Hours</option>
+                                            <option value="3">3 Hours</option>
+                                        </select>
+                                        <div class="form-hint" style="margin-bottom: 0;">How long each delivery time slot should be</div>
+                                    </div>
+                                </div>
                                 
                                 <!-- STORE LOCATION (merged from Location card) -->
                                 <div class="form-group form-group-full">
@@ -2164,6 +2189,20 @@
                             <div class="summary-label">Location</div>
                             <div class="summary-value" id="sum-location">
                                 {% if store.street %}<span>{{ store.street }}, </span>{% endif %}Brgy. {{ store.barangay }}, {{ store.municipality }}
+                            </div>
+                        </div>
+                        <div class="summary-field">
+                            <div class="summary-label">Operating Hours</div>
+                            <div class="summary-value {% if not store.store_schedule %}empty{% endif %}" id="sum-schedule">
+                                {% if store.store_schedule and store.store_schedule.schedules %}
+                                    {% for entry in store.store_schedule.schedules %}
+                                        <div style="margin-bottom: 0.25rem;">
+                                            <strong>{{ entry.days | join(', ') | title }}</strong>: {{ entry.open }} - {{ entry.close }}
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    Not configured (using default hours)
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -3318,6 +3357,125 @@
     
     document.getElementById('remove-logo-btn')?.addEventListener('click', removeLogo);
     
+    // ─── STORE SCHEDULE MANAGEMENT ───
+    const ALL_DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    const DAY_LABELS = {monday:'Mon',tuesday:'Tue',wednesday:'Wed',thursday:'Thu',friday:'Fri',saturday:'Sat',sunday:'Sun'};
+    let scheduleEntries = [];
+    
+    // Load existing schedule from server
+    const existingSchedule = {{ store.store_schedule | tojson if store.store_schedule else 'null' }};
+    if (existingSchedule && existingSchedule.schedules) {
+        scheduleEntries = existingSchedule.schedules.map((e, i) => ({
+            id: i,
+            days: e.days || [],
+            open: e.open || '07:00',
+            close: e.close || '19:00'
+        }));
+        const savedDuration = existingSchedule.slot_duration || 2;
+        document.getElementById('slot-duration').value = savedDuration;
+    }
+    
+    function renderScheduleEntries() {
+        const container = document.getElementById('schedule-entries');
+        container.innerHTML = '';
+        
+        if (scheduleEntries.length === 0) {
+            container.innerHTML = '<div style="color: var(--muted); font-size: 13px; padding: 0.75rem; background: var(--cream); border-radius: var(--radius-md); text-align: center;">No operating hours set. Click "Add Time Block" to configure your store schedule.</div>';
+            return;
+        }
+        
+        scheduleEntries.forEach((entry, idx) => {
+            const div = document.createElement('div');
+            div.className = 'schedule-entry';
+            div.style.cssText = 'background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem;';
+            
+            // Day chips
+            let dayChipsHTML = ALL_DAYS.map(d => {
+                const isActive = entry.days.includes(d);
+                return `<button type="button" class="schedule-day-chip ${isActive ? 'active' : ''}" 
+                    data-entry="${idx}" data-day="${d}"
+                    style="padding: 0.3rem 0.6rem; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: pointer; border: 1.5px solid ${isActive ? 'var(--charcoal)' : 'var(--border-strong)'}; background: ${isActive ? 'var(--charcoal)' : 'var(--warm-white)'}; color: ${isActive ? 'var(--cream)' : 'var(--muted)'}; transition: all 0.15s ease;">
+                    ${DAY_LABELS[d]}</button>`;
+            }).join('');
+            
+            div.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                    <span style="font-weight: 600; font-size: 13px; color: var(--charcoal);">Time Block ${idx + 1}</span>
+                    <button type="button" class="remove-schedule-entry" data-idx="${idx}" 
+                        style="background: none; border: none; color: #c0392b; cursor: pointer; font-size: 16px; padding: 0.25rem;" title="Remove">
+                        <i class="ri-delete-bin-line"></i>
+                    </button>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 0.75rem;">
+                    ${dayChipsHTML}
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="time" class="form-control schedule-open" data-idx="${idx}" value="${entry.open}" style="width: auto; min-width: 120px;">
+                    <span style="color: var(--muted); font-weight: 600;">to</span>
+                    <input type="time" class="form-control schedule-close" data-idx="${idx}" value="${entry.close}" style="width: auto; min-width: 120px;">
+                </div>
+            `;
+            
+            container.appendChild(div);
+        });
+        
+        // Attach event listeners
+        container.querySelectorAll('.schedule-day-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const eIdx = parseInt(chip.dataset.entry);
+                const day = chip.dataset.day;
+                const entry = scheduleEntries[eIdx];
+                if (entry.days.includes(day)) {
+                    entry.days = entry.days.filter(d => d !== day);
+                } else {
+                    entry.days.push(day);
+                }
+                renderScheduleEntries();
+            });
+        });
+        
+        container.querySelectorAll('.remove-schedule-entry').forEach(btn => {
+            btn.addEventListener('click', () => {
+                scheduleEntries.splice(parseInt(btn.dataset.idx), 1);
+                renderScheduleEntries();
+            });
+        });
+        
+        container.querySelectorAll('.schedule-open').forEach(input => {
+            input.addEventListener('change', () => {
+                scheduleEntries[parseInt(input.dataset.idx)].open = input.value;
+            });
+        });
+        
+        container.querySelectorAll('.schedule-close').forEach(input => {
+            input.addEventListener('change', () => {
+                scheduleEntries[parseInt(input.dataset.idx)].close = input.value;
+            });
+        });
+    }
+    
+    document.getElementById('add-schedule-entry')?.addEventListener('click', () => {
+        scheduleEntries.push({
+            id: scheduleEntries.length,
+            days: ['monday','tuesday','wednesday','thursday','friday'],
+            open: '07:00',
+            close: '19:00'
+        });
+        renderScheduleEntries();
+    });
+    
+    function getScheduleJSON() {
+        const validEntries = scheduleEntries.filter(e => e.days.length > 0 && e.open && e.close);
+        if (validEntries.length === 0) return null;
+        return {
+            schedules: validEntries.map(e => ({ days: e.days, open: e.open, close: e.close })),
+            slot_duration: parseInt(document.getElementById('slot-duration').value) || 2
+        };
+    }
+    
+    // Initialize schedule UI
+    renderScheduleEntries();
+    
     // Edit button
     document.getElementById('edit-basic-info')?.addEventListener('click', () => {
         toggleBasicInfoSection(true);
@@ -3378,6 +3536,12 @@
                 }
             }
             
+            // Include store schedule data
+            const scheduleData = getScheduleJSON();
+            if (scheduleData) {
+                formData.append('store_schedule', JSON.stringify(scheduleData));
+            }
+            
             const response = await fetch('/api/seller/store/settings', {
                 method: 'POST',
                 headers: {
@@ -3404,6 +3568,21 @@
             document.getElementById('sum-description').classList.toggle('empty', !description);
             document.getElementById('sum-location').textContent = 
                 (street ? `${street}, ` : '') + `Brgy. ${barangay}, ${municipality}`;
+            
+            // Update schedule summary
+            const sumSchedule = document.getElementById('sum-schedule');
+            if (sumSchedule) {
+                if (scheduleData && scheduleData.schedules.length > 0) {
+                    sumSchedule.classList.remove('empty');
+                    sumSchedule.innerHTML = scheduleData.schedules.map(e => {
+                        const daysStr = e.days.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ');
+                        return `<div style="margin-bottom: 0.25rem;"><strong>${daysStr}</strong>: ${e.open} - ${e.close}</div>`;
+                    }).join('');
+                } else {
+                    sumSchedule.classList.add('empty');
+                    sumSchedule.textContent = 'Not configured (using default hours)';
+                }
+            }
             
             showToast('Store information saved successfully!', 'success');
             locationChanged = false;

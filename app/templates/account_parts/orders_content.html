@@ -1171,8 +1171,8 @@ const STATUS_CONFIG = {
     preparing:   { label: 'Preparing',  badge: 'badge-preparing',   icon: 'ri-box-1-line',          progress: 1 },
     done_preparing: { label: 'Ready',  badge: 'badge-done_preparing',   icon: 'ri-checkbox-line',          progress: 2 },
     processing:  { label: 'Preparing',  badge: 'badge-processing',  icon: 'ri-box-1-line',          progress: 1 },
-    on_delivery: { label: 'In Transit',  badge: 'badge-on_delivery', icon: 'ri-e-bike-line',         progress: 2 },
-    delivered:   { label: 'Delivered',  badge: 'badge-delivered',   icon: 'ri-checkbox-circle-line',progress: 3 },
+    on_delivery: { label: 'In Transit',  badge: 'badge-on_delivery', icon: 'ri-e-bike-line',         progress: 3 },
+    delivered:   { label: 'Delivered',  badge: 'badge-delivered',   icon: 'ri-checkbox-circle-line',progress: 4 },
     cancelled:   { label: 'Cancelled',  badge: 'badge-cancelled',   icon: 'ri-close-circle-line',   progress: -1 },
 };
 
@@ -1650,6 +1650,14 @@ function buildOrderDetailHTML(order) {
     const dateStr  = formatDate(order.date || order.created_at);
     const orderId  = order.order_number || `ORD-${String(order.id).padStart(4,'0')}`;
 
+    // Status badge (matching the card badge)
+    const statusBadge = `
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;">
+            <span class="order-status-badge ${cfg.badge}">
+                <i class="${cfg.icon}" style="margin-right:4px;"></i>${display.label}
+            </span>
+        </div>`;
+
     // Progress tracker (skip for cancelled)
     let progressHtml = '';
     if (display.key !== 'cancelled') {
@@ -1703,6 +1711,7 @@ function buildOrderDetailHTML(order) {
     const total    = order.total_amount ?? order.total ?? 0;
 
     return `
+        ${statusBadge}
         ${progressHtml}
 
         <!-- Items -->

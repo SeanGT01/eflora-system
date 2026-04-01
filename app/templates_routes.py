@@ -4551,6 +4551,97 @@ def store_detail(store_id):
 
 
 
+@templates_bp.route('/api/store/<int:store_id>/time-slots')
+def get_store_time_slots_web(store_id):
+    """Get available delivery time slots for a store (web/session-based, no JWT required)"""
+    from datetime import datetime as dt
+    
+    store = Store.query.get(store_id)
+    if not store:
+        return jsonify({'error': 'Store not found'}), 404
+    
+    schedule = store.store_schedule
+    if not schedule or not schedule.get('schedules'):
+        return jsonify({
+            'success': True,
+            'time_slots': [
+                {'label': '8:00 AM - 12:00 PM', 'value': '08:00-12:00'},
+                {'label': '12:00 PM - 3:00 PM', 'value': '12:00-15:00'},
+                {'label': '3:00 PM - 6:00 PM', 'value': '15:00-18:00'}
+            ],
+            'is_open': True,
+            'has_schedule': False
+        })
+    
+    date_str = request.args.get('date')
+    if date_str:
+        try:
+            target_date = dt.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    else:
+        target_date = dt.now()
+    
+    day_name = target_date.strftime('%A').lower()
+    slot_duration = schedule.get('slot_duration', 2)
+    
+    active_ranges = []
+    for entry in schedule['schedules']:
+        if day_name in [d.lower() for d in entry.get('days', [])]:
+            active_ranges.append({'open': entry['open'], 'close': entry['close']})
+    
+    if not active_ranges:
+        return jsonify({
+            'success': True,
+            'time_slots': [],
+            'is_open': False,
+            'has_schedule': True,
+            'day': day_name
+        })
+    
+    time_slots = []
+    for r in active_ranges:
+        open_h, open_m = map(int, r['open'].split(':'))
+        close_h, close_m = map(int, r['close'].split(':'))
+        current_h, current_m = open_h, open_m
+        
+        while True:
+            end_h = current_h + slot_duration
+            end_m = current_m
+            if end_h > close_h or (end_h == close_h and end_m > close_m):
+                remaining = (close_h - current_h) + (close_m - current_m) / 60
+                if remaining >= 1:
+                    end_h, end_m = close_h, close_m
+                else:
+                    break
+            
+            start_str = f"{current_h:02d}:{current_m:02d}"
+            end_str = f"{end_h:02d}:{end_m:02d}"
+            
+            def fmt(h, m):
+                p = 'AM' if h < 12 else 'PM'
+                dh = h % 12 or 12
+                return f"{dh}:{m:02d} {p}"
+            
+            time_slots.append({
+                'label': f"{fmt(current_h, current_m)} - {fmt(end_h, end_m)}",
+                'value': f"{start_str}-{end_str}"
+            })
+            
+            current_h, current_m = end_h, end_m
+            if current_h >= close_h and current_m >= close_m:
+                break
+    
+    return jsonify({
+        'success': True,
+        'time_slots': time_slots,
+        'is_open': True,
+        'has_schedule': True,
+        'day': day_name,
+        'slot_duration': slot_duration
+    })
+
+
 @templates_bp.route('/seller/store-settings')
 @seller_required
 def store_settings():
@@ -4729,6 +4820,18 @@ def update_store_settings():
                 store.location = from_shape(Point(store.longitude, store.latitude), srid=4326)
             except Exception as e:
                 print(f"⚠️ Could not update PostGIS location: {e}")
+        
+        # ===== STORE SCHEDULE =====
+        if 'store_schedule' in data:
+            schedule_value = data['store_schedule']
+            if isinstance(schedule_value, str):
+                try:
+                    store.store_schedule = json.loads(schedule_value)
+                except:
+                    pass
+            elif isinstance(schedule_value, dict):
+                store.store_schedule = schedule_value
+            print(f"✅ Updated store_schedule: {store.store_schedule}")
         
         # ===== DELIVERY SETTINGS =====
         old_method = store.delivery_method

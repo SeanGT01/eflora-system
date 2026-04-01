@@ -2235,6 +2235,71 @@ function getTodayDateString() {
     return today.toISOString().split('T')[0];
 }
 
+// Fetch time slots from store schedule API for checkout modal
+async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
+    const timeSelect = document.getElementById(`storeDeliveryTime_${tempId}`);
+    const closedMsg = document.getElementById(`storeClosedMsg_${tempId}`);
+    if (!timeSelect) return;
+    
+    // Show loading state
+    timeSelect.innerHTML = '<option value="">Loading...</option>';
+    timeSelect.disabled = true;
+    if (closedMsg) closedMsg.style.display = 'none';
+    
+    // Get the preferred time from product_details.html (sessionStorage) for pre-selection
+    const savedPrefs = JSON.parse(sessionStorage.getItem('deliveryPreferences') || '{}');
+    const preferredTime = storeDeliveryPreferences[tempId]?.selectedTime || savedPrefs.selectedTime || '';
+    
+    try {
+        const resp = await fetch(`/api/store/${storeId}/time-slots?date=${dateStr}`);
+        const data = await resp.json();
+        
+        if (data.success) {
+            if (!data.is_open && data.has_schedule) {
+                // Store is closed on this day
+                timeSelect.innerHTML = '<option value="">— Closed —</option>';
+                timeSelect.disabled = true;
+                if (closedMsg) closedMsg.style.display = 'block';
+                return;
+            }
+            
+            if (data.time_slots && data.time_slots.length > 0) {
+                timeSelect.innerHTML = '';
+                let foundPreferred = false;
+                data.time_slots.forEach(slot => {
+                    const opt = document.createElement('option');
+                    opt.value = slot.value;
+                    opt.textContent = slot.label;
+                    if (slot.value === preferredTime) {
+                        opt.selected = true;
+                        foundPreferred = true;
+                    }
+                    timeSelect.appendChild(opt);
+                });
+                // If preferred time wasn't found, select first
+                if (!foundPreferred) {
+                    timeSelect.selectedIndex = 0;
+                }
+                timeSelect.disabled = false;
+                // Save the selected time
+                setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
+                return;
+            }
+        }
+    } catch (e) {
+        console.warn('Could not fetch store time slots, using defaults:', e);
+    }
+    
+    // Fallback to defaults
+    timeSelect.innerHTML = `
+        <option value="08:00-12:00" ${preferredTime === '08:00-12:00' ? 'selected' : ''}>8:00 AM - 12:00 PM</option>
+        <option value="12:00-15:00" ${preferredTime === '12:00-15:00' ? 'selected' : ''}>12:00 PM - 3:00 PM</option>
+        <option value="15:00-18:00" ${preferredTime === '15:00-18:00' ? 'selected' : ''}>3:00 PM - 6:00 PM</option>
+    `;
+    timeSelect.disabled = false;
+    setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
+}
+
 function cancelCheckout(showWarning = false) {
     const sessionId = sessionStorage.getItem('active_checkout');
     if (sessionId) {
@@ -3218,6 +3283,18 @@ async function proceedCheckout() {
         const currentOrder = checkoutOrders[currentOrderIndex];
         const proofState = getProofState(currentOrder.temp_id);
 
+        // Validate delivery date/time
+        const timeSelect = document.getElementById(`storeDeliveryTime_${currentOrder.temp_id}`);
+        const closedMsg = document.getElementById(`storeClosedMsg_${currentOrder.temp_id}`);
+        if (closedMsg && closedMsg.style.display !== 'none') {
+            showToast('Store is closed on the selected date. Please pick a different date.', 'error');
+            return;
+        }
+        if (timeSelect && (!timeSelect.value || timeSelect.disabled)) {
+            showToast('Please select a valid delivery time slot', 'error');
+            return;
+        }
+
         if (!proofState.hasUploaded) {
             if (!proofState.hasPending) {
                 showToast('Please choose a payment proof for this order first', 'error');
@@ -3458,6 +3535,9 @@ function displayGCashPayment() {
         <!-- Phase 1: Per-store delivery date/time picker -->
         <div style="margin-bottom: 16px; padding: 12px; background: #f9f5f3; border-radius: var(--radius-md); border: 1px solid var(--border);">
             <h5 style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--charcoal);">Requested Delivery</h5>
+            <div id="storeClosedMsg_${order.temp_id}" style="display: none; padding: 10px; background: rgba(192,57,43,0.08); border: 1px solid rgba(192,57,43,0.2); border-radius: var(--radius-md); margin-bottom: 10px; color: #c0392b; font-size: 12px; font-weight: 600;">
+                <i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.
+            </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div>
                     <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--muted);">Date</label>
@@ -3465,10 +3545,8 @@ function displayGCashPayment() {
                 </div>
                 <div>
                     <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--muted);">Time Slot</label>
-                    <select id="storeDeliveryTime_${order.temp_id}" value="${deliveryTime}" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12px;" required>
-                        <option value="08:00-12:00" ${deliveryTime === '08:00-12:00' ? 'selected' : ''}>8:00 AM - 12:00 PM</option>
-                        <option value="12:00-15:00" ${deliveryTime === '12:00-15:00' ? 'selected' : ''}>12:00 PM - 3:00 PM</option>
-                        <option value="15:00-18:00" ${deliveryTime === '15:00-18:00' ? 'selected' : ''}>3:00 PM - 6:00 PM</option>
+                    <select id="storeDeliveryTime_${order.temp_id}" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12px;" required>
+                        <option value="">Loading...</option>
                     </select>
                 </div>
             </div>
@@ -3531,8 +3609,10 @@ function displayGCashPayment() {
     const timeInput = document.getElementById(`storeDeliveryTime_${order.temp_id}`);
     
     if (dateInput) {
+        // Fetch time slots when date changes
         dateInput.addEventListener('change', (e) => {
-            setStoreDeliveryPreference(order.temp_id, e.target.value, getStoreDeliveryTime(order.temp_id));
+            setStoreDeliveryPreference(order.temp_id, e.target.value, '');
+            fetchCheckoutTimeSlots(order.store_id, order.temp_id, e.target.value);
         });
     }
     
@@ -3541,6 +3621,9 @@ function displayGCashPayment() {
             setStoreDeliveryPreference(order.temp_id, getStoreDeliveryDate(order.temp_id), e.target.value);
         });
     }
+    
+    // Fetch time slots for the initial date
+    fetchCheckoutTimeSlots(order.store_id, order.temp_id, deliveryDate);
     
     updateCheckoutPaymentAction();
 
