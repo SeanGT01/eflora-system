@@ -640,7 +640,7 @@
 
         <!-- Actions -->
         <div class="store-hero-actions">
-            <span class="status-open">Open Now</span>
+            <span class="status-open" id="storeStatusHero">Open Now</span>
             {% if store.contact_number %}
             <a href="tel:{{ store.contact_number }}" class="btn btn-ghost"
                style="border-color:rgba(250,246,240,0.2); color:var(--cream); font-size:13px;">
@@ -823,9 +823,16 @@
                     <i class="ri-time-line"></i>
                     <div>
                         <div class="info-row-label">Status</div>
-                        <div class="info-row-value">
+                        <div class="info-row-value" id="storeStatusSidebar">
                             <span class="status-open">Open Now</span>
                         </div>
+                    </div>
+                </div>
+                <div class="info-row" id="storeHoursRow" style="display:none;">
+                    <i class="ri-calendar-schedule-line"></i>
+                    <div>
+                        <div class="info-row-label">Weekly Hours</div>
+                        <div class="info-row-value" id="storeHoursValue" style="font-size:12px; line-height:1.6;"></div>
                     </div>
                 </div>
                 <div class="info-row">
@@ -1041,6 +1048,139 @@ function viewProduct(productId) {
         if (typeof window.updateCartCount === 'function') {
             window.updateCartCount();
         }
+
+        // Check store status on load
+        checkStoreStatus();
+        // Update every minute
+        setInterval(checkStoreStatus, 60000);
     });
+
+    // Get current time in Philippine timezone (UTC+8)
+    function getPhilippineTime() {
+        const now = new Date();
+        const phTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+        return phTime;
+    }
+
+    // Display current Philippine time
+    function updateCurrentTime() {
+        const phTime = getPhilippineTime();
+        const hours = String(phTime.getHours()).padStart(2, '0');
+        const minutes = String(phTime.getMinutes()).padStart(2, '0');
+        const seconds = String(phTime.getSeconds()).padStart(2, '0');
+        const ampm = phTime.getHours() >= 12 ? 'PM' : 'AM';
+        
+        const timeDisplay = `${hours}:${minutes}:${seconds} ${ampm}`;
+        const currentTimeValue = document.getElementById('currentTimeValue');
+        if (currentTimeValue) {
+            currentTimeValue.textContent = timeDisplay;
+        }
+    }
+
+    // Check if store is currently open
+    function checkStoreStatus() {
+        const storeSchedule = {{ store.store_schedule | tojson if store.store_schedule else 'null' }};
+        
+        if (!storeSchedule || !storeSchedule.schedules) {
+            // No schedule configured, show default
+            updateStatusDisplay(true, null, null);
+            return;
+        }
+
+        const phTime = getPhilippineTime();
+        const dayName = phTime.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+        const currentMinutes = phTime.getHours() * 60 + phTime.getMinutes();
+        let isOpen = false;
+        let todayHours = [];
+        
+        // Build full week schedule
+        const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        let weekSchedule = {};
+        
+        daysOfWeek.forEach(day => {
+            weekSchedule[day] = [];
+        });
+
+        // Check each schedule entry for today and build week schedule
+        storeSchedule.schedules.forEach(entry => {
+            entry.days.forEach(day => {
+                const dayLower = day.toLowerCase();
+                if (dayLower in weekSchedule) {
+                    weekSchedule[dayLower].push({
+                        open: entry.open,
+                        close: entry.close
+                    });
+                }
+            });
+            
+            if (entry.days.map(d => d.toLowerCase()).includes(dayName)) {
+                const [oh, om] = entry.open.split(':').map(Number);
+                const [ch, cm] = entry.close.split(':').map(Number);
+                const openMinutes = oh * 60 + om;
+                const closeMinutes = ch * 60 + cm;
+                
+                todayHours.push({ open: entry.open, close: entry.close });
+                
+                // Check if current time falls within this range
+                if (currentMinutes >= openMinutes && currentMinutes < closeMinutes) {
+                    isOpen = true;
+                }
+            }
+        });
+
+        updateStatusDisplay(isOpen, todayHours, weekSchedule);
+    }
+
+    // Format time to 12-hour AM/PM format
+    function formatTime12Hour(timeStr) {
+        const [h, m] = timeStr.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    function updateStatusDisplay(isOpen, todayHours, weekSchedule) {
+        const statusHero = document.getElementById('storeStatusHero');
+        const statusSidebar = document.getElementById('storeStatusSidebar');
+        const hoursRow = document.getElementById('storeHoursRow');
+        const hoursValue = document.getElementById('storeHoursValue');
+
+        if (isOpen) {
+            const statusHTML = '<span class="status-open"><i class="ri-checkbox-circle-line" style="margin-right:5px;"></i>Open Now</span>';
+            if (statusHero) statusHero.innerHTML = statusHTML;
+            if (statusSidebar) statusSidebar.innerHTML = statusHTML;
+        } else {
+            const statusHTML = '<span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:#c0392b;"><i class="ri-close-circle-line"></i> Closed</span>';
+            if (statusHero) statusHero.innerHTML = statusHTML;
+            if (statusSidebar) statusSidebar.innerHTML = statusHTML;
+        }
+
+        // Display full week schedule
+        if (weekSchedule) {
+            hoursRow.style.display = 'flex';
+            const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            const dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+            
+            let html = '<div style="width:100%;background:var(--cream);border-radius:var(--radius-md);padding:0.75rem;margin-top:0.5rem;">';
+            daysOfWeek.forEach((dayName, idx) => {
+                const dayKey = dayKeys[idx];
+                const times = weekSchedule[dayKey];
+                let timeStr = 'Closed';
+                const isOpen = times && times.length > 0;
+                
+                if (isOpen) {
+                    timeStr = times.map(t => `${formatTime12Hour(t.open)}-${formatTime12Hour(t.close)}`).join(' / ');
+                }
+                
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:12px;">
+                    <span style="font-weight:600;color:var(--charcoal);min-width:45px;">${dayName.slice(0, 3)}</span>
+                    <span style="text-align:right;color:${isOpen ? '#276749' : 'var(--muted)'};">${timeStr}</span>
+                </div>`;
+            });
+            html += '</div>';
+            
+            hoursValue.innerHTML = html;
+        }
+    }
 </script>
 {% endblock %}

@@ -4610,7 +4610,7 @@ def get_store_time_slots_web(store_id):
             end_m = current_m
             if end_h > close_h or (end_h == close_h and end_m > close_m):
                 remaining = (close_h - current_h) + (close_m - current_m) / 60
-                if remaining >= 1:
+                if remaining > 0:  # Allow any remaining time as final slot (even < 1 hour)
                     end_h, end_m = close_h, close_m
                 else:
                     break

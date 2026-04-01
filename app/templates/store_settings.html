@@ -3398,13 +3398,40 @@
                     ${DAY_LABELS[d]}</button>`;
             }).join('');
             
+            // Check for time validation issues
+            const timeError = entry.open && entry.close && entry.open >= entry.close 
+                ? '<div class="schedule-error" style="color: #c0392b; font-size: 12px; margin-top: 0.5rem;"><i class="ri-error-warning-line"></i> Close time must be after open time</div>' : '';
+            
+            // Check for overlap with other entries on same days
+            let overlapWarning = '';
+            if (entry.days.length > 0 && entry.open && entry.close && entry.open < entry.close) {
+                for (let j = 0; j < scheduleEntries.length; j++) {
+                    if (j === idx) continue;
+                    const other = scheduleEntries[j];
+                    const sharedDays = entry.days.filter(d => other.days.includes(d));
+                    if (sharedDays.length > 0 && other.open && other.close && other.open < other.close) {
+                        if (entry.open < other.close && entry.close > other.open) {
+                            const dayNames = sharedDays.map(d => DAY_LABELS[d]).join(', ');
+                            overlapWarning = `<div class="schedule-error" style="color: #e67e22; font-size: 12px; margin-top: 0.5rem;"><i class="ri-alert-line"></i> Overlaps with Time Block ${j + 1} on ${dayNames}</div>`;
+                            break;
+                        }
+                    }
+                }
+            }
+
             div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                     <span style="font-weight: 600; font-size: 13px; color: var(--charcoal);">Time Block ${idx + 1}</span>
-                    <button type="button" class="remove-schedule-entry" data-idx="${idx}" 
-                        style="background: none; border: none; color: #c0392b; cursor: pointer; font-size: 16px; padding: 0.25rem;" title="Remove">
-                        <i class="ri-delete-bin-line"></i>
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <button type="button" class="copy-schedule-entry" data-idx="${idx}" 
+                            style="background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--charcoal); cursor: pointer; font-size: 12px; padding: 0.25rem 0.5rem; display: flex; align-items: center; gap: 0.25rem; transition: all 0.15s ease;" title="Copy time to other days">
+                            <i class="ri-file-copy-line"></i> Copy
+                        </button>
+                        <button type="button" class="remove-schedule-entry" data-idx="${idx}" 
+                            style="background: none; border: none; color: #c0392b; cursor: pointer; font-size: 16px; padding: 0.25rem;" title="Remove">
+                            <i class="ri-delete-bin-line"></i>
+                        </button>
+                    </div>
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 0.75rem;">
                     ${dayChipsHTML}
@@ -3413,6 +3440,24 @@
                     <input type="time" class="form-control schedule-open" data-idx="${idx}" value="${entry.open}" style="width: auto; min-width: 120px;">
                     <span style="color: var(--muted); font-weight: 600;">to</span>
                     <input type="time" class="form-control schedule-close" data-idx="${idx}" value="${entry.close}" style="width: auto; min-width: 120px;">
+                </div>
+                ${timeError}
+                ${overlapWarning}
+                <div class="copy-dropdown" id="copy-dropdown-${idx}" style="display: none; margin-top: 0.75rem; background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                    <div style="font-size: 12px; font-weight: 600; color: var(--charcoal); margin-bottom: 0.5rem;">Apply this time (${entry.open} - ${entry.close}) to:</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 0.625rem;">
+                        ${ALL_DAYS.map(d => {
+                            const isAlready = entry.days.includes(d);
+                            return `<button type="button" class="copy-day-chip" data-entry="${idx}" data-day="${d}"
+                                style="padding: 0.3rem 0.6rem; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: ${isAlready ? 'default' : 'pointer'}; border: 1.5px solid ${isAlready ? 'var(--border)' : 'var(--deep-rose)'}; background: ${isAlready ? 'var(--cream)' : 'var(--warm-white)'}; color: ${isAlready ? 'var(--muted)' : 'var(--deep-rose)'}; opacity: ${isAlready ? '0.5' : '1'}; transition: all 0.15s ease;"
+                                ${isAlready ? 'disabled' : ''}>
+                                ${DAY_LABELS[d]}</button>`;
+                        }).join('')}
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="button" class="copy-all-days" data-idx="${idx}" style="font-size: 12px; padding: 0.3rem 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--deep-rose); background: var(--deep-rose); color: white; cursor: pointer; font-weight: 600;">Select All</button>
+                        <button type="button" class="copy-close" data-idx="${idx}" style="font-size: 12px; padding: 0.3rem 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--warm-white); color: var(--charcoal); cursor: pointer;">Done</button>
+                    </div>
                 </div>
             `;
             
@@ -3444,12 +3489,57 @@
         container.querySelectorAll('.schedule-open').forEach(input => {
             input.addEventListener('change', () => {
                 scheduleEntries[parseInt(input.dataset.idx)].open = input.value;
+                renderScheduleEntries();
             });
         });
         
         container.querySelectorAll('.schedule-close').forEach(input => {
             input.addEventListener('change', () => {
                 scheduleEntries[parseInt(input.dataset.idx)].close = input.value;
+                renderScheduleEntries();
+            });
+        });
+        
+        // Copy button toggles dropdown
+        container.querySelectorAll('.copy-schedule-entry').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.idx);
+                const dropdown = document.getElementById(`copy-dropdown-${idx}`);
+                // Close all other dropdowns
+                container.querySelectorAll('.copy-dropdown').forEach(dd => {
+                    if (dd.id !== `copy-dropdown-${idx}`) dd.style.display = 'none';
+                });
+                dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+            });
+        });
+        
+        // Copy day chips — add the day to this entry
+        container.querySelectorAll('.copy-day-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                if (chip.disabled) return;
+                const eIdx = parseInt(chip.dataset.entry);
+                const day = chip.dataset.day;
+                const entry = scheduleEntries[eIdx];
+                if (!entry.days.includes(day)) {
+                    entry.days.push(day);
+                    renderScheduleEntries();
+                }
+            });
+        });
+        
+        // Copy all days
+        container.querySelectorAll('.copy-all-days').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.idx);
+                scheduleEntries[idx].days = [...ALL_DAYS];
+                renderScheduleEntries();
+            });
+        });
+        
+        // Close copy dropdown
+        container.querySelectorAll('.copy-close').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById(`copy-dropdown-${btn.dataset.idx}`).style.display = 'none';
             });
         });
     }
@@ -3467,6 +3557,29 @@
     function getScheduleJSON() {
         const validEntries = scheduleEntries.filter(e => e.days.length > 0 && e.open && e.close);
         if (validEntries.length === 0) return null;
+        
+        // Validate: close must be after open
+        for (const entry of validEntries) {
+            if (entry.open >= entry.close) {
+                showToast(`Invalid time block: ${entry.open} to ${entry.close}. Close time must be after open time.`, 'error');
+                return 'INVALID';
+            }
+        }
+        
+        // Validate: no overlapping blocks on the same day
+        for (let i = 0; i < validEntries.length; i++) {
+            for (let j = i + 1; j < validEntries.length; j++) {
+                const a = validEntries[i];
+                const b = validEntries[j];
+                const sharedDays = a.days.filter(d => b.days.includes(d));
+                if (sharedDays.length > 0 && a.open < b.close && a.close > b.open) {
+                    const dayNames = sharedDays.map(d => DAY_LABELS[d]).join(', ');
+                    showToast(`Time blocks ${i+1} and ${j+1} overlap on ${dayNames}. Please fix before saving.`, 'error');
+                    return 'INVALID';
+                }
+            }
+        }
+        
         return {
             schedules: validEntries.map(e => ({ days: e.days, open: e.open, close: e.close })),
             slot_duration: parseInt(document.getElementById('slot-duration').value) || 2
@@ -3538,6 +3651,11 @@
             
             // Include store schedule data
             const scheduleData = getScheduleJSON();
+            if (scheduleData === 'INVALID') {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                return;
+            }
             if (scheduleData) {
                 formData.append('store_schedule', JSON.stringify(scheduleData));
             }

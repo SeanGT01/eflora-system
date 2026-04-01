@@ -2235,6 +2235,19 @@ function getTodayDateString() {
     return today.toISOString().split('T')[0];
 }
 
+// Get current time in Philippine timezone (UTC+8)
+function getPhilippineTime() {
+    const now = new Date();
+    const phTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+    return phTime;
+}
+
+// Get today's date in Philippine timezone
+function getPhilippineTodayStr() {
+    const phTime = getPhilippineTime();
+    return phTime.toISOString().split('T')[0];
+}
+
 // Fetch time slots from store schedule API for checkout modal
 async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
     const timeSelect = document.getElementById(`storeDeliveryTime_${tempId}`);
@@ -2266,19 +2279,56 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
             if (data.time_slots && data.time_slots.length > 0) {
                 timeSelect.innerHTML = '';
                 let foundPreferred = false;
+                let hasAvailable = false;
+                console.log(`✅ Fetched ${data.time_slots.length} custom time slots for store ${storeId}`);
+                
+                const phTime = getPhilippineTime();
+                const todayStr = getPhilippineTodayStr();
+                const isToday = dateStr === todayStr;
+                const currentMinutes = phTime.getHours() * 60 + phTime.getMinutes();
+                
                 data.time_slots.forEach(slot => {
                     const opt = document.createElement('option');
                     opt.value = slot.value;
-                    opt.textContent = slot.label;
-                    if (slot.value === preferredTime) {
-                        opt.selected = true;
-                        foundPreferred = true;
+                    
+                    // Check if slot has passed for today (using PH time)
+                    let isPast = false;
+                    if (isToday && slot.value.includes('-')) {
+                        const endTime = slot.value.split('-')[1];
+                        const [eh, em] = endTime.split(':').map(Number);
+                        isPast = currentMinutes >= (eh * 60 + em);
+                    }
+                    
+                    if (isPast) {
+                        opt.textContent = slot.label + ' (Passed)';
+                        opt.disabled = true;
+                        opt.style.color = '#999';
+                    } else {
+                        opt.textContent = slot.label;
+                        hasAvailable = true;
+                        if (slot.value === preferredTime) {
+                            opt.selected = true;
+                            foundPreferred = true;
+                        }
                     }
                     timeSelect.appendChild(opt);
                 });
-                // If preferred time wasn't found, select first
+                
+                if (!hasAvailable) {
+                    // All slots passed
+                    timeSelect.innerHTML = '<option value="">All slots have passed</option>';
+                    timeSelect.disabled = true;
+                    if (closedMsg) {
+                        closedMsg.style.display = 'block';
+                        closedMsg.innerHTML = '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another date.';
+                    }
+                    return;
+                }
+                
+                // If preferred time wasn't found or was past, select first available
                 if (!foundPreferred) {
-                    timeSelect.selectedIndex = 0;
+                    const firstAvail = [...timeSelect.options].find(o => !o.disabled);
+                    if (firstAvail) firstAvail.selected = true;
                 }
                 timeSelect.disabled = false;
                 // Save the selected time
@@ -2290,13 +2340,51 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
         console.warn('Could not fetch store time slots, using defaults:', e);
     }
     
-    // Fallback to defaults
-    timeSelect.innerHTML = `
-        <option value="08:00-12:00" ${preferredTime === '08:00-12:00' ? 'selected' : ''}>8:00 AM - 12:00 PM</option>
-        <option value="12:00-15:00" ${preferredTime === '12:00-15:00' ? 'selected' : ''}>12:00 PM - 3:00 PM</option>
-        <option value="15:00-18:00" ${preferredTime === '15:00-18:00' ? 'selected' : ''}>3:00 PM - 6:00 PM</option>
-    `;
-    timeSelect.disabled = false;
+    // Fallback to defaults (store schedule not configured)
+    console.warn('⚠️ No custom time slots available. Using default times (8 AM - 6 PM). Store schedule may not be configured.');
+    const phTime = getPhilippineTime();
+    const todayStr = getPhilippineTodayStr();
+    const isToday = dateStr === todayStr;
+    const currentMinutes = phTime.getHours() * 60 + phTime.getMinutes();
+    
+    const defaultSlots = [
+        { value: '08:00-12:00', label: '8:00 AM - 12:00 PM', end: 12*60 },
+        { value: '12:00-15:00', label: '12:00 PM - 3:00 PM', end: 15*60 },
+        { value: '15:00-18:00', label: '3:00 PM - 6:00 PM', end: 18*60 }
+    ];
+    
+    let hasAvailableDefault = false;
+    timeSelect.innerHTML = '';
+    
+    defaultSlots.forEach(slot => {
+        const opt = document.createElement('option');
+        opt.value = slot.value;
+        
+        let isPast = isToday && currentMinutes >= slot.end;
+        if (isPast) {
+            opt.textContent = slot.label + ' (Passed)';
+            opt.disabled = true;
+            opt.style.color = '#999';
+        } else {
+            opt.textContent = slot.label;
+            hasAvailableDefault = true;
+            if (slot.value === preferredTime) {
+                opt.selected = true;
+            }
+        }
+        timeSelect.appendChild(opt);
+    });
+    
+    if (!hasAvailableDefault && isToday) {
+        timeSelect.innerHTML = '<option value="">Store schedule not configured</option>';
+        timeSelect.disabled = true;
+        if (closedMsg) {
+            closedMsg.style.display = 'block';
+            closedMsg.innerHTML = '<i class="ri-alert-line"></i> Store schedule is not configured. Please contact the store.';
+        }
+    } else {
+        timeSelect.disabled = false;
+    }
     setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
 }
 

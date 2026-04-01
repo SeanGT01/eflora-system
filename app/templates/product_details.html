@@ -2197,12 +2197,26 @@ function filterAddons(cat, btn) {
    let selectedTime = null;
    let storeIsOpen = true;
    
+   // Get current time in Philippine timezone (UTC+8)
+   function getPhilippineTime() {
+       const now = new Date();
+       const phTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+       return phTime;
+   }
+   
+   // Get today's date in Philippine timezone
+   function getPhilippineTodayStr() {
+       const phTime = getPhilippineTime();
+       return phTime.toISOString().split('T')[0];
+   }
+   
    // Time slots - will be fetched from store schedule API
    let timeSlots = [
        { label: '8:00 AM - 12:00 PM', value: '08:00-12:00' },
        { label: '12:00 PM - 3:00 PM', value: '12:00-15:00' },
        { label: '3:00 PM - 6:00 PM', value: '15:00-18:00' }
    ];
+   let gotCustomTimeSlots = false;  // Track if API returned custom slots
    
    const STORE_ID = {{ product.store_id }};
    
@@ -2213,10 +2227,16 @@ function filterAddons(cat, btn) {
            const data = await resp.json();
            if (data.success && data.time_slots && data.time_slots.length > 0) {
                timeSlots = data.time_slots;
+               gotCustomTimeSlots = true;
+               console.log('✅ Fetched custom time slots from API:', timeSlots);
+           } else {
+               gotCustomTimeSlots = false;
+               console.warn('⚠️ No custom time slots from API, using defaults. Store schedule may not be configured.');
            }
            return data;
        } catch (e) {
-           console.warn('Could not fetch store time slots, using defaults:', e);
+           gotCustomTimeSlots = false;
+           console.warn('❌ Could not fetch store time slots, using defaults:', e);
            return null;
        }
    }
@@ -2294,20 +2314,58 @@ function buildTimeOptions() {
         return;
     }
     
+    const phTime = getPhilippineTime();
+    const todayStr = getPhilippineTodayStr();
+    const isToday = selectedDate === todayStr;
+    const currentMinutes = phTime.getHours() * 60 + phTime.getMinutes();
+    let firstAvailable = null;
+    
+    console.log(`📅 Date: ${selectedDate}, Current PH time: ${phTime.getHours()}:${String(phTime.getMinutes()).padStart(2, '0')}, Available slots: ${timeSlots.length}`);
+    
     timeSlots.forEach((slot, index) => {
         const div = document.createElement('div');
         div.className = 'time-option';
         div.dataset.time = slot.value;
-        div.innerHTML = `<i class="ri-time-line"></i> ${slot.label}`;
         
-        if (index === 0) {
-            div.classList.add('selected');
-            selectedTime = slot.value;
+        // Check if this slot has passed (compare end time of slot with current PH time)
+        let isPast = false;
+        if (isToday && slot.value.includes('-')) {
+            const endTime = slot.value.split('-')[1]; // e.g. "12:00"
+            const [eh, em] = endTime.split(':').map(Number);
+            const endMinutes = eh * 60 + em;
+            isPast = currentMinutes >= endMinutes;
+            console.log(`  Slot ${index}: ${slot.label} (ends ${eh}:${String(em).padStart(2, '0')}) - ${isPast ? 'PASSED ❌' : 'AVAILABLE ✅'}`);
         }
         
-        div.addEventListener('click', () => selectTime(div));
+        if (isPast) {
+            div.classList.add('disabled');
+            div.style.opacity = '0.4';
+            div.style.cursor = 'not-allowed';
+            div.style.pointerEvents = 'none';
+            div.innerHTML = `<i class="ri-time-line"></i> ${slot.label} <span style="font-size: 11px; color: var(--muted);">(Passed)</span>`;
+        } else {
+            div.innerHTML = `<i class="ri-time-line"></i> ${slot.label}`;
+            if (!firstAvailable) firstAvailable = div;
+            div.addEventListener('click', () => selectTime(div));
+        }
+        
         container.appendChild(div);
     });
+    
+    // Auto-select first available slot
+    if (firstAvailable) {
+        firstAvailable.classList.add('selected');
+        selectedTime = firstAvailable.dataset.time;
+    } else if (isToday) {
+        // All slots have passed
+        const message = !gotCustomTimeSlots 
+            ? '<p style="color: var(--orange); font-size: 0.9rem;"><i class="ri-alert-line"></i> Store schedule not configured. Please contact the store.</p>'
+            : '<p style="color: var(--terracotta); font-size: 0.9rem;"><i class="ri-time-line"></i> All delivery slots for today have passed. Please select another date.</p>';
+        container.innerHTML = message;
+        selectedTime = null;
+        storeIsOpen = false;
+        syncPurchaseActions();
+    }
 }
 
 function selectTime(el) {

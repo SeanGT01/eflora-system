@@ -821,9 +821,9 @@ def get_store_time_slots(store_id):
             
             # Don't exceed closing time
             if end_h > close_h or (end_h == close_h and end_m > close_m):
-                # If there's remaining time of at least 1 hour, make a shorter slot
+                # If there's remaining time of any amount, make a shorter slot
                 remaining = (close_h - current_h) + (close_m - current_m) / 60
-                if remaining >= 1:
+                if remaining > 0:  # Allow any remaining time as final slot (even < 1 hour)
                     end_h = close_h
                     end_m = close_m
                 else:
