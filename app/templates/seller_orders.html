@@ -484,6 +484,78 @@
         cursor: pointer;
     }
 
+    /* Batch Actions Styles */
+    .order-checkbox {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+    }
+
+    .batch-actions-toolbar {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: var(--light-rose);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-base);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .batch-info {
+        flex: 1;
+        font-size: 0.95rem;
+        color: var(--charcoal);
+        font-weight: 500;
+    }
+
+    .batch-action-btn {
+        padding: 0.5rem 1.5rem;
+        background: var(--deep-rose);
+        color: white;
+        border: none;
+        border-radius: var(--radius-base);
+        cursor: pointer;
+        font-weight: 600;
+        transition: background 0.3s ease;
+    }
+
+    .batch-action-btn:hover {
+        background: var(--rose-hover);
+    }
+
+    .batch-action-btn:disabled {
+        background: var(--border-light);
+        cursor: not-allowed;
+        opacity: 0.6;
+    }
+
+    .batch-close-btn {
+        background: transparent;
+        color: var(--charcoal);
+        border: 1px solid var(--border-light);
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        border-radius: var(--radius-base);
+        transition: border-color 0.3s ease;
+    }
+
+    .batch-close-btn:hover {
+        border-color: var(--deep-rose);
+    }
+
     @media (max-width: 900px) {
         .details-grid {
             grid-template-columns: 1fr;
@@ -720,10 +792,29 @@
             </div>
         </div>
 
+        <!-- Batch Actions Toolbar -->
+        <div id="batchActionsToolbar" class="batch-actions-toolbar" style="display: none;">
+            <div class="batch-info" id="batchInfo">
+                <span id="batchSelectedCount">0</span> order(s) selected
+            </div>
+            <button type="button" class="batch-action-btn" id="batchMarkDoneBtn">
+                <i class="ri-check-line"></i> Mark as Done
+            </button>
+            <button type="button" class="batch-close-btn" id="batchCancelBtn">Clear Selection</button>
+        </div>
+
         <div class="orders-table-wrap">
             <table class="orders-table">
                 <thead>
                     <tr>
+                        <th style="width: 36px; text-align: center;">
+                            <input 
+                                type="checkbox" 
+                                id="selectAllOrders" 
+                                class="order-checkbox batch-select-all" 
+                                title="Select all visible preparing orders"
+                            >
+                        </th>
                         <th>Order</th>
                         <th>Customer</th>
                         <th>Payment</th>
@@ -747,6 +838,16 @@
                             (order['items'] | map(attribute='product_name') | join(' '))
                         )|lower }}"
                     >
+                        <td style="width: 36px; text-align: center;">
+                            {% if order.status == 'preparing' %}
+                            <input 
+                                type="checkbox" 
+                                class="order-checkbox batch-order-checkbox" 
+                                data-order-id="{{ order.id }}"
+                                value="{{ order.id }}"
+                            >
+                            {% endif %}
+                        </td>
                         <td data-label="Order">
                             <div class="order-code">#{{ order.id }}</div>
                             <div class="order-subline">{{ order.order_type|capitalize }}</div>
@@ -1161,5 +1262,144 @@
             if (event.target === modal) closeModal(modal);
         });
     });
+
+    // ===== Batch Selection Feature =====
+    const batchActionsToolbar = document.getElementById('batchActionsToolbar');
+    const batchSelectedCount = document.getElementById('batchSelectedCount');
+    const batchMarkDoneBtn = document.getElementById('batchMarkDoneBtn');
+    const batchCancelBtn = document.getElementById('batchCancelBtn');
+    const selectAllCheckbox = document.getElementById('selectAllOrders');
+
+    let selectedOrderIds = new Set();
+
+    function updateBatchUI() {
+        const visiblePreparing = Array.from(document.querySelectorAll('.batch-order-checkbox')).filter(cb => {
+            return cb.closest('tr').style.display !== 'none';
+        });
+
+        batchSelectedCount.textContent = selectedOrderIds.size;
+        
+        if (selectedOrderIds.size > 0) {
+            batchActionsToolbar.style.display = 'flex';
+        } else {
+            batchActionsToolbar.style.display = 'none';
+        }
+
+        // Update select-all checkbox state
+        if (visiblePreparing.length > 0) {
+            const allChecked = visiblePreparing.every(cb => cb.checked);
+            const someChecked = visiblePreparing.some(cb => cb.checked);
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = someChecked && !allChecked;
+        } else {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+        }
+    }
+
+    // Handle individual checkboxes
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('batch-order-checkbox')) {
+            const orderId = parseInt(e.target.dataset.orderId);
+            if (e.target.checked) {
+                selectedOrderIds.add(orderId);
+            } else {
+                selectedOrderIds.delete(orderId);
+            }
+            updateBatchUI();
+        }
+    });
+
+    // Handle select-all checkbox
+    selectAllCheckbox.addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.batch-order-checkbox');
+        checkboxes.forEach(checkbox => {
+            // Only select visible checkboxes
+            if (checkbox.closest('tr').style.display !== 'none') {
+                checkbox.checked = this.checked;
+                const orderId = parseInt(checkbox.dataset.orderId);
+                if (this.checked) {
+                    selectedOrderIds.add(orderId);
+                } else {
+                    selectedOrderIds.delete(orderId);
+                }
+            }
+        });
+        updateBatchUI();
+    });
+
+    // Handle batch mark done
+    batchMarkDoneBtn.addEventListener('click', async function() {
+        if (selectedOrderIds.size === 0) return;
+
+        const orderIds = Array.from(selectedOrderIds);
+        const confirmMsg = `Mark ${orderIds.length} order(s) as Done Preparing?`;
+        if (!confirm(confirmMsg)) return;
+
+        batchMarkDoneBtn.disabled = true;
+        const originalText = batchMarkDoneBtn.innerHTML;
+        batchMarkDoneBtn.innerHTML = '<i class="ri-loader-4-line" style="animation:spin 1s linear infinite;"></i> Updating...';
+
+        let successCount = 0;
+        let failureCount = 0;
+
+        for (const orderId of orderIds) {
+            try {
+                const response = await fetch(`/api/seller/orders/${orderId}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: 'done_preparing' })
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    successCount++;
+                    // Remove checkbox and row styling
+                    const checkbox = document.querySelector(`.batch-order-checkbox[data-order-id="${orderId}"]`);
+                    if (checkbox) {
+                        checkbox.closest('tr').remove();
+                    }
+                    selectedOrderIds.delete(orderId);
+                } else {
+                    failureCount++;
+                }
+            } catch (error) {
+                failureCount++;
+            }
+        }
+
+        batchMarkDoneBtn.disabled = false;
+        batchMarkDoneBtn.innerHTML = originalText;
+
+        if (successCount > 0) {
+            showSellerAlert('success', `${successCount} order(s) marked as Done Preparing.`);
+        }
+        if (failureCount > 0) {
+            showSellerAlert('danger', `Failed to update ${failureCount} order(s).`);
+        }
+
+        selectedOrderIds.clear();
+        updateBatchUI();
+    });
+
+    // Handle batch cancel
+    batchCancelBtn.addEventListener('click', function() {
+        document.querySelectorAll('.batch-order-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        selectedOrderIds.clear();
+        updateBatchUI();
+    });
+
+    // Update batch UI when filters change
+    const originalApplySellerFilters = applySellerFilters;
+    applySellerFilters = function() {
+        originalApplySellerFilters();
+        updateBatchUI();
+    };
+
+    // Initialize UI
+    updateBatchUI();
 </script>
 {% endblock %}
