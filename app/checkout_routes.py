@@ -921,17 +921,33 @@ def buy_now_validate():
     try:
         user_id = request.user_id
         data = request.get_json() or {}
+        
+        print(f"📨 Request data received: {data}")
 
         product_id = data.get("product_id")
         variant_id = data.get("variant_id")
-        quantity = int(data.get("quantity", 1))
         address_id = data.get("delivery_address_id")
+        
+        try:
+            quantity = int(data.get("quantity", 1))
+        except (ValueError, TypeError) as e:
+            print(f"❌ Quantity conversion error: {e}")
+            return jsonify({"error": "quantity must be a valid integer"}), 400
+        
+        print(f"🔍 Parsed values:")
+        print(f"   product_id: {product_id} (type: {type(product_id)})")
+        print(f"   variant_id: {variant_id} (type: {type(variant_id)})")
+        print(f"   quantity: {quantity} (type: {type(quantity)})")
+        print(f"   address_id: {address_id} (type: {type(address_id)})")
 
         if not product_id:
+            print(f"❌ product_id validation failed: {product_id}")
             return jsonify({"error": "product_id is required"}), 400
         if not address_id:
+            print(f"❌ address_id validation failed: {address_id}")
             return jsonify({"error": "delivery_address_id is required"}), 400
         if quantity < 1:
+            print(f"❌ quantity validation failed: {quantity}")
             return jsonify({"error": "Quantity must be at least 1"}), 400
 
         product = Product.query.get(product_id)

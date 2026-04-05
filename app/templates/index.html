@@ -1862,19 +1862,8 @@
                         <i class="ri-eye-line"></i>
                     </button>
                     {% if product.stock_quantity > 0 and product.is_available %}
-                    <button class="overlay-btn" onclick="event.stopPropagation(); addToCart({
-                        id: {{ product.id }},
-                        name: '{{ product.name|replace('"', '\\"')|safe }}',
-                        price: {{ product.price }},
-                        store_id: {{ product.store_id }},
-                        store_name: '{{ product.store_name|replace('"', '\\"')|safe if product.store_name else 'Flower Shop' }}',
-                        image_url: '{{ product.image_url|safe if product.image_url else '' }}'
-                    })" title="Add to Cart">
+                    <button class="overlay-btn" onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.price }}, '')" title="Quick Add">
                         <i class="ri-shopping-bag-line"></i>
-                    </button>
-                    {% elif has_sellable_stock %}
-                    <button class="overlay-btn" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="Select Variant">
-                        <i class="ri-checkbox-circle-line"></i>
                     </button>
                     {% endif %}
                 </div>
@@ -1885,26 +1874,12 @@
                 <h3 class="product-title">{{ product.name }}</h3>
                 <div class="product-footer">
                     <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
-                    {% if product.stock_quantity > 0 and product.is_available %}
-                    <button class="add-btn" onclick="event.stopPropagation(); addToCart({
-                        id: {{ product.id }},
-                        name: '{{ product.name|replace('"', '\\"')|safe }}',
-                        price: {{ product.price }},
-                        store_id: {{ product.store_id }},
-                        store_name: '{{ product.store_name|replace('"', '\\"')|safe if product.store_name else 'Flower Shop' }}',
-                        image_url: '{{ product.image_url|safe if product.image_url else '' }}'
-                    })" title="Add to Cart">
-                        <i class="ri-add-circle-fill"></i>
+                    <button class="add-btn"
+                        {% if not product.is_available or product.stock_quantity == 0 %}disabled{% endif %}
+                        onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.price }}, '')"
+                        title="{{ 'Add to cart' if product.is_available and product.stock_quantity > 0 else 'Out of stock' }}">
+                        <i class="ri-add-line"></i>
                     </button>
-                    {% elif has_sellable_stock %}
-                    <button class="add-btn" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="Select Variant">
-                        <i class="ri-checkbox-circle-line"></i>
-                    </button>
-                    {% else %}
-                    <button class="add-btn" disabled style="opacity:0.4;cursor:not-allowed;" title="Out of Stock">
-                        <i class="ri-prohibition-line"></i>
-                    </button>
-                    {% endif %}
                 </div>
             </div>
         </div>
@@ -2215,5 +2190,75 @@ dots.forEach((dot, index) => {
         startAutoRotate();
     });
 });
+
+// Quick Add to Cart Function - Matches store_detail.html behavior
+async function quickAdd(productId, productName, productPrice, productCategory) {
+    // Get the button that was clicked
+    const button = event.currentTarget;
+    const originalHtml = button.innerHTML;
+    
+    // Show loading state
+    button.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+    button.disabled = true;
+    
+    try {
+        // Get the product card to extract image URL
+        const productCard = button.closest('.product-card');
+        const imageElement = productCard.querySelector('.product-image img');
+        const imageUrl = imageElement ? imageElement.src : '';
+        
+        // Create product object for the global addToCart function
+        const product = {
+            id: productId,
+            name: productName,
+            price: productPrice,
+            store_id: null,
+            store_name: 'Flower Shop',
+            image_url: imageUrl
+        };
+        
+        // Check if the global addToCart function exists (from base.html)
+        if (typeof window.addToCart === 'function') {
+            // Use the global function which handles both logged-in and guest users
+            await window.addToCart(product);
+            
+            // Show success message
+            showToast(`✓ ${productName} added to basket`);
+        } else {
+            // Fallback if global function doesn't exist
+            const response = await fetch('/api/cart/items', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_id: productId, quantity: 1 })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast(`✓ ${productName} added to basket`);
+                
+                // Try to update cart count if function exists
+                if (typeof window.updateCartCount === 'function') {
+                    window.updateCartCount();
+                }
+                
+                // Try to reload cart if function exists
+                if (typeof window.loadCart === 'function') {
+                    window.loadCart();
+                }
+            } else {
+                showToast(data.error || 'Could not add to cart');
+            }
+        }
+    } catch (error) {
+        console.error('Error adding to cart:', error);
+        showToast('Network error — please try again');
+    } finally {
+        // Restore button after a short delay
+        setTimeout(() => {
+            button.innerHTML = originalHtml;
+            button.disabled = false;
+        }, 500);
+    }
+}
 </script>
 {% endblock %}

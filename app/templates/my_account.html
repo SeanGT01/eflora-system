@@ -477,18 +477,6 @@
 <div class="account-wrapper">
     <!-- Sidebar -->
     <aside class="profile-sidebar">
-        <div class="sidebar-user">
-            <div class="sidebar-avatar">
-                {% if user and user.avatar_url %}
-                    <img src="{{ user.avatar_url }}" alt="{{ session.get('user_name','User') }}">
-                {% else %}
-                    {{ session.get('user_name','U')[0] }}
-                {% endif %}
-            </div>
-            <div class="sidebar-name">{{ session.get('user_name', 'My Account') }}</div>
-            <div class="sidebar-email">{{ session.get('user_email', '') }}</div>
-        </div>
-
         <nav class="sidebar-nav">
             <div class="sidebar-section-label">Account</div>
             <ul style="list-style:none;padding:0;">
@@ -679,12 +667,27 @@
         if (pf) {
             const nf = pf.cloneNode(true);
             pf.parentNode.replaceChild(nf, pf);
+            
+            // Explicitly get and disable the button
+            const submitBtn = nf.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true; // Start disabled
+                
+                // Add listeners to all inputs to enable button when changed
+                const inputs = nf.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="radio"], select, textarea');
+                inputs.forEach(input => {
+                    input.addEventListener('input', () => { submitBtn.disabled = false; });
+                    input.addEventListener('change', () => { submitBtn.disabled = false; });
+                });
+            }
+            
             nf.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const btn = this.querySelector('button[type="submit"]');
                 const orig = btn.innerHTML;
                 btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving…';
                 btn.disabled = true;
+                let saveSuccess = false;
                 try {
                     const formData = new FormData(this);
                     const otherInput = document.getElementById('gender_other');
@@ -695,6 +698,7 @@
                     const d = await r.json();
                     if (d.success) {
                         showToast('✓  Profile saved');
+                        saveSuccess = true;
 
                         // Keep the saved custom value in memory so it reappears when toggling back to "Other"
                         const otherInput = document.getElementById('gender_other');
@@ -703,14 +707,20 @@
                         }
 
                         updateGenderOtherVisibility();
+                        this.reset();
+                        btn.disabled = true; // Keep disabled after successful save
                     } else {
                         showToast('Error: ' + (d.error || 'Unknown error'));
+                        btn.disabled = false; // Enable on error so user can retry
                     }
                 } catch {
                     showToast('Network error. Please try again.');
+                    btn.disabled = false; // Enable on error so user can retry
                 } finally {
                     btn.innerHTML = orig;
-                    btn.disabled = false;
+                    if (!saveSuccess) {
+                        btn.disabled = false; // Already handled in catch/error blocks
+                    }
                 }
             });
         }
@@ -720,6 +730,20 @@
         if (pwf) {
             const nf = pwf.cloneNode(true);
             pwf.parentNode.replaceChild(nf, pwf);
+            
+            // Explicitly get and disable the button
+            const submitBtn = nf.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true; // Start disabled
+                
+                // Add listeners to password inputs to enable button when changed
+                const inputs = nf.querySelectorAll('input[type="password"]');
+                inputs.forEach(input => {
+                    input.addEventListener('input', () => { submitBtn.disabled = false; });
+                    input.addEventListener('change', () => { submitBtn.disabled = false; });
+                });
+            }
+            
             nf.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const fd = new FormData(this);
@@ -735,20 +759,27 @@
                 const orig = btn.innerHTML;
                 btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Changing…';
                 btn.disabled = true;
+                let changeSuccess = false;
                 try {
                     const r = await fetch('/api/account/password/change', { method: 'POST', body: fd });
                     const d = await r.json();
                     if (d.success) { 
                         showToast('✓  Password changed'); 
-                        this.reset(); 
+                        changeSuccess = true;
+                        this.reset();
+                        btn.disabled = true; // Keep disabled after successful change
                     } else {
                         showToast('Error: ' + (d.error || 'Unknown'));
+                        btn.disabled = false; // Enable on error so user can retry
                     }
                 } catch { 
-                    showToast('Network error. Please try again.'); 
+                    showToast('Network error. Please try again.');
+                    btn.disabled = false; // Enable on error so user can retry
                 } finally { 
                     btn.innerHTML = orig; 
-                    btn.disabled = false; 
+                    if (!changeSuccess) {
+                        btn.disabled = false; // Already handled in catch/error blocks
+                    }
                 }
             });
         }
@@ -843,13 +874,8 @@
                     if (progress) progressBar.style.width = '100%';
                     
                     if (d.success) {
-                        // Update avatar in sidebar and profile
-                        const sidebarAvatar = document.querySelector('.sidebar-avatar');
+                        // Update avatar in profile form
                         const profileAvatar = document.querySelector('.avatar-circle');
-                        
-                        if (sidebarAvatar && d.user?.avatar_url) {
-                            sidebarAvatar.innerHTML = `<img src="${d.user.avatar_url}?t=${Date.now()}" alt="Profile">`;
-                        }
                         
                         if (profileAvatar && d.user?.avatar_url) {
                             profileAvatar.innerHTML = `<img src="${d.user.avatar_url}?t=${Date.now()}" alt="Profile">`;

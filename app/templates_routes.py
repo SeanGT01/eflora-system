@@ -5150,6 +5150,29 @@ def get_municipality_barangays(municipality):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@templates_bp.route('/api/laguna/barangay-coordinates/<municipality>/<barangay>', methods=['GET'])
+def get_barangay_coordinates(municipality, barangay):
+    """Get approximate coordinates for a specific barangay within a municipality"""
+    try:
+        from app.laguna_addresses import LAGUNA_ADDRESSES
+        
+        if municipality not in LAGUNA_ADDRESSES:
+            return jsonify({'error': 'Municipality not found'}), 404
+        
+        muni_data = LAGUNA_ADDRESSES[municipality]
+        muni_coords = muni_data.get('coordinates', {})
+        
+        # For now, return municipality center coordinates as barangay coordinates
+        # Users can fine-tune with the map
+        return jsonify({
+            'success': True,
+            'municipality': municipality,
+            'barangay': barangay,
+            'coordinates': muni_coords  # Uses municipality center as starting point
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @templates_bp.route('/api/account/addresses', methods=['GET'])
 def get_user_addresses():
     """Get all addresses for the logged-in user (supports JWT and sessions)"""

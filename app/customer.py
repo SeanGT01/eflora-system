@@ -149,6 +149,36 @@ def get_stores():
     return jsonify([s.to_dict() for s in stores])
 
 
+@customer_bp.route('/stores/<int:store_id>', methods=['GET'])
+def get_store(store_id):
+    """Public single store detail."""
+    store = Store.query.get_or_404(store_id)
+    data = store.to_dict()
+    # Add product count
+    product_count = Product.query.filter_by(store_id=store_id, is_available=True).count()
+    data['product_count'] = product_count
+    # Add average rating from testimonials
+    from app.models import Testimonial
+    testimonials = Testimonial.query.filter_by(store_id=store_id).all()
+    if testimonials:
+        data['avg_rating'] = round(sum(t.rating for t in testimonials) / len(testimonials), 1)
+        data['review_count'] = len(testimonials)
+    else:
+        data['avg_rating'] = 0
+        data['review_count'] = 0
+    return jsonify(data)
+
+
+@customer_bp.route('/stores/<int:store_id>/categories', methods=['GET'])
+def get_store_categories(store_id):
+    """Public — get store-specific subcategories."""
+    from app.models import StoreCategory
+    categories = StoreCategory.query.filter_by(
+        store_id=store_id, is_active=True
+    ).order_by(StoreCategory.sort_order).all()
+    return jsonify([c.to_dict() for c in categories])
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # CART — JWT protected
 # ══════════════════════════════════════════════════════════════════════════

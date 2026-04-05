@@ -1989,27 +1989,18 @@
 
                 <a href="{{ url_for('templates.index') }}" class="action-btn">
                     <i class="ri-home-5-line action-icon"></i>
-                    <span class="action-text">Home</span>
                 </a>
 
                 <button class="action-btn cart-btn" onclick="toggleCart()">
                     <i class="ri-shopping-bag-line action-icon bag"></i>
-                    <span class="action-text" id="bag">Basket</span>
                     <span class="cart-count" id="cartCount">0</span>
                 </button>
 
                 {% if session.get('user_id') %}
-                    <div class="user-avatar-container" id="userAvatarContainer">
-                        <div class="user-avatar" id="userAvatar" 
-                            onclick="window.location.href='{{ url_for('templates.my_account') }}?page=profile'"
-                            {% if user and user.avatar_url %}style="background:none;overflow:hidden;cursor:pointer;"{% else %}style="cursor:pointer;"{% endif %}>
-                            {% if user and user.avatar_url %}
-                                <img src="{{ user.avatar_url }}" alt="{{ session.get('user_name','User') }}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
-                            {% else %}
-                                {{ session.get('user_name','U')[0] }}
-                            {% endif %}
-                        </div>
-                        <div class="user-menu" id="userMenu">
+                    <button class="action-btn" onclick="toggleUserMenu(event)" id="userAvatarBtn" style="position:relative;">
+                        <i class="ri-user-3-line action-icon"></i>
+                    </button>
+                    <div class="user-menu" id="userMenu">
                             <a href="#" class="menu-item" onclick="handleAccountNavigation('profile'); return false;">
                                 <i class="ri-user-line"></i> Profile
                             </a>
@@ -2020,7 +2011,6 @@
                                 <i class="ri-logout-box-r-line"></i> Sign Out
                             </a>
                         </div>
-                    </div>
                 {% else %}
                 <a href="{{ url_for('templates.login') }}" class="action-btn">
                     <i class="ri-user-line action-icon"></i>
@@ -3005,6 +2995,21 @@ function toggleCart() {
 
 document.getElementById('closeCart').addEventListener('click', toggleCart);
 
+function toggleUserMenu(event) {
+    event.stopPropagation();
+    const userMenu = document.getElementById('userMenu');
+    userMenu.classList.toggle('show');
+}
+
+// Close user menu when clicking outside
+document.addEventListener('click', function(event) {
+    const userMenu = document.getElementById('userMenu');
+    const userBtn = document.getElementById('userAvatarBtn');
+    if (userBtn && userMenu && !userBtn.contains(event.target) && !userMenu.contains(event.target)) {
+        userMenu.classList.remove('show');
+    }
+});
+
 async function fetchCheckoutAddresses() {
     const response = await fetch('/api/account/addresses');
     const result = await response.json();
@@ -3271,17 +3276,28 @@ function renderCheckoutDeliveryIssues(issues) {
     }
 
     issuesEl.style.display = 'block';
+    
+    // Determine if single store or multiple
+    const isSingleStore = issues.length === 1;
+    const heading = isSingleStore 
+        ? `This store cannot deliver to your selected address` 
+        : `${issues.length} stores cannot deliver to your selected address`;
+    
     issuesEl.innerHTML = `
         <div style="padding:12px; border:1px solid #e0b4b4; background:#fff5f5; color:#8b3a3a; border-radius: var(--radius-md);">
-            <div style="font-weight:600; margin-bottom:8px;">Some stores cannot deliver to this address</div>
+            <div style="font-weight:600; margin-bottom:8px;">⚠️ ${heading}</div>
             ${issues.map(issue => `
                 <div style="font-size:13px; margin-bottom:6px;">
-                    <strong>${issue.store_name}</strong>: ${issue.reason}${issue.distance_km !== null && issue.distance_km !== undefined ? ` (${issue.distance_km} km)` : ''}
+                    <strong>${issue.store_name}</strong>: ${issue.reason}${issue.distance_km !== null && issue.distance_km !== undefined ? ` (${issue.distance_km} km away)` : ''}
                 </div>
             `).join('')}
+            <div style="font-size:12px; margin-top:8px; opacity:0.8;">
+                💡 Try selecting a different delivery address from your saved addresses.
+            </div>
         </div>
     `;
 }
+
 
 async function proceedCheckout() {
     if (checkoutStep === 1) {
@@ -3296,19 +3312,23 @@ async function proceedCheckout() {
 
             if (buyNowMode && buyNowItem) {
                 // Buy Now mode: validate directly with product data
+                const requestBody = {
+                    product_id: buyNowItem.product_id,
+                    variant_id: buyNowItem.variant_id || null,
+                    quantity: buyNowItem.quantity || 1,
+                    delivery_address_id: selectedCheckoutAddressId,
+                };
+                console.log('📤 Buy Now Validate Request:', requestBody);
+                
                 response = await fetch('/api/v1/checkout/buy-now/validate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': 'Bearer ' + (await getAuthToken())
                     },
-                    body: JSON.stringify({
-                        product_id: buyNowItem.product_id,
-                        variant_id: buyNowItem.variant_id || null,
-                        quantity: buyNowItem.quantity || 1,
-                        delivery_address_id: selectedCheckoutAddressId,
-                    })
+                    body: JSON.stringify(requestBody)
                 });
+                console.log('📥 Buy Now Validate Response Status:', response.status);
             } else {
                 // Normal cart checkout
                 const selectedItems = cart.filter(item => item.is_selected);
@@ -3334,6 +3354,7 @@ async function proceedCheckout() {
             }
 
             result = await response.json();
+            console.log('📋 Validation Response:', result);
             
             if (result.success && result.orders) {
                 checkoutOrders = result.orders;
@@ -3348,8 +3369,16 @@ async function proceedCheckout() {
                 document.getElementById('checkoutBackBtn').style.display = 'inline-block';
                 document.getElementById('checkoutNextBtn').textContent = '→ Proceed to Payment';
             } else {
+                console.error('❌ Validation failed:', result.error || 'Unknown error');
                 renderCheckoutDeliveryIssues(result.undeliverable_stores || []);
-                showToast(result.error || 'Failed to validate delivery');
+                
+                // Show more helpful error message
+                if (result.undeliverable_stores && result.undeliverable_stores.length > 0) {
+                    const issue = result.undeliverable_stores[0];
+                    showToast(`⚠️ ${issue.store_name}: ${issue.reason}`);
+                } else {
+                    showToast(result.error || 'Failed to validate delivery');
+                }
             }
         } catch (error) {
             console.error('Checkout error:', error);
