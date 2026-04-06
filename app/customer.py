@@ -209,23 +209,9 @@ def get_cart():
         }
         
         for item in cart.items:
-            product = item.product
-            if product:
-                # Use product.to_dict() to get complete product data with all category fields
-                product_data = product.to_dict()
-                product_data['store_name'] = product.store.name if product.store else None
-                
-                # Build cart item data
-                item_data = {
-                    'id': item.id,
-                    'cart_id': item.cart_id,
-                    'product_id': item.product_id,
-                    'quantity': item.quantity,
-                    'created_at': item.created_at.isoformat() if item.created_at else None,
-                    'updated_at': item.updated_at.isoformat() if item.updated_at else None,
-                    'product': product_data
-                }
-                cart_data['items'].append(item_data)
+            # Use item.to_dict() which properly handles variants and all cart item fields
+            item_data = item.to_dict()
+            cart_data['items'].append(item_data)
         
         print(f"✅ Cart retrieved: {len(cart_data['items'])} items")
         
@@ -404,9 +390,13 @@ def update_cart_item(item_id):
         if item.cart.user_id != user_id:
             return jsonify({'error': 'Unauthorized'}), 403
 
-        # Check stock
-        if item.product and item.product.stock_quantity < int(quantity):
-            return jsonify({'error': f'Only {item.product.stock_quantity} available'}), 400
+        # Check stock - use variant stock if available, otherwise use product stock
+        if item.variant:
+            if item.variant.stock_quantity < int(quantity):
+                return jsonify({'error': f'Only {item.variant.stock_quantity} available'}), 400
+        else:
+            if item.product and item.product.stock_quantity < int(quantity):
+                return jsonify({'error': f'Only {item.product.stock_quantity} available'}), 400
 
         item.quantity = int(quantity)
         db.session.commit()
