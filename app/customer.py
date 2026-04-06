@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User
 from app.extensions import db
+from sqlalchemy.orm import joinedload
 from functools import wraps
 import jwt
 import os
@@ -386,15 +387,17 @@ def update_cart_item(item_id):
         if quantity is None or int(quantity) < 1:
             return jsonify({'error': 'quantity >= 1 is required'}), 400
 
-        item = CartItem.query.get_or_404(item_id)
+        item = CartItem.query.options(joinedload(CartItem.variant)).get_or_404(item_id)
         if item.cart.user_id != user_id:
             return jsonify({'error': 'Unauthorized'}), 403
 
         # Check stock - use variant stock if available, otherwise use product stock
         if item.variant:
+            print(f"   📦 Variant: {item.variant.name}, Stock: {item.variant.stock_quantity}")
             if item.variant.stock_quantity < int(quantity):
                 return jsonify({'error': f'Only {item.variant.stock_quantity} available'}), 400
         else:
+            print(f"   📦 Product: {item.product.name}, Stock: {item.product.stock_quantity}")
             if item.product and item.product.stock_quantity < int(quantity):
                 return jsonify({'error': f'Only {item.product.stock_quantity} available'}), 400
 
