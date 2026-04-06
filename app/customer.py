@@ -387,15 +387,23 @@ def update_cart_item(item_id):
         if quantity is None or int(quantity) < 1:
             return jsonify({'error': 'quantity >= 1 is required'}), 400
 
-        item = CartItem.query.options(joinedload(CartItem.variant)).get_or_404(item_id)
+        item = CartItem.query.get_or_404(item_id)
         if item.cart.user_id != user_id:
             return jsonify({'error': 'Unauthorized'}), 403
 
-        # Check stock - use variant stock if available, otherwise use product stock
-        if item.variant:
-            print(f"   📦 Variant: {item.variant.name}, Stock: {item.variant.stock_quantity}")
-            if item.variant.stock_quantity < int(quantity):
-                return jsonify({'error': f'Only {item.variant.stock_quantity} available'}), 400
+        print(f"   🔍 Item variant_id: {item.variant_id}")
+
+        # Check stock - use variant stock if variant_id is set
+        if item.variant_id:
+            variant = ProductVariant.query.get(item.variant_id)
+            if variant:
+                print(f"   📦 Variant: {variant.name}, Stock: {variant.stock_quantity}")
+                if variant.stock_quantity < int(quantity):
+                    return jsonify({'error': f'Only {variant.stock_quantity} available'}), 400
+            else:
+                print(f"   ⚠️ Variant {item.variant_id} not found, falling back to product stock")
+                if item.product and item.product.stock_quantity < int(quantity):
+                    return jsonify({'error': f'Only {item.product.stock_quantity} available'}), 400
         else:
             print(f"   📦 Product: {item.product.name}, Stock: {item.product.stock_quantity}")
             if item.product and item.product.stock_quantity < int(quantity):
