@@ -1484,14 +1484,20 @@
         <!-- Rating + Store -->
         <div class="rating-row">
             <div class="stars">
+                {% set full_stars = (avg_rating | int) %}
+                {% set has_half = (avg_rating - full_stars) >= 0.3 %}
+                {% for i in range(full_stars) %}
                 <i class="ri-star-fill"></i>
-                <i class="ri-star-fill"></i>
-                <i class="ri-star-fill"></i>
-                <i class="ri-star-fill"></i>
+                {% endfor %}
+                {% if has_half %}
                 <i class="ri-star-half-fill"></i>
+                {% endif %}
+                {% for i in range(5 - full_stars - (1 if has_half else 0)) %}
+                <i class="ri-star-line"></i>
+                {% endfor %}
             </div>
-            <span class="rating-score">4.9</span>
-            <span class="rating-count">({{ product.id * 7 + 12 }} reviews)</span>
+            <span class="rating-score">{{ avg_rating }}</span>
+            <span class="rating-count">({{ total_ratings }} review{{ 's' if total_ratings != 1 else '' }})</span>
             <span class="rating-divider"></span>
             {% if product.store %}
             <a href="{{ url_for('templates.store_detail', store_id=product.store_id) }}" class="store-link">
@@ -1880,6 +1886,10 @@ const variants = [
         {% endfor %}
     {% endif %}
 ];
+
+/* Per-variant rating aggregates  (key "main" = standard product) */
+const variantRatings = {{ variant_ratings | tojson }};
+const overallRating = { avg: {{ avg_rating }}, count: {{ total_ratings }} };
  
 
     /* ════════════════════════════════
@@ -1989,6 +1999,9 @@ function setGalleryImages(nextImages) {
         // Update price display
         document.getElementById('currentPrice').textContent = '₱' + Math.round(mainProduct.price).toLocaleString();
         
+        // Update rating display for main product
+        updateRatingDisplay('main');
+        
         // Restore the full product gallery
         setGalleryImages(images);
         
@@ -2011,6 +2024,9 @@ function setGalleryImages(nextImages) {
         
         currentPrice = variantPrice;
         currentStock = variantStock;
+        
+        // Update rating display for this variant
+        updateRatingDisplay(variantId);
         
         // Update price display
         document.getElementById('currentPrice').textContent = '₱' + Math.round(variantPrice).toLocaleString();
@@ -2043,6 +2059,30 @@ function setGalleryImages(nextImages) {
     
     console.groupEnd();
 }
+
+    /* ════════════════════════════════
+       RATING DISPLAY UPDATE
+    ════════════════════════════════ */
+    function updateRatingDisplay(variantKey) {
+        const data = variantRatings[variantKey] || { avg: 0, count: 0 };
+        const avg = data.avg;
+        const count = data.count;
+        const fullStars = Math.floor(avg);
+        const hasHalf = (avg - fullStars) >= 0.3;
+        const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);
+
+        let starsHtml = '';
+        for (let i = 0; i < fullStars; i++) starsHtml += '<i class="ri-star-fill"></i>';
+        if (hasHalf) starsHtml += '<i class="ri-star-half-fill"></i>';
+        for (let i = 0; i < emptyStars; i++) starsHtml += '<i class="ri-star-line"></i>';
+
+        const ratingRow = document.querySelector('.rating-row');
+        if (!ratingRow) return;
+        ratingRow.querySelector('.stars').innerHTML = starsHtml;
+        ratingRow.querySelector('.rating-score').textContent = avg;
+        const countEl = ratingRow.querySelector('.rating-count');
+        countEl.textContent = '(' + count + ' review' + (count !== 1 ? 's' : '') + ')';
+    }
 
     /* ════════════════════════════════
        GALLERY FUNCTIONS
@@ -2499,6 +2539,7 @@ document.addEventListener('DOMContentLoaded', function() {
     buildTimeOptions();
     setGalleryImages(images);
     updateTotal();
+    updateRatingDisplay('main');  // Show main product rating by default
     
     // Ensure main product button is active
     const mainBtn = document.querySelector('.variant-btn[data-variant-id="main"]');

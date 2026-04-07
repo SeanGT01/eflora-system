@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, ProductRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -82,6 +82,15 @@ def _serialize_customer_order(order):
     items_payload = []
     total_quantity = 0
 
+    # Pre-fetch existing ratings for this order if delivered
+    rated_item_ids = set()
+    if order.status == 'delivered':
+        try:
+            ratings = ProductRating.query.filter_by(order_id=order.id).all()
+            rated_item_ids = {r.order_item_id for r in ratings}
+        except Exception:
+            rated_item_ids = set()
+
     for item in order.items:
         quantity = item.quantity or 0
         unit_price = float(item.price or 0)
@@ -99,7 +108,10 @@ def _serialize_customer_order(order):
             'total': float(quantity * unit_price),
             'product_image_url': item.product_image,
             'image_url': item.product_image,
+            'is_rated': item.id in rated_item_ids,
         })
+
+    all_rated = len(rated_item_ids) >= len(order.items) if order.items else False
 
     return {
         'id': order.id,
@@ -121,6 +133,8 @@ def _serialize_customer_order(order):
         'store_contact': order.store.contact_number if order.store else None,
         'item_count': total_quantity,
         'items': items_payload,
+        'all_rated': all_rated,
+        'rated_count': len(rated_item_ids),
     }
 
 
@@ -951,6 +965,134 @@ def cancel_order(order_id):
     db.session.commit()
 
     return jsonify({'success': True, 'message': 'Order cancelled successfully'})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PRODUCT RATINGS — Session auth (Web)
+# ══════════════════════════════════════════════════════════════════════════
+
+@templates_bp.route('/api/account/orders/<int:order_id>/ratings', methods=['GET'])
+def get_order_ratings(order_id):
+    """Get existing ratings for an order's items."""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user_id = session.get('user_id')
+    order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    ratings = ProductRating.query.filter_by(order_id=order_id, customer_id=user_id).all()
+    ratings_map = {r.order_item_id: r.to_dict() for r in ratings}
+
+    return jsonify({'success': True, 'ratings': ratings_map})
+
+
+@templates_bp.route('/api/account/orders/<int:order_id>/rate', methods=['POST'])
+def submit_order_ratings(order_id):
+    """Submit product ratings for a delivered order. Accepts multiple ratings at once."""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user_id = session.get('user_id')
+    order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    if order.status != 'delivered':
+        return jsonify({'error': 'Can only rate delivered orders'}), 400
+
+    data = request.get_json() or {}
+    ratings_data = data.get('ratings', [])
+
+    if not ratings_data:
+        return jsonify({'error': 'No ratings provided'}), 400
+
+    created = []
+
+    for r in ratings_data:
+        order_item_id = r.get('order_item_id')
+        rating_value = r.get('rating')
+        comment = r.get('comment', '').strip() if r.get('comment') else None
+
+        if not order_item_id or not rating_value:
+            continue
+        if not (1 <= int(rating_value) <= 5):
+            continue
+
+        # Verify item belongs to this order
+        order_item = OrderItem.query.filter_by(id=order_item_id, order_id=order_id).first()
+        if not order_item:
+            continue
+
+        # Skip if already rated (ratings are final)
+        existing = ProductRating.query.filter_by(
+            customer_id=user_id, order_item_id=order_item_id
+        ).first()
+
+        if existing:
+            continue
+
+        new_rating = ProductRating(
+            customer_id=user_id,
+            product_id=order_item.product_id,
+            variant_id=order_item.variant_id,
+            order_id=order_id,
+            order_item_id=order_item_id,
+            rating=int(rating_value),
+            comment=comment,
+        )
+        db.session.add(new_rating)
+        created.append(new_rating)
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'{len(created)} rating(s) submitted',
+        'created': len(created),
+    })
+
+
+@templates_bp.route('/api/products/<int:product_id>/ratings', methods=['GET'])
+def get_product_ratings(product_id):
+    """Get all ratings for a product (public)."""
+    product = Product.query.get_or_404(product_id)
+
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 10, type=int), 50)
+
+    ratings_query = ProductRating.query.filter_by(product_id=product_id)\
+        .order_by(ProductRating.created_at.desc())
+
+    total = ratings_query.count()
+    ratings = ratings_query.offset((page - 1) * per_page).limit(per_page).all()
+
+    # Calculate aggregates
+    from sqlalchemy import func
+    agg = db.session.query(
+        func.avg(ProductRating.rating).label('avg'),
+        func.count(ProductRating.id).label('count')
+    ).filter_by(product_id=product_id).first()
+
+    # Star distribution
+    dist = db.session.query(
+        ProductRating.rating, func.count(ProductRating.id)
+    ).filter_by(product_id=product_id).group_by(ProductRating.rating).all()
+    distribution = {str(i): 0 for i in range(1, 6)}
+    for star, count in dist:
+        distribution[str(star)] = count
+
+    return jsonify({
+        'success': True,
+        'avg_rating': round(float(agg.avg or 0), 1),
+        'total_ratings': agg.count or 0,
+        'distribution': distribution,
+        'ratings': [r.to_dict() for r in ratings],
+        'page': page,
+        'total_pages': (total + per_page - 1) // per_page,
+    })
+
 
 @templates_bp.route('/orders')
 def orders():
@@ -3607,12 +3749,38 @@ def product_details(product_id):
         print(f"  Related products: {len(related_dicts)}")
         print(f"  Categories for nav: {len(main_categories)}")
         
+        # Get product rating aggregates
+        from sqlalchemy import func as sa_func
+        rating_agg = db.session.query(
+            sa_func.avg(ProductRating.rating).label('avg'),
+            sa_func.count(ProductRating.id).label('count')
+        ).filter_by(product_id=product_id).first()
+        avg_rating = round(float(rating_agg.avg or 0), 1)
+        total_ratings = rating_agg.count or 0
+
+        # Per-variant rating aggregates  (variant_id=NULL → "main")
+        variant_ratings = {}
+        rows = db.session.query(
+            ProductRating.variant_id,
+            sa_func.avg(ProductRating.rating).label('avg'),
+            sa_func.count(ProductRating.id).label('count')
+        ).filter_by(product_id=product_id).group_by(ProductRating.variant_id).all()
+        for row in rows:
+            key = str(row.variant_id) if row.variant_id else 'main'
+            variant_ratings[key] = {
+                'avg': round(float(row.avg or 0), 1),
+                'count': row.count or 0,
+            }
+        
         return render_template(
-            'product_details.html',  # Note: this template should be updated to use the new category fields
+            'product_details.html',
             product=product_dict,
             addon_products=addon_dicts,
             related_products=related_dicts,
-            main_categories=main_categories  # Pass to base.html for navigation
+            main_categories=main_categories,
+            avg_rating=avg_rating,
+            total_ratings=total_ratings,
+            variant_ratings=variant_ratings,
         )
         
     except Exception as e:
@@ -3747,6 +3915,7 @@ def debug_auth():
 
 
 @templates_bp.route('/api/cart/items', methods=['POST'])
+@limiter.exempt
 def add_to_cart():
     """Add item to cart - FIXED to handle variants"""
     user = get_current_user()
@@ -3848,6 +4017,7 @@ def add_to_cart():
 
 
 @templates_bp.route('/api/cart', methods=['GET'])
+@limiter.exempt
 def get_cart():
     """Get cart - FIXED to include variant details and Cloudinary URLs"""
     user = get_current_user()
@@ -3978,6 +4148,7 @@ def get_cart():
         return jsonify({'error': str(e)}), 500
 
 @templates_bp.route('/api/cart/items/<int:item_id>', methods=['PUT'])
+@limiter.exempt
 def update_cart_item(item_id):
     """Update cart item quantity"""
     user = get_current_user()
@@ -4027,6 +4198,7 @@ def update_cart_item(item_id):
         return jsonify({'error': str(e)}), 500
 
 @templates_bp.route('/api/cart/items/<int:item_id>', methods=['DELETE'])
+@limiter.exempt
 def remove_from_cart(item_id):
     """Remove item from cart"""
     user = get_current_user()
@@ -4061,6 +4233,7 @@ def remove_from_cart(item_id):
         return jsonify({'error': str(e)}), 500
 
 @templates_bp.route('/api/cart/clear', methods=['POST'])
+@limiter.exempt
 def clear_cart():
     """Clear all items from cart"""
     user = get_current_user()

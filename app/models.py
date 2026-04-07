@@ -1325,6 +1325,50 @@ class Testimonial(db.Model):
         }
 
 
+class ProductRating(db.Model):
+    """Per-product rating submitted by customers after order delivery."""
+    __tablename__ = 'product_ratings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
+    order_item_id = db.Column(db.Integer, db.ForeignKey('order_items.id', ondelete='SET NULL'), nullable=True)
+    rating = db.Column(db.Integer, nullable=False)  # 1-5 stars
+    comment = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    customer = db.relationship('User', backref=db.backref('product_ratings', lazy='dynamic'))
+    product = db.relationship('Product', backref=db.backref('ratings', lazy='dynamic'))
+    variant = db.relationship('ProductVariant', backref=db.backref('ratings', lazy='dynamic'))
+    order = db.relationship('Order', backref=db.backref('product_ratings', lazy='dynamic'))
+    order_item = db.relationship('OrderItem', backref=db.backref('rating', uselist=False))
+    
+    __table_args__ = (
+        db.UniqueConstraint('customer_id', 'order_item_id', name='unique_customer_order_item_rating'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'product_id': self.product_id,
+            'variant_id': self.variant_id,
+            'order_id': self.order_id,
+            'order_item_id': self.order_item_id,
+            'rating': self.rating,
+            'comment': self.comment,
+            'customer_name': self.customer.full_name if self.customer else None,
+            'customer_avatar': self.customer.avatar_url if self.customer else None,
+            'variant_name': self.variant.name if self.variant else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class OrderAnalytics(db.Model):
     __tablename__ = 'order_analytics'
     

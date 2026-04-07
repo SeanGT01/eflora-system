@@ -1092,6 +1092,137 @@
         max-width: 640px;
     }
 }
+
+/* ── Rating Modal ── */
+.rating-modal {
+    max-width: 560px;
+    width: 95%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+.rating-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+.rating-item-card {
+    background: var(--cream);
+    border-radius: 12px;
+    padding: clamp(0.75rem, 2vw, 1rem);
+    border: 1px solid var(--border);
+}
+.rating-item-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+.rating-item-img {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: var(--warm-white);
+    flex-shrink: 0;
+}
+.rating-item-img-ph {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: var(--warm-white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--border-strong);
+    font-size: 20px;
+}
+.rating-item-info {
+    flex: 1;
+    min-width: 0;
+}
+.rating-item-name {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--charcoal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rating-item-variant {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+.rating-item-rated-badge {
+    font-size: 11px;
+    color: #27ae60;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.rating-stars-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 0.5rem;
+}
+.rating-star {
+    font-size: 28px;
+    cursor: pointer;
+    color: var(--border-strong);
+    transition: color 0.15s, transform 0.15s;
+    user-select: none;
+    line-height: 1;
+}
+.rating-star:hover,
+.rating-star.active {
+    color: #f0b429;
+    transform: scale(1.15);
+}
+.rating-star.hovered {
+    color: #f0b429;
+}
+.rating-comment {
+    width: 100%;
+    min-height: 52px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-family: var(--font-sans);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--warm-white);
+    resize: vertical;
+    color: var(--charcoal);
+    transition: border-color 0.2s;
+}
+.rating-comment:focus {
+    outline: none;
+    border-color: var(--deep-rose);
+}
+.rating-comment::placeholder {
+    color: var(--muted);
+}
+.rating-submit-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--deep-rose);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.rating-submit-btn:hover { opacity: 0.9; }
+.rating-submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 </style>
 
 <div class="orders-page">
@@ -1167,6 +1298,21 @@
         </div>
         <div class="modal-footer" style="padding:clamp(1rem, 2vw, 1.5rem) clamp(1rem, 3vw, 2rem);display:flex;gap:clamp(0.5rem, 1vw, 0.75rem);justify-content:flex-end;border-top:1px solid var(--border);background:var(--cream);flex-wrap:wrap;">
             <button class="btn-order-action" onclick="closeOrderDetail()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Rating Modal -->
+<div class="modal-overlay" id="ratingModal" style="display:none;">
+    <div class="modal rating-modal">
+        <div class="modal-header">
+            <h3 id="ratingModalTitle" style="font-family:var(--font-display);font-size:clamp(18px, 5vw, 20px);font-weight:500;margin:0;">Rate Products</h3>
+            <button class="cart-close" onclick="closeRatingModal()" style="font-size:clamp(20px, 5vw, 24px);"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" id="ratingModalBody" style="padding:clamp(1rem, 3vw, 1.5rem) clamp(1rem, 3vw, 2rem);max-height:calc(90vh - 180px);overflow-y:auto;">
+        </div>
+        <div class="modal-footer" style="padding:clamp(1rem, 2vw, 1.5rem) clamp(1rem, 3vw, 2rem);border-top:1px solid var(--border);background:var(--cream);">
+            <button class="rating-submit-btn" id="ratingSubmitBtn" onclick="submitRatings()" disabled>Submit Rating</button>
         </div>
     </div>
 </div>
@@ -1560,7 +1706,9 @@ function buildCTAButtons(order) {
         btns += `<button class="btn-order-action primary" onclick="confirmReceivedOrder(${id})"><i class="ri-checkbox-circle-line"></i> Order Received</button>`;
     }
     if (display.key === 'delivered') {
-        btns += `<button class="btn-order-action primary" onclick="rateOrder(${id})"><i class="ri-star-line"></i> Rate</button>`;
+        if (!order.all_rated) {
+            btns += `<button class="btn-order-action primary" onclick="rateOrder(${id})"><i class="ri-star-line"></i> Rate</button>`;
+        }
         btns += `<button class="btn-order-action" onclick="reorderItems(${id})"><i class="ri-refresh-line"></i> Buy Again</button>`;
     }
 
@@ -1870,8 +2018,225 @@ function confirmReceivedOrder(orderId) {
     // Call your confirm-received API here
 }
 
-function rateOrder(orderId)   { showOrderToast('Rating feature coming soon!'); }
-function reorderItems(orderId){ showOrderToast('Adding items to cart…'); }
+/* ═══════════════════════════════════════
+   RATING MODAL
+═══════════════════════════════════════ */
+let _ratingOrderId = null;
+let _ratingState = {}; // { [order_item_id]: { rating: 0, comment: '' } }
+
+async function rateOrder(orderId) {
+    _ratingOrderId = orderId;
+    _ratingState = {};
+
+    const modal = document.getElementById('ratingModal');
+    const body = document.getElementById('ratingModalBody');
+    const submitBtn = document.getElementById('ratingSubmitBtn');
+    submitBtn.disabled = true;
+
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    body.innerHTML = `<div style="text-align:center;padding:2rem;"><div class="loading-spinner" style="margin:0 auto;"></div></div>`;
+
+    try {
+        // Fetch order detail and existing ratings in parallel
+        const [orderRes, ratingsRes] = await Promise.all([
+            fetch(`/api/account/orders/${orderId}`).then(r => r.json()),
+            fetch(`/api/account/orders/${orderId}/ratings`).then(r => r.json()),
+        ]);
+
+        const items = orderRes.items || [];
+        const existingRatings = ratingsRes.ratings || {};
+
+        if (!items.length) {
+            body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">No items to rate.</div>`;
+            return;
+        }
+
+        // Initialize rating state — only for unrated items
+        const unratedItems = items.filter(item => !existingRatings[String(item.id)]);
+
+        if (unratedItems.length === 0) {
+            closeRatingModal();
+            return;
+        }
+
+        unratedItems.forEach(item => {
+            _ratingState[item.id] = { rating: 0, comment: '' };
+        });
+
+        body.innerHTML = `
+            <div class="rating-items-list">
+                ${unratedItems.map(item => {
+                    const name = item.name || item.product_name || 'Product';
+                    const variant = item.variant_name ? `<div class="rating-item-variant">${esc(item.variant_name)}</div>` : '';
+                    const img = item.image_url || item.product_image_url;
+                    const imgHtml = img
+                        ? `<img class="rating-item-img" src="${img}" alt="${esc(name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                           <div class="rating-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
+                        : `<div class="rating-item-img-ph"><i class="ri-flower-line"></i></div>`;
+                    return `
+                        <div class="rating-item-card" data-item-id="${item.id}">
+                            <div class="rating-item-header">
+                                ${imgHtml}
+                                <div class="rating-item-info">
+                                    <div class="rating-item-name">${esc(name)}</div>
+                                    ${variant}
+                                </div>
+                            </div>
+                            <div class="rating-stars-row" data-item-id="${item.id}">
+                                ${[1,2,3,4,5].map(star => `<i class="ri-star-line rating-star" data-star="${star}" data-item-id="${item.id}" onclick="setRating(${item.id}, ${star})" onmouseenter="hoverStars(${item.id}, ${star})" onmouseleave="unhoverStars(${item.id})"></i>`).join('')}
+                            </div>
+                            <textarea class="rating-comment" data-item-id="${item.id}" placeholder="Share your thoughts about this product (optional)" maxlength="500" oninput="_ratingState[${item.id}].comment = this.value"></textarea>
+                        </div>`;
+                }).join('')}
+            </div>`;
+
+        updateSubmitBtnState();
+    } catch (err) {
+        body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">Failed to load order details.</div>`;
+    }
+}
+
+function setRating(itemId, star) {
+    _ratingState[itemId].rating = star;
+    const row = document.querySelector(`.rating-stars-row[data-item-id="${itemId}"]`);
+    if (row) {
+        row.querySelectorAll('.rating-star').forEach(el => {
+            const s = parseInt(el.dataset.star);
+            el.classList.toggle('active', s <= star);
+            el.className = el.className.replace(/ri-star-(fill|line)/, s <= star ? 'ri-star-fill' : 'ri-star-line');
+        });
+    }
+    updateSubmitBtnState();
+}
+
+function hoverStars(itemId, star) {
+    const row = document.querySelector(`.rating-stars-row[data-item-id="${itemId}"]`);
+    if (row) {
+        row.querySelectorAll('.rating-star').forEach(el => {
+            const s = parseInt(el.dataset.star);
+            el.classList.toggle('hovered', s <= star);
+        });
+    }
+}
+
+function unhoverStars(itemId) {
+    const row = document.querySelector(`.rating-stars-row[data-item-id="${itemId}"]`);
+    if (row) {
+        row.querySelectorAll('.rating-star').forEach(el => {
+            el.classList.remove('hovered');
+        });
+    }
+}
+
+function updateSubmitBtnState() {
+    const btn = document.getElementById('ratingSubmitBtn');
+    const hasAtLeastOne = Object.values(_ratingState).some(r => r.rating > 0);
+    btn.disabled = !hasAtLeastOne;
+}
+
+async function submitRatings() {
+    const btn = document.getElementById('ratingSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    const ratings = Object.entries(_ratingState)
+        .filter(([_, r]) => r.rating > 0)
+        .map(([itemId, r]) => ({
+            order_item_id: parseInt(itemId),
+            rating: r.rating,
+            comment: r.comment || null,
+        }));
+
+    try {
+        const res = await fetch(`/api/account/orders/${_ratingOrderId}/rate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ratings }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showOrderToast('Thank you for your rating!');
+            closeRatingModal();
+            
+            // Hide the Rate button from the order card without reloading
+            const rateBtn = document.querySelector(`#order-card-${_ratingOrderId} button[onclick*="rateOrder"]`);
+            if (rateBtn) {
+                rateBtn.style.display = 'none';
+            }
+        } else {
+            showOrderToast(data.error || 'Failed to submit rating.');
+            btn.disabled = false;
+            btn.textContent = 'Submit Rating';
+        }
+    } catch {
+        showOrderToast('Error submitting rating.');
+        btn.disabled = false;
+        btn.textContent = 'Submit Rating';
+    }
+}
+
+function closeRatingModal() {
+    const modal = document.getElementById('ratingModal');
+    modal.classList.remove('active');
+    setTimeout(() => { modal.style.display = 'none'; }, 300);
+    _ratingOrderId = null;
+    _ratingState = {};
+}
+
+async function reorderItems(orderId) {
+    showOrderToast('Adding items to cart…');
+    try {
+        const res = await fetch(`/api/account/orders/${orderId}`);
+        const order = await res.json();
+        const items = order.items || [];
+
+        if (!items.length) {
+            showOrderToast('No items found in this order.');
+            return;
+        }
+
+        let added = 0;
+        let skipped = 0;
+
+        for (const item of items) {
+            try {
+                const payload = {
+                    product_id: item.product_id,
+                    quantity: 1,
+                };
+                if (item.variant_id) {
+                    payload.variant_id = item.variant_id;
+                }
+                const r = await fetch('/api/cart/items', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const d = await r.json();
+                if (r.ok && !d.error) {
+                    added++;
+                } else {
+                    skipped++;
+                }
+            } catch {
+                skipped++;
+            }
+        }
+
+        if (added > 0) {
+            showOrderToast(`${added} item${added !== 1 ? 's' : ''} added to cart${skipped > 0 ? ` (${skipped} out of stock)` : ''}`);
+            // Reload cart groups and re-render
+            await loadCartGroups();
+            applyFilters();
+        } else {
+            showOrderToast('All items are out of stock.');
+        }
+    } catch {
+        showOrderToast('Failed to reorder. Please try again.');
+    }
+}
 
 /* ═══════════════════════════════════════
    UTILITIES
@@ -1937,5 +2302,8 @@ function showOrderToast(msg) {
 // Close modal on overlay click
 document.getElementById('orderDetailModal').addEventListener('click', function(e) {
     if (e.target === this) closeOrderDetail();
+});
+document.getElementById('ratingModal').addEventListener('click', function(e) {
+    if (e.target === this) closeRatingModal();
 });
 </script>

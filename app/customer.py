@@ -1,10 +1,11 @@
 # app/customer.py
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User
+from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, ProductRating
 from app.extensions import db
 from sqlalchemy.orm import joinedload
 from functools import wraps
+from datetime import datetime
 import jwt
 import os
 
@@ -665,6 +666,138 @@ def get_order(order_id):
         return jsonify(d)
     except Exception as e:
         print(f"❌ Error in get_order: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PRODUCT RATINGS — JWT auth (Flutter)
+# ══════════════════════════════════════════════════════════════════════════
+
+@customer_bp.route('/orders/<int:order_id>/ratings', methods=['GET'])
+@customer_only
+def get_order_ratings(order_id):
+    """Get existing ratings for an order's items."""
+    try:
+        user_id = int(get_jwt_identity())
+        order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+
+        ratings = ProductRating.query.filter_by(order_id=order_id, customer_id=user_id).all()
+        ratings_map = {str(r.order_item_id): r.to_dict() for r in ratings}
+
+        return jsonify({'success': True, 'ratings': ratings_map})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@customer_bp.route('/orders/<int:order_id>/rate', methods=['POST'])
+@customer_only
+def submit_order_ratings(order_id):
+    """Submit product ratings for a delivered order."""
+    try:
+        user_id = int(get_jwt_identity())
+        order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+
+        if order.status != 'delivered':
+            return jsonify({'error': 'Can only rate delivered orders'}), 400
+
+        data = request.get_json() or {}
+        ratings_data = data.get('ratings', [])
+
+        if not ratings_data:
+            return jsonify({'error': 'No ratings provided'}), 400
+
+        created = 0
+        updated = 0
+
+        for r in ratings_data:
+            order_item_id = r.get('order_item_id')
+            rating_value = r.get('rating')
+            comment = r.get('comment', '').strip() if r.get('comment') else None
+
+            if not order_item_id or not rating_value:
+                continue
+            if not (1 <= int(rating_value) <= 5):
+                continue
+
+            order_item = OrderItem.query.filter_by(id=order_item_id, order_id=order_id).first()
+            if not order_item:
+                continue
+
+            # Skip if already rated (ratings are final)
+            existing = ProductRating.query.filter_by(
+                customer_id=user_id, order_item_id=order_item_id
+            ).first()
+
+            if existing:
+                continue
+
+            new_rating = ProductRating(
+                customer_id=user_id,
+                product_id=order_item.product_id,
+                variant_id=order_item.variant_id,
+                order_id=order_id,
+                order_item_id=order_item_id,
+                rating=int(rating_value),
+                comment=comment,
+            )
+            db.session.add(new_rating)
+            created += 1
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'{created} rating(s) submitted',
+            'created': created,
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@customer_bp.route('/products/<int:product_id>/ratings', methods=['GET'])
+@customer_only
+def get_product_ratings(product_id):
+    """Get all ratings for a product."""
+    try:
+        product = Product.query.get_or_404(product_id)
+
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 10, type=int), 50)
+
+        ratings_query = ProductRating.query.filter_by(product_id=product_id)\
+            .order_by(ProductRating.created_at.desc())
+
+        total = ratings_query.count()
+        ratings = ratings_query.offset((page - 1) * per_page).limit(per_page).all()
+
+        from sqlalchemy import func
+        agg = db.session.query(
+            func.avg(ProductRating.rating).label('avg'),
+            func.count(ProductRating.id).label('count')
+        ).filter_by(product_id=product_id).first()
+
+        dist = db.session.query(
+            ProductRating.rating, func.count(ProductRating.id)
+        ).filter_by(product_id=product_id).group_by(ProductRating.rating).all()
+        distribution = {str(i): 0 for i in range(1, 6)}
+        for star, count in dist:
+            distribution[str(star)] = count
+
+        return jsonify({
+            'success': True,
+            'avg_rating': round(float(agg.avg or 0), 1),
+            'total_ratings': agg.count or 0,
+            'distribution': distribution,
+            'ratings': [r.to_dict() for r in ratings],
+            'page': page,
+            'total_pages': (total + per_page - 1) // per_page,
+        })
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
