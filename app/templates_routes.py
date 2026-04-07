@@ -4000,10 +4000,15 @@ def update_cart_item(item_id):
             print(f"❌ Unauthorized: Item belongs to user {cart_item.cart.user_id}, but request is from {user.id}")
             return jsonify({'error': 'Unauthorized'}), 403
         
-        # Check stock
-        product = cart_item.product
-        if product and product.stock_quantity < quantity:
-            return jsonify({'error': f'Only {product.stock_quantity} available'}), 400
+        # Check stock - use variant stock if variant_id is set
+        if cart_item.variant_id and cart_item.variant:
+            print(f"   📦 Variant: {cart_item.variant.name}, Stock: {cart_item.variant.stock_quantity}")
+            if cart_item.variant.stock_quantity < quantity:
+                return jsonify({'error': f'Only {cart_item.variant.stock_quantity} available'}), 400
+        else:
+            product = cart_item.product
+            if product and product.stock_quantity < quantity:
+                return jsonify({'error': f'Only {product.stock_quantity} available'}), 400
         
         cart_item.quantity = quantity
         db.session.commit()

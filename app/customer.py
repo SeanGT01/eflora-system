@@ -414,7 +414,66 @@ def update_cart_item(item_id):
         
         print(f"✅ Cart item updated successfully")
         
-        return jsonify({'success': True, 'cart': item.cart.to_dict()})
+        # Return full cart with consistent format (same as add_to_cart)
+        updated_cart = Cart.query.get(item.cart_id)
+        
+        cart_data = {
+            'id': updated_cart.id,
+            'user_id': updated_cart.user_id,
+            'created_at': updated_cart.created_at.isoformat() if updated_cart.created_at else None,
+            'updated_at': updated_cart.updated_at.isoformat() if updated_cart.updated_at else None,
+            'items': []
+        }
+        
+        for cart_item in updated_cart.items:
+            prod = cart_item.product
+            if prod:
+                # Get product images
+                images = []
+                for img in prod.images:
+                    images.append({
+                        'id': img.id,
+                        'filename': img.filename,
+                        'is_primary': img.is_primary,
+                        'sort_order': img.sort_order
+                    })
+                
+                product_data = {
+                    'id': prod.id,
+                    'name': prod.name,
+                    'description': prod.description,
+                    'price': float(prod.price),
+                    'stock_quantity': prod.stock_quantity,
+                    'main_category_id': prod.main_category_id,
+                    'main_category_name': prod.main_category.name if prod.main_category else 'Uncategorized',
+                    'store_category_name': prod.store_category.name if prod.store_category else None,
+                    'category_display': prod.category_display,
+                    'is_available': prod.is_available,
+                    'store_id': prod.store_id,
+                    'images': images,
+                    'store_name': prod.store.name if prod.store else None
+                }
+                
+                # Include variant data if present
+                variant_data = None
+                if cart_item.variant:
+                    variant_data = cart_item.variant.to_dict()
+                
+                item_data = {
+                    'id': cart_item.id,
+                    'cart_id': cart_item.cart_id,
+                    'product_id': cart_item.product_id,
+                    'variant_id': cart_item.variant_id,
+                    'quantity': cart_item.quantity,
+                    'is_selected': cart_item.is_selected,
+                    'created_at': cart_item.created_at.isoformat() if cart_item.created_at else None,
+                    'updated_at': cart_item.updated_at.isoformat() if cart_item.updated_at else None,
+                    'product': product_data,
+                    'variant': variant_data  # Include variant if present
+                }
+                cart_data['items'].append(item_data)
+        
+        return jsonify({'success': True, 'cart': cart_data})
     except Exception as e:
         db.session.rollback()
         print(f"❌ Error in update_cart_item: {str(e)}")
@@ -439,7 +498,64 @@ def remove_cart_item(item_id):
         
         print(f"✅ Item removed successfully")
         
-        return jsonify({'success': True, 'cart': cart.to_dict()})
+        # Return full cart with consistent format
+        cart_data = {
+            'id': cart.id,
+            'user_id': cart.user_id,
+            'created_at': cart.created_at.isoformat() if cart.created_at else None,
+            'updated_at': cart.updated_at.isoformat() if cart.updated_at else None,
+            'items': []
+        }
+        
+        for cart_item in cart.items:
+            prod = cart_item.product
+            if prod:
+                # Get product images
+                images = []
+                for img in prod.images:
+                    images.append({
+                        'id': img.id,
+                        'filename': img.filename,
+                        'is_primary': img.is_primary,
+                        'sort_order': img.sort_order
+                    })
+                
+                product_data = {
+                    'id': prod.id,
+                    'name': prod.name,
+                    'description': prod.description,
+                    'price': float(prod.price),
+                    'stock_quantity': prod.stock_quantity,
+                    'main_category_id': prod.main_category_id,
+                    'main_category_name': prod.main_category.name if prod.main_category else 'Uncategorized',
+                    'store_category_name': prod.store_category.name if prod.store_category else None,
+                    'category_display': prod.category_display,
+                    'is_available': prod.is_available,
+                    'store_id': prod.store_id,
+                    'images': images,
+                    'store_name': prod.store.name if prod.store else None
+                }
+                
+                # Include variant data if present
+                variant_data = None
+                if cart_item.variant:
+                    variant_data = cart_item.variant.to_dict()
+                
+                item_data = {
+                    'id': cart_item.id,
+                    'cart_id': cart_item.cart_id,
+                    'product_id': cart_item.product_id,
+                    'variant_id': cart_item.variant_id,
+                    'quantity': cart_item.quantity,
+                    'is_selected': cart_item.is_selected,
+                    'created_at': cart_item.created_at.isoformat() if cart_item.created_at else None,
+                    'updated_at': cart_item.updated_at.isoformat() if cart_item.updated_at else None,
+                    'product': product_data,
+                    'variant': variant_data  # Include variant if present
+                }
+                cart_data['items'].append(item_data)
+        
+        return jsonify({'success': True, 'cart': cart_data})
     except Exception as e:
         db.session.rollback()
         print(f"❌ Error in remove_cart_item: {str(e)}")
