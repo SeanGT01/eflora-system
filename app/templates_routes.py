@@ -2617,8 +2617,7 @@ def seller_order_status_api(order_id):
     if new_status not in allowed_statuses:
         return jsonify({'error': 'Invalid status'}), 400
 
-    order.status = new_status
-    order.updated_at = datetime.utcnow()
+    order.set_status(new_status)
     db.session.commit()
 
     return jsonify({
@@ -2646,8 +2645,7 @@ def seller_order_verify_payment_api(order_id):
 
     # Verify payment and immediately set status to "preparing"
     order.payment_status = 'verified'
-    order.status = 'preparing'  # Changed from 'accepted' to 'preparing'
-    order.updated_at = datetime.utcnow()
+    order.set_status('preparing')  # Changed from 'accepted' to 'preparing'
     db.session.commit()
 
     current_app.logger.info(f"✅ Order #{order_id} payment verified, status changed to preparing")
@@ -2691,8 +2689,7 @@ def seller_order_update_status(order_id):
         return jsonify({'error': 'Order must be in accepted status to mark as preparing'}), 400
     
     # Log status update
-    order.status = new_status
-    order.updated_at = datetime.utcnow()
+    order.set_status(new_status)
     db.session.commit()
 
     current_app.logger.info(f"✅ Order #{order_id} status updated: {current_status} → {new_status}")

@@ -188,8 +188,7 @@ def accept_order(order_id):
         return jsonify({'error': 'Order cannot be accepted'}), 400
     
     order.rider_id = rider.id
-    order.status = 'on_delivery'
-    order.updated_at = datetime.utcnow()
+    order.set_status('on_delivery')
     
     db.session.commit()
     
@@ -217,8 +216,7 @@ def update_order_status(order_id):
     if new_status not in ['on_delivery', 'delivered']:
         return jsonify({'error': 'Invalid status'}), 400
     
-    order.status = new_status
-    order.updated_at = datetime.utcnow()
+    order.set_status(new_status)
     
     # If delivered, update payment status if proof exists
     if new_status == 'delivered' and order.payment_proof:

@@ -212,7 +212,7 @@ def update_order_status(order_id):
     if new_status not in allowed_statuses:
         return jsonify({'error': 'Invalid status'}), 400
     
-    order.status = new_status
+    order.set_status(new_status)
     db.session.commit()
     
     return jsonify({
@@ -237,8 +237,7 @@ def verify_order_payment(order_id):
     
     order.payment_status = 'verified'
     if order.status == 'pending':
-        order.status = 'accepted'
-    order.updated_at = datetime.utcnow()
+        order.set_status('accepted')
     db.session.commit()
     
     return jsonify({

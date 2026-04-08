@@ -153,8 +153,7 @@ def verify_payment(order_id):
         
         # Update order
         order.payment_status = 'verified'
-        order.status = 'accepted'  # Accept order - ready for rider pickup
-        order.updated_at = datetime.utcnow()
+        order.set_status('accepted')  # Accept order - ready for rider pickup
         
         db.session.commit()
         

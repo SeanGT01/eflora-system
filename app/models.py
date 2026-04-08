@@ -1082,6 +1082,15 @@ class Order(db.Model):
     delivery_proof_2_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
     # ======================================================
     
+    # Status timestamps for timeline tracking
+    pending_at = db.Column(db.DateTime, default=datetime.utcnow)  # When order was created
+    accepted_at = db.Column(db.DateTime, nullable=True)  # When seller verifies payment receipt
+    preparing_at = db.Column(db.DateTime, nullable=True)  # Same time as accepted_at
+    done_preparing_at = db.Column(db.DateTime, nullable=True)  # When seller clicks done preparing
+    confirmed_at = db.Column(db.DateTime, nullable=True)  # When rider accepts the order
+    on_delivery_at = db.Column(db.DateTime, nullable=True)  # DEPRECATED - use confirmed_at
+    delivered_at = db.Column(db.DateTime, nullable=True)  # When rider submits proofs and marks delivered
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -1097,6 +1106,49 @@ class Order(db.Model):
         subtotal = Decimal(self.subtotal_amount or 0)
         delivery = Decimal(self.delivery_fee or 0)
         self.total_amount = subtotal + delivery
+
+    def set_status(self, new_status):
+        """Update order status and record the timestamp for timeline tracking.
+        
+        Timeline mapping:
+        - pending_at: order created
+        - accepted_at: seller verifies payment receipt
+        - preparing_at: same as accepted_at (set together)
+        - done_preparing_at: seller clicks done preparing
+        - confirmed_at: rider accepts the order
+        - delivered_at: rider submits proofs and marks delivered
+        """
+        self.status = new_status
+        now = datetime.utcnow()
+        timestamp_map = {
+            'pending': 'pending_at',
+            'done_preparing': 'done_preparing_at',
+            'delivered': 'delivered_at',
+        }
+        field = timestamp_map.get(new_status)
+        if field and getattr(self, field) is None:
+            setattr(self, field, now)
+        
+        # accepted: set both accepted_at and preparing_at together
+        if new_status == 'accepted':
+            if self.accepted_at is None:
+                self.accepted_at = now
+            if self.preparing_at is None:
+                self.preparing_at = now
+        
+        # preparing: also set accepted_at and preparing_at (web verify-payment goes straight to preparing)
+        if new_status == 'preparing':
+            if self.accepted_at is None:
+                self.accepted_at = now
+            if self.preparing_at is None:
+                self.preparing_at = now
+        
+        # on_delivery (rider accepts): set confirmed_at
+        if new_status == 'on_delivery':
+            if self.confirmed_at is None:
+                self.confirmed_at = now
+        
+        self.updated_at = now
     
     def to_dict(self):
         return {
@@ -1126,6 +1178,12 @@ class Order(db.Model):
             'customer_longitude': self.customer_longitude,
             'mapbox_place_id': self.mapbox_place_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'pending_at': self.pending_at.isoformat() if self.pending_at else None,
+            'accepted_at': self.accepted_at.isoformat() if self.accepted_at else None,
+            'preparing_at': self.preparing_at.isoformat() if self.preparing_at else None,
+            'done_preparing_at': self.done_preparing_at.isoformat() if self.done_preparing_at else None,
+            'confirmed_at': self.confirmed_at.isoformat() if self.confirmed_at else None,
+            'delivered_at': self.delivered_at.isoformat() if self.delivered_at else None,
             'customer_name': self.customer.full_name if self.customer else None,
             'customer_avatar': self.customer.avatar_url if self.customer else None,  # Cloudinary only
             'store_name': self.store.name if self.store else None,
