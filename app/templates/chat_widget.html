@@ -1199,11 +1199,15 @@ const chatWidget = (() => {
         } catch(e) {}
     }
 
+    function _hasOpenMenu() {
+        return document.querySelector('.msg-menu-popup.open') !== null;
+    }
+
     // ═══ POLLING (fallback for real-time) ═══
     function _startPoll() {
         _stopPoll();
         _pollTimer = setInterval(async () => {
-            await _loadMessages();
+            if (!_hasOpenMenu()) await _loadMessages();
             _pollTyping();
         }, 3000);
     }
