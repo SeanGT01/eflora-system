@@ -7,159 +7,309 @@
     /* ─── Hero ─── */
     .hero-section {
         position: relative;
-        border-radius: 28px;
+        border-radius: 24px;
         overflow: hidden;
         margin-bottom: 3rem;
-        min-height: 400px;
+        min-height: 480px;
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 0.75fr 1.25fr;
+        transition: background 0.7s ease;
     }
 
+    /* Left panel */
     .hero-left {
-        background: var(--charcoal);
-        padding: 0.5rem 4rem;
+        position: relative;
+        padding: 3rem 3rem 2rem;
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        position: relative;
+        justify-content: space-between;
         overflow: hidden;
         z-index: 1;
+        transition: background 0.7s ease;
     }
 
-    .hero-left::before {
-        content: '';
+    .hero-left-bg {
         position: absolute;
-        top: -80px;
-        left: -80px;
-        width: 300px;
-        height: 300px;
-        background: radial-gradient(circle, rgba(212,120,138,0.2) 0%, transparent 70%);
-        border-radius: 50%;
+        inset: 0;
+        transition: background 0.7s ease;
+        z-index: 0;
     }
 
-    .hero-left::after {
-        content: '';
-        position: absolute;
-        bottom: -60px;
-        right: -60px;
-        width: 220px;
-        height: 220px;
-        background: radial-gradient(circle, rgba(122,158,126,0.15) 0%, transparent 70%);
-        border-radius: 50%;
+    .hero-left > * { position: relative; z-index: 1; }
+
+    .hero-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
     }
 
     .hero-eyebrow {
         font-family: var(--font-sans);
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.2em;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
         text-transform: uppercase;
-        color: var(--dusty-rose);
-        margin-bottom: 1rem;
+        color: rgba(255,255,255,0.55);
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 8px;
+        margin-bottom: 0;
+        transition: color 0.5s ease;
     }
 
     .hero-eyebrow::before {
         content: '';
         display: inline-block;
-        width: 24px;
+        width: 20px;
         height: 1px;
-        background: var(--dusty-rose);
+        background: currentColor;
     }
 
+    .hero-title-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
     .hero-title {
-        font-family: var(--font-display);
-        font-size: clamp(44px, 5vw, 62px);
-        font-weight: 400;
-        color: var(--cream);
-        line-height: 1.1;
-        margin-bottom: 1.25rem;
+        font-family: var(--font-sans);
+        font-size: clamp(40px, 4.5vw, 68px);
+        font-weight: 900;
+        line-height: 0.95;
+        letter-spacing: -0.02em;
+        color: #fff;
+        text-transform: uppercase;
+        margin-bottom: 0;
         position: relative;
         z-index: 1;
     }
 
     .hero-title em {
+        display: block;
         font-style: italic;
-        color: var(--blush);
+        font-weight: 400;
+        font-family: var(--font-display);
+        font-size: 0.75em;
+        color: rgba(255,255,255,0.75);
+        letter-spacing: 0;
+        text-transform: none;
     }
 
-    .hero-desc {
-        font-size: 15px;
-        color: rgba(250, 246, 240, 0.6);
-        line-height: 1.7;
-        margin-bottom: 2rem;
-        max-width: 340px;
-        position: relative;
-        z-index: 1;
+    .hero-subtitle {
+        font-size: 13px;
+        color: rgba(255,255,255,0.5);
+        line-height: 1.6;
+        max-width: 300px;
+        margin-top: 1.25rem;
+        font-family: var(--font-sans);
+    }
+
+    /* Thumbnail strip */
+    .hero-thumbs {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .hero-thumb {
+        width: 62px;
+        height: 62px;
+        border-radius: 12px;
+        overflow: hidden;
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: border-color 0.3s, transform 0.3s;
+        flex-shrink: 0;
+        background: rgba(255,255,255,0.08);
+    }
+
+    .hero-thumb:hover { transform: scale(1.06); }
+    .hero-thumb.active { border-color: #fff; }
+
+    .hero-thumb img {
+        width: 100%; height: 100%;
+        object-fit: cover;
+        display: block;
     }
 
     .hero-actions {
         display: flex;
-        gap: 0.875rem;
+        gap: 0.75rem;
         align-items: center;
+        margin-top: 1.5rem;
+    }
+
+    .hero-actions .btn-hero-primary {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 0.7rem 1.5rem;
+        background: #fff;
+        color: #1a1a1a;
+        border-radius: var(--radius-pill);
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+        letter-spacing: 0.04em;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .hero-actions .btn-hero-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+
+    .hero-actions .btn-hero-ghost {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 0.7rem 1.5rem;
+        background: transparent;
+        color: rgba(255,255,255,0.7);
+        border: 1px solid rgba(255,255,255,0.3);
+        border-radius: var(--radius-pill);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: border-color 0.2s, color 0.2s;
+    }
+    .hero-actions .btn-hero-ghost:hover { border-color: rgba(255,255,255,0.8); color: #fff; }
+
+    /* Right panel */
+    .hero-right {
         position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.7s ease;
+        perspective: 1000px;
+    }
+
+    .hero-right-bg {
+        display: none;
+    }
+
+    /* Slides */
+    .hero-slide {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.7s cubic-bezier(0.4,0,0.2,1);
         z-index: 1;
     }
 
-    .hero-right {
-        position: relative;
-        background: linear-gradient(145deg, #e8d5c4, #d4c4b0);
-        overflow: hidden;
+    /* Previous slide - left side, small and blurred */
+    .hero-slide.prev {
+        opacity: 0.3;
+        z-index: 0;
+    }
+    .hero-slide.prev img {
+        transform: translateX(-35%) scale(0.65) rotateY(-15deg);
+        filter: drop-shadow(0 20px 40px rgba(0,0,0,0.18)) blur(3px);
     }
 
-    .hero-right-img {
-        width: 100%;
-        height: 100%;
+    /* Active slide - center, large and clear */
+    .hero-slide.active {
+        opacity: 1;
+        pointer-events: auto;
+        z-index: 2;
+    }
+    .hero-slide.active img {
+        transform: translateX(0) scale(1.1) rotateY(0deg);
+        filter: drop-shadow(0 20px 40px rgba(0,0,0,0.18)) blur(0px);
+    }
+
+    /* Next slide - right side, small and blurred */
+    .hero-slide.next {
+        opacity: 0.3;
+        z-index: 0;
+    }
+    .hero-slide.next img {
+        transform: translateX(35%) scale(0.65) rotateY(15deg);
+        filter: drop-shadow(0 20px 40px rgba(0,0,0,0.18)) blur(3px);
+    }
+
+    .hero-slide img {
+        width: 85%;
+        height: 85%;
         object-fit: contain;
+        border-radius: 0;
         display: block;
+        transition: transform 0.7s cubic-bezier(0.4,0,0.2,1);
+        box-shadow: none;
+        transform-style: preserve-3d;
     }
 
-    .hero-right-overlay {
+    /* Category label pill top-right of image */
+    .hero-slide-label {
         position: absolute;
-        inset: 0;
-        background: linear-gradient(135deg, rgba(42,35,30,0.15) 0%, rgba(212,120,138,0.1) 100%);
-    }
-
-    .hero-right-badge {
-        position: absolute;
-        bottom: 2rem;
-        left: 2rem;
-        background: rgba(255, 253, 249, 0.92);
-        backdrop-filter: blur(12px);
-        padding: 1rem 1.5rem;
-        border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-    }
-
-    .hero-badge-label {
-        font-size: 10px;
-        font-weight: 600;
+        top: 1.5rem;
+        right: 1.5rem;
+        background: rgba(0,0,0,0.65);
+        backdrop-filter: blur(6px);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: var(--sage);
-        margin-bottom: 4px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        border: none;
+        z-index: 2;
+        opacity: 0;
+        transform: translateY(-8px);
+        transition: opacity 0.5s 0.3s, transform 0.5s 0.3s;
     }
+    .hero-slide.active .hero-slide-label { opacity: 1; transform: translateY(0); }
 
-    .hero-badge-value {
-        font-family: var(--font-display);
-        font-size: 22px;
-        font-weight: 600;
-        color: var(--charcoal);
-    }
-
-    .hero-right-decoration {
+    /* Nav arrows */
+    .hero-nav {
         position: absolute;
-        top: 2rem;
-        right: 2rem;
-        background: var(--deep-rose);
-        color: white;
-        padding: 0.75rem 1.25rem;
-        border-radius: var(--radius-pill);
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        display: flex;
+        gap: 8px;
+        z-index: 3;
+    }
+    .hero-nav-btn {
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0,0,0,0.55);
+        backdrop-filter: blur(4px);
+        color: #fff;
+        font-size: 18px;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: background 0.2s, transform 0.2s;
+    }
+    .hero-nav-btn:hover { background: rgba(0,0,0,0.8); transform: scale(1.08); }
+
+    /* Progress bar */
+    .hero-progress {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: rgba(255,255,255,0.15);
+        z-index: 3;
+    }
+    .hero-progress-bar {
+        height: 100%;
+        background: rgba(255,255,255,0.7);
+        width: 0%;
+        transition: width 0.1s linear;
+    }
+
+    /* Left panel text animation */
+    .hero-text-slot {
+        overflow: hidden;
+    }
+    .hero-text-inner {
+        transition: transform 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.55s ease;
+    }
+    .hero-text-inner.leaving {
+        transform: translateY(-110%);
+        opacity: 0;
+    }
+    .hero-text-inner.entering {
+        transform: translateY(110%);
+        opacity: 0;
     }
 
     /* Floating petal decoration */
@@ -168,22 +318,36 @@
         inset: 0;
         pointer-events: none;
         overflow: hidden;
+        z-index: 0;
     }
-
     .petal {
         position: absolute;
-        width: 12px;
-        height: 18px;
-        background: rgba(242, 196, 206, 0.3);
+        width: 10px;
+        height: 16px;
+        background: rgba(255,255,255,0.12);
         border-radius: 50% 0 50% 0;
         animation: floatPetal linear infinite;
     }
-
     @keyframes floatPetal {
         0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
         10% { opacity: 1; }
-        90% { opacity: 0.5; }
-        100% { transform: translateY(580px) rotate(360deg); opacity: 0; }
+        90% { opacity: 0.4; }
+        100% { transform: translateY(520px) rotate(360deg); opacity: 0; }
+    }
+
+    /* Responsive Hero */
+    @media (max-width: 900px) {
+        .hero-section { grid-template-columns: 1fr; min-height: auto; }
+        .hero-right { height: 300px; }
+        .hero-left { padding: 2rem 2rem 1.5rem; }
+        .hero-title { font-size: clamp(30px, 7vw, 52px); }
+    }
+    @media (max-width: 600px) {
+        .hero-right { height: 240px; }
+        .hero-left { padding: 1.5rem 1.25rem 1.25rem; }
+        .hero-title { font-size: clamp(26px, 8vw, 44px); }
+        .hero-thumbs { gap: 7px; }
+        .hero-thumb { width: 50px; height: 50px; }
     }
 
     /* ─── Section Headers ─── */
@@ -1423,341 +1587,89 @@
     }
 
 
-    /* Category Advertisement Styles */
-.category-ad-container {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 2rem;
-    background: linear-gradient(145deg, rgba(250, 246, 240, 0.95), rgba(245, 237, 230, 0.95));
-    backdrop-filter: blur(10px);
-}
-
-.category-ad-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-}
-
-.ad-label {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--deep-rose);
-}
-
-.ad-controls {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.ad-control {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-    border: 1px solid rgba(181, 68, 90, 0.2);
-    color: var(--charcoal);
-    cursor: pointer;
-    transition: var(--transition);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    backdrop-filter: blur(5px);
-}
-
-.ad-control:hover {
-    background: var(--deep-rose);
-    color: white;
-    border-color: var(--deep-rose);
-    transform: scale(1.05);
-}
-
-.category-ad-carousel {
-    position: relative;
-    height: 350px;
-    overflow: hidden;
-}
-
-.category-ad-item {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.5s ease, visibility 0.5s ease;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.category-ad-item.active {
-    opacity: 1;
-    visibility: visible;
-}
-
-.category-ad-card {
-    display: block;
-    text-decoration: none;
-    transition: var(--transition);
-}
-
-.category-ad-image-wrap {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    border-radius: var(--radius-lg);
-    background: var(--cream);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    transition: var(--transition);
-    box-shadow: var(--shadow-petal);
-}
-
-.category-ad-image-wrap:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--shadow-leaf);
-    border-color: var(--deep-rose);
-}
-
-.category-ad-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.5s ease;
-}
-
-.category-ad-image-wrap:hover .category-ad-image {
-    transform: scale(1.05);
-}
-
-.category-ad-text {
-    text-align: center;
-}
-
-.category-ad-name {
-    font-family: var(--font-display);
-    font-size: 22px;
-    font-weight: 500;
-    color: var(--charcoal);
-    margin-bottom: 0.5rem;
-}
-
-.category-ad-desc {
-    font-size: 14px;
-    color: var(--muted);
-    line-height: 1.6;
-    margin-bottom: 1rem;
-}
-
-.category-ad-shop {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1.25rem;
-    background: var(--deep-rose);
-    color: white;
-    text-decoration: none;
-    border-radius: var(--radius-pill);
-    font-size: 13px;
-    font-weight: 500;
-    transition: var(--transition);
-}
-
-.category-ad-shop:hover {
-    background: var(--dusty-rose);
-    transform: translateX(5px);
-    box-shadow: 0 4px 12px rgba(181, 68, 90, 0.3);
-}
-
-/* Dots indicator */
-.ad-dots {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-top: 1.5rem;
-}
-
-.ad-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: rgba(107, 76, 59, 0.2);
-    cursor: pointer;
-    transition: var(--transition);
-}
-
-.ad-dot.active {
-    width: 24px;
-    border-radius: 4px;
-    background: var(--deep-rose);
-}
-
-.ad-dot:hover {
-    background: var(--dusty-rose);
-}
-
-/* Update hero-right to accommodate the carousel */
-.hero-right {
-    position: relative;
-    background: linear-gradient(145deg, #e8d5c4, #d4c4b0);
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* Icon fallback styles */
-.category-ad-image-wrap i {
-    font-size: 64px;
-    color: var(--muted);
-    opacity: 0.5;
-}
-
-/* Responsive adjustments */
-@media (max-width: 900px) {
-    .category-ad-container {
-        padding: 1.5rem;
-    }
-    
-    .category-ad-carousel {
-        height: 300px;
-    }
-    
-    .category-ad-name {
-        font-size: 20px;
-    }
-    
-    .category-ad-desc {
-        font-size: 13px;
-    }
-}
-
-@media (max-width: 600px) {
-    .category-ad-carousel {
-        height: 280px;
-    }
-    
-    .category-ad-name {
-        font-size: 18px;
-    }
-}
 </style>
 {% endblock %}
 
 {% block content %}
 
 <!-- ─── Hero ─── -->
-<section class="hero-section">
-    <div class="hero-left">
-        <div class="hero-eyebrow">Freshly curated blooms</div>
-        <h1 class="hero-title">
-            Nature's finest,<br>
-            <em>at your door</em>
-        </h1>
-        <p class="hero-desc">
-            Handpicked flowers and plants sourced directly from local farms — fresh, beautiful, and delivered with care.
-        </p>
-        <div class="hero-actions">
-            <a href="#featured-products" class="btn btn-rose">
-                <i class="ri-shopping-bag-line"></i> Shop Now
-            </a>
-            <a href="{{ url_for('templates.stores') }}" class="btn btn-ghost">
-                Browse Stores
-            </a>
+<section class="hero-section" id="heroSection">
+    <!-- LEFT: text + thumbs -->
+    <div class="hero-left" id="heroLeft">
+        <div class="hero-left-bg" id="heroLeftBg"></div>
+
+        <div class="hero-top-bar">
+            <div class="hero-eyebrow" id="heroEyebrow">Fresh Flowers</div>
         </div>
+
+        <div class="hero-title-wrap">
+            <div class="hero-text-slot">
+                <div class="hero-text-inner" id="heroTitleInner">
+                    <h1 class="hero-title" id="heroTitle">The New<br><em>Must Haves</em></h1>
+                    <p class="hero-subtitle" id="heroSubtitle">Roses, tulips, lilies & more — handpicked from local farms, delivered fresh to your door.</p>
+                    <div class="hero-actions">
+                        <a href="#featured-products" class="btn-hero-primary" id="heroShopBtn">
+                            <i class="ri-shopping-bag-line"></i> Shop Now
+                        </a>
+                        <a href="{{ url_for('templates.stores') }}" class="btn-hero-ghost">Browse Stores</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Thumbnail strip -->
+        <div class="hero-thumbs" id="heroThumbs">
+            <div class="hero-thumb active" onclick="heroGoTo(0)" data-idx="0">
+                <img src="/static/images/category_images/fresh_flowers.png" alt="Fresh Flowers">
+            </div>
+            <div class="hero-thumb" onclick="heroGoTo(1)" data-idx="1">
+                <img src="/static/images/category_images/potted_plants.png" alt="Potted Plants">
+            </div>
+            <div class="hero-thumb" onclick="heroGoTo(2)" data-idx="2">
+                <img src="/static/images/category_images/bouquets.png" alt="Bouquets">
+            </div>
+            <div class="hero-thumb" onclick="heroGoTo(3)" data-idx="3">
+                <img src="/static/images/category_images/succulents.png" alt="Succulents">
+            </div>
+        </div>
+
+        <!-- Petals -->
+        <div class="hero-petals" id="heroPetals"></div>
     </div>
 
-    <div class="hero-right">
-        <!-- Category Advertisement Carousel -->
-        <div class="category-ad-container">
-            <div class="category-ad-header">
-                <span class="ad-label">Shop by Category</span>
-                <div class="ad-controls">
-                    <button class="ad-control prev" onclick="rotateCategory(-1)"><i class="ri-arrow-left-s-line"></i></button>
-                    <button class="ad-control next" onclick="rotateCategory(1)"><i class="ri-arrow-right-s-line"></i></button>
-                </div>
-            </div>
-            
-            <div class="category-ad-carousel" id="categoryCarousel">
-                <!-- Item 1 -->
-                <div class="category-ad-item active">
-                   <a href="{{ url_for('templates.category', category_identifier='flowers') }}" class="category-ad-card"></a>
-                        <div class="category-ad-image-wrap">
-                            <img src="../static/images/category_images/potted_plants.jpg" alt="Fresh Flowers" class="category-ad-image">
-                        </div>
-                    </a>
-                    <div class="category-ad-text">
-                        <div class="category-ad-name">Fresh Flowers</div>
-                        <div class="category-ad-desc">Roses, tulips, lilies & more</div>
-                  <a href="{{ url_for('templates.category', category_identifier='flowers') }}" class="category-ad-shop">Shop Now <i class="ri-arrow-right-line"></i></a>
-                    </div>
-                </div>
+    <!-- RIGHT: big image -->
+    <div class="hero-right" id="heroRight">
+        <div class="hero-right-bg" id="heroRightBg"></div>
 
-                <!-- Item 2 -->
-                <div class="category-ad-item">
-                <a href="{{ url_for('templates.category', category_identifier='plants') }}" class="category-ad-card">
-                        <div class="category-ad-image-wrap">
-                            <img src="../static/images/category_images/fresh_flowers.jpg" alt="Potted Plants" class="category-ad-image" onerror="this.parentElement.innerHTML='<i class=\'ri-plant-line\'></i>'">
-                        </div>
-                    </a>
-                    <div class="category-ad-text">
-                        <div class="category-ad-name">Potted Plants</div>
-                        <div class="category-ad-desc">Indoor & outdoor beauties</div>
-                     <a href="{{ url_for('templates.category', category_identifier='plants') }}" class="category-ad-shop">Shop Now <i class="ri-arrow-right-line"></i></a>
-                    </div>
-                </div>
-
-                <!-- Item 3 -->
-                <div class="category-ad-item">
-                  <a href="{{ url_for('templates.category', category_identifier='bouquets') }}" class="category-ad-card">
-                        <div class="category-ad-image-wrap">
-                            <img src="../static/images/category_images/bouquets.jpg" alt="Bouquets" class="category-ad-image" onerror="this.parentElement.innerHTML='<i class=\'ri-heart-line\'></i>'">
-                        </div>
-                    </a>
-                    <div class="category-ad-text">
-                        <div class="category-ad-name">Bouquets</div>
-                        <div class="category-ad-desc">Arrangements for every occasion</div>
-                    <a href="{{ url_for('templates.category', category_identifier='bouquets') }}" class="category-ad-shop">Shop Now <i class="ri-arrow-right-line"></i></a>
-                    </div>
-                </div>
-
-                <!-- Item 4 -->
-                <div class="category-ad-item">
-               <a href="{{ url_for('templates.category', category_identifier='succulents') }}" class="category-ad-card">
-                        <div class="category-ad-image-wrap">
-                            <img src="../static/images/category_images/bouquets.jpg" alt="Succulents" class="category-ad-image" onerror="this.parentElement.innerHTML='<i class=\'ri-seedling-line\'></i>'">
-                        </div>
-                    </a>
-                    <div class="category-ad-text">
-                        <div class="category-ad-name">Succulents</div>
-                        <div class="category-ad-desc">Low-maintenance, high beauty</div>
-                     <a href="{{ url_for('templates.category', category_identifier='succulents') }}" class="category-ad-shop">Shop Now <i class="ri-arrow-right-line"></i></a>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Dots indicator -->
-            <div class="ad-dots" id="adDots">
-                <span class="ad-dot active" onclick="showCategory(0)"></span>
-                <span class="ad-dot" onclick="showCategory(1)"></span>
-                <span class="ad-dot" onclick="showCategory(2)"></span>
-                <span class="ad-dot" onclick="showCategory(3)"></span>
-            </div>
+        <!-- Slide 0: Fresh Flowers -->
+        <div class="hero-slide active" data-idx="0">
+            <span class="hero-slide-label">Fresh Flowers</span>
+            <img src="/static/images/category_images/fresh_flowers.png" alt="Fresh Flowers">
+        </div>
+        <!-- Slide 1: Potted Plants -->
+        <div class="hero-slide" data-idx="1">
+            <span class="hero-slide-label">Potted Plants</span>
+            <img src="/static/images/category_images/potted_plants.png" alt="Potted Plants">
+        </div>
+        <!-- Slide 2: Bouquets -->
+        <div class="hero-slide" data-idx="2">
+            <span class="hero-slide-label">Bouquets</span>
+            <img src="/static/images/category_images/bouquets.png" alt="Bouquets">
+        </div>
+        <!-- Slide 3: Succulents -->
+        <div class="hero-slide" data-idx="3">
+            <span class="hero-slide-label">Succulents</span>
+            <img src="/static/images/category_images/succulents.png" alt="Succulents">
         </div>
 
-        <!-- Falling petals decoration -->
-        <div class="hero-petals" id="heroPetals"></div>
+        <!-- Nav arrows -->
+        <div class="hero-nav">
+            <button class="hero-nav-btn" onclick="heroPrev()" title="Previous"><i class="ri-arrow-left-s-line"></i></button>
+            <button class="hero-nav-btn" onclick="heroNext()" title="Next"><i class="ri-arrow-right-s-line"></i></button>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="hero-progress"><div class="hero-progress-bar" id="heroProgressBar"></div></div>
     </div>
 </section>
 
@@ -2101,95 +2013,175 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Category Advertisement Carousel
-let currentCategoryIndex = 0;
-const categoryItems = document.querySelectorAll('.category-ad-item');
-const dots = document.querySelectorAll('.ad-dot');
-const totalCategories = categoryItems.length;
-let autoRotateInterval;
+// ═══════════════════════════════════════════════════════════════
+// HERO CAROUSEL
+// ═══════════════════════════════════════════════════════════════
+(function() {
+    const SLIDES = [
+        {
+            title: 'The New<br><em>Must Haves</em>',
+            eyebrow: 'Fresh Flowers',
+            subtitle: 'Roses, tulips, lilies & more — handpicked from local farms, delivered fresh to your door.',
+            shopUrl: '/products?category=fresh-flowers',
+            bg: 'linear-gradient(135deg, #b5445a 0%, #d4788a 60%, #e8a0b2 100%)',
+        },
+        {
+            title: 'Bring Life<br><em>Indoors</em>',
+            eyebrow: 'Potted Plants',
+            subtitle: 'Indoor & outdoor beauties that transform any space into a green sanctuary.',
+            shopUrl: '/products?category=potted-plants',
+            bg: 'linear-gradient(135deg, #3a7a58 0%, #5fa07a 60%, #7aba93 100%)',
+        },
+        {
+            title: 'Perfect For<br><em>Every Moment</em>',
+            eyebrow: 'Bouquets',
+            subtitle: 'Curated arrangements for birthdays, anniversaries, and every occasion worth celebrating.',
+            shopUrl: '/products?category=bouquets',
+            bg: 'linear-gradient(135deg, #8b3a7a 0%, #b56aa0 60%, #d490c0 100%)',
+        },
+        {
+            title: 'Low Care<br><em>High Beauty</em>',
+            eyebrow: 'Succulents',
+            subtitle: 'Resilient, stylish, and endlessly charming — perfect for busy plant lovers.',
+            shopUrl: '/products?category=succulents',
+            bg: 'linear-gradient(135deg, #2a6a8a 0%, #4a90b0 60%, #6aadcc 100%)',
+        },
+    ];
 
-function showCategory(index) {
-    // Handle wrap around
-    if (index < 0) index = totalCategories - 1;
-    if (index >= totalCategories) index = 0;
-    
-    // Update active class on items
-    categoryItems.forEach(item => item.classList.remove('active'));
-    categoryItems[index].classList.add('active');
-    
-    // Update dots
-    dots.forEach(dot => dot.classList.remove('active'));
-    dots[index].classList.add('active');
-    
-    currentCategoryIndex = index;
-}
+    let current = 0;
+    let autoTimer = null;
+    let progressTimer = null;
+    let progressVal = 0;
+    const DURATION = 5000;
+    const TICK = 60;
 
-function rotateCategory(direction) {
-    showCategory(currentCategoryIndex + direction);
-}
+    const slides = document.querySelectorAll('.hero-slide');
+    const thumbs = document.querySelectorAll('.hero-thumb');
+    const heroSectionEl = document.getElementById('heroSection');
+    const eyebrowEl = document.getElementById('heroEyebrow');
+    const titleInner = document.getElementById('heroTitleInner');
+    const progressBar = document.getElementById('heroProgressBar');
+    const shopBtn = document.getElementById('heroShopBtn');
 
-// Auto-rotate every 2 seconds
-function startAutoRotate() {
-    autoRotateInterval = setInterval(() => rotateCategory(1), 5000);
-}
+    function applySlide(idx, animate) {
+        const s = SLIDES[idx];
 
-// Stop auto-rotate
-function stopAutoRotate() {
-    clearInterval(autoRotateInterval);
-}
+        // Slide positioning - prev/next/active
+        slides.forEach((el, i) => {
+            el.classList.remove('prev', 'active', 'next');
+            if (i === idx) {
+                el.classList.add('active');
+            } else if (i === (idx - 1 + SLIDES.length) % SLIDES.length) {
+                el.classList.add('prev');
+            } else if (i === (idx + 1) % SLIDES.length) {
+                el.classList.add('next');
+            }
+        });
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    // Start auto-rotation
-    startAutoRotate();
-    
-    // Pause auto-rotate on hover
-    const carousel = document.querySelector('.category-ad-container');
-    if (carousel) {
-        carousel.addEventListener('mouseenter', stopAutoRotate);
-        carousel.addEventListener('mouseleave', startAutoRotate);
+        // Thumbs
+        thumbs.forEach(el => el.classList.remove('active'));
+        thumbs[idx].classList.add('active');
+
+        // Background — full section
+        heroSectionEl.style.background = s.bg;
+
+        // Text animation
+        if (animate) {
+            titleInner.classList.add('leaving');
+            setTimeout(() => {
+                updateText(s);
+                titleInner.classList.remove('leaving');
+                titleInner.classList.add('entering');
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    titleInner.classList.remove('entering');
+                }));
+            }, 300);
+        } else {
+            updateText(s);
+        }
+
+        current = idx;
     }
-    
-    // Initialize falling petals
-    const container = document.getElementById('heroPetals');
-    if (!container) return;
-    for (let i = 0; i < 8; i++) {
-        const petal = document.createElement('div');
-        petal.className = 'petal';
-        petal.style.cssText = `
-            left: ${10 + Math.random() * 80}%;
-            animation-duration: ${5 + Math.random() * 6}s;
-            animation-delay: ${Math.random() * 5}s;
-            width: ${8 + Math.random() * 8}px;
-            height: ${12 + Math.random() * 10}px;
-            transform: rotate(${Math.random() * 360}deg);
-            opacity: ${0.15 + Math.random() * 0.2};
-        `;
-        container.appendChild(petal);
+
+    function updateText(s) {
+        eyebrowEl.textContent = s.eyebrow;
+        document.getElementById('heroTitle').innerHTML = s.title;
+        document.getElementById('heroSubtitle').textContent = s.subtitle;
+        shopBtn.href = s.shopUrl;
     }
-});
 
-// Add click handlers for controls
-document.querySelector('.ad-control.prev')?.addEventListener('click', function() {
-    stopAutoRotate();
-    rotateCategory(-1);
-    startAutoRotate();
-});
+    function startProgress() {
+        clearInterval(progressTimer);
+        progressVal = 0;
+        progressBar.style.width = '0%';
+        progressTimer = setInterval(() => {
+            progressVal += (TICK / DURATION) * 100;
+            progressBar.style.width = Math.min(progressVal, 100) + '%';
+            if (progressVal >= 100) {
+                clearInterval(progressTimer);
+            }
+        }, TICK);
+    }
 
-document.querySelector('.ad-control.next')?.addEventListener('click', function() {
-    stopAutoRotate();
-    rotateCategory(1);
-    startAutoRotate();
-});
+    function startAuto() {
+        clearInterval(autoTimer);
+        startProgress();
+        autoTimer = setInterval(() => {
+            heroNext();
+        }, DURATION);
+    }
 
-// Add click handlers for dots
-dots.forEach((dot, index) => {
-    dot.addEventListener('click', function() {
-        stopAutoRotate();
-        showCategory(index);
-        startAutoRotate();
+    function stopAuto() {
+        clearInterval(autoTimer);
+        clearInterval(progressTimer);
+        autoTimer = null;
+    }
+
+    window.heroGoTo = function(idx) {
+        if (idx === current) return;
+        stopAuto();
+        applySlide(idx, true);
+        startAuto();
+    };
+
+    window.heroNext = function() {
+        const next = (current + 1) % SLIDES.length;
+        stopAuto();
+        applySlide(next, true);
+        startAuto();
+    };
+
+    window.heroPrev = function() {
+        const prev = (current - 1 + SLIDES.length) % SLIDES.length;
+        stopAuto();
+        applySlide(prev, true);
+        startAuto();
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // First slide (no animation)
+        applySlide(0, false);
+        startAuto();
+
+        // Pause on hover
+        const heroEl = document.getElementById('heroSection');
+        if (heroEl) {
+            heroEl.addEventListener('mouseenter', stopAuto);
+            heroEl.addEventListener('mouseleave', startAuto);
+        }
+
+        // Falling petals
+        const container = document.getElementById('heroPetals');
+        if (container) {
+            for (let i = 0; i < 7; i++) {
+                const p = document.createElement('div');
+                p.className = 'petal';
+                p.style.cssText = `left:${10+Math.random()*80}%;animation-duration:${6+Math.random()*7}s;animation-delay:${Math.random()*6}s;width:${7+Math.random()*7}px;height:${11+Math.random()*9}px;transform:rotate(${Math.random()*360}deg);`;
+                container.appendChild(p);
+            }
+        }
     });
-});
+})();
 
 // Quick Add to Cart Function - Matches store_detail.html behavior
 async function quickAdd(productId, productName, productPrice, productCategory) {
