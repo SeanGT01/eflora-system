@@ -320,6 +320,66 @@
 .msg-timestamp { font-size: 10px; color: #999; text-align: center; margin: 6px 0; }
 .msg-seen { font-size: 10.5px; color: #888; text-align: right; margin-top: 2px; }
 
+/* ══════════ MESSAGE MENU (3-dot) ══════════ */
+.msg-row { position: relative; }
+.msg-menu-wrap { position: relative; display: flex; align-items: center; flex-shrink: 0; }
+.msg-menu-btn {
+    width: 26px; height: 26px; border: none; background: transparent;
+    color: transparent; font-size: 16px; cursor: pointer; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; transition: color .15s, background .15s;
+}
+.msg-row:hover .msg-menu-btn { color: #999; }
+.msg-menu-btn:hover { color: var(--charcoal) !important; background: rgba(0,0,0,.06); }
+.msg-menu-popup {
+    display: none; position: absolute; z-index: 10;
+    background: #fff; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    min-width: 130px; padding: 4px 0; font-size: 13px;
+}
+.msg-row.sent .msg-menu-popup { right: 0; top: 100%; }
+.msg-row.received .msg-menu-popup { left: 0; top: 100%; }
+.msg-menu-popup.open { display: block; }
+.msg-menu-popup .menu-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+    cursor: pointer; color: var(--charcoal); white-space: nowrap; transition: background .12s;
+}
+.msg-menu-popup .menu-item:hover { background: rgba(0,0,0,.04); }
+.msg-menu-popup .menu-item.danger { color: #d32f2f; }
+.msg-menu-popup .menu-item.danger:hover { background: rgba(211,47,47,.06); }
+.msg-menu-popup .menu-item i { font-size: 15px; width: 18px; text-align: center; }
+
+/* ══════════ DELETED MESSAGE ══════════ */
+.msg-deleted-content {
+    display: flex; align-items: center; gap: 5px;
+    font-style: italic; color: #999; font-size: 13px;
+}
+.msg-deleted-content i { font-size: 14px; }
+
+/* ══════════ QUOTED REPLY ══════════ */
+.msg-reply-quote {
+    background: rgba(0,0,0,.05); border-left: 3px solid var(--deep-rose);
+    border-radius: 6px; padding: 5px 8px; margin-bottom: 5px;
+    font-size: 12px; max-width: 100%; cursor: pointer;
+}
+.msg-reply-quote .reply-name { font-weight: 600; color: var(--deep-rose); font-size: 11px; margin-bottom: 1px; }
+.msg-reply-quote .reply-text { color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ══════════ REPLY INDICATOR BAR ══════════ */
+.chat-reply-bar {
+    display: none; align-items: center; gap: 8px;
+    padding: 8px 14px; background: var(--cream);
+    border-top: 1px solid var(--border); font-size: 13px;
+}
+.chat-reply-bar.show { display: flex; }
+.chat-reply-bar .reply-preview { flex: 1; min-width: 0; border-left: 3px solid var(--deep-rose); padding-left: 8px; }
+.chat-reply-bar .reply-preview .reply-to-name { font-weight: 600; color: var(--deep-rose); font-size: 12px; }
+.chat-reply-bar .reply-preview .reply-to-text { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-reply-bar .reply-cancel {
+    width: 26px; height: 26px; border-radius: 50%; border: none;
+    background: transparent; color: var(--muted); cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+}
+.chat-reply-bar .reply-cancel:hover { color: #d32f2f; background: rgba(211,47,47,.08); }
+
 /* Typing indicator */
 .typing-indicator { font-size: 12px; color: var(--muted); padding: 4px 0; }
 .typing-indicator .dots span {
@@ -487,6 +547,13 @@
             <div class="chat-messages" id="chat-messages-area"></div>
             <div class="typing-indicator" id="chat-typing" style="display:none;padding:4px 16px;">
                 <span id="chat-typing-name"></span> is typing<span class="dots"><span></span><span></span><span></span></span>
+            </div>
+            <div class="chat-reply-bar" id="chat-reply-bar">
+                <div class="reply-preview">
+                    <div class="reply-to-name" id="chat-reply-name"></div>
+                    <div class="reply-to-text" id="chat-reply-text"></div>
+                </div>
+                <button class="reply-cancel" onclick="chatWidget.cancelReply()" title="Cancel reply"><i class="ri-close-line"></i></button>
             </div>
             <div class="chat-img-preview" id="chat-img-preview">
                 <div class="preview-thumbs" id="chat-preview-thumbs"></div>
@@ -809,6 +876,26 @@ const chatWidget = (() => {
         let lastDate = '';
         const lastSentByMe = [..._messages].reverse().find(m => m.sender_id == _userId);
 
+        // Helper: build quoted reply HTML
+        function replyHtml(m) {
+            if (!m.reply_to_id) return '';
+            const rName = _esc(m.reply_to_sender_name || 'Unknown');
+            const rText = m.reply_to_text ? _esc(m.reply_to_text) : '<i>Message has been deleted</i>';
+            return `<div class="msg-reply-quote"><div class="reply-name">${rName}</div><div class="reply-text">${rText}</div></div>`;
+        }
+
+        // Helper: build 3-dot menu
+        function menuHtml(m) {
+            if (m.is_deleted) return '';
+            const isMine = m.sender_id == _userId;
+            const menuId = 'msg-menu-' + m.id;
+            let items = '';
+            items += `<div class="menu-item" onclick="chatWidget.setReply(${m.id})"><i class="ri-reply-line"></i> Reply</div>`;
+            if (m.text) items += `<div class="menu-item" onclick="chatWidget.copyMessage(${m.id})"><i class="ri-file-copy-line"></i> Copy</div>`;
+            if (isMine) items += `<div class="menu-item danger" onclick="chatWidget.deleteMessage(${m.id})"><i class="ri-delete-bin-line"></i> Delete</div>`;
+            return `<div class="msg-menu-wrap"><button class="msg-menu-btn" onclick="chatWidget._toggleMenu('${menuId}',event)" title="More"><i class="ri-more-2-fill"></i></button><div class="msg-menu-popup" id="${menuId}">${items}</div></div>`;
+        }
+
         let i = 0;
         while (i < _messages.length) {
             const m = _messages[i];
@@ -821,26 +908,36 @@ const chatWidget = (() => {
 
             const isSent = m.sender_id == _userId;
             const cls = isSent ? 'sent' : 'received';
+            const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Deleted message
+            if (m.is_deleted || m.message_type === 'deleted') {
+                html += `<div class="msg-row ${cls}">`;
+                if (!isSent && m.sender_avatar) html += `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
+                html += `<div class="bubble"><div class="msg-deleted-content"><i class="ri-forbid-line"></i> Message has been deleted</div><div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
+                html += `</div>`;
+                i++; continue;
+            }
 
             // Group consecutive image-only messages from the same sender
             if (m.message_type === 'image' && m.image_url && !m.text) {
                 const imgs = [m];
                 while (i + 1 < _messages.length && imgs.length < 5) {
                     const next = _messages[i + 1];
-                    if (next.message_type === 'image' && next.image_url && !next.text && next.sender_id === m.sender_id) {
+                    if (next.message_type === 'image' && next.image_url && !next.text && next.sender_id === m.sender_id && !next.is_deleted) {
                         imgs.push(next);
                         i++;
                     } else break;
                 }
 
-                const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 html += `<div class="msg-row ${cls}">`;
                 if (!isSent && m.sender_avatar) {
                     html += `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
                 }
 
                 if (imgs.length === 1) {
-                    let content = `<img class="chat-img" src="${m.image_url}" alt="Image" onclick="chatWidget.openLightbox('${m.image_url}')">`;
+                    let content = replyHtml(m);
+                    content += `<img class="chat-img" src="${m.image_url}" alt="Image" onclick="chatWidget.openLightbox('${m.image_url}')">`;
                     html += `<div class="bubble">${content}<div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
                 } else {
                     const gCls = 'g' + imgs.length;
@@ -849,6 +946,7 @@ const chatWidget = (() => {
                     ).join('');
                     html += `<div class="bubble"><div class="img-grid ${gCls}">${gridHtml}</div><div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
                 }
+                html += menuHtml(m);
                 html += `</div>`;
 
                 // Seen receipt for last grouped image
@@ -858,21 +956,20 @@ const chatWidget = (() => {
                 }
             } else {
                 // Normal text or image-with-caption message
-                let content = '';
+                let content = replyHtml(m);
                 if (m.message_type === 'image' && m.image_url) {
                     content += `<img class="chat-img" src="${m.image_url}" alt="Image" onclick="chatWidget.openLightbox('${m.image_url}')">`;
                     if (m.text) content += `<div class="caption">${_esc(m.text)}</div>`;
                 } else {
-                    content = _esc(m.text || '');
+                    content += _esc(m.text || '');
                 }
-
-                const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
                 html += `<div class="msg-row ${cls}">`;
                 if (!isSent && m.sender_avatar) {
                     html += `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
                 }
                 html += `<div class="bubble">${content}<div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
+                html += menuHtml(m);
                 html += `</div>`;
 
                 if (isSent && m === lastSentByMe && m.is_read) {
@@ -903,12 +1000,16 @@ const chatWidget = (() => {
         const text = input.value.trim();
         if (!text || !_activeConvoId) return;
         input.value = '';
+        const replyToId = _replyTo ? _replyTo.id : null;
+        cancelReply();
 
         try {
+            const body = { text, message_type: 'text' };
+            if (replyToId) body.reply_to_id = replyToId;
             const res = await _fetch(API + '/conversations/' + _activeConvoId + '/messages', {
                 method: 'POST',
                 headers: _headers(),
-                body: JSON.stringify({ text, message_type: 'text' }),
+                body: JSON.stringify(body),
             });
             const data = await res.json();
             if (data.message) {
@@ -919,6 +1020,76 @@ const chatWidget = (() => {
     }
 
     let _pendingImages = [];
+    let _replyTo = null; // { id, sender_name, text }
+
+    function setReply(msgId) {
+        const msg = _messages.find(m => m.id === msgId);
+        if (!msg) return;
+        _replyTo = { id: msg.id, sender_name: msg.sender_name || 'Unknown', text: msg.text || (msg.message_type === 'image' ? '[Image]' : '') };
+        document.getElementById('chat-reply-name').textContent = 'Replying to ' + _replyTo.sender_name;
+        document.getElementById('chat-reply-text').textContent = _replyTo.text;
+        document.getElementById('chat-reply-bar').classList.add('show');
+        document.getElementById('chat-msg-input').focus();
+        _closeAllMenus();
+    }
+
+    function cancelReply() {
+        _replyTo = null;
+        document.getElementById('chat-reply-bar').classList.remove('show');
+    }
+
+    function copyMessage(msgId) {
+        const msg = _messages.find(m => m.id === msgId);
+        if (!msg || !msg.text) return;
+        navigator.clipboard.writeText(msg.text).then(() => {
+            // Brief toast
+            const toast = document.createElement('div');
+            toast.textContent = 'Copied to clipboard';
+            toast.style.cssText = 'position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:6px 16px;border-radius:20px;font-size:12px;z-index:100001;';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 1500);
+        }).catch(()=>{});
+        _closeAllMenus();
+    }
+
+    async function deleteMessage(msgId) {
+        if (!_activeConvoId) return;
+        _closeAllMenus();
+        if (!confirm('Delete this message?')) return;
+        try {
+            const res = await _fetch(API + '/conversations/' + _activeConvoId + '/messages/' + msgId, {
+                method: 'DELETE', headers: _headers(),
+            });
+            const data = await res.json();
+            if (data.message && typeof data.message === 'object') {
+                const idx = _messages.findIndex(m => m.id === msgId);
+                if (idx !== -1) { _messages[idx] = data.message; _renderMessages(); }
+            } else {
+                // Fallback: mark locally
+                const idx = _messages.findIndex(m => m.id === msgId);
+                if (idx !== -1) {
+                    _messages[idx].is_deleted = true;
+                    _messages[idx].text = null;
+                    _messages[idx].image_url = null;
+                    _messages[idx].message_type = 'deleted';
+                    _renderMessages();
+                }
+            }
+        } catch(e) { console.error('Chat: delete failed', e); }
+    }
+
+    function _toggleMenu(id, ev) {
+        ev.stopPropagation();
+        const el = document.getElementById(id);
+        const wasOpen = el.classList.contains('open');
+        _closeAllMenus();
+        if (!wasOpen) el.classList.add('open');
+    }
+    function _closeAllMenus() {
+        document.querySelectorAll('.msg-menu-popup.open').forEach(el => el.classList.remove('open'));
+    }
+    // Close menus on click outside
+    document.addEventListener('click', _closeAllMenus);
 
     function previewImage(fileInput) {
         const files = Array.from(fileInput.files);
@@ -1111,6 +1282,11 @@ const chatWidget = (() => {
         openLightbox,
         closeLightbox,
         onType,
+        setReply,
+        cancelReply,
+        copyMessage,
+        deleteMessage,
+        _toggleMenu,
     };
 })();
 </script>
