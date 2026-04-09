@@ -234,11 +234,20 @@ def send_message(convo_id):
     if msg_type == 'text' and not text:
         return jsonify({'error': 'Message text is required'}), 400
 
+    reply_to_id = data.get('reply_to_id')
+    if reply_to_id is not None:
+        reply_to_id = int(reply_to_id)
+        # Verify the replied-to message exists in this conversation
+        replied = ChatMessage.query.filter_by(id=reply_to_id, conversation_id=convo.id).first()
+        if not replied:
+            reply_to_id = None
+
     msg = ChatMessage(
         conversation_id=convo.id,
         sender_id=user.id,
         message_type=msg_type,
         text=text if text else None,
+        reply_to_id=reply_to_id,
     )
     db.session.add(msg)
 
@@ -332,6 +341,48 @@ def send_image_message(convo_id):
     db.session.commit()
 
     return jsonify({'message': msg.to_dict()}), 201
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# DELETE MESSAGE
+# ═══════════════════════════════════════════════════════════════════════
+
+@chat_bp.route('/conversations/<int:convo_id>/messages/<int:msg_id>', methods=['DELETE'])
+@chat_auth_required
+def delete_message(convo_id, msg_id):
+    """
+    DELETE /api/v1/chat/conversations/<id>/messages/<msg_id>
+    Only the sender can delete their own messages.
+    """
+    user = _current_user()
+    convo = Conversation.query.get_or_404(convo_id)
+    msg = ChatMessage.query.get_or_404(msg_id)
+
+    if msg.conversation_id != convo_id:
+        return jsonify({'error': 'Message not in this conversation'}), 400
+
+    if user.id not in (convo.customer_id, convo.seller_id):
+        return jsonify({'error': 'Access denied'}), 403
+
+    if msg.sender_id != user.id:
+        return jsonify({'error': 'Can only delete your own messages'}), 403
+
+    # Delete image from Cloudinary if it exists
+    if msg.message_type == 'image' and msg.image_public_id:
+        try:
+            cloudinary.uploader.destroy(msg.image_public_id)
+        except Exception as e:
+            print(f'Warning: Failed to delete image from Cloudinary: {e}')
+
+    # Soft delete: keep the row but clear content
+    msg.is_deleted = True
+    msg.text = None
+    msg.image_url = None
+    msg.image_public_id = None
+    msg.message_type = 'deleted'
+    db.session.commit()
+
+    return jsonify({'message': msg.to_dict()}), 200
 
 
 # ═══════════════════════════════════════════════════════════════════════

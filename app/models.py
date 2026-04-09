@@ -1856,6 +1856,12 @@ class ChatMessage(db.Model):
     image_url = db.Column(db.String(500), nullable=True)
     image_public_id = db.Column(db.String(255), nullable=True)
 
+    # Reply
+    reply_to_id = db.Column(db.Integer, db.ForeignKey('chat_messages.id'), nullable=True)
+
+    # Soft delete
+    is_deleted = db.Column(db.Boolean, default=False)
+
     # Read receipt
     is_read = db.Column(db.Boolean, default=False)
     read_at = db.Column(db.DateTime, nullable=True)
@@ -1865,19 +1871,33 @@ class ChatMessage(db.Model):
     # Relationships
     conversation = db.relationship('Conversation', back_populates='messages')
     sender = db.relationship('User', backref=db.backref('sent_messages', lazy='dynamic'))
+    reply_to = db.relationship('ChatMessage', remote_side='ChatMessage.id', uselist=False)
 
     def to_dict(self):
-        return {
+        d = {
             'id': self.id,
             'conversation_id': self.conversation_id,
             'sender_id': self.sender_id,
             'sender_name': self.sender.full_name if self.sender else None,
             'sender_avatar': self.sender.avatar_url if self.sender else None,
             'message_type': self.message_type,
-            'text': self.text,
-            'image_url': self.image_url,
-            'image_public_id': self.image_public_id,
+            'is_deleted': self.is_deleted or False,
             'is_read': self.is_read,
             'read_at': to_pht_iso(self.read_at),
             'created_at': to_pht_iso(self.created_at),
+            'reply_to_id': self.reply_to_id,
+            'reply_to_text': None,
+            'reply_to_sender_name': None,
         }
+        if self.is_deleted:
+            d['text'] = None
+            d['image_url'] = None
+            d['image_public_id'] = None
+        else:
+            d['text'] = self.text
+            d['image_url'] = self.image_url
+            d['image_public_id'] = self.image_public_id
+        if self.reply_to_id and self.reply_to:
+            d['reply_to_text'] = self.reply_to.text if not self.reply_to.is_deleted else None
+            d['reply_to_sender_name'] = self.reply_to.sender.full_name if self.reply_to.sender else None
+        return d
