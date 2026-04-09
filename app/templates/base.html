@@ -3969,5 +3969,21 @@ updateCartDisplay();
 
     {% block extra_js %}
     {% endblock %}
+
+    <!-- Chat Widget (Messenger-style floating button + drawer) -->
+    {% include 'chat_widget.html' %}
+    <script>
+    // Initialize chat widget for website users (using Flask sessions, not JWT)
+    (function() {
+        fetch('/api/chat/session-check', { credentials: 'include' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.user_id) {
+                    chatWidget.init(data.token || '', data.user_id);
+                }
+            })
+            .catch(e => console.log('Chat: session check failed', e));
+    })();
+    </script>
 </body>
 </html>

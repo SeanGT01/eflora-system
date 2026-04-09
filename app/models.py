@@ -8,6 +8,20 @@ from decimal import Decimal
 from sqlalchemy.dialects.postgresql import JSON
 import cloudinary
 import cloudinary.utils
+import pytz
+
+
+# Philippines timezone (UTC+8)
+PHT = pytz.timezone('Asia/Manila')
+
+def to_pht_iso(dt):
+    """Convert UTC datetime to Philippines timezone ISO string"""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        # Assume UTC if no timezone info
+        dt = pytz.UTC.localize(dt)
+    return dt.astimezone(PHT).isoformat()
 
 
 class User(db.Model):
@@ -1747,4 +1761,123 @@ class MunicipalityBoundary(db.Model):
                 'max_lng': self.max_lng
             } if self.min_lat else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CHAT / MESSAGING MODELS
+# ═════════════════════════════════════════════════════════════════════════════
+
+class Conversation(db.Model):
+    """A chat conversation between a customer and a seller (store)."""
+    __tablename__ = 'conversations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
+
+    # Denormalized last-message data for fast inbox queries
+    last_message_text = db.Column(db.Text, nullable=True)
+    last_message_at = db.Column(db.DateTime, nullable=True)
+    last_sender_id = db.Column(db.Integer, nullable=True)
+
+    # Per-participant unread counters
+    customer_unread = db.Column(db.Integer, default=0)
+    seller_unread = db.Column(db.Integer, default=0)
+
+    # Soft-delete per participant (allows "delete conversation" without affecting the other side)
+    customer_deleted_at = db.Column(db.DateTime, nullable=True)
+    seller_deleted_at = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    customer = db.relationship('User', foreign_keys=[customer_id], backref=db.backref('customer_conversations', lazy='dynamic'))
+    seller = db.relationship('User', foreign_keys=[seller_id], backref=db.backref('seller_conversations', lazy='dynamic'))
+    store = db.relationship('Store', backref=db.backref('conversations', lazy='dynamic'))
+    messages = db.relationship('ChatMessage', back_populates='conversation', lazy='dynamic',
+                               cascade='all, delete-orphan', order_by='ChatMessage.created_at')
+
+    __table_args__ = (
+        db.UniqueConstraint('customer_id', 'store_id', name='unique_customer_store_conversation'),
+    )
+
+    def unread_for(self, user_id):
+        if user_id == self.customer_id:
+            return self.customer_unread
+        return self.seller_unread
+
+    def to_dict(self, current_user_id=None):
+        # Determine the "other" participant relative to current user
+        if current_user_id == self.customer_id:
+            other = self.seller
+            unread = self.customer_unread
+        else:
+            other = self.customer
+            unread = self.seller_unread
+
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'seller_id': self.seller_id,
+            'store_id': self.store_id,
+            'store_name': self.store.name if self.store else None,
+            'store_logo': self.store.logo_url if self.store else None,
+            'other_user': {
+                'id': other.id,
+                'full_name': other.full_name,
+                'avatar_url': other.avatar_url,
+                'role': other.role,
+            } if other else None,
+            'last_message_text': self.last_message_text,
+            'last_message_at': to_pht_iso(self.last_message_at),
+            'last_sender_id': self.last_sender_id,
+            'unread_count': unread,
+            'created_at': to_pht_iso(self.created_at),
+            'updated_at': to_pht_iso(self.updated_at),
+        }
+
+
+class ChatMessage(db.Model):
+    """A single message inside a conversation."""
+    __tablename__ = 'chat_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
+    # Content
+    message_type = db.Column(db.String(20), default='text')  # text, image
+    text = db.Column(db.Text, nullable=True)
+
+    # Image attachment (Cloudinary)
+    image_url = db.Column(db.String(500), nullable=True)
+    image_public_id = db.Column(db.String(255), nullable=True)
+
+    # Read receipt
+    is_read = db.Column(db.Boolean, default=False)
+    read_at = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    conversation = db.relationship('Conversation', back_populates='messages')
+    sender = db.relationship('User', backref=db.backref('sent_messages', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'conversation_id': self.conversation_id,
+            'sender_id': self.sender_id,
+            'sender_name': self.sender.full_name if self.sender else None,
+            'sender_avatar': self.sender.avatar_url if self.sender else None,
+            'message_type': self.message_type,
+            'text': self.text,
+            'image_url': self.image_url,
+            'image_public_id': self.image_public_id,
+            'is_read': self.is_read,
+            'read_at': to_pht_iso(self.read_at),
+            'created_at': to_pht_iso(self.created_at),
         }

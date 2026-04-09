@@ -182,6 +182,8 @@ def create_app(config_class='default'):
     from app.cloudinary_routes import cloudinary_bp  # Import Cloudinary blueprint
     from app.checkout_routes import checkout_bp  # Import Checkout blueprint
     from app.payment_verification_routes import payment_verification_bp  # Seller payment verification
+    from app.chat import chat_bp  # Chat / Messaging blueprint
+    from app.chat_session import chat_session_bp  # Chat session bridge (Flask sessions to JWT)
     
     # ====================================================
     # OPTIONAL: Background removal module (requires rembg)
@@ -218,6 +220,8 @@ def create_app(config_class='default'):
     app.register_blueprint(cloudinary_bp, url_prefix='/api/v1/cloudinary')
     app.register_blueprint(checkout_bp, url_prefix='/api/v1/checkout')
     app.register_blueprint(payment_verification_bp)  # Register Payment Verification blueprint
+    app.register_blueprint(chat_bp, url_prefix='/api/v1/chat')  # Register Chat blueprint
+    app.register_blueprint(chat_session_bp, url_prefix='/api/chat')  # Register Chat session bridge
     
     # Set session secret key
     app.secret_key = app.config['SECRET_KEY']
