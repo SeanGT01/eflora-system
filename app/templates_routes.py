@@ -130,6 +130,7 @@ def _serialize_customer_order(order):
         'updated_at': order.updated_at.isoformat() if order.updated_at else None,
         'store_id': order.store_id,
         'store_name': order.store.name if order.store else 'Store',
+        'store_logo': order.store.logo_url if order.store else None,
         'store_contact': order.store.contact_number if order.store else None,
         'item_count': total_quantity,
         'items': items_payload,

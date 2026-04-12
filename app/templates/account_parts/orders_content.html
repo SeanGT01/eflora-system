@@ -1588,7 +1588,10 @@ function renderOrderCard(order) {
             <!-- Store header -->
             <div class="order-card-store-hdr">
                 <div class="order-store-left">
-                    <div class="order-store-icon"><i class="ri-store-2-line"></i></div>
+                    ${order.store_logo 
+                        ? `<img src="${order.store_logo}" alt="${esc(order.store_name)}" style="width:clamp(24px, 5vw, 28px);height:clamp(24px, 5vw, 28px);border-radius:50%;object-fit:cover;flex-shrink:0;background:#f5ede6;" onerror="this.style.display='none';this.nextElementSibling?.style?.display?.match?.('flex');" />
+           <div class="order-store-icon" ${order.store_logo ? 'style="display:none;"' : ''}><i class="ri-store-2-line"></i></div>`
+                        : `<div class="order-store-icon"><i class="ri-store-2-line"></i></div>`}
                     <span class="order-store-name">${esc(storeName)}</span>
                 </div>
                 <span class="order-status-badge ${cfg.badge}">
@@ -1661,7 +1664,10 @@ function renderCartGroupCard(group) {
         <div class="order-card" id="cart-group-${group.store_id || group.id}">
             <div class="order-card-store-hdr">
                 <div class="order-store-left">
-                    <div class="order-store-icon"><i class="ri-shopping-bag-3-line"></i></div>
+                    ${group.store_logo 
+                        ? `<img src="${group.store_logo}" alt="${esc(group.store_name)}" style="width:clamp(24px, 5vw, 28px);height:clamp(24px, 5vw, 28px);border-radius:50%;object-fit:cover;flex-shrink:0;background:#f5ede6;" onerror="this.style.display='none';this.nextElementSibling?.style?.removeProperty?.('display');" />
+           <div class="order-store-icon" ${group.store_logo ? 'style="display:none;"' : ''}><i class="ri-shopping-bag-3-line"></i></div>`
+                        : `<div class="order-store-icon"><i class="ri-shopping-bag-3-line"></i></div>`}
                     <span class="order-store-name">${esc(storeName)}</span>
                 </div>
                 <span class="order-status-badge badge-pending">
@@ -1896,7 +1902,7 @@ function buildOrderDetailHTML(order) {
                 </div>
                 <div class="order-detail-item">
                     <div class="order-detail-item-label">Date Placed</div>
-                    <div class="order-detail-item-value">${dateStr}</div>
+                    <div class="order-detail-item-value">${formatDateWithTime(order.date || order.created_at)}</div>
                 </div>
                 <div class="order-detail-item">
                     <div class="order-detail-item-label">Payment</div>
@@ -2249,6 +2255,24 @@ function formatDate(dt) {
     if (!dt) return '—';
     try {
         return new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(dt));
+    } catch { return dt; }
+}
+
+function formatDateWithTime(dt) {
+    if (!dt) return '—';
+    try {
+        // Append 'Z' to ensure JavaScript treats it as UTC (backend sends UTC without Z suffix)
+        const dateString = dt.includes('Z') ? dt : dt + 'Z';
+        return new Intl.DateTimeFormat('en-PH', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+            timeZone: 'Asia/Manila'
+        }).format(new Date(dateString));
     } catch { return dt; }
 }
 
