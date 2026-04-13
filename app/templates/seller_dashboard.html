@@ -1,0 +1,2148 @@
+{% extends "layout.html" %}
+
+{% block title %}Seller Dashboard — E-FLOWERS{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ─── Design Tokens ─────────────────────────────────────── */
+:root {
+  --cream:       #faf6f0;
+  --warm-white:  #fffdf9;
+  --blush:       #f2c4ce;
+  --deep-rose:   #b5445a;
+  --dusty-rose:  #d4788a;
+  --sage:        #7a9e7e;
+  --deep-sage:   #4a6b4e;
+  --terracotta:  #c4714b;
+  --bark:        #6b4c3b;
+  --charcoal:    #2c2520;
+  --muted:       #9a8d85;
+  --border:      rgba(107,76,59,.12);
+  --border-md:   rgba(107,76,59,.22);
+  --font-display:'Cormorant Garamond', serif;
+  --font-sans:   'DM Sans', sans-serif;
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   22px;
+  --radius-xl:   32px;
+  --shadow-card: 0 2px 16px rgba(42,35,30,.07);
+  --shadow-hover:0 8px 36px rgba(42,35,30,.13);
+  --transition:  all .32s cubic-bezier(.4,0,.2,1);
+}
+
+/* ─── Page Shell ────────────────────────────────────────── */
+.dash {
+  background: var(--cream);
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--charcoal);
+  padding: 2rem 2.5rem 4rem;
+  max-width: 1340px;
+  margin: 0 auto;
+}
+
+/* ─── Header Bar ────────────────────────────────────────── */
+.dash-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dash-greeting-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--dusty-rose);
+  margin-bottom: .35rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.dash-greeting-label::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 1.5px;
+  background: var(--dusty-rose);
+}
+
+.dash-title {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3.5vw, 42px);
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--charcoal);
+}
+
+.dash-title em {
+  font-style: italic;
+  color: var(--deep-rose);
+}
+
+.dash-date {
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: .45rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.dash-date i { color: var(--dusty-rose); font-size: 15px; }
+
+/* ─── KPI Strip ─────────────────────────────────────────── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.kpi-card {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem 1.75rem;
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition);
+  cursor: default;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .4s ease;
+}
+
+.kpi-card:hover { 
+  box-shadow: var(--shadow-hover); 
+  transform: translateY(-3px);
+  border-color: var(--border-md);
+}
+
+.kpi-card:hover::before { transform: scaleX(1); }
+
+.kpi-card.green::before  { background: linear-gradient(90deg, var(--sage), var(--deep-sage)); }
+.kpi-card.terra::before  { background: linear-gradient(90deg, var(--terracotta), var(--bark)); }
+.kpi-card.bark::before   { background: linear-gradient(90deg, var(--bark), var(--charcoal)); }
+
+.kpi-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kpi-icon {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.kpi-card:nth-child(1) .kpi-icon { background: rgba(181,68,90,.1); color: var(--deep-rose); }
+.kpi-card:nth-child(2) .kpi-icon { background: rgba(122,158,126,.13); color: var(--sage); }
+.kpi-card:nth-child(3) .kpi-icon { background: rgba(196,113,75,.12); color: var(--terracotta); }
+.kpi-card:nth-child(4) .kpi-icon { background: rgba(107,76,59,.1); color: var(--bark); }
+
+.kpi-value {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 500;
+  color: var(--charcoal);
+  line-height: 1;
+  margin-bottom: .35rem;
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: .9rem;
+}
+
+.kpi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 100px;
+}
+
+.kpi-badge.up   { background: rgba(122,158,126,.15); color: var(--deep-sage); }
+.kpi-badge.down { background: rgba(181,68,90,.1);   color: var(--deep-rose); }
+.kpi-badge.flat { background: rgba(107,76,59,.08);   color: var(--muted); }
+
+/* ─── Two-column body ───────────────────────────────────── */
+.dash-body {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ─── Panel base ────────────────────────────────────────── */
+.panel {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.4rem 1.75rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.panel-action {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--deep-rose);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: var(--transition);
+  padding: .35rem .8rem;
+  border-radius: 100px;
+  border: 1.5px solid transparent;
+}
+
+.panel-action:hover {
+  border-color: var(--deep-rose);
+  background: rgba(181,68,90,.05);
+}
+
+/* ─── Chart Area ────────────────────────────────────────── */
+.chart-wrap {
+  padding: 1.5rem 1.75rem;
+  position: relative;
+  height: 260px;
+}
+
+.chart-tabs {
+  display: flex;
+  gap: .35rem;
+  margin-bottom: 1.5rem;
+}
+
+.chart-tab {
+  padding: .4rem 1rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.chart-tab.active,
+.chart-tab:hover {
+  border-color: var(--deep-rose);
+  color: var(--deep-rose);
+  background: rgba(181,68,90,.06);
+}
+
+/* ─── Top Products Panel ────────────────────────────────── */
+.product-rank {
+  padding: .85rem 1.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.product-rank:last-child { border-bottom: none; }
+.product-rank:hover { background: var(--cream); }
+
+.rank-num {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rank-num.gold   { background: rgba(255,210,63,.2); color: #b8860b; }
+.rank-num.silver { background: rgba(150,150,160,.15); color: #555; }
+.rank-num.bronze { background: rgba(196,113,75,.15); color: var(--terracotta); }
+.rank-num.plain  { background: var(--cream); color: var(--muted); border: 1px solid var(--border); }
+
+.rank-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rank-info { flex: 1; min-width: 0; }
+
+.rank-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-store {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.rank-sold {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--charcoal);
+  flex-shrink: 0;
+}
+
+.rank-sold span {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* ─── Orders Table ──────────────────────────────────────── */
+.orders-panel { margin-bottom: 1.5rem; }
+
+.table-scroll { overflow-x: auto; }
+
+table.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.dash-table thead th {
+  padding: .75rem 1.4rem;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--cream);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.dash-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.dash-table tbody tr:last-child { border-bottom: none; }
+.dash-table tbody tr:hover { background: rgba(250,246,240,.7); }
+
+.dash-table td {
+  padding: .95rem 1.4rem;
+  vertical-align: middle;
+}
+
+.order-id {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.customer-cell {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.c-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: white;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.c-name { font-weight: 500; font-size: 13px; }
+
+.amount-cell {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+/* Status badges */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border-radius: 100px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pill::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+
+.s-delivered { background: rgba(122,158,126,.15); color: var(--deep-sage); }
+.s-delivered::before { background: var(--sage); }
+
+.s-delivery  { background: rgba(196,113,75,.13); color: var(--terracotta); }
+.s-delivery::before  { background: var(--terracotta); box-shadow: 0 0 0 2px rgba(196,113,75,.3); animation: pulse 1.5s infinite; }
+
+.s-processing { background: rgba(181,68,90,.1); color: var(--deep-rose); }
+.s-processing::before { background: var(--deep-rose); }
+
+.s-pending { background: rgba(107,76,59,.1); color: var(--bark); }
+.s-pending::before { background: var(--muted); }
+
+.s-cancelled { background: rgba(192,57,43,.1); color: #9b1c1c; }
+.s-cancelled::before { background: #c0392b; }
+
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(196,113,75,.4); }
+  50%      { box-shadow: 0 0 0 4px rgba(196,113,75,0); }
+}
+
+.action-btn-sm {
+  padding: 5px 14px;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--charcoal);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: var(--transition);
+  text-decoration: none;
+}
+
+.action-btn-sm:hover {
+  border-color: var(--deep-rose);
+  color: var(--deep-rose);
+  background: rgba(181,68,90,.05);
+}
+
+/* ─── Bottom Row ────────────────────────────────────────── */
+.dash-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+/* ─── Quick Actions ─────────────────────────────────────── */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75rem;
+  padding: 1.4rem 1.75rem;
+}
+
+.qa-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .5rem;
+  padding: 1.1rem 1.25rem;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--cream);
+  text-decoration: none;
+  color: var(--charcoal);
+  transition: var(--transition);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+
+.qa-btn:hover {
+  border-color: var(--deep-rose);
+  background: var(--warm-white);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(181,68,90,.1);
+}
+
+.qa-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  transition: var(--transition);
+}
+
+.qa-btn:hover .qa-icon { transform: scale(1.1); }
+
+.qa-icon.rose   { background: rgba(181,68,90,.1);   color: var(--deep-rose); }
+.qa-icon.sage   { background: rgba(122,158,126,.13); color: var(--sage); }
+.qa-icon.terra  { background: rgba(196,113,75,.12);  color: var(--terracotta); }
+.qa-icon.bark   { background: rgba(107,76,59,.1);    color: var(--bark); }
+
+.qa-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.qa-desc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ─── Performance ───────────────────────────────────────── */
+.perf-body { padding: 1.25rem 1.75rem; }
+
+.perf-item { margin-bottom: 1.5rem; }
+.perf-item:last-child { margin-bottom: 0; }
+
+.perf-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .55rem;
+}
+
+.perf-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--charcoal);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.perf-name i { font-size: 14px; color: var(--muted); }
+
+.perf-val {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.perf-track {
+  height: 7px;
+  background: rgba(107,76,59,.08);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.perf-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 1.2s cubic-bezier(.4,0,.2,1);
+}
+
+.fill-rose  { background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose)); }
+.fill-sage  { background: linear-gradient(90deg, var(--sage), var(--deep-sage)); }
+.fill-terra { background: linear-gradient(90deg, var(--terracotta), #e8906a); }
+
+.perf-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: .4rem;
+}
+
+/* ─── Inventory Alerts ──────────────────────────────────── */
+.alert-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1.75rem;
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.alert-item:last-child { border-bottom: none; }
+.alert-item:hover { background: var(--cream); }
+
+.alert-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.alert-icon.warning { background: rgba(240,180,41,.15); color: #8a5e00; }
+.alert-icon.danger  { background: rgba(192,57,43,.1); color: #9b1c1c; }
+
+.alert-info { flex: 1; min-width: 0; }
+.alert-name { font-size: 13px; font-weight: 600; color: var(--charcoal); }
+.alert-detail { font-size: 11px; color: var(--muted); }
+
+.alert-stock {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.alert-stock.low { color: #8a5e00; }
+.alert-stock.out { color: #9b1c1c; }
+
+/* ─── Empty State ───────────────────────────────────────── */
+.empty-panel {
+  padding: 2rem 1.75rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.empty-panel i {
+  font-size: 28px;
+  opacity: .3;
+  display: block;
+  margin-bottom: .5rem;
+}
+
+/* ─── Analytics Section ─────────────────────────────────── */
+.analytics-section-title {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 2.5vw, 28px);
+  font-weight: 400;
+  color: var(--charcoal);
+  margin: 2.5rem 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+.analytics-section-title::before {
+  content: '';
+  display: inline-block;
+  width: 28px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));
+}
+.analytics-section-title em {
+  font-style: italic;
+  color: var(--deep-rose);
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.analytics-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.chart-panel {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  animation: fadeUp .5s .6s ease both;
+}
+
+.chart-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.2rem 1.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-panel-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.chart-panel-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.chart-panel-body {
+  padding: 1.25rem 1.75rem 1.5rem;
+  position: relative;
+}
+
+.chart-canvas-sm {
+  height: 220px;
+  position: relative;
+}
+
+.chart-canvas-md {
+  height: 260px;
+  position: relative;
+}
+
+/* ─── Mini Stats Row (inside chart panels) ──────────────── */
+.mini-stats {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.mini-stat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 80px;
+  background: var(--cream);
+  border-radius: var(--radius-sm);
+  padding: .6rem .75rem;
+}
+.mini-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  margin-bottom: .25rem;
+}
+.mini-stat-value {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--charcoal);
+  line-height: 1.1;
+}
+.mini-stat-value.rose { color: var(--deep-rose); }
+.mini-stat-value.sage { color: var(--deep-sage); }
+.mini-stat-value.terra { color: var(--terracotta); }
+
+/* ─── Category list inside chart panel ──────────────────── */
+.category-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.category-item:last-child { border-bottom: none; }
+.category-left {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+.category-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.category-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+.category-meta {
+  text-align: right;
+}
+.category-rev {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+.category-qty {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* ─── Retention ring ────────────────────────────────────── */
+.retention-row {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: .5rem 0;
+}
+.retention-chart-wrap {
+  width: 140px;
+  height: 140px;
+  position: relative;
+  flex-shrink: 0;
+}
+.retention-center-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.retention-center-label .big {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--charcoal);
+  display: block;
+  line-height: 1.1;
+}
+.retention-center-label .sub {
+  font-size: 10px;
+  color: var(--muted);
+}
+.retention-legends {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  flex: 1;
+}
+.retention-legend {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+}
+.retention-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.retention-legend-text {
+  font-size: 12.5px;
+  color: var(--charcoal);
+}
+.retention-legend-text strong {
+  font-weight: 600;
+}
+.retention-legend-text span {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: .3rem;
+}
+
+/* ─── Responsive ────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .kpi-row { grid-template-columns: repeat(2,1fr); }
+  .dash-body { grid-template-columns: 1fr; }
+  .analytics-grid-3 { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 768px) {
+  .dash { padding: 1.25rem 1rem 3rem; }
+  .kpi-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .dash-bottom { grid-template-columns: 1fr; }
+  .quick-actions-grid { grid-template-columns: 1fr 1fr; }
+  .panel-head { padding: 1rem 1.25rem .875rem; }
+  .chart-wrap { padding: 1.1rem 1.25rem; }
+  .product-rank { padding: .75rem 1.25rem; }
+  .dash-table thead th { padding: .65rem 1rem; }
+  .dash-table td { padding: .8rem 1rem; }
+  .perf-body { padding: 1rem 1.25rem; }
+  .alert-item { padding: .65rem 1.25rem; }
+  .quick-actions-grid { padding: 1.1rem 1.25rem; }
+  .analytics-grid { grid-template-columns: 1fr; }
+  .analytics-grid-3 { grid-template-columns: 1fr; }
+  .chart-panel-body { padding: 1rem 1.25rem 1.25rem; }
+  .chart-canvas-sm { height: 180px; }
+  .chart-canvas-md { height: 200px; }
+  .retention-row { flex-direction: column; gap: 1rem; }
+}
+
+@media (max-width: 479px) {
+  .dash {
+    width: 100%;
+    max-width: 100%;
+    padding: 0 0 1.5rem;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  .dash-header {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: .875rem;
+    gap: .4rem;
+    padding: .75rem .875rem 0;
+  }
+  .dash-greeting-label { font-size: 10px; margin-bottom: .15rem; }
+  .dash-title { font-size: clamp(20px, 5.5vw, 26px); }
+  .dash-date { font-size: 11px; padding: .25rem .65rem; align-self: flex-start; }
+
+  .kpi-row {
+    grid-template-columns: 1fr 1fr;
+    gap: .4rem;
+    margin-bottom: .75rem;
+    padding: 0 .875rem;
+  }
+  .kpi-card { padding: .65rem .7rem; border-radius: 12px; }
+  .kpi-top { margin-bottom: .4rem; }
+  .kpi-icon { width: 26px; height: 26px; font-size: 12px; border-radius: 7px; }
+  .kpi-label { font-size: 9px; letter-spacing: .05em; }
+  .kpi-value { font-size: clamp(16px, 4.5vw, 21px); margin-bottom: .1rem; }
+  .kpi-sub { font-size: 9px; margin-bottom: .3rem; }
+  .kpi-badge { font-size: 9px; padding: 1px 6px; }
+
+  .panel { border-radius: 12px; margin-bottom: .5rem; }
+  .panel-head {
+    padding: .6rem .875rem .55rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .4rem;
+  }
+  .panel-title { font-size: 14px; }
+  .panel-action { font-size: 11px; padding: .2rem .5rem; align-self: flex-end; margin-top: -.5rem; }
+
+  .chart-wrap {
+    padding: .5rem .75rem .75rem;
+    position: relative;
+    height: 160px;
+  }
+  .chart-tabs { gap: .2rem; flex-wrap: wrap; margin: 0; }
+  .chart-tab { padding: .2rem .55rem; font-size: 10px; }
+
+  .product-rank { padding: .5rem .875rem; gap: .5rem; }
+  .rank-num { width: 20px; height: 20px; font-size: 10px; }
+  .rank-dot { width: 7px; height: 7px; }
+  .rank-name { font-size: 12px; }
+  .rank-store { font-size: 10px; }
+  .rank-sold { font-size: 14px; }
+  .rank-sold span { font-size: 9px; }
+
+  .dash-table thead th:nth-child(3) { display: none; }
+  .dash-table tbody td:nth-child(3) { display: none; }
+  .dash-table thead th { padding: .45rem .5rem; font-size: 9px; white-space: nowrap; }
+  .dash-table td { padding: .55rem .5rem; font-size: 12px; }
+  .order-id { font-size: 12px; }
+  .c-name { display: none; }
+  .c-avatar { width: 26px; height: 26px; font-size: 11px; }
+  .amount-cell { font-size: 13px; }
+  .status-pill { font-size: 9.5px; padding: 2px 6px; gap: 3px; }
+  .action-btn-sm { font-size: 10px; padding: 3px 8px; }
+
+  .quick-actions-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: .4rem;
+    padding: .75rem .875rem;
+  }
+  .qa-btn { padding: .65rem .65rem; gap: .3rem; }
+  .qa-icon { width: 26px; height: 26px; font-size: 12px; border-radius: 7px; }
+  .qa-label { font-size: 11.5px; }
+  .qa-desc { font-size: 10px; }
+
+  .perf-body { padding: .75rem .875rem; }
+  .perf-item { margin-bottom: .875rem; }
+  .perf-name { font-size: 12px; }
+  .perf-name i { font-size: 12px; }
+  .perf-val { font-size: 15px; }
+  .perf-note { font-size: 10px; }
+
+  .alert-item { padding: .55rem .875rem; gap: .5rem; }
+  .alert-icon { width: 26px; height: 26px; font-size: 12px; border-radius: 6px; }
+  .alert-name { font-size: 12px; }
+  .alert-detail { font-size: 10px; }
+  .alert-stock { font-size: 13px; }
+
+  .dash-bottom { gap: .5rem; }
+  .orders-panel { margin-bottom: .5rem; }
+
+  .analytics-section-title { font-size: clamp(16px, 4.5vw, 20px); margin: 1.25rem 0 .75rem; padding: 0 .875rem; }
+  .analytics-section-title::before { width: 16px; }
+  .analytics-grid, .analytics-grid-3 { grid-template-columns: 1fr; gap: .5rem; padding: 0 .375rem; }
+  .chart-panel { border-radius: 10px; }
+  .chart-panel-head { padding: .6rem .875rem .5rem; }
+  .chart-panel-title { font-size: 14px; }
+  .chart-panel-subtitle { font-size: 10px; }
+  .chart-panel-body { padding: .75rem .875rem 1rem; }
+  .chart-canvas-sm { height: 160px; }
+  .chart-canvas-md { height: 175px; }
+  .mini-stats { gap: .4rem; }
+  .mini-stat { padding: .4rem .55rem; }
+  .mini-stat-label { font-size: 9px; }
+  .mini-stat-value { font-size: 16px; }
+  .category-item { padding: .45rem 0; }
+  .category-name { font-size: 11.5px; }
+  .category-rev { font-size: 13px; }
+  .category-qty { font-size: 9.5px; }
+  .retention-row { flex-direction: column; gap: .75rem; }
+  .retention-chart-wrap { width: 110px; height: 110px; }
+  .retention-center-label .big { font-size: 18px; }
+}
+
+@media (max-width: 360px) {
+  .kpi-row {
+    grid-template-columns: 1fr 1fr;
+    gap: .3rem;
+    padding: 0 .625rem;
+  }
+  .kpi-card { padding: .5rem .55rem; border-radius: 10px; }
+  .kpi-top { margin-bottom: .3rem; }
+  .kpi-icon { width: 22px; height: 22px; font-size: 11px; border-radius: 6px; }
+  .kpi-label { font-size: 8.5px; }
+  .kpi-value { font-size: clamp(14px, 4vw, 18px); }
+  .kpi-sub { font-size: 8.5px; margin-bottom: .2rem; }
+  .kpi-badge { font-size: 8.5px; padding: 1px 5px; }
+
+  .dash-header { padding: .6rem .625rem 0; margin-bottom: .75rem; }
+  .dash-title { font-size: clamp(18px, 5vw, 22px); }
+  .dash-date { font-size: 10px; padding: .2rem .55rem; }
+  .dash-greeting-label { font-size: 9px; }
+
+  .panel { border-radius: 10px; }
+  .panel-head { padding: .5rem .625rem .45rem; }
+  .panel-title { font-size: 13px; }
+  .panel-action { font-size: 10px; }
+
+  .chart-wrap { height: 130px; padding: .4rem .625rem .5rem; }
+  .chart-tab { padding: .18rem .5rem; font-size: 9.5px; }
+
+  .product-rank { padding: .4rem .625rem; gap: .4rem; }
+  .rank-num { width: 18px; height: 18px; font-size: 9px; }
+  .rank-name { font-size: 11px; }
+  .rank-store { font-size: 9px; }
+  .rank-sold { font-size: 13px; }
+
+  .dash-table thead th { padding: .4rem .4rem; font-size: 8.5px; }
+  .dash-table td { padding: .45rem .4rem; font-size: 11px; }
+  .order-id { font-size: 11px; }
+  .c-avatar { width: 22px; height: 22px; font-size: 10px; }
+  .amount-cell { font-size: 12px; }
+  .status-pill { font-size: 9px; padding: 2px 5px; }
+  .action-btn-sm { font-size: 9.5px; padding: 2px 6px; }
+
+  .quick-actions-grid { gap: .3rem; padding: .6rem .625rem; }
+  .qa-btn { padding: .55rem .55rem; }
+  .qa-icon { width: 22px; height: 22px; font-size: 11px; border-radius: 6px; }
+  .qa-label { font-size: 11px; }
+  .qa-desc { font-size: 9.5px; }
+
+  .perf-body { padding: .6rem .625rem; }
+  .perf-name { font-size: 11px; }
+  .perf-val { font-size: 14px; }
+  .perf-note { font-size: 9.5px; }
+}
+
+/* ─── Entry Animations ──────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.kpi-card    { animation: fadeUp .45s ease both; }
+.kpi-card:nth-child(1) { animation-delay: .05s; }
+.kpi-card:nth-child(2) { animation-delay: .12s; }
+.kpi-card:nth-child(3) { animation-delay: .19s; }
+.kpi-card:nth-child(4) { animation-delay: .26s; }
+
+.panel       { animation: fadeUp .5s .3s ease both; }
+.orders-panel{ animation: fadeUp .5s .4s ease both; }
+.dash-bottom .panel { animation: fadeUp .5s .5s ease both; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dash">
+
+  <!-- ─── Header ─────────────────────────────────────────── -->
+  <div class="dash-header">
+    <div>
+      <div class="dash-greeting-label">Welcome back, {{ session.get('user_name', 'Seller') }}</div>
+      <h1 class="dash-title">{{ store.name }}, <em>in bloom</em></h1>
+    </div>
+    <div class="dash-date" id="dashDate">
+      <i class="ri-calendar-line"></i>
+      <span id="dateStr">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ─── KPI Strip ───────────────────────────────────────── -->
+  <div class="kpi-row">
+    <!-- Revenue -->
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <div class="kpi-label">Total Revenue</div>
+        <div class="kpi-icon"><i class="ri-money-dollar-circle-line"></i></div>
+      </div>
+      <div class="kpi-value">₱{{ '{:,.0f}'.format(revenue_this_month) }}</div>
+      <div class="kpi-sub">This month</div>
+      {% if revenue_change > 0 %}
+        <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> {{ revenue_change }}%</span>
+      {% elif revenue_change < 0 %}
+        <span class="kpi-badge down"><i class="ri-arrow-down-line"></i> {{ revenue_change|abs }}%</span>
+      {% else %}
+        <span class="kpi-badge flat">—</span>
+      {% endif %}
+    </div>
+
+    <!-- Orders -->
+    <div class="kpi-card green">
+      <div class="kpi-top">
+        <div class="kpi-label">Total Orders</div>
+        <div class="kpi-icon"><i class="ri-shopping-bag-line"></i></div>
+      </div>
+      <div class="kpi-value">{{ orders_this_month }}</div>
+      <div class="kpi-sub">Orders this month</div>
+      {% if orders_change > 0 %}
+        <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> {{ orders_change }}%</span>
+      {% elif orders_change < 0 %}
+        <span class="kpi-badge down"><i class="ri-arrow-down-line"></i> {{ orders_change|abs }}%</span>
+      {% else %}
+        <span class="kpi-badge flat">—</span>
+      {% endif %}
+    </div>
+
+    <!-- Customers -->
+    <div class="kpi-card terra">
+      <div class="kpi-top">
+        <div class="kpi-label">Customers</div>
+        <div class="kpi-icon"><i class="ri-user-heart-line"></i></div>
+      </div>
+      <div class="kpi-value">{{ customers_this_month }}</div>
+      <div class="kpi-sub">Unique this month</div>
+      {% if customers_change > 0 %}
+        <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> {{ customers_change }}%</span>
+      {% elif customers_change < 0 %}
+        <span class="kpi-badge down"><i class="ri-arrow-down-line"></i> {{ customers_change|abs }}%</span>
+      {% else %}
+        <span class="kpi-badge flat">—</span>
+      {% endif %}
+    </div>
+
+    <!-- Delivery Rate -->
+    <div class="kpi-card bark">
+      <div class="kpi-top">
+        <div class="kpi-label">Delivery Rate</div>
+        <div class="kpi-icon"><i class="ri-truck-line"></i></div>
+      </div>
+      <div class="kpi-value">{{ delivery_rate }}%</div>
+      <div class="kpi-sub">Successful deliveries</div>
+      {% if delivery_rate >= 95 %}
+        <span class="kpi-badge up"><i class="ri-check-line"></i> Excellent</span>
+      {% elif delivery_rate >= 80 %}
+        <span class="kpi-badge flat">Good</span>
+      {% else %}
+        <span class="kpi-badge down"><i class="ri-alert-line"></i> Needs improvement</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ─── Body: Chart + Top Products ─────────────────────── -->
+  <div class="dash-body">
+
+    <!-- Revenue Chart -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Revenue Overview</span>
+        <div class="chart-tabs">
+          <button class="chart-tab" onclick="switchPeriod('7d',this)">7 days</button>
+          <button class="chart-tab active" onclick="switchPeriod('30d',this)">30 days</button>
+          <button class="chart-tab" onclick="switchPeriod('90d',this)">90 days</button>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="revenueChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Top Products -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Top Products</span>
+        <a href="{{ url_for('templates.seller_products') }}" class="panel-action">
+          All <i class="ri-arrow-right-line"></i>
+        </a>
+      </div>
+
+      {% if top_products %}
+        {% set rank_colors = ['var(--deep-rose)', 'var(--sage)', 'var(--dusty-rose)', 'var(--terracotta)', 'var(--bark)'] %}
+        {% set rank_classes = ['gold', 'silver', 'bronze', 'plain', 'plain'] %}
+        {% for product in top_products %}
+        <div class="product-rank">
+          <div class="rank-num {{ rank_classes[loop.index0] if loop.index0 < 5 else 'plain' }}">{{ loop.index }}</div>
+          <div class="rank-dot" style="background:{{ rank_colors[loop.index0] if loop.index0 < 5 else 'var(--muted)' }}"></div>
+          <div class="rank-info">
+            <div class="rank-name">{{ product.name }}</div>
+            <div class="rank-store">{{ product.category }}</div>
+          </div>
+          <div class="rank-sold">{{ product.total_sold }} <span>sold</span></div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-panel">
+          <i class="ri-bar-chart-box-line"></i>
+          No sales data yet
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ─── Recent Orders ───────────────────────────────────── -->
+  <div class="panel orders-panel">
+    <div class="panel-head">
+      <span class="panel-title">Recent Orders</span>
+      <a href="{{ url_for('templates.seller_orders') }}" class="panel-action">
+        View all <i class="ri-arrow-right-line"></i>
+      </a>
+    </div>
+    {% if recent_orders %}
+    <div class="table-scroll">
+      <table class="dash-table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set avatar_colors = [
+            'linear-gradient(135deg,var(--blush),var(--dusty-rose))',
+            'linear-gradient(135deg,var(--sage),var(--deep-sage))',
+            'linear-gradient(135deg,var(--terracotta),var(--bark))',
+            'linear-gradient(135deg,#a9c5e8,#6b8fb5)',
+            'linear-gradient(135deg,#e8d5c4,#c4a080)'
+          ] %}
+          {% for order in recent_orders %}
+          <tr>
+            <td><span class="order-id">#{{ '%05d' % order.id }}</span></td>
+            <td>
+              <div class="customer-cell">
+                <div class="c-avatar" style="background:{{ avatar_colors[loop.index0 % 5] }}">{{ order.customer_initial }}</div>
+                <span class="c-name">{{ order.customer_name }}</span>
+              </div>
+            </td>
+            <td style="color:var(--muted);font-size:12.5px;">{{ order.date }}</td>
+            <td><span class="amount-cell">₱{{ '{:,.0f}'.format(order.total) }}</span></td>
+            <td>
+              {% if order.status == 'delivered' %}
+                <span class="status-pill s-delivered">Delivered</span>
+              {% elif order.status == 'on_delivery' %}
+                <span class="status-pill s-delivery">On Delivery</span>
+              {% elif order.status in ['preparing', 'accepted', 'done_preparing'] %}
+                <span class="status-pill s-processing">{{ order.status|replace('_', ' ')|title }}</span>
+              {% elif order.status == 'cancelled' %}
+                <span class="status-pill s-cancelled">Cancelled</span>
+              {% else %}
+                <span class="status-pill s-pending">{{ order.status|title }}</span>
+              {% endif %}
+            </td>
+            <td><a href="{{ url_for('templates.seller_orders') }}" class="action-btn-sm">View</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="empty-panel">
+        <i class="ri-shopping-bag-line"></i>
+        No orders yet. They'll show up here once customers start ordering!
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- ─── Bottom Row ──────────────────────────────────────── -->
+  <div class="dash-bottom">
+
+    <!-- Quick Actions + Inventory Alerts -->
+    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+
+      <!-- Quick Actions -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Quick Actions</span>
+        </div>
+        <div class="quick-actions-grid">
+          <a href="{{ url_for('templates.seller_products') }}" class="qa-btn">
+            <div class="qa-icon rose"><i class="ri-add-circle-line"></i></div>
+            <div class="qa-label">Add Product</div>
+            <div class="qa-desc">List a new bloom or plant</div>
+          </a>
+          <a href="{{ url_for('templates.seller_orders') }}" class="qa-btn">
+            <div class="qa-icon sage"><i class="ri-shopping-bag-3-line"></i></div>
+            <div class="qa-label">View Orders</div>
+            <div class="qa-desc">{{ pending_orders }} pending</div>
+          </a>
+          <a href="{{ url_for('templates.seller_riders') }}" class="qa-btn">
+            <div class="qa-icon terra"><i class="ri-motorbike-line"></i></div>
+            <div class="qa-label">Riders</div>
+            <div class="qa-desc">{{ active_riders }}/{{ total_riders }} active</div>
+          </a>
+          <a href="{{ url_for('templates.seller_pos') }}" class="qa-btn">
+            <div class="qa-icon bark"><i class="ri-receipt-line"></i></div>
+            <div class="qa-label">POS System</div>
+            <div class="qa-desc">₱{{ '{:,.0f}'.format(pos_revenue_today) }} today ({{ pos_orders_today }} sales)</div>
+          </a>
+        </div>
+      </div>
+
+      <!-- Inventory Alerts -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Inventory Alerts</span>
+          <a href="{{ url_for('templates.seller_products') }}" class="panel-action">
+            Products <i class="ri-arrow-right-line"></i>
+          </a>
+        </div>
+        {% if low_stock_products or out_of_stock > 0 %}
+          {% if out_of_stock > 0 %}
+          <div class="alert-item">
+            <div class="alert-icon danger"><i class="ri-error-warning-line"></i></div>
+            <div class="alert-info">
+              <div class="alert-name">Out of Stock</div>
+              <div class="alert-detail">{{ out_of_stock }} product{{ 's' if out_of_stock != 1 else '' }} need restocking</div>
+            </div>
+            <div class="alert-stock out">{{ out_of_stock }}</div>
+          </div>
+          {% endif %}
+          {% for product in low_stock_products[:5] %}
+          <div class="alert-item">
+            <div class="alert-icon warning"><i class="ri-plant-line"></i></div>
+            <div class="alert-info">
+              <div class="alert-name">{{ product.name }}</div>
+              <div class="alert-detail">Low stock — restock soon</div>
+            </div>
+            <div class="alert-stock low">{{ product.stock_quantity }} left</div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-panel">
+            <i class="ri-checkbox-circle-line"></i>
+            All {{ total_products }} products are well-stocked!
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Performance + Store Info -->
+    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+
+      <!-- Store Performance -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Performance</span>
+        </div>
+        <div class="perf-body">
+          <div class="perf-item">
+            <div class="perf-meta">
+              <span class="perf-name"><i class="ri-star-line"></i> Customer Rating</span>
+              <span class="perf-val">{{ avg_rating }}/5</span>
+            </div>
+            <div class="perf-track">
+              <div class="perf-fill fill-rose" style="width:{{ (avg_rating / 5 * 100)|round }}%"></div>
+            </div>
+            <div class="perf-note">Based on {{ total_reviews }} review{{ 's' if total_reviews != 1 else '' }}</div>
+          </div>
+
+          <div class="perf-item">
+            <div class="perf-meta">
+              <span class="perf-name"><i class="ri-leaf-line"></i> Active Products</span>
+              <span class="perf-val">{{ total_products }}</span>
+            </div>
+            <div class="perf-track">
+              <div class="perf-fill fill-sage" style="width:{{ [total_products, 100]|min }}%"></div>
+            </div>
+            <div class="perf-note">{{ out_of_stock }} out of stock · {{ low_stock_products|length }} low stock</div>
+          </div>
+
+          <div class="perf-item">
+            <div class="perf-meta">
+              <span class="perf-name"><i class="ri-truck-line"></i> Delivery Success</span>
+              <span class="perf-val">{{ delivery_rate }}%</span>
+            </div>
+            <div class="perf-track">
+              <div class="perf-fill fill-terra" style="width:{{ delivery_rate }}%"></div>
+            </div>
+            <div class="perf-note">{{ active_riders }} active rider{{ 's' if active_riders != 1 else '' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Store Info Summary -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Store Info</span>
+          <a href="{{ url_for('templates.store_settings') }}" class="panel-action">
+            Settings <i class="ri-settings-4-line"></i>
+          </a>
+        </div>
+        <div class="perf-body">
+          <div style="display:flex;flex-direction:column;gap:.75rem;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;">
+              <span style="color:var(--muted);">Store</span>
+              <span style="font-weight:600;">{{ store.name }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;">
+              <span style="color:var(--muted);">Status</span>
+              <span style="color:var(--sage);font-weight:600;">{{ store.status|title }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;">
+              <span style="color:var(--muted);">Delivery Method</span>
+              <span style="font-weight:600;">{{ store.delivery_method|title if store.delivery_method else 'Not set' }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;">
+              <span style="color:var(--muted);">POS Today</span>
+              <span style="font-weight:600;">₱{{ '{:,.0f}'.format(pos_revenue_today) }} ({{ pos_orders_today }} orders)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════
+       ANALYTICS DEEP DIVE
+       ════════════════════════════════════════════════════════ -->
+  <h2 class="analytics-section-title">Analytics <em>deep dive</em></h2>
+
+  <!-- Row 1: Order Status + Payment Methods -->
+  <div class="analytics-grid">
+
+    <!-- Order Status Distribution -->
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">Order Status</div>
+          <div class="chart-panel-subtitle">All-time distribution</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        <div class="chart-canvas-sm">
+          <canvas id="statusChart"></canvas>
+        </div>
+        <div class="mini-stats">
+          <div class="mini-stat">
+            <div class="mini-stat-label">Delivered</div>
+            <div class="mini-stat-value sage">{{ order_status_dist.get('delivered', 0) }}</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-stat-label">In Progress</div>
+            <div class="mini-stat-value terra">{{ order_status_dist.get('preparing', 0) + order_status_dist.get('accepted', 0) + order_status_dist.get('on_delivery', 0) + order_status_dist.get('done_preparing', 0) }}</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-stat-label">Cancelled</div>
+            <div class="mini-stat-value rose">{{ order_status_dist.get('cancelled', 0) }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Revenue by Payment Method -->
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">Payment Methods</div>
+          <div class="chart-panel-subtitle">Revenue this month</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        <div class="chart-canvas-sm">
+          <canvas id="paymentChart"></canvas>
+        </div>
+        <div class="mini-stats">
+          {% for method, amount in revenue_by_payment.items() %}
+          <div class="mini-stat">
+            <div class="mini-stat-label">{{ method|upper }}</div>
+            <div class="mini-stat-value">₱{{ '{:,.0f}'.format(amount) }}</div>
+          </div>
+          {% endfor %}
+          {% if not revenue_by_payment %}
+          <div class="mini-stat">
+            <div class="mini-stat-label">No data</div>
+            <div class="mini-stat-value">—</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: POS vs Online + Hourly Distribution -->
+  <div class="analytics-grid">
+
+    <!-- POS vs Online -->
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">POS vs Online</div>
+          <div class="chart-panel-subtitle">Last 7 days revenue comparison</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        <div class="chart-canvas-md">
+          <canvas id="posOnlineChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hourly Distribution -->
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">Peak Hours</div>
+          <div class="chart-panel-subtitle">Delivered orders by hour</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        <div class="chart-canvas-md">
+          <canvas id="hourlyChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: Category Breakdown + AOV Trend + Customer Retention -->
+  <div class="analytics-grid-3">
+
+    <!-- Sales by Category -->
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">By Category</div>
+          <div class="chart-panel-subtitle">Top selling categories</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        {% if sales_by_category %}
+        {% set cat_colors = ['#b5445a','#7a9e7e','#c4714b','#6b4c3b','#d4788a','#4a6b4e','#e8906a','#9a8d85'] %}
+        <ul class="category-list">
+          {% for cat in sales_by_category %}
+          <li class="category-item">
+            <div class="category-left">
+              <div class="category-dot" style="background:{{ cat_colors[loop.index0 % 8] }}"></div>
+              <span class="category-name">{{ cat.name }}</span>
+            </div>
+            <div class="category-meta">
+              <div class="category-rev">₱{{ '{:,.0f}'.format(cat.revenue) }}</div>
+              <div class="category-qty">{{ cat.qty }} sold</div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+          <div class="empty-panel"><i class="ri-pie-chart-line"></i>No category data yet</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Average Order Value Trend -->
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">Avg. Order Value</div>
+          <div class="chart-panel-subtitle">Last 30 days trend</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        <div class="chart-canvas-sm">
+          <canvas id="aovChart"></canvas>
+        </div>
+        {% if aov_trend['values'] %}
+        <div class="mini-stats">
+          <div class="mini-stat">
+            <div class="mini-stat-label">Avg AOV</div>
+            <div class="mini-stat-value">₱{{ '{:,.0f}'.format((aov_trend['values']|sum) / (aov_trend['values']|length)) }}</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-stat-label">Total Days</div>
+            <div class="mini-stat-value">{{ aov_trend['values']|length }}</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Customer Retention -->
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">Customers</div>
+          <div class="chart-panel-subtitle">Retention overview</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        <div class="retention-row">
+          <div class="retention-chart-wrap">
+            <canvas id="retentionChart"></canvas>
+            <div class="retention-center-label">
+              <span class="big">{{ total_unique_customers }}</span>
+              <span class="sub">total</span>
+            </div>
+          </div>
+          <div class="retention-legends">
+            <div class="retention-legend">
+              <div class="retention-legend-dot" style="background:var(--sage)"></div>
+              <div class="retention-legend-text">
+                <strong>{{ repeat_customers }}</strong> Repeat
+                <span>{% if total_unique_customers > 0 %}({{ ((repeat_customers / total_unique_customers) * 100)|round|int }}%){% endif %}</span>
+              </div>
+            </div>
+            <div class="retention-legend">
+              <div class="retention-legend-dot" style="background:var(--dusty-rose)"></div>
+              <div class="retention-legend-text">
+                <strong>{{ total_unique_customers - repeat_customers }}</strong> One-time
+                <span>{% if total_unique_customers > 0 %}({{ (((total_unique_customers - repeat_customers) / total_unique_customers) * 100)|round|int }}%){% endif %}</span>
+              </div>
+            </div>
+            <div class="retention-legend">
+              <div class="retention-legend-dot" style="background:var(--terracotta)"></div>
+              <div class="retention-legend-text">
+                <strong>{{ new_customers }}</strong> New
+                <span>(last 90 days)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 4: Rating Distribution (full width) -->
+  <div class="analytics-grid" style="grid-template-columns:1fr;">
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">Rating Distribution</div>
+          <div class="chart-panel-subtitle">Customer review breakdown &middot; {{ total_reviews }} total reviews</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        <div class="chart-canvas-sm" style="height:180px;">
+          <canvas id="ratingChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /dash -->
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+/* ── Date ─────────────────────────────────────────────── */
+(function(){
+  const d = new Date();
+  const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
+  document.getElementById('dateStr').textContent = d.toLocaleDateString('en-PH', opts);
+})();
+
+/* ── Chart data from backend ──────────────────────────── */
+const datasets = {{ chart_data|tojson }};
+
+/* ── Build Chart ──────────────────────────────────────── */
+const ctx = document.getElementById('revenueChart').getContext('2d');
+
+const roseGrad = ctx.createLinearGradient(0,0,0,220);
+roseGrad.addColorStop(0,   'rgba(181,68,90,.18)');
+roseGrad.addColorStop(1,   'rgba(181,68,90,.02)');
+
+const sageGrad = ctx.createLinearGradient(0,0,0,220);
+sageGrad.addColorStop(0,   'rgba(122,158,126,.18)');
+sageGrad.addColorStop(1,   'rgba(122,158,126,.02)');
+
+const initialPeriod = datasets['30d'] && datasets['30d'].labels.length > 0 ? '30d' : '7d';
+
+let chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: (datasets[initialPeriod] || {labels:[]}).labels,
+    datasets: [
+      {
+        label: 'Revenue (₱)',
+        data: (datasets[initialPeriod] || {revenue:[]}).revenue,
+        borderColor: 'rgba(181,68,90,1)',
+        backgroundColor: roseGrad,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.42,
+        pointRadius: 4,
+        pointBackgroundColor: 'rgba(181,68,90,1)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 6,
+      },
+      {
+        label: 'Orders',
+        data: (datasets[initialPeriod] || {orders:[]}).orders,
+        borderColor: 'rgba(122,158,126,1)',
+        backgroundColor: sageGrad,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.42,
+        yAxisID: 'y1',
+        pointRadius: 4,
+        pointBackgroundColor: 'rgba(122,158,126,1)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 6,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: {
+          font: { family: "'DM Sans', sans-serif", size: 12 },
+          boxWidth: 12,
+          padding: 16,
+          color: '#9a8d85'
+        }
+      },
+      tooltip: {
+        backgroundColor: '#fffdf9',
+        titleColor: '#2c2520',
+        bodyColor: '#9a8d85',
+        borderColor: 'rgba(107,76,59,.15)',
+        borderWidth: 1,
+        padding: 12,
+        titleFont: { family: "'Cormorant Garamond', serif", size: 16 },
+        bodyFont:  { family: "'DM Sans', sans-serif", size: 12 },
+        callbacks: {
+          label: c => c.datasetIndex === 0
+            ? `  Revenue: ₱${c.parsed.y.toLocaleString()}`
+            : `  Orders: ${c.parsed.y}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(107,76,59,.06)' },
+        ticks: { font: { family: "'DM Sans'", size: 11 }, color: '#9a8d85' }
+      },
+      y: {
+        position: 'left',
+        grid: { color: 'rgba(107,76,59,.06)' },
+        ticks: {
+          font: { family: "'DM Sans'", size: 11 },
+          color: '#9a8d85',
+          callback: v => '₱' + v.toLocaleString()
+        }
+      },
+      y1: {
+        position: 'right',
+        grid: { drawOnChartArea: false },
+        ticks: {
+          font: { family: "'DM Sans'", size: 11 },
+          color: '#9a8d85',
+        }
+      }
+    }
+  }
+});
+
+/* ── Period Switch ────────────────────────────────────── */
+function switchPeriod(period, btn) {
+  document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  const d = datasets[period] || {labels:[], revenue:[], orders:[]};
+  chart.data.labels = d.labels;
+  chart.data.datasets[0].data = d.revenue;
+  chart.data.datasets[1].data = d.orders;
+  chart.update('active');
+}
+
+/* ── Animate progress bars on load ───────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.perf-fill').forEach(el => {
+    const target = el.style.width;
+    el.style.width = '0';
+    requestAnimationFrame(() => {
+      setTimeout(() => { el.style.width = target; }, 600);
+    });
+  });
+});
+
+/* ══════════════════════════════════════════════════════════
+   ANALYTICS CHARTS
+   ══════════════════════════════════════════════════════════ */
+const chartFont = { family: "'DM Sans', sans-serif" };
+const tooltipStyle = {
+  backgroundColor: '#fffdf9',
+  titleColor: '#2c2520',
+  bodyColor: '#9a8d85',
+  borderColor: 'rgba(107,76,59,.15)',
+  borderWidth: 1,
+  padding: 10,
+  titleFont: { family: "'Cormorant Garamond', serif", size: 14 },
+  bodyFont: { family: "'DM Sans', sans-serif", size: 12 }
+};
+
+/* ── 1. Order Status Doughnut ────────────────────────── */
+(function(){
+  const statusData = {{ order_status_dist|tojson }};
+  const labels = [];
+  const values = [];
+  const colors = [];
+  const colorMap = {
+    'delivered': '#7a9e7e',
+    'on_delivery': '#c4714b',
+    'preparing': '#d4788a',
+    'accepted': '#a9c5e8',
+    'done_preparing': '#e8d5c4',
+    'pending': '#9a8d85',
+    'cancelled': '#b5445a'
+  };
+  for (const [status, count] of Object.entries(statusData)) {
+    labels.push(status.replace('_',' ').replace(/\b\w/g, l => l.toUpperCase()));
+    values.push(count);
+    colors.push(colorMap[status] || '#ccc');
+  }
+  if (labels.length === 0) { labels.push('No data'); values.push(1); colors.push('#eee'); }
+  new Chart(document.getElementById('statusChart'), {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: '#fffdf9',
+        borderWidth: 2.5,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { font: { ...chartFont, size: 11 }, boxWidth: 10, padding: 10, color: '#9a8d85' }
+        },
+        tooltip: tooltipStyle
+      }
+    }
+  });
+})();
+
+/* ── 2. Revenue by Payment Method ────────────────────── */
+(function(){
+  const paymentData = {{ revenue_by_payment|tojson }};
+  const labels = Object.keys(paymentData).map(k => k.toUpperCase());
+  const values = Object.values(paymentData);
+  const colors = ['#b5445a', '#7a9e7e', '#c4714b', '#6b4c3b', '#d4788a'];
+  if (labels.length === 0) { labels.push('No data'); values.push(0); }
+  new Chart(document.getElementById('paymentChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Revenue (₱)',
+        data: values,
+        backgroundColor: labels.map((_, i) => colors[i % colors.length]),
+        borderRadius: 8,
+        borderSkipped: false,
+        maxBarThickness: 60
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ₱${c.parsed.x.toLocaleString()}` } }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(107,76,59,.06)' },
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => '₱' + v.toLocaleString() }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { font: { ...chartFont, size: 12, weight: 600 }, color: '#2c2520' }
+        }
+      }
+    }
+  });
+})();
+
+/* ── 3. POS vs Online Stacked Bar ───────────────────── */
+(function(){
+  const pvo = {{ pos_vs_online|tojson }};
+  new Chart(document.getElementById('posOnlineChart'), {
+    type: 'bar',
+    data: {
+      labels: pvo.labels,
+      datasets: [
+        {
+          label: 'Online',
+          data: pvo.online,
+          backgroundColor: 'rgba(181,68,90,.75)',
+          borderRadius: { topLeft: 6, topRight: 6 },
+          borderSkipped: false,
+          maxBarThickness: 32
+        },
+        {
+          label: 'POS',
+          data: pvo.pos,
+          backgroundColor: 'rgba(122,158,126,.75)',
+          borderRadius: { topLeft: 6, topRight: 6 },
+          borderSkipped: false,
+          maxBarThickness: 32
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { ...chartFont, size: 11 }, boxWidth: 10, padding: 14, color: '#9a8d85' }
+        },
+        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ${c.dataset.label}: ₱${c.parsed.y.toLocaleString()}` } }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false },
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85' }
+        },
+        y: {
+          stacked: true,
+          grid: { color: 'rgba(107,76,59,.06)' },
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => '₱' + v.toLocaleString() }
+        }
+      }
+    }
+  });
+})();
+
+/* ── 4. Hourly Distribution Bar ─────────────────────── */
+(function(){
+  const hourlyData = {{ hourly_distribution|tojson }};
+  const labels = [];
+  const values = [];
+  let maxVal = 0;
+  for (let h = 0; h < 24; h++) {
+    const ampm = h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h-12) + 'p';
+    labels.push(ampm);
+    const v = hourlyData[h] || 0;
+    values.push(v);
+    if (v > maxVal) maxVal = v;
+  }
+  new Chart(document.getElementById('hourlyChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Orders',
+        data: values,
+        backgroundColor: values.map(v =>
+          v === maxVal && maxVal > 0 ? 'rgba(181,68,90,.85)' :
+          v >= maxVal * 0.7 ? 'rgba(196,113,75,.65)' :
+          v >= maxVal * 0.4 ? 'rgba(212,120,138,.5)' :
+          'rgba(154,141,133,.25)'
+        ),
+        borderRadius: 4,
+        borderSkipped: false,
+        maxBarThickness: 18
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ${c.parsed.y} orders` } }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { ...chartFont, size: 9 }, color: '#9a8d85', maxRotation: 0 }
+        },
+        y: {
+          grid: { color: 'rgba(107,76,59,.06)' },
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', stepSize: 1 },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+})();
+
+/* ── 5. Average Order Value Line ─────────────────────── */
+(function(){
+  const aov = {{ aov_trend|tojson }};
+  if (aov.labels.length === 0) return;
+  const ctxAov = document.getElementById('aovChart').getContext('2d');
+  const terraGrad = ctxAov.createLinearGradient(0,0,0,200);
+  terraGrad.addColorStop(0, 'rgba(196,113,75,.2)');
+  terraGrad.addColorStop(1, 'rgba(196,113,75,.02)');
+  new Chart(ctxAov, {
+    type: 'line',
+    data: {
+      labels: aov.labels,
+      datasets: [{
+        label: 'Avg. Order Value (₱)',
+        data: aov.values,
+        borderColor: 'rgba(196,113,75,1)',
+        backgroundColor: terraGrad,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        pointBackgroundColor: 'rgba(196,113,75,1)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { ...tooltipStyle, callbacks: { label: c => ` AOV: ₱${c.parsed.y.toLocaleString()}` } }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { ...chartFont, size: 10 }, color: '#9a8d85', maxTicksLimit: 8 }
+        },
+        y: {
+          grid: { color: 'rgba(107,76,59,.06)' },
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => '₱' + v.toLocaleString() }
+        }
+      }
+    }
+  });
+})();
+
+/* ── 6. Customer Retention Doughnut ──────────────────── */
+(function(){
+  const repeat = {{ repeat_customers }};
+  const oneTime = {{ total_unique_customers }} - repeat;
+  if (repeat + oneTime === 0) return;
+  new Chart(document.getElementById('retentionChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Repeat', 'One-time'],
+      datasets: [{
+        data: [repeat, oneTime < 0 ? 0 : oneTime],
+        backgroundColor: ['#7a9e7e', '#d4788a'],
+        borderColor: '#fffdf9',
+        borderWidth: 3,
+        hoverOffset: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '72%',
+      plugins: {
+        legend: { display: false },
+        tooltip: tooltipStyle
+      }
+    }
+  });
+})();
+
+/* ── 7. Rating Distribution Bar ──────────────────────── */
+(function(){
+  const ratingData = {{ rating_distribution|tojson }};
+  const labels = ['1 ★', '2 ★', '3 ★', '4 ★', '5 ★'];
+  const values = [1,2,3,4,5].map(r => ratingData[r] || 0);
+  const colors = ['#b5445a', '#c4714b', '#d4788a', '#7a9e7e', '#4a6b4e'];
+  new Chart(document.getElementById('ratingChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Reviews',
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 8,
+        borderSkipped: false,
+        maxBarThickness: 48
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ${c.parsed.y} reviews` } }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { ...chartFont, size: 13, weight: 600 }, color: '#2c2520' }
+        },
+        y: {
+          grid: { color: 'rgba(107,76,59,.06)' },
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', stepSize: 1 },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}
