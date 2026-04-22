@@ -43,8 +43,14 @@ def generate_refresh_token():
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             print("🔄 Refreshing existing credentials...")
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                print(f"⚠️  Could not refresh token: {e}")
+                print("   Creating new credentials instead...")
+                creds = None
+        
+        if not creds:
             print("🌐 Opening browser for Gmail authorization...")
             print(f"   Make sure {CLIENT_SECRET_FILE} exists in this directory!")
             flow = InstalledAppFlow.from_client_secrets_file(

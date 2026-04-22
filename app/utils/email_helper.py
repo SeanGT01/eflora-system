@@ -129,12 +129,12 @@ def send_rider_verification_email(recipient_email, verification_token, store_nam
     try:
         base_url = current_app.config.get('APP_BASE_URL') or request.host_url.rstrip('/')
         verify_url = f"{base_url.rstrip('/')}/verify-rider/{verification_token}"
-        subject = f"E-Flowers Rider Invitation - {store_name}"
+        subject = f"E-Flora Rider Invitation - {store_name}"
         
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">&#127800; E-Flowers</h1>
+                <h1 style="color: white; margin: 0;">&#127800; E-Flora</h1>
                 <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">Rider Account Invitation</p>
             </div>
             
@@ -143,7 +143,7 @@ def send_rider_verification_email(recipient_email, verification_token, store_nam
                 
                 <p style="color: #555; font-size: 16px;">
                     <strong>{seller_name}</strong> from <strong>{store_name}</strong> has invited you 
-                    to join as a delivery rider on E-Flowers.
+                    to join as a delivery rider on E-Flora.
                 </p>
                 
                 <p style="color: #555; font-size: 16px;">
@@ -178,7 +178,7 @@ def send_rider_verification_email(recipient_email, verification_token, store_nam
             
             <div style="text-align: center; padding: 15px; background: #f9f9f9; border-radius: 0 0 10px 10px; border: 1px solid #e0e0e0; border-top: none;">
                 <p style="color: #aaa; font-size: 12px; margin: 0;">
-                    &copy; E-Flowers Delivery System
+                    &copy; E-Flora Delivery System
                 </p>
             </div>
         </div>
@@ -209,12 +209,12 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
     The seller will then enter this OTP on the dashboard to verify.
     """
     try:
-        subject = f"E-Flowers Rider Verification Code - {store_name}"
+        subject = f"E-Flora Rider Verification Code - {store_name}"
 
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">&#127800; E-Flowers</h1>
+                <h1 style="color: white; margin: 0;">&#127800; E-Flora</h1>
                 <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">Rider Verification Code</p>
             </div>
 
@@ -223,7 +223,7 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
 
                 <p style="color: #555; font-size: 16px;">
                     <strong>{seller_name}</strong> from <strong>{store_name}</strong> is setting up your
-                    rider account on E-Flowers. Please share the verification code below with your seller.
+                    rider account on E-Flora. Please share the verification code below with your seller.
                 </p>
 
                 <div style="text-align: center; margin: 30px 0;">
@@ -248,7 +248,7 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
 
             <div style="text-align: center; padding: 15px; background: #f9f9f9; border-radius: 0 0 10px 10px; border: 1px solid #e0e0e0; border-top: none;">
                 <p style="color: #aaa; font-size: 12px; margin: 0;">
-                    &copy; E-Flowers Delivery System
+                    &copy; E-Flora Delivery System
                 </p>
             </div>
         </div>
@@ -278,12 +278,12 @@ def send_rider_credentials_email(recipient_email, full_name, default_password, s
     Send rider their account credentials after successful OTP verification via SendGrid.
     """
     try:
-        subject = f"E-Flowers Rider Account Created - {store_name}"
+        subject = f"E-Flora Rider Account Created - {store_name}"
 
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0;">&#127800; E-Flowers</h1>
+                <h1 style="color: white; margin: 0;">&#127800; E-Flora</h1>
                 <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">Welcome, Rider!</p>
             </div>
 
@@ -292,7 +292,7 @@ def send_rider_credentials_email(recipient_email, full_name, default_password, s
 
                 <p style="color: #555; font-size: 16px;">
                     Your rider account for <strong>{store_name}</strong> has been successfully created.
-                    You can now log in to the E-Flowers app using the credentials below.
+                    You can now log in to the E-Flora app using the credentials below.
                 </p>
 
                 <div style="background: #f4f4f8; border-radius: 10px; padding: 20px; margin: 25px 0;">
@@ -321,7 +321,7 @@ def send_rider_credentials_email(recipient_email, full_name, default_password, s
 
             <div style="text-align: center; padding: 15px; background: #f9f9f9; border-radius: 0 0 10px 10px; border: 1px solid #e0e0e0; border-top: none;">
                 <p style="color: #aaa; font-size: 12px; margin: 0;">
-                    &copy; E-Flowers Delivery System
+                    &copy; E-Flora Delivery System
                 </p>
             </div>
         </div>
