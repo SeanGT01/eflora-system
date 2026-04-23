@@ -1913,8 +1913,9 @@ def seller_products():
     
     # Get seller's store
     store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+    categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order.asc(), Category.name.asc()).all()
     if not store:
-        return render_template('products.html', products=[])
+        return render_template('products.html', products=[], categories=categories)
     
     # Get ONLY NON-ARCHIVED products for this store
     products = Product.query.filter_by(
@@ -1925,7 +1926,7 @@ def seller_products():
     # FIX: Convert products to dict for template
     product_list = [product.to_dict() for product in products]
     
-    return render_template('products.html', products=product_list)
+    return render_template('products.html', products=product_list, categories=categories)
 
 def generate_short_filename(original_filename, product_id, index):
     """Generate a short, safe filename for images"""
@@ -2056,7 +2057,7 @@ def create_product():
         db.session.add(product)
         db.session.flush()  # Get product ID
         
-        print(f"✅ Product created with ID: {product.id}")
+        print(f"Product created with ID: {product.id}")
         
         # ===== HANDLE CLOUDINARY IMAGES (ONLY) =====
         cloudinary_images_json = request.form.get('cloudinary_images')
@@ -2088,7 +2089,7 @@ def create_product():
                 print(f"  ✅ Added Cloudinary image: {img_data['public_id']}")
                 
         except json.JSONDecodeError as e:
-            print(f"❌ Error parsing cloudinary_images: {e}")
+            print(f"Error parsing cloudinary_images: {e}")
             db.session.rollback()
             return jsonify({'error': 'Invalid image data format'}), 400
 
@@ -2099,15 +2100,15 @@ def create_product():
                 main_image_index = int(main_image_index_raw)
                 for img in product.images:
                     img.is_primary = (img.sort_order == main_image_index)
-                print(f"🏷️ Applied main image index: {main_image_index}")
+                print(f"Applied main image index: {main_image_index}")
             except (TypeError, ValueError):
-                print(f"⚠️ Invalid main_image_index: {main_image_index_raw}")
+                print(f"Invalid main_image_index: {main_image_index_raw}")
 
         # Ensure at least one image remains primary.
         if product.images and not any(img.is_primary for img in product.images):
             first_img = sorted(product.images, key=lambda x: x.sort_order)[0]
             first_img.is_primary = True
-            print(f"🏷️ Fallback primary image set to ID: {first_img.id}")
+            print(f"Fallback primary image set to ID: {first_img.id}")
         
         # ===== HANDLE VARIANTS =====
         if has_variants:
@@ -3254,7 +3255,7 @@ def seller_order_verify_payment_api(order_id):
     order.set_status('preparing')  # Changed from 'accepted' to 'preparing'
     db.session.commit()
 
-    current_app.logger.info(f"✅ Order #{order_id} payment verified, status changed to preparing")
+    current_app.logger.info(f"Order #{order_id} payment verified, status changed to preparing")
 
     return jsonify({
         'success': True,
@@ -3298,7 +3299,7 @@ def seller_order_update_status(order_id):
     order.set_status(new_status)
     db.session.commit()
 
-    current_app.logger.info(f"✅ Order #{order_id} status updated: {current_status} → {new_status}")
+    current_app.logger.info(f"Order #{order_id} status updated: {current_status} → {new_status}")
 
     return jsonify({
         'success': True,
