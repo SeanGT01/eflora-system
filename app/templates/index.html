@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_price_display.html" import price_tag %}
 
 {% block title %}E-FLOWERS — Fresh Blooms & Beautiful Plants{% endblock %}
 
@@ -710,34 +711,74 @@
     }
 
     /* ─── Stores ─── */
+    .stores-carousel {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        position: relative;
+        margin-bottom: 3rem;
+    }
+
     .stores-grid {
         display: flex;
         flex-direction: row;
-        gap: 1.25rem;
-        margin-bottom: 3rem;
-        overflow-x: auto;
+        gap: 0.75rem;
+        overflow-x: hidden;
         overflow-y: hidden;
-        padding-bottom: 0.5rem;
+        flex: 1;
         scroll-behavior: smooth;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
     }
 
-    /* Scrollbar styling */
     .stores-grid::-webkit-scrollbar {
-        height: 6px;
+        display: none;
     }
 
-    .stores-grid::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 10px;
+    .stores-arrow {
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--deep-rose);
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: var(--transition);
+        box-shadow: var(--shadow-sm);
+        padding: 0;
+        line-height: 1;
+        position: relative;
+        z-index: 3;
     }
 
-    .stores-grid::-webkit-scrollbar-thumb {
-        background: #d4788a;
-        border-radius: 10px;
+    .stores-arrow-glyph {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1;
+        color: currentColor;
+        position: relative;
+        z-index: 1;
+        transform: translateY(-1px);
     }
 
-    .stores-grid::-webkit-scrollbar-thumb:hover {
-        background: #b5445a;
+    .stores-arrow:hover {
+        background: #a83a4e;
+        transform: scale(1.1);
+        box-shadow: var(--shadow-md);
+    }
+
+    .stores-arrow:active {
+        transform: scale(0.95);
     }
 
     .store-card {
@@ -750,7 +791,8 @@
         gap: 1.25rem;
         align-items: center;
         flex-shrink: 0;
-        min-width: 360px;
+        min-width: 240px;
+        position: relative;
     }
 
     .store-card:hover {
@@ -773,6 +815,23 @@
         font-weight: 500;
         flex-shrink: 0;
         overflow: hidden;
+        position: relative;
+    }
+
+    /* Newly Approved Badge */
+    .store-card.newly-approved::after {
+        content: 'NEW';
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: #ff6b6b;
+        color: white;
+        padding: 0.35rem 0.65rem;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
     }
 
     .store-avatar img {
@@ -1194,14 +1253,26 @@
         .newsletter-section { 
             padding: 2.5rem 1.5rem; 
         }
+        
+        .stores-carousel {
+            gap: 0.5rem;
+        }
+
         .stores-grid { 
             gap: 0.75rem;
+        }
+
+        .stores-arrow {
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
         }
         
         .store-card {
             flex-direction: row;
             gap: 0.6rem;
             padding: 0.8rem;
+            min-width: 220px;
             cursor: auto;
         }
         
@@ -1393,14 +1464,25 @@
             font-size: 10px;
         }
         
+        .stores-carousel {
+            gap: 0.4rem;
+        }
+
         .stores-grid {
             gap: 0.5rem;
+        }
+
+        .stores-arrow {
+            width: 38px;
+            height: 38px;
+            font-size: 18px;
         }
         
         .store-card {
             flex-direction: row;
             gap: 0.35rem;
             padding: 0.55rem;
+            min-width: 200px;
             align-items: flex-start;
             cursor: pointer;
             transition: var(--transition);
@@ -1490,8 +1572,18 @@
             height: 40px;
         }
         
+        .stores-carousel {
+            gap: 0.35rem;
+        }
+
         .stores-grid {
             gap: 0.4rem;
+        }
+
+        .stores-arrow {
+            width: 36px;
+            height: 36px;
+            font-size: 16px;
         }
         
         .store-card {
@@ -1499,6 +1591,7 @@
             gap: 0.3rem;
             padding: 0.5rem;
             align-items: flex-start;
+            min-width: 180px;
         }
         
         .store-avatar {
@@ -1560,8 +1653,18 @@
 
     /* Ultra-small phone screens */
     @media (max-width: 320px) {
+        .stores-carousel {
+            gap: 0.3rem;
+        }
+
         .stores-grid {
             gap: 0.3rem;
+        }
+
+        .stores-arrow {
+            width: 34px;
+            height: 34px;
+            font-size: 14px;
         }
         
         .store-card {
@@ -1569,6 +1672,7 @@
             gap: 0.25rem;
             padding: 0.4rem;
             align-items: flex-start;
+            min-width: 160px;
         }
         
         .store-avatar {
@@ -1795,7 +1899,7 @@
                         <i class="ri-eye-line"></i>
                     </button>
                     {% if product.stock_quantity > 0 and product.is_available %}
-                    <button class="overlay-btn" onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.price }}, '')" title="Quick Add">
+                    <button class="overlay-btn" onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.effective_price }}, '')" title="Quick Add">
                         <i class="ri-shopping-bag-line"></i>
                     </button>
                     {% endif %}
@@ -1806,10 +1910,10 @@
                 <div class="product-category">{{ product.store_name or 'Flower Shop' }}</div>
                 <h3 class="product-title">{{ product.name }}</h3>
                 <div class="product-footer">
-                    <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
+                    <div class="product-price">{{ price_tag(product, 'md') }}</div>
                     <button class="add-btn"
                         {% if not product.is_available or product.stock_quantity == 0 %}disabled{% endif %}
-                        onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.price }}, '')"
+                        onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.effective_price }}, '')"
                         title="{{ 'Add to cart' if product.is_available and product.stock_quantity > 0 else 'Out of stock' }}">
                         <i class="ri-add-line"></i>
                     </button>
@@ -1840,9 +1944,13 @@
     </div>
 
     {% if stores and stores|length > 0 %}
-    <div class="stores-grid">
-        {% for store in stores %}
-        <div class="store-card">
+    <div class="stores-carousel">
+        <button class="stores-arrow stores-arrow-left" onclick="scrollStores('left')" aria-label="Previous stores">
+            <span class="stores-arrow-glyph" aria-hidden="true">&#8249;</span>
+        </button>
+        <div class="stores-grid" id="storesContainer">
+            {% for store in stores %}
+            <div class="store-card {% if store.approved_at and (now - store.approved_at).days < 7 %}newly-approved{% endif %}">
             <div class="store-avatar">
                 {% if store.logo_url %}
                     <img src="{{ store.logo_url }}" alt="{{ store.name }}" onerror="this.style.display='none'; this.parentElement.innerHTML='{{ store.name[0] if store.name else 'S' }}'">
@@ -1853,15 +1961,20 @@
             <div class="store-info">
                 <div class="store-name">{{ store.name }}</div>
                 <div class="store-address">
-                    {% if store.address %}
+                    {% if store.barangay and store.municipality %}
+                        {{ store.barangay }}, {{ store.municipality }}
+                    {% elif store.municipality %}
+                        {{ store.municipality }}
+                    {% elif store.barangay %}
+                        {{ store.barangay }}
+                    {% elif store.address %}
                         {{ store.address[:55] }}{% if store.address|length > 55 %}…{% endif %}
                     {% else %}
-                        <em style="font-style:italic;">Address not available</em>
+                        <em style="font-style:italic;">Location not available</em>
                     {% endif %}
                 </div>
                 <div class="store-meta">
                     <span><i class="ri-star-fill"></i> 4.8</span>
-                    <span><i class="ri-map-pin-line"></i> {{ store.delivery_radius_km or 5 }}km radius</span>
                 </div>
             </div>
             <a href="{{ url_for('templates.store_detail', store_id=store.id) }}" class="btn btn-outline" style="flex-shrink:0;padding:0.6rem 1rem;font-size:13px;">
@@ -1869,6 +1982,10 @@
             </a>
         </div>
         {% endfor %}
+        </div>
+        <button class="stores-arrow stores-arrow-right" onclick="scrollStores('right')" aria-label="Next stores">
+            <span class="stores-arrow-glyph" aria-hidden="true">&#8250;</span>
+        </button>
     </div>
     {% else %}
     <div class="empty-state">
@@ -1882,7 +1999,7 @@
 <section class="why-section">
     <div class="why-header">
         <div class="section-label">Our Promise</div>
-        <h2 class="section-title">Why Choose E-FLOWERS?</h2>
+        <h2 class="section-title">Why Choose E-FLORA?</h2>
     </div>
     <div class="why-grid">
         <div class="why-card">
@@ -1897,13 +2014,13 @@
         </div>
         <div class="why-card">
             <div class="why-icon-wrap"><i class="ri-shield-check-line"></i></div>
-            <div class="why-title">Secure Payment</div>
-            <div class="why-desc">Multiple options with bank-grade security on every order.</div>
+            <div class="why-title">Online Payment</div>
+            <div class="why-desc">Pay online through GCash receipt.</div>
         </div>
         <div class="why-card">
             <div class="why-icon-wrap"><i class="ri-customer-service-2-line"></i></div>
-            <div class="why-title">24/7 Support</div>
-            <div class="why-desc">Our team is always here for your floral needs.</div>
+            <div class="why-title">Store Chat Support</div>
+            <div class="why-desc">Message stores through chat for assistance.</div>
         </div>
     </div>
 </section>
@@ -2022,15 +2139,20 @@
 
 <script>
 // Add click handler to store cards
+window.addEventListener('load', function() {
+    setupStoresCarousel();
+});
+
 document.addEventListener('DOMContentLoaded', function() {
-    const storeCards = document.querySelectorAll('.store-card');
-    storeCards.forEach(card => {
-        card.addEventListener('click', function() {
-            const visitLink = this.querySelector('.btn');
-            if (visitLink && visitLink.href) {
-                window.location.href = visitLink.href;
-            }
-        });
+    document.addEventListener('click', function(event) {
+        const card = event.target.closest('.store-card');
+        if (!card) return;
+        if (event.target.closest('a, button')) return;
+
+        const visitLink = card.querySelector('.btn');
+        if (visitLink && visitLink.href) {
+            window.location.href = visitLink.href;
+        }
     });
 });
 
@@ -2203,6 +2325,75 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 })();
+
+// Scroll Stores Carousel Function
+let storesAutoScrollInterval = null;
+let storesAutoScrollPaused = false;
+let storesAutoScrollReady = false;
+
+function setupStoresCarousel() {
+    const container = document.getElementById('storesContainer');
+    if (!container || storesAutoScrollReady) return;
+
+    const originalCards = Array.from(container.children);
+    if (originalCards.length <= 1) return;
+
+    originalCards.forEach(card => {
+        const clone = card.cloneNode(true);
+        clone.setAttribute('aria-hidden', 'true');
+        container.appendChild(clone);
+    });
+
+    const pause = () => { storesAutoScrollPaused = true; };
+    const resume = () => { storesAutoScrollPaused = false; };
+
+    container.addEventListener('mouseenter', pause);
+    container.addEventListener('mouseleave', resume);
+    container.addEventListener('focusin', pause);
+    container.addEventListener('focusout', resume);
+
+    document.querySelectorAll('.stores-arrow').forEach(button => {
+        button.addEventListener('mouseenter', pause);
+        button.addEventListener('mouseleave', resume);
+    });
+
+    container.scrollLeft = 1;
+    storesAutoScrollReady = true;
+    storesAutoScrollInterval = window.setInterval(() => {
+        if (storesAutoScrollPaused) return;
+
+        container.scrollLeft += 1;
+
+        if (container.scrollLeft >= container.scrollWidth / 2) {
+            container.scrollLeft = 1;
+        }
+    }, 24);
+}
+
+function scrollStores(direction) {
+    const container = document.getElementById('storesContainer');
+    if (!container) return;
+    
+    const scrollAmount = 245; // Width of one store card (240px) + gap (12px)
+    storesAutoScrollPaused = true;
+    
+    if (direction === 'left') {
+        container.scrollBy({
+            left: -scrollAmount,
+            behavior: 'smooth'
+        });
+    } else if (direction === 'right') {
+        container.scrollBy({
+            left: scrollAmount,
+            behavior: 'smooth'
+        });
+    }
+
+    window.clearTimeout(window._storesResumeTimer);
+    window._storesResumeTimer = window.setTimeout(() => {
+        storesAutoScrollPaused = false;
+    }, 1400);
+}
 
 // Quick Add to Cart Function - Matches store_detail.html behavior
 async function quickAdd(productId, productName, productPrice, productCategory) {

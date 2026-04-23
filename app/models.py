@@ -393,6 +393,7 @@ class Store(db.Model):
             'delivery_rate_per_km': float(self.delivery_rate_per_km or 0),
             'free_delivery_minimum': float(self.free_delivery_minimum or 0),
             'max_delivery_distance': self.max_delivery_distance,
+            'created_at': self.created_at,
             'latitude': self.latitude,
             'longitude': self.longitude,
             'formatted_address': self.formatted_address,
@@ -657,6 +658,7 @@ class Product(db.Model):
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     price = db.Column(db.Numeric(10, 2), nullable=False)
+    special_price = db.Column(db.Numeric(10, 2), nullable=True)  # Sale / discounted price
     stock_quantity = db.Column(db.Integer, default=0)
     is_available = db.Column(db.Boolean, default=True)
     
@@ -678,6 +680,20 @@ class Product(db.Model):
     archived_by_user = db.relationship('User', foreign_keys=[archived_by], backref='archived_products')
     stock_reductions = db.relationship('StockReduction', back_populates='product', lazy=True, cascade='all, delete-orphan')
     
+    @property
+    def effective_price(self):
+        """The price customers actually pay (special_price if set, else price)."""
+        if self.special_price and self.special_price < self.price:
+            return float(self.special_price)
+        return float(self.price)
+
+    @property
+    def discount_pct(self):
+        """Integer discount percentage, or None when no special price is active."""
+        if self.special_price and self.special_price < self.price and float(self.price) > 0:
+            return round((1 - float(self.special_price) / float(self.price)) * 100)
+        return None
+
     @property
     def category_path(self):
         """Get full category path e.g., 'Bouquets > Crochet Bouquets'"""
@@ -716,7 +732,7 @@ class Product(db.Model):
         
         Args:
             amount (int): Number of units to reduce
-            reason (str): Reason for reduction (spoilage, damage, defect, other)
+            reason (str): Reason for reduction (spoilage, damage, defect, other, pos_sale)
             user_id (int): ID of user making the reduction
             reason_notes (str): Optional additional context
             variant (ProductVariant, optional): If reducing variant stock
@@ -792,6 +808,9 @@ class Product(db.Model):
             'name': self.name,
             'description': self.description,
             'price': float(self.price) if self.price else 0,
+            'special_price': float(self.special_price) if self.special_price else None,
+            'effective_price': self.effective_price,
+            'discount_pct': self.discount_pct,
             'stock_quantity': self.stock_quantity,
             
                         # Main category info (with safe fallbacks)
@@ -901,6 +920,7 @@ class ProductVariant(db.Model):
     # Variant details
     name = db.Column(db.String(100), nullable=False)  # e.g., "Small", "Red Rose", "12 Stems"
     price = db.Column(db.Numeric(10, 2), nullable=False)  # Variant-specific price
+    special_price = db.Column(db.Numeric(10, 2), nullable=True)  # Sale / discounted price
     stock_quantity = db.Column(db.Integer, default=0)
     sku = db.Column(db.String(50), nullable=True)  # Stock Keeping Unit
     
@@ -928,6 +948,18 @@ class ProductVariant(db.Model):
     # Relationships
     product = db.relationship('Product', back_populates='variants')
     
+    @property
+    def effective_price(self):
+        if self.special_price and self.special_price < self.price:
+            return float(self.special_price)
+        return float(self.price)
+
+    @property
+    def discount_pct(self):
+        if self.special_price and self.special_price < self.price and float(self.price) > 0:
+            return round((1 - float(self.special_price) / float(self.price)) * 100)
+        return None
+
     @property
     def image(self):
         """Get Cloudinary URL - no local fallback"""
@@ -959,6 +991,9 @@ class ProductVariant(db.Model):
             'product_id': self.product_id,
             'name': self.name,
             'price': float(self.price) if self.price else 0,
+            'special_price': float(self.special_price) if self.special_price else None,
+            'effective_price': self.effective_price,
+            'discount_pct': self.discount_pct,
             'stock_quantity': self.stock_quantity,
             'sku': self.sku,
             'image_url': self.image_url,  # Cloudinary only
@@ -988,7 +1023,7 @@ class StockReduction(db.Model):
     reduction_amount = db.Column(db.Integer, nullable=False)
     
     # Reason for reduction
-    reason = db.Column(db.String(50), nullable=False)  # spoilage, damage, defect, other
+    reason = db.Column(db.String(50), nullable=False)  # spoilage, damage, defect, other, pos_sale
     reason_notes = db.Column(db.Text, nullable=True)   # Additional context
     
     # Who made the reduction
@@ -1004,7 +1039,7 @@ class StockReduction(db.Model):
     reducer_user = db.relationship('User', backref='stock_reductions_made', foreign_keys=[reduced_by])
     
     # Valid reasons
-    REASONS = ['spoilage', 'damage', 'defect', 'other']
+    REASONS = ['spoilage', 'damage', 'defect', 'other', 'pos_sale', 'found_stock', 'receiving_error', 'restock']
     
     def to_dict(self):
         # Get product image (prefer primary, then first image)
@@ -1554,10 +1589,10 @@ class CartItem(db.Model):
     
     @property
     def subtotal(self):
-        # Use variant price if variant is selected, otherwise product price
+        # Use effective sale-aware price (variant takes precedence)
         if self.variant:
-            return self.variant.price * self.quantity
-        return self.product.price * self.quantity if self.product else 0
+            return self.variant.effective_price * self.quantity
+        return self.product.effective_price * self.quantity if self.product else 0
     
     @property
     def item_image(self):
@@ -1578,6 +1613,20 @@ class CartItem(db.Model):
         if self.product and self.product.store:
             store_name = self.product.store.name
         
+        # Resolve effective (sale-aware) price and sale metadata for Flutter
+        if self.variant:
+            effective = float(self.variant.effective_price)
+            original  = float(self.variant.price)
+            disc_pct  = self.variant.discount_pct
+        elif self.product:
+            effective = float(self.product.effective_price)
+            original  = float(self.product.price)
+            disc_pct  = self.product.discount_pct
+        else:
+            effective = 0.0
+            original  = 0.0
+            disc_pct  = None
+
         return {
             'id': self.id,
             'cart_id': self.cart_id,
@@ -1588,9 +1637,13 @@ class CartItem(db.Model):
             'product': product_dict,
             'variant': variant_dict,
             'quantity': self.quantity,
-            'is_selected': self.is_selected,  # Selection status
+            'is_selected': self.is_selected,
             'subtotal': float(self.subtotal),
-            'image_url': self.item_image,  # Cloudinary only
+            'image_url': self.item_image,
+            # Top-level price fields consumed by Flutter CartItem.fromJson
+            'price': effective,
+            'original_price': original if disc_pct else None,
+            'discount_pct': disc_pct,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

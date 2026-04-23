@@ -436,6 +436,51 @@
 <script>
     let currentApplications = [];
     let currentTab = 'pending';
+    let currentReviewOriginal = null;
+
+    function collectRejectionDetails() {
+        const rejectionDetails = {};
+        let checkedCount = 0;
+        let missingReason = false;
+        
+        document.querySelectorAll('.reject-field-cb').forEach(cb => {
+            const field = cb.dataset.field;
+            if (cb.checked) {
+                checkedCount++;
+                const reason = document.querySelector(`.reject-reason[data-field="${field}"]`).value.trim();
+                if (!reason) {
+                    missingReason = true;
+                    return;
+                }
+                rejectionDetails[field] = { rejected: true, reason: reason };
+            }
+        });
+
+        return { rejectionDetails, checkedCount, missingReason };
+    }
+
+    function updateReviewActionState() {
+        const rejectBtn = document.getElementById('rejectBtn');
+        const approveBtn = document.getElementById('approveBtn');
+        const decision = document.querySelector('input[name="decision"]:checked')?.value;
+
+        if (!currentReviewOriginal || currentReviewOriginal.status !== 'rejected') {
+            if (approveBtn) approveBtn.disabled = decision !== 'approve';
+            if (rejectBtn) rejectBtn.disabled = decision !== 'reject';
+            return;
+        }
+
+        if (approveBtn) approveBtn.disabled = false;
+        if (!rejectBtn) return;
+
+        const adminNotes = document.querySelector('textarea[name="admin_notes"]').value.trim();
+        const { rejectionDetails, checkedCount, missingReason } = collectRejectionDetails();
+        const originalDetails = currentReviewOriginal.rejection_details || {};
+        const originalNotes = (currentReviewOriginal.admin_notes || '').trim();
+        const changed = JSON.stringify(rejectionDetails) !== JSON.stringify(originalDetails) || adminNotes !== originalNotes;
+
+        rejectBtn.disabled = !changed || checkedCount === 0 || missingReason;
+    }
     
     document.addEventListener('DOMContentLoaded', function() {
         loadApplications();
@@ -447,8 +492,7 @@
                 reasonGroup.style.display = this.value === 'reject' ? 'block' : 'none';
                 
                 // Update button states
-                document.getElementById('approveBtn').disabled = this.value !== 'approve';
-                document.getElementById('rejectBtn').disabled = this.value !== 'reject';
+                updateReviewActionState();
             });
         });
         
@@ -459,8 +503,15 @@
                 const reasonInput = document.querySelector(`.reject-reason[data-field="${field}"]`);
                 reasonInput.style.display = this.checked ? 'block' : 'none';
                 if (!this.checked) reasonInput.value = '';
+                updateReviewActionState();
             });
         });
+
+        document.querySelectorAll('.reject-reason').forEach(input => {
+            input.addEventListener('input', updateReviewActionState);
+        });
+
+        document.querySelector('textarea[name="admin_notes"]')?.addEventListener('input', updateReviewActionState);
         
         // Search functionality
         document.getElementById('searchInput').addEventListener('input', filterApplications);
@@ -633,7 +684,19 @@
             return;
         }
         
-        tbody.innerHTML = rejectedApps.map(app => `
+        tbody.innerHTML = rejectedApps.map(app => {
+            const rejectionReasons = app.rejection_details
+                ? Object.entries(app.rejection_details)
+                    .filter(([, detail]) => detail && detail.rejected)
+                    .map(([field, detail]) => {
+                        const label = field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                        return `${label}: ${detail.reason || 'Reason not provided'}`;
+                    })
+                    .join('; ')
+                : '';
+            const reasonText = rejectionReasons || app.admin_notes || 'No reason provided';
+
+            return `
             <tr>
                 <td><span style="font-weight: 600;">#${app.id}</span></td>
                 <td>
@@ -651,7 +714,7 @@
                 <td>${app.phone || 'N/A'}</td>
                 <td>${app.reviewed_at ? new Date(app.reviewed_at).toLocaleDateString() : 'N/A'}</td>
                 <td style="max-width: 200px;">
-                    <span style="font-size: 13px; color: var(--muted);">${app.admin_notes || 'No reason provided'}</span>
+                    <span style="font-size: 13px; color: var(--muted);">${reasonText}</span>
                 </td>
                 <td>
                     <button class="btn btn-icon btn-sm btn-outline" onclick="viewApplication(${app.id})" title="View Details" style="width: 32px; height: 32px;">
@@ -659,7 +722,8 @@
                     </button>
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     }
     
     function renderAllTable() {
@@ -762,19 +826,60 @@
     function openReviewModal(applicationId) {
         const app = currentApplications.find(a => a.id === applicationId);
         if (!app) return;
+        currentReviewOriginal = {
+            status: app.status,
+            admin_notes: app.admin_notes || '',
+            rejection_details: app.rejection_details || {}
+        };
         
         document.getElementById('reviewApplicationId').value = app.id;
         
         // Reset form
+        const decisionSection = document.querySelector('#reviewForm').querySelector('div[style*="margin-bottom: 1.25rem;"]');
+        const approveBtn = document.getElementById('approveBtn');
+        const rejectBtn = document.getElementById('rejectBtn');
         document.querySelectorAll('input[name="decision"]').forEach(r => r.checked = false);
         document.getElementById('rejectionReasonGroup').style.display = 'none';
-        document.getElementById('approveBtn').disabled = true;
-        document.getElementById('rejectBtn').disabled = true;
+        approveBtn.disabled = true;
+        rejectBtn.disabled = true;
         document.querySelector('textarea[name="admin_notes"]').value = '';
+        if (decisionSection) decisionSection.style.display = 'block';
+        approveBtn.innerHTML = '<i class="ri-checkbox-circle-line"></i> Approve & Convert to Seller';
+        rejectBtn.innerHTML = '<i class="ri-close-circle-line"></i> Reject Application';
+        rejectBtn.style.display = '';
         
         // Reset per-field rejection checkboxes
         document.querySelectorAll('.reject-field-cb').forEach(cb => { cb.checked = false; });
         document.querySelectorAll('.reject-reason').forEach(input => { input.value = ''; input.style.display = 'none'; });
+
+        if (app.admin_notes) {
+            document.querySelector('textarea[name="admin_notes"]').value = app.admin_notes;
+        }
+
+        if (app.status === 'rejected' && app.rejection_details) {
+            const rejectRadio = document.querySelector('input[name="decision"][value="reject"]');
+            if (rejectRadio) rejectRadio.checked = true;
+
+            if (decisionSection) decisionSection.style.display = 'none';
+            document.getElementById('rejectionReasonGroup').style.display = 'block';
+            approveBtn.innerHTML = '<i class="ri-checkbox-circle-line"></i> Approve';
+            rejectBtn.innerHTML = '<i class="ri-edit-line"></i> Update';
+
+            Object.entries(app.rejection_details).forEach(([field, detail]) => {
+                if (!detail || !detail.rejected) return;
+
+                const checkbox = document.querySelector(`.reject-field-cb[data-field="${field}"]`);
+                const reasonInput = document.querySelector(`.reject-reason[data-field="${field}"]`);
+
+                if (checkbox) checkbox.checked = true;
+                if (reasonInput) {
+                    reasonInput.value = detail.reason || '';
+                    reasonInput.style.display = 'block';
+                }
+            });
+        }
+        
+        updateReviewActionState();
         
         // Load application details
         const detailsDiv = document.getElementById('applicationDetails');
@@ -816,24 +921,7 @@
         let bodyData = { admin_notes: adminNotes };
         
         if (decision === 'reject') {
-            // Build per-field rejection details
-            const rejectionDetails = {};
-            let checkedCount = 0;
-            let missingReason = false;
-            
-            document.querySelectorAll('.reject-field-cb').forEach(cb => {
-                const field = cb.dataset.field;
-                if (cb.checked) {
-                    checkedCount++;
-                    const reason = document.querySelector(`.reject-reason[data-field="${field}"]`).value.trim();
-                    if (!reason) {
-                        showAlert('warning', `Please provide a reason for rejecting "${field.replace('_', ' ')}"`);
-                        missingReason = true;
-                        return;
-                    }
-                    rejectionDetails[field] = { rejected: true, reason: reason };
-                }
-            });
+            const { rejectionDetails, checkedCount, missingReason } = collectRejectionDetails();
             
             if (checkedCount === 0) {
                 showAlert('warning', 'Please select at least one item to reject and provide reasons');
@@ -861,7 +949,12 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                showAlert('success', `Application ${decision}d successfully! User role updated to seller.`);
+                const successMessage = decision === 'approve'
+                    ? 'Application approved successfully! User role updated to seller.'
+                    : (currentReviewOriginal?.status === 'rejected'
+                        ? 'Rejection reasons updated successfully!'
+                        : 'Application rejected successfully!');
+                showAlert('success', successMessage);
                 closeModal('reviewModal');
                 loadApplications(); // Refresh the list
             } else {

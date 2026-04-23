@@ -21,6 +21,7 @@ def upgrade():
     op.create_table('stock_reductions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
+    sa.Column('variant_id', sa.Integer(), nullable=True),
     sa.Column('reduction_amount', sa.Integer(), nullable=False),
     sa.Column('reason', sa.String(length=50), nullable=False),
     sa.Column('reason_notes', sa.Text(), nullable=True),
@@ -28,6 +29,7 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
+    sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['reduced_by'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )

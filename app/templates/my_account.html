@@ -636,6 +636,62 @@
         // Keep the last saved custom gender value around so it sticks when toggling back to "other"
         let lastSavedOtherGender = document.getElementById('gender_other')?.value || '';
 
+        function syncProfileUI(user) {
+            if (!user) return;
+
+            const scope = document.getElementById('accountContent') || document;
+            const avatarName = scope.querySelector('.avatar-name');
+            const avatarMeta = scope.querySelector('.avatar-meta');
+            const avatarCircle = scope.querySelector('.avatar-circle');
+            const profileForm = scope.querySelector('#profileForm');
+
+            if (avatarName) avatarName.textContent = user.full_name || 'Your Name';
+            if (avatarMeta) avatarMeta.textContent = user.email || '';
+
+            if (avatarCircle) {
+                if (user.avatar_url) {
+                    avatarCircle.innerHTML = `<img src="${user.avatar_url}?t=${Date.now()}" alt="Profile">`;
+                } else {
+                    avatarCircle.textContent = user.full_name ? user.full_name.charAt(0).toUpperCase() : 'U';
+                }
+            }
+
+            if (!profileForm) return;
+
+            const setValue = (name, value) => {
+                const input = profileForm.querySelector(`[name="${name}"]`);
+                if (input) input.value = value || '';
+            };
+
+            setValue('first_name', user.first_name);
+            setValue('last_name', user.last_name);
+            setValue('email', user.email);
+            setValue('phone', user.phone);
+            setValue('birthday', user.birthday);
+
+            const genderValue = user.gender || '';
+            const standardGenders = ['male', 'female', 'other'];
+            profileForm.querySelectorAll('input[name="gender"]').forEach(radio => {
+                radio.checked = false;
+                if (standardGenders.includes(genderValue) && radio.value === genderValue) {
+                    radio.checked = true;
+                }
+                if (!standardGenders.includes(genderValue) && genderValue && radio.value === 'other') {
+                    radio.checked = true;
+                }
+            });
+
+            const otherInput = document.getElementById('gender_other');
+            if (otherInput) {
+                otherInput.value = !standardGenders.includes(genderValue) ? genderValue : '';
+                if (otherInput.value.trim()) {
+                    lastSavedOtherGender = otherInput.value.trim();
+                }
+            }
+
+            updateGenderOtherVisibility();
+        }
+
         // Toggle visibility of the custom gender field
         function updateGenderOtherVisibility() {
             const container = document.getElementById('gender-other-container');
@@ -706,8 +762,7 @@
                             lastSavedOtherGender = otherInput.value.trim();
                         }
 
-                        updateGenderOtherVisibility();
-                        this.reset();
+                        syncProfileUI(d.user);
                         btn.disabled = true; // Keep disabled after successful save
                     } else {
                         showToast('Error: ' + (d.error || 'Unknown error'));

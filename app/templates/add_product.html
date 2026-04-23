@@ -28,9 +28,9 @@
 
         
         
-        <!-- Two Column Layout -->
-        <div class="form-layout">
-            <!-- Left Column - Main Product Info -->
+        <!-- Top Two-Column Layout: Basic Info + Content Score -->
+        <div class="form-layout-top">
+            <!-- Left Column: Basic Info + Pricing -->
             <div class="left-column">
                 <!-- Basic Information Card -->
                 <div class="form-card">
@@ -48,7 +48,6 @@
                             <div class="character-count"><span id="nameCount">{{ product.name|length if product else 0 }}</span>/100</div>
                         </div>
 
-                        <!-- ===== UPDATED: Category Selection with Main + Sub ===== -->
                         <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label">Main Category <span class="required">*</span></label>
@@ -61,12 +60,11 @@
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <!-- Add this debug info -->
-                                    {% if not main_categories %}
-                                    <div style="background: #fee; padding: 10px; margin: 10px 0; border-radius: 4px; color: #c00;">
-                                        ⚠️ Debug: main_categories is empty or not passed to template
-                                    </div>
-                                    {% endif %}
+                                {% if not main_categories %}
+                                <div style="background: #fee; padding: 10px; margin: 10px 0; border-radius: 4px; color: #c00;">
+                                    ⚠️ Debug: main_categories is empty or not passed to template
+                                </div>
+                                {% endif %}
                                 <small class="form-hint">Select the main category for your product</small>
                             </div>
                             
@@ -91,14 +89,15 @@
                             <div class="form-group">
                                 <label class="form-label">SKU (Optional)</label>
                                 <input type="text" id="productSku" name="sku" class="form-control" 
-                                       placeholder="e.g., ROS-001" value="{{ product.sku if product else '' }}">
+                                       placeholder="Auto-generated from product name (editable)" value="{{ product.sku if product else '' }}">
+                                <small class="form-hint">Auto-generated from product name. You can override manually.</small>
                             </div>
                         </div>
 
                         <div class="form-group">
                             <label class="form-label">Description</label>
                             <textarea id="productDescription" name="description" class="form-control" 
-                                      rows="4" placeholder="Describe your product in detail...">{{ product.description if product else '' }}</textarea>
+                                      rows="5" placeholder="Describe your product in detail...">{{ product.description if product else '' }}</textarea>
                             <div class="character-count"><span id="descCount">{{ product.description|length if product and product.description else 0 }}</span>/500</div>
                         </div>
                     </div>
@@ -121,152 +120,271 @@
                                            value="{{ product.price if product else '' }}" required>
                                 </div>
                             </div>
-                            
+                            <div class="form-group">
+                                <label class="form-label">Special Price (₱) <span class="form-hint-inline">optional sale price</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">₱</span>
+                                    <input type="number" id="productSpecialPrice" name="special_price" class="form-control" 
+                                           placeholder="Leave blank if no sale" step="0.01" min="0" 
+                                           value="{{ product.special_price if product and product.special_price else '' }}">
+                                </div>
+                                <small class="form-hint">If set, this is the selling price — original will be shown struck-through.</small>
+                            </div>
+
+                            {% if not is_edit %}
                             <div class="form-group">
                                 <label class="form-label">Stock Quantity <span class="required">*</span></label>
                                 <input type="number" id="productStock" name="stock_quantity" class="form-control" 
                                        placeholder="0" min="0" value="{{ product.stock_quantity if product else '' }}" required>
                                 <small class="form-hint">Total stock including all variants</small>
                             </div>
+                            {% else %}
+                            <div class="form-group">
+                                <label class="form-label">Stock Quantity</label>
+                                <input type="number" id="productStock" name="stock_quantity" class="form-control" 
+                                       placeholder="0" min="0" value="{{ product.stock_quantity if product else 0 }}" disabled readonly>
+                                <small class="form-hint">Use Reduce Stock or Add Stock buttons to modify</small>
+                            </div>
+                            {% endif %}
                         </div>
-
-                        <!-- ===== NEW: Stock Management (Edit Mode Only) ===== -->
                         {% if is_edit %}
-                        <div class="stock-management-section" id="stockManagementSection">
-                            <div class="stock-info-box">
-                                <div class="stock-info-item">
-                                    <span class="label">Current Stock</span>
-                                    <span class="value" id="currentStockDisplay">{{ product.stock_quantity if product else 0 }}</span>
-                                    <span class="unit">units</span>
-                                </div>
-                            </div>
-                            
-                            <div class="stock-actions">
-                                <button type="button" class="btn btn-outline btn-sm" onclick="openStockHistoryModal()">
-                                    <i class="ri-history-line"></i> View History
-                                </button>
-                                <button type="button" class="btn btn-warning btn-sm" onclick="openStockReductionModal()">
-                                    <i class="ri-subtract-line"></i> Reduce Stock
-                                </button>
-                            </div>
+                        <div class="stock-actions stock-actions-inline">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="openStockHistoryModal()">
+                                <i class="ri-history-line"></i> View History
+                            </button>
+                            <button type="button" class="btn btn-warning btn-sm" onclick="openStockReductionModal()">
+                                <i class="ri-subtract-line"></i> Reduce Stock
+                            </button>
+                            <button type="button" class="btn btn-success btn-sm" onclick="openStockAdditionModal()">
+                                <i class="ri-add-line"></i> Add Stock
+                            </button>
                         </div>
                         {% endif %}
 
-                        <div class="form-group">
-                            <label class="toggle-switch">
+                        <!-- Available for Sale Toggle (fixed alignment) -->
+                        <div class="available-toggle-row">
+                            <label class="toggle-switch" style="margin: 0; width: auto; flex-shrink: 0;">
                                 <input type="checkbox" id="isAvailable" name="is_available" 
                                        {% if not product or product.is_available %}checked{% endif %}>
                                 <span class="toggle-slider"></span>
-                                <span class="toggle-label">Available for sale immediately</span>
                             </label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Images Card -->
-                <div class="form-card">
-                    <div class="card-header">
-                        <h3>Product Images</h3>
-                        <span class="badge">Up to 5 images</span>
-                    </div>
-                    
-                    <div class="card-body">
-                        <div class="image-upload-area">
-                            <div class="image-grid" id="imageGrid">
-                                <!-- Image slots will be generated here -->
-                            </div>
-                            
-                            <div class="image-upload-tips">
-                                <i class="ri-information-line"></i>
-                                <span>First image will be used as the main product photo. Recommended size: 800x800px</span>
+                            <div class="available-toggle-text">
+                                <span class="available-toggle-label">Available for sale immediately</span>
+                                <span class="available-toggle-hint">Customers can purchase this product right away</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column - Variants & Options -->
+            <!-- Right Column: Content Score -->
             <div class="right-column">
-                <!-- Variants Card -->
-                <div class="form-card">
+                <div class="form-card content-score-card">
                     <div class="card-header">
-                        <h3>Product Variants</h3>
-                        <button type="button" class="btn btn-link" onclick="toggleVariantsHelp()">
-                            <i class="ri-question-line"></i>
-                        </button>
+                        <h3><i class="ri-bar-chart-grouped-line" style="color: var(--deep-rose); margin-right: 6px;"></i>Content Score</h3>
                     </div>
-                    
-                    <div class="card-body">
-                        <div class="variants-toggle">
-                            <label class="toggle-switch large">
-                                <input type="checkbox" id="hasVariants" onchange="toggleVariantsSection()"
-                                       {% if product and product.has_variants %}checked{% endif %}>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">This product has variants (different sizes, colors, etc.)</span>
-                            </label>
+                    <div class="card-body" style="padding: 1.25rem 1.5rem;">
+
+                        <!-- Score bar -->
+                        <div class="score-summary">
+                            <div class="score-label-row">
+                                <span class="score-word" id="scoreLabel">Incomplete</span>
+                                <span class="score-pct" id="scorePct">0%</span>
+                            </div>
+                            <div class="score-bar-track">
+                                <div class="score-bar-fill" id="scoreBarFill" style="width: 0%;"></div>
+                            </div>
                         </div>
 
-                        <div id="variantsSection" class="variants-section" style="display: {% if product and product.has_variants %}block{% else %}none{% endif %};">
-                            <div class="variants-header">
+                        <!-- Step tracker -->
+                        <div class="score-steps">
+
+                            <div class="score-step" id="step-basic">
+                                <div class="step-indicator">
+                                    <div class="step-circle" id="circle-basic">
+                                        <i class="ri-check-line"></i>
+                                    </div>
+                                    <div class="step-line"></div>
+                                </div>
+                                <div class="step-content">
+                                    <div class="step-title">Basic Information</div>
+                                    <div class="step-desc">
+                                        • Enter a clear, descriptive product name<br>
+                                        • Choose the correct main category<br>
+                                        • Add a unique SKU for tracking
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="score-step" id="step-specification">
+                                <div class="step-indicator">
+                                    <div class="step-circle" id="circle-specification">
+                                        <i class="ri-check-line"></i>
+                                    </div>
+                                    <div class="step-line"></div>
+                                </div>
+                                <div class="step-content">
+                                    <div class="step-title">Specification</div>
+                                    <div class="step-desc">
+                                        • Add variant tags/attributes to each variant<br>
+                                        • Tags help customers filter and find your product<br>
+                                        • Example: <em>red, 12 stems, bouquet</em>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="score-step" id="step-variants">
+                                <div class="step-indicator">
+                                    <div class="step-circle" id="circle-variants">
+                                        <i class="ri-check-line"></i>
+                                    </div>
+                                    <div class="step-line"></div>
+                                </div>
+                                <div class="step-content">
+                                    <div class="step-title">Variants</div>
+                                    <div class="step-desc">
+                                        • Enable variants if your product comes in different versions<br>
+                                        • Set individual prices, stock, and SKUs per variant<br>
+                                        • Upload a photo for each variant option
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="score-step" id="step-description">
+                                <div class="step-indicator">
+                                    <div class="step-circle" id="circle-description">
+                                        <i class="ri-check-line"></i>
+                                    </div>
+                                    <div class="step-line"></div>
+                                </div>
+                                <div class="step-content">
+                                    <div class="step-title">Description</div>
+                                    <div class="step-desc">
+                                        • Write at least 50 characters describing your product<br>
+                                        • Mention flower types, arrangement style, and occasions<br>
+                                        • Highlight what makes your product special
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="score-step" id="step-images">
+                                <div class="step-indicator">
+                                    <div class="step-circle" id="circle-images">
+                                        <i class="ri-check-line"></i>
+                                    </div>
+                                    <div class="step-line"></div>
+                                </div>
+                                <div class="step-content">
+                                    <div class="step-title">Product Images</div>
+                                    <div class="step-desc">
+                                        • Upload at least one clear product photo<br>
+                                        • Use a white or clean background for the main photo<br>
+                                        • Recommended size: 800×800px, up to 5 photos
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div><!-- /.score-steps -->
+
+                        <!-- Tips box -->
+                        <div class="score-tips-box">
+                            <div class="score-tips-title"><i class="ri-lightbulb-line"></i> Tips</div>
+                            <p>Filling in product attributes — especially those marked as key — increases your product's chance of exposure. Complete listings convert better and rank higher in search.</p>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div><!-- /.form-layout-top -->
+
+        <!-- Full-Width Bottom: Images + Variants -->
+        <div class="form-layout-bottom">
+
+            <!-- Images Card (full width) -->
+            <div class="form-card">
+                <div class="card-header">
+                    <h3>Product Images</h3>
+                    <span class="badge">Up to 5 images</span>
+                </div>
+                <div class="card-body">
+                    <div class="image-upload-area">
+                        <div class="image-grid" id="imageGrid">
+                            <!-- Image slots will be generated here -->
+                        </div>
+                        <div class="image-upload-tips">
+                            <i class="ri-information-line"></i>
+                            <span>Click any slot to upload. Use the Main checkbox at the bottom-left of an image to set its landing-page primary photo. Click ✕ to remove. Recommended size: 800×800px</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Variants Card (full width) -->
+            <div class="form-card">
+                <div class="card-header">
+                    <h3>Product Variants</h3>
+                    <button type="button" class="btn btn-link" onclick="toggleVariantsHelp()">
+                        <i class="ri-question-line"></i> Help
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="variants-toggle">
+                        <label class="toggle-switch large">
+                            <input type="checkbox" id="hasVariants" onchange="toggleVariantsSection()"
+                                   {% if product and product.has_variants %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">This product has variants (different sizes, colors, etc.)</span>
+                        </label>
+                    </div>
+
+                    <div id="variantsSection" class="variants-section" style="display: {% if product and product.has_variants %}block{% else %}none{% endif %};">
+                        <div class="variants-header">
+                            <div class="variants-header-left">
                                 <h4>Variant Options</h4>
-                                <button type="button" class="btn btn-rose btn-sm" onclick="addVariantRow()">
-                                    <i class="ri-add-line"></i> Add Variant
-                                </button>
+                                <span class="variant-count-badge" id="variantCountBadge">0 variant(s)</span>
                             </div>
-
-                            <div id="variantsContainer" class="variants-container">
-                                <!-- Variant rows will be added here -->
-                            </div>
-
-                            <div class="variant-examples">
-                                <p>Quick templates:</p>
-                                <div class="example-chips">
+                            <div class="variants-header-right">
+                                <div class="example-chips" style="margin: 0;">
+                                    <span style="font-size: 11px; color: var(--muted); align-self: center;">Quick add:</span>
                                     <span class="example-chip" onclick="addExampleVariants('size')">Size</span>
                                     <span class="example-chip" onclick="addExampleVariants('color')">Color</span>
                                     <span class="example-chip" onclick="addExampleVariants('stems')">Stem Count</span>
                                     <span class="example-chip" onclick="addExampleVariants('bundle')">Bundle</span>
                                 </div>
+                                <button type="button" class="btn btn-rose btn-sm" onclick="addVariantRow()">
+                                    <i class="ri-add-line"></i> Add Variant
+                                </button>
                             </div>
                         </div>
 
-                        <div id="noVariantsMessage" class="no-variants-message" style="display: {% if product and product.has_variants %}none{% else %}flex{% endif %};">
-                            <i class="ri-stack-line"></i>
-                            <p>No variants added. Product will be sold as a single item.</p>
+                        <!-- Horizontal variant table header -->
+                        <div class="variant-table-wrapper">
+                            <div class="variant-table-head">
+                                <span class="vtc vtc-name">Variant Name</span>
+                                <span class="vtc vtc-price">Price (₱)</span>
+                                <span class="vtc vtc-special">Sale Price</span>
+                                <span class="vtc vtc-stock">Stock</span>
+                                <span class="vtc vtc-sku">SKU</span>
+                                <span class="vtc vtc-tags">Tags</span>
+                                <span class="vtc vtc-img">Image</span>
+                                <span class="vtc vtc-avail">Active</span>
+                                <span class="vtc vtc-del"></span>
+                            </div>
+                            <div id="variantsContainer" class="variants-container">
+                                <!-- Variant rows will be added here -->
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- SEO Card (Optional) -->
-                <div class="form-card">
-                    <div class="card-header">
-                        <h3>SEO Information (Optional)</h3>
                     </div>
-                    
-                    <div class="card-body">
-                        <div class="form-group">
-                            <label class="form-label">Meta Title</label>
-                            <input type="text" id="metaTitle" class="form-control" 
-                                   placeholder="SEO title (auto-generated if empty)"
-                                   value="{{ product.meta_title if product else '' }}">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Meta Description</label>
-                            <textarea id="metaDescription" class="form-control" rows="2" 
-                                      placeholder="SEO description">{{ product.meta_description if product else '' }}</textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Meta Keywords</label>
-                            <input type="text" id="metaKeywords" class="form-control" 
-                                   placeholder="flower, bouquet, gift, etc."
-                                   value="{{ product.meta_keywords if product else '' }}">
-                            <small class="form-hint">Separate keywords with commas</small>
-                        </div>
+
+                    <div id="noVariantsMessage" class="no-variants-message" style="display: {% if product and product.has_variants %}none{% else %}flex{% endif %};">
+                        <i class="ri-stack-line"></i>
+                        <p>No variants added. Product will be sold as a single item.</p>
                     </div>
                 </div>
             </div>
-        </div>
+
+        </div><!-- /.form-layout-bottom -->
 
         <!-- Sticky Footer with Actions -->
         <div class="form-footer">
@@ -430,6 +548,82 @@
     {% endif %}
 </script>
 
+<!-- ===== Stock Addition Modal ===== -->
+<div id="stockAdditionModal" class="modal-overlay" style="display: none;">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <h3 class="modal-title">Add Stock</h3>
+            <button class="modal-close" onclick="closeStockAdditionModal()">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <!-- Product/Variant Selector -->
+            <div class="form-group">
+                <label class="form-label">Select Product/Variant <span class="required">*</span></label>
+                <select id="productVariantSelectorAdd" class="form-select" onchange="updateStockDisplayAdd()" required>
+                    <option value="">-- Choose a product --</option>
+                </select>
+                <small class="form-hint">Select the product or variant to add stock for</small>
+            </div>
+
+            <div class="stock-modal-info">
+                <p class="info-text"><strong>Selected:</strong> <span id="modalProductNameAdd">{{ product.name if product else '' }}</span></p>
+                <p class="info-text"><strong>Current Stock:</strong> <span id="modalCurrentStockAdd" class="highlight">{{ product.stock_quantity if product else 0 }}</span> units</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Addition Amount (units) <span class="required">*</span></label>
+                <input type="number" id="additionAmount" class="form-control" 
+                       placeholder="How many units to add?" min="1" required>
+                <small class="form-hint" id="amountHintAdd"></small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Reason for Addition <span class="required">*</span></label>
+                <div class="reason-options">
+                    <label class="reason-option">
+                        <input type="radio" name="additionReason" value="found_stock" required>
+                        <div class="reason-card">
+                            <i class="ri-search-line"></i>
+                            <span class="reason-name">Found Stock</span>
+                            <span class="reason-desc">Inventory discovery</span>
+                        </div>
+                    </label>
+                    <label class="reason-option">
+                        <input type="radio" name="additionReason" value="receiving_error" required>
+                        <div class="reason-card">
+                            <i class="ri-error-warning-line"></i>
+                            <span class="reason-name">Receiving Error</span>
+                            <span class="reason-desc">Correction in receiving</span>
+                        </div>
+                    </label>
+                    <label class="reason-option">
+                        <input type="radio" name="additionReason" value="restock" required>
+                        <div class="reason-card">
+                            <i class="ri-inbox-archive-line"></i>
+                            <span class="reason-name">Restock</span>
+                            <span class="reason-desc">New shipment received</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Additional Notes (Optional)</label>
+                <textarea id="additionNotes" class="form-control" rows="3" 
+                          placeholder="Add any additional details or context..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeStockAdditionModal()">Cancel</button>
+            <button class="btn btn-success" id="submitAdditionBtn" onclick="submitStockAddition()">
+                <i class="ri-save-line"></i> Record Addition
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- ===== Stock History Modal ===== -->
 <div id="stockHistoryModal" class="modal-overlay" style="display: none;">
     <div class="modal modal-lg">
@@ -591,12 +785,24 @@
         gap: 0.75rem;
     }
 
-    /* Two Column Layout */
-    .form-layout {
+    /* ===== Layout ===== */
+    .form-layout-top {
         display: grid;
         grid-template-columns: 1fr 380px;
         gap: 1.5rem;
+        margin-bottom: 1.5rem;
+        align-items: stretch;
+    }
+
+    .form-layout-bottom {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
         margin-bottom: 5rem;
+    }
+
+    .right-column {
+        display: flex;
     }
 
     /* Form Cards */
@@ -682,6 +888,15 @@
         display: block;
     }
 
+    .form-hint-inline {
+        font-size: 10px;
+        font-weight: 400;
+        color: var(--muted);
+        margin-left: 4px;
+        text-transform: lowercase;
+        font-style: italic;
+    }
+
     .input-group {
         display: flex;
         align-items: center;
@@ -706,10 +921,13 @@
 
     /* Toggle Switch */
     .toggle-switch {
-        display: flex;
+        display: inline-flex;
+        width: 100%;
         align-items: center;
+        justify-content: flex-start;
         gap: 0.75rem;
         cursor: pointer;
+        min-height: 24px;
     }
 
     .toggle-switch input {
@@ -717,9 +935,11 @@
     }
 
     .toggle-slider {
+        display: inline-block;
         width: 44px;
         height: 24px;
         background: var(--border-strong);
+        border: 1px solid var(--border);
         border-radius: 34px;
         position: relative;
         transition: var(--transition);
@@ -761,7 +981,10 @@
     }
 
     .toggle-label {
+        display: inline-block;
         font-size: 13px;
+        line-height: 1.4;
+        font-weight: 500;
         color: var(--charcoal);
     }
 
@@ -777,37 +1000,40 @@
     .stock-info-box {
         display: flex;
         gap: 1rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0;
     }
 
     .stock-info-item {
         flex: 1;
         display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding: 0.75rem;
+        align-items: baseline;
+        justify-content: flex-start;
+        gap: 0.5rem;
+        min-height: 48px;
+        padding: 0.62rem 0.75rem;
         background: white;
         border-radius: var(--radius-md);
-        border: 1px solid var(--border);
+        border: 1.5px solid var(--border-strong);
     }
 
     .stock-info-item .label {
-        font-size: 11px;
+        font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         color: var(--muted);
         font-weight: 600;
-        margin-bottom: 0.25rem;
+        margin-bottom: 0;
     }
 
     .stock-info-item .value {
-        font-size: 24px;
+        font-size: 16px;
         font-weight: 700;
         color: var(--charcoal);
+        line-height: 1;
     }
 
     .stock-info-item .unit {
-        font-size: 12px;
+        font-size: 11px;
         color: var(--muted);
     }
 
@@ -820,6 +1046,10 @@
         flex: 1;
     }
 
+    .stock-actions-inline {
+        margin-top: 0.75rem;
+    }
+
     .btn-warning {
         background: #f0b429;
         color: white;
@@ -828,6 +1058,16 @@
 
     .btn-warning:hover {
         background: #d89f1b;
+    }
+
+    .btn-success {
+        background: #4CAF50;
+        color: white;
+        border: none;
+    }
+
+    .btn-success:hover {
+        background: #45a049;
     }
 
     /* ===== Stock Reduction Modal Styles ===== */
@@ -1061,6 +1301,11 @@
         z-index: 2;
     }
 
+    /* Always show X when slot has an image */
+    .image-slot.has-image .remove-image {
+        opacity: 1;
+    }
+
     .image-slot:hover .remove-image {
         opacity: 1;
     }
@@ -1069,12 +1314,49 @@
         position: absolute;
         bottom: 4px;
         left: 4px;
-        background: var(--deep-rose);
-        color: white;
-        font-size: 9px;
-        padding: 2px 6px;
-        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.96);
+        color: var(--charcoal);
+        font-size: 10px;
+        padding: 3px 8px;
+        border-radius: 999px;
         z-index: 2;
+        border: 1px solid var(--border-strong);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        user-select: none;
+        transition: var(--transition);
+    }
+
+    .image-slot .main-badge:hover {
+        border-color: var(--deep-rose);
+    }
+
+    .image-slot .main-badge .main-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        border: 1.5px solid var(--border-strong);
+        background: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        color: transparent;
+        transition: var(--transition);
+    }
+
+    .image-slot .main-badge.active {
+        border-color: #2563eb;
+        color: #1d4ed8;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+    }
+
+    .image-slot .main-badge.active .main-indicator {
+        border-color: #2563eb;
+        background: #2563eb;
+        color: white;
     }
 
     .image-upload-tips {
@@ -1096,120 +1378,366 @@
 
     /* Variants Section */
     .variants-section {
-        margin-top: 1.5rem;
+        margin-top: 1rem;
     }
 
+    .example-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+    }
+
+    .example-chip {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        padding: 0.3rem 0.75rem;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .example-chip:hover {
+        background: var(--deep-rose);
+        color: white;
+        border-color: var(--deep-rose);
+    }
+
+    /* ===== Available for Sale Toggle (fixed) ===== */
+    .available-toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 1.25rem;
+        padding: 0.875rem 1rem;
+        background: var(--cream);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+    }
+
+    .available-toggle-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .available-toggle-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--charcoal);
+        line-height: 1;
+    }
+
+    .available-toggle-hint {
+        font-size: 11px;
+        color: var(--muted);
+    }
+
+    /* ===== Content Score Card ===== */
+    .content-score-card {
+        position: sticky;
+        top: 1rem;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        margin-bottom: 0;
+    }
+
+    .content-score-card .card-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+    }
+
+    .score-summary {
+        margin-bottom: 1.25rem;
+    }
+
+    .score-label-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 6px;
+    }
+
+    .score-word {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--charcoal);
+        transition: color 0.3s;
+    }
+
+    .score-pct {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
+    }
+
+    .score-bar-track {
+        height: 6px;
+        background: var(--border);
+        border-radius: 99px;
+        overflow: hidden;
+    }
+
+    .score-bar-fill {
+        height: 100%;
+        border-radius: 99px;
+        background: #e74c3c;
+        transition: width 0.4s ease, background 0.4s ease;
+    }
+
+    /* ===== Step Tracker ===== */
+    .score-steps {
+        display: flex;
+        flex-direction: column;
+        margin: 1.25rem 0 1rem;
+        flex: 1;
+    }
+
+    .score-step {
+        display: flex;
+        gap: 12px;
+    }
+
+    .step-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 22px;
+        flex-shrink: 0;
+    }
+
+    .step-circle {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 2px solid var(--border-strong);
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        color: transparent;
+        flex-shrink: 0;
+        transition: background 0.3s, border-color 0.3s, color 0.3s;
+        z-index: 1;
+    }
+
+    .step-circle.done {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: white;
+    }
+
+    .step-line {
+        width: 2px;
+        flex: 1;
+        min-height: 16px;
+        background: var(--border-strong);
+        margin: 1px 0;
+    }
+
+    .score-step:last-child .step-line {
+        display: none;
+    }
+
+    .step-content {
+        padding-bottom: 1rem;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .step-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--charcoal);
+        margin-bottom: 4px;
+        line-height: 1.3;
+    }
+
+    .step-title.done-title {
+        color: #2563eb;
+    }
+
+    .step-desc {
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.7;
+    }
+
+    /* ===== Tips Box ===== */
+    .score-tips-box {
+        background: linear-gradient(135deg, rgba(181,68,90,0.06), rgba(181,68,90,0.02));
+        border: 1px solid rgba(181,68,90,0.15);
+        border-radius: var(--radius-md);
+        padding: 0.875rem 1rem;
+        font-size: 12px;
+        color: var(--charcoal);
+        line-height: 1.6;
+        margin-top: auto;
+    }
+
+    .score-tips-title {
+        font-weight: 700;
+        font-size: 12px;
+        margin-bottom: 6px;
+        color: var(--deep-rose);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .score-tips-box p {
+        margin: 0;
+        color: var(--muted);
+    }
+
+    /* ===== Variants Section Header ===== */
     .variants-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 1rem;
+        flex-wrap: wrap;
+        gap: 0.75rem;
     }
 
-    .variants-header h4 {
+    .variants-header-left {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .variants-header-left h4 {
         font-size: 14px;
         font-weight: 600;
         margin: 0;
     }
 
-    .variant-row {
-        background: var(--cream);
+    .variants-header-right {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .variant-count-badge {
+        background: var(--deep-rose);
+        color: white;
+        padding: 2px 8px;
+        border-radius: var(--radius-pill);
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    /* ===== Horizontal Variant Table ===== */
+    .variant-table-wrapper {
         border: 1px solid var(--border);
         border-radius: var(--radius-md);
-        padding: 1rem;
-        margin-bottom: 1rem;
+        overflow: hidden;
+        margin-top: 0.5rem;
     }
 
-    .variant-row-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-    }
-
-    .variant-row-header h5 {
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--deep-rose);
-        margin: 0;
-    }
-
-    .variant-fields {
+    .variant-table-head {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 0.75rem;
+        grid-template-columns: 1.4fr 1fr 0.9fr 0.85fr 1fr 1.2fr 52px 54px 38px;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1rem;
+        background: var(--cream);
+        border-bottom: 1px solid var(--border);
     }
 
-    .variant-fields .field-group {
-        min-width: 0;
-    }
-
-    .variant-fields .field-group.full-width {
-        grid-column: 1 / -1;
-    }
-
-    .variant-fields label {
+    .vtc {
         font-size: 10px;
+        font-weight: 700;
         text-transform: uppercase;
+        letter-spacing: 0.04em;
         color: var(--muted);
-        margin-bottom: 0.25rem;
-        display: block;
     }
 
-    .variant-fields input {
-        width: 100%;
-        padding: 0.5rem;
+    .variant-row {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr 0.9fr 0.85fr 1fr 1.2fr 52px 54px 38px;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: white;
+        border-bottom: 1px solid var(--border);
+        transition: background 0.15s;
+    }
+
+    .variant-row:last-child {
+        border-bottom: none;
+    }
+
+    .variant-row:hover {
+        background: rgba(181, 68, 90, 0.02);
+    }
+
+    .variant-row .form-control-sm {
+        padding: 0.4rem 0.55rem;
         font-size: 12px;
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
         background: var(--warm-white);
-    }
-
-    /* Variant Image Upload */
-    .variant-image-upload {
         width: 100%;
+        min-width: 0;
+        color: var(--charcoal);
+        transition: border-color 0.15s;
     }
 
-    .variant-image-preview {
-        width: 100px;
-        height: 100px;
-        border: 2px dashed var(--border-strong);
-        border-radius: var(--radius-md);
+    .variant-row .form-control-sm:focus {
+        outline: none;
+        border-color: var(--deep-rose);
+        box-shadow: 0 0 0 2px rgba(181,68,90,0.1);
+    }
+
+    .variant-row .form-control-sm::placeholder {
+        color: var(--border-strong);
+    }
+
+    /* Variant thumb image */
+    .variant-thumb-area {
+        position: relative;
+        width: 40px;
+        height: 40px;
+    }
+
+    .variant-thumb-btn {
+        width: 40px;
+        height: 40px;
+        border: 1.5px dashed var(--border-strong);
+        border-radius: var(--radius-sm);
         background: var(--cream);
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
         cursor: pointer;
+        font-size: 16px;
+        color: var(--muted);
         transition: var(--transition);
     }
 
-    .variant-image-preview:hover {
+    .variant-thumb-btn:hover {
         border-color: var(--deep-rose);
-        background: rgba(181, 68, 90, 0.02);
+        color: var(--deep-rose);
+        background: rgba(181,68,90,0.04);
     }
 
-    .variant-image-preview i {
-        font-size: 24px;
-        color: var(--muted);
-        margin-bottom: 0.25rem;
-    }
-
-    .variant-image-preview span {
-        font-size: 10px;
-        color: var(--muted);
-    }
-
-    .variant-image-preview-container {
+    .variant-thumb-img-wrap {
         position: relative;
-        width: 100px;
-        height: 100px;
-        border-radius: var(--radius-md);
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-sm);
         overflow: hidden;
-        border: 2px solid var(--deep-rose);
+        border: 1.5px solid var(--deep-rose);
     }
 
-    .variant-image-preview-container img {
+    .variant-thumb-img-wrap img {
         width: 100%;
         height: 100%;
         object-fit: cover;
@@ -1217,10 +1745,10 @@
 
     .remove-variant-image {
         position: absolute;
-        top: 4px;
-        right: 4px;
-        width: 24px;
-        height: 24px;
+        top: 2px;
+        right: 2px;
+        width: 16px;
+        height: 16px;
         border-radius: 50%;
         background: var(--deep-rose);
         color: white;
@@ -1229,16 +1757,40 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        font-size: 14px;
-        transition: var(--transition);
+        font-size: 10px;
         z-index: 2;
+        padding: 0;
+        transition: var(--transition);
     }
 
     .remove-variant-image:hover {
         background: #c0392b;
-        transform: scale(1.1);
     }
 
+    /* Variant delete button */
+    .btn-icon-danger {
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(181,68,90,0.3);
+        background: rgba(181,68,90,0.05);
+        color: var(--deep-rose);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-size: 14px;
+        transition: var(--transition);
+        padding: 0;
+    }
+
+    .btn-icon-danger:hover {
+        background: var(--deep-rose);
+        color: white;
+        border-color: var(--deep-rose);
+    }
+
+    /* No variants placeholder */
     .no-variants-message {
         text-align: center;
         padding: 2rem;
@@ -1261,30 +1813,7 @@
         margin: 0;
     }
 
-    .example-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-    }
-
-    .example-chip {
-        background: var(--warm-white);
-        border: 1px solid var(--border);
-        padding: 0.4rem 1rem;
-        border-radius: var(--radius-pill);
-        font-size: 11px;
-        cursor: pointer;
-        transition: var(--transition);
-    }
-
-    .example-chip:hover {
-        background: var(--deep-rose);
-        color: white;
-        border-color: var(--deep-rose);
-    }
-
-    /* Sticky Footer */
+    /* ===== Sticky Footer ===== */
     .form-footer {
         position: fixed;
         bottom: 0;
@@ -1339,14 +1868,31 @@
         to { transform: rotate(360deg); }
     }
 
-    /* Responsive */
-    @media (max-width: 1000px) {
-        .form-layout {
+    /* ===== Responsive ===== */
+    @media (max-width: 1100px) {
+        .form-layout-top {
+            grid-template-columns: 1fr 340px;
+        }
+        .variant-table-head,
+        .variant-row {
+            grid-template-columns: 1.4fr 0.9fr 0.75fr 0.9fr 1.2fr 48px 50px 34px;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .form-layout-top {
             grid-template-columns: 1fr;
         }
-
+        .content-score-card {
+            position: static;
+        }
         .image-grid {
             grid-template-columns: repeat(4, 1fr);
+        }
+        .variant-table-head,
+        .variant-row {
+            grid-template-columns: 1.2fr 0.9fr 0.75fr 1fr 1.1fr 44px 46px 32px;
+            font-size: 11px;
         }
     }
 
@@ -1354,26 +1900,30 @@
         .image-grid {
             grid-template-columns: repeat(3, 1fr);
         }
-
         .form-row {
             grid-template-columns: 1fr;
         }
-
-        .variant-fields {
-            grid-template-columns: repeat(2, 1fr);
-        }
-
         .footer-content {
             flex-direction: column;
             gap: 1rem;
         }
-
         .footer-right {
             width: 100%;
         }
-
         .footer-right .btn {
             flex: 1;
+        }
+        /* On small screens, allow horizontal scroll for variant table */
+        .variant-table-wrapper {
+            overflow-x: auto;
+        }
+        .variant-table-head,
+        .variant-row {
+            min-width: 640px;
+        }
+        .variants-header {
+            flex-direction: column;
+            align-items: flex-start;
         }
     }
 
@@ -1381,15 +1931,9 @@
         .image-grid {
             grid-template-columns: repeat(2, 1fr);
         }
-
-        .variant-fields {
-            grid-template-columns: 1fr;
-        }
-
         .header-actions {
             width: 100%;
         }
-
         .header-actions .btn {
             flex: 1;
         }
@@ -1403,6 +1947,7 @@
     let imageSlots = [];
     let existingImages = [];
     const MAX_IMAGES = 5;
+    let selectedMainImageIndex = null;
     let isEditMode = {% if is_edit %}true{% else %}false{% endif %};
     let productId = {% if product and product.id %}{{ product.id }}{% else %}null{% endif %};
 
@@ -1410,6 +1955,8 @@
         console.log(`🚀 Page loaded. isEditMode: ${isEditMode}, productId: ${productId}`);
         initializeImageSlots();
         initializeCharacterCounts();
+        initializeMainProductSkuAuto();
+        initializeContentScore();
         
         // Load existing images and variants if in edit mode
         if (isEditMode && productId) {
@@ -1617,6 +2164,7 @@
         const grid = document.getElementById('imageGrid');
         grid.innerHTML = '';
         imageSlots = [];
+        selectedMainImageIndex = null;
 
         for (let i = 0; i < MAX_IMAGES; i++) {
             if (i < images.length) {
@@ -1632,6 +2180,61 @@
                 createImageSlot(i, null);
             }
         }
+
+        // Keep server primary if present; fallback to first available slot.
+        if (selectedMainImageIndex === null) {
+            ensureMainImageSelection();
+        } else {
+            setMainImageIndex(selectedMainImageIndex);
+        }
+    }
+
+    function buildVariantRowHTML(rowId, variant, attrValue, isExisting) {
+        const stockDisabled = isExisting && isEditMode ? 'disabled' : '';
+        const stockRequired = isExisting && isEditMode ? '' : 'required';
+        const stockTitle = isExisting && isEditMode ? 'title="Use Reduce / Add Stock to modify"' : '';
+        const nameVal = variant ? escapeHtml(variant.name || '') : '';
+        const priceVal = variant ? (variant.price || '') : '';
+        const specialPriceVal = variant ? (variant.special_price || '') : '';
+        const stockVal = variant ? (variant.stock_quantity !== undefined ? variant.stock_quantity : '') : '';
+        const skuVal = variant ? escapeHtml(variant.sku || '') : '';
+        const imgSrc = variant && variant.image_url ? variant.image_url : '';
+        const hasImg = !!imgSrc;
+        const isAvail = variant ? (variant.is_available !== false) : true;
+        const removeCallback = isExisting ? `removeVariantImage('${rowId}', true)` : `removeVariantImage('${rowId}')`;
+        const removeRowCallback = isExisting ? `removeVariantRow('${rowId}', true)` : `removeVariantRow('${rowId}', false)`;
+
+        return `
+            <input type="text" class="form-control-sm" name="variant_name" value="${nameVal}" placeholder="e.g., Red" required>
+            <input type="number" class="form-control-sm" name="variant_price" step="0.01" min="0" value="${priceVal}" placeholder="0.00" required>
+            <input type="number" class="form-control-sm" name="variant_special_price" step="0.01" min="0" value="${specialPriceVal}" placeholder="—">
+            <input type="number" class="form-control-sm" name="variant_stock" min="0" value="${stockVal}" placeholder="0" ${stockDisabled} ${stockRequired} ${stockTitle}>
+            <input type="text" class="form-control-sm" name="variant_sku" value="${skuVal}" placeholder="Auto">
+            <input type="text" class="form-control-sm" name="variant_attributes" value="${escapeHtml(attrValue)}" placeholder="red, bouquet…">
+            <div class="variant-thumb-area">
+                <input type="file" class="variant-image-input" id="variant-image-${rowId}" accept="image/*" style="display:none;">
+                <div class="variant-thumb-btn" id="thumb-btn-${rowId}" style="display:${hasImg ? 'none' : 'flex'};" onclick="document.getElementById('variant-image-${rowId}').click()">
+                    <i class="ri-image-add-line"></i>
+                </div>
+                <div class="variant-thumb-img-wrap" id="thumb-img-${rowId}" style="display:${hasImg ? 'block' : 'none'};">
+                    <img class="variant-image-img" src="${imgSrc}" alt="Variant">
+                    <button type="button" class="remove-variant-image" onclick="${removeCallback}">
+                        <i class="ri-close-line"></i>
+                    </button>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;">
+                <label class="toggle-switch" style="margin:0;width:auto;">
+                    <input type="checkbox" name="variant_available" ${isAvail ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;">
+                <button type="button" class="btn-icon-danger" onclick="${removeRowCallback}" title="Delete variant">
+                    <i class="ri-delete-bin-line"></i>
+                </button>
+            </div>
+        `;
     }
 
     function loadExistingVariants(variants) {
@@ -1650,95 +2253,26 @@
             const row = document.createElement('div');
             row.className = 'variant-row';
             row.id = rowId;
-            
             row.setAttribute('data-variant-id', variant.id);
             row.variantId = variant.id;
-            
-            console.log(`✅ Set variant ID for row ${rowId}:`, variant.id);
 
-            let attrValue = '';
-            if (variant.attributes) {
-                if (typeof variant.attributes === 'object') {
-                    attrValue = JSON.stringify(variant.attributes);
-                } else {
-                    attrValue = variant.attributes;
-                }
-            }
-
-            row.innerHTML = `
-                <div class="variant-row-header">
-                    <h5>Variant Option</h5>
-                    <button type="button" class="btn btn-danger-outline btn-sm" onclick="removeVariantRow('${rowId}', true)">
-                        <i class="ri-delete-bin-line"></i>
-                    </button>
-                </div>
-                <div class="variant-fields">
-                    <div class="field-group">
-                        <label>Name</label>
-                        <input type="text" class="form-control" name="variant_name" value="${escapeHtml(variant.name)}" required>
-                    </div>
-                    <div class="field-group">
-                        <label>Price</label>
-                        <input type="number" class="form-control" name="variant_price" step="0.01" min="0" value="${variant.price}" required>
-                    </div>
-                    <div class="field-group">
-                        <label>Stock</label>
-                        <input type="number" class="form-control" name="variant_stock" min="0" value="${variant.stock_quantity}" required>
-                    </div>
-                    <div class="field-group">
-                        <label>SKU</label>
-                        <input type="text" class="form-control" name="variant_sku" value="${escapeHtml(variant.sku || '')}">
-                    </div>
-                </div>
-                <div class="variant-fields" style="margin-top: 0.75rem;">
-                    <div class="field-group" style="grid-column: span 2;">
-                        <label>Attributes (JSON)</label>
-                        <input type="text" class="form-control" name="variant_attributes" value='${escapeHtml(attrValue)}'>
-                    </div>
-                    <div class="field-group" style="grid-column: span 2;">
-                        <label>Variant Image</label>
-                        <div class="variant-image-upload">
-                            <input type="file" class="variant-image-input" id="variant-image-${rowId}" accept="image/*" style="display: none;">
-                            ${variant.image_url ? 
-                                `<div class="variant-image-preview-container" style="display: block;">
-                                    <img class="variant-image-img" src="${variant.image_url}" alt="Variant preview">
-                                    <button type="button" class="remove-variant-image" onclick="removeVariantImage('${rowId}', true)">
-                                        <i class="ri-close-line"></i>
-                                    </button>
-                                </div>
-                                <div class="variant-image-preview" style="display: none;" onclick="document.getElementById('variant-image-${rowId}').click()">
-                                    <i class="ri-image-add-line"></i>
-                                    <span>Click to upload</span>
-                                </div>` :
-                                `<div class="variant-image-preview" onclick="document.getElementById('variant-image-${rowId}').click()">
-                                    <i class="ri-image-add-line"></i>
-                                    <span>Click to upload</span>
-                                </div>
-                                <div class="variant-image-preview-container" style="display: none;">
-                                    <img class="variant-image-img" src="" alt="Variant preview">
-                                    <button type="button" class="remove-variant-image" onclick="removeVariantImage('${rowId}')">
-                                        <i class="ri-close-line"></i>
-                                    </button>
-                                </div>`
-                            }
-                        </div>
-                        <small class="form-hint">Leave empty to use product's main image</small>
-                    </div>
-                </div>
-            `;
+            let attrValue = formatVariantAttributesForInput(variant.attributes);
+            row.innerHTML = buildVariantRowHTML(rowId, variant, attrValue, true);
 
             container.appendChild(row);
+            attachVariantSkuAuto(row);
             
-            console.log(`✅ Variant row added: ${rowId}, variantId=${row.variantId}`);
-
             const fileInput = document.getElementById(`variant-image-${rowId}`);
             if (fileInput) {
                 fileInput.addEventListener('change', function(e) {
                     handleVariantImageUpload(e, rowId);
                 });
             }
+            console.log(`✅ Variant row added: ${rowId}`);
         });
-        
+
+        updateVariantCount();
+        updateContentScore();
         console.log('✅ All variants loaded');
     }
 
@@ -1747,6 +2281,178 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    function normalizeSkuPart(text, maxLength = 12) {
+        if (!text) return '';
+        return String(text)
+            .toUpperCase()
+            .replace(/[^A-Z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .replace(/-+/g, '-')
+            .slice(0, maxLength);
+    }
+
+    function parseVariantAttributeSnippet(rawAttributes) {
+        if (!rawAttributes) return '';
+        const text = String(rawAttributes).trim();
+        if (!text) return '';
+
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const keys = Object.keys(parsed).sort();
+                const snippets = keys.map(key => {
+                    const value = parsed[key];
+                    return normalizeSkuPart(`${key}-${value}`, 8);
+                }).filter(Boolean);
+                return snippets.slice(0, 2).join('-');
+            }
+        } catch (e) {
+            // Fallback to plain text normalization when JSON isn't valid yet.
+        }
+
+        return normalizeSkuPart(text, 12);
+    }
+
+    function normalizeAttributeTagsText(rawText) {
+        if (!rawText) return '';
+        const tags = String(rawText)
+            .split(',')
+            .map(tag => tag.trim())
+            .filter(Boolean);
+        return tags.join(', ');
+    }
+
+    function formatVariantAttributesForInput(attributes) {
+        if (!attributes) return '';
+        // If the server returns a JSON string, parse it first
+        if (typeof attributes === 'string') {
+            try {
+                const parsed = JSON.parse(attributes);
+                attributes = parsed;
+            } catch (e) {
+                return normalizeAttributeTagsText(attributes);
+            }
+        }
+        if (Array.isArray(attributes)) {
+            return normalizeAttributeTagsText(attributes.join(', '));
+        }
+        if (typeof attributes === 'object' && !Array.isArray(attributes)) {
+            if (Array.isArray(attributes.tags)) {
+                return normalizeAttributeTagsText(attributes.tags.join(', '));
+            }
+            if (typeof attributes.value === 'string') {
+                return normalizeAttributeTagsText(attributes.value);
+            }
+            return '';
+        }
+        return '';
+    }
+
+    function generateVariantSkuFromRow(row) {
+        const productName = document.getElementById('productName')?.value || '';
+        const variantName = row.querySelector('[name="variant_name"]')?.value || '';
+        const rawAttributes = row.querySelector('[name="variant_attributes"]')?.value || '';
+
+        const parts = [
+            normalizeSkuPart(productName, 10),
+            normalizeSkuPart(variantName, 10),
+            parseVariantAttributeSnippet(rawAttributes)
+        ].filter(Boolean);
+
+        return parts.join('-').slice(0, 40);
+    }
+
+    function syncVariantSku(row, force = false) {
+        const skuInput = row.querySelector('[name="variant_sku"]');
+        if (!skuInput) return;
+        if (!force && skuInput.dataset.skuManual === 'true') return;
+
+        const generatedSku = generateVariantSkuFromRow(row);
+        skuInput.value = generatedSku;
+        skuInput.dataset.skuGenerated = generatedSku;
+    }
+
+    function attachVariantSkuAuto(row) {
+        const variantNameInput = row.querySelector('[name="variant_name"]');
+        const variantAttributesInput = row.querySelector('[name="variant_attributes"]');
+        const skuInput = row.querySelector('[name="variant_sku"]');
+        if (!variantNameInput || !variantAttributesInput || !skuInput) return;
+
+        if (skuInput.value.trim()) {
+            skuInput.dataset.skuManual = 'true';
+            skuInput.dataset.skuGenerated = skuInput.value.trim();
+        } else {
+            skuInput.dataset.skuManual = 'false';
+            syncVariantSku(row, true);
+        }
+
+        variantNameInput.addEventListener('input', () => syncVariantSku(row));
+        variantAttributesInput.addEventListener('input', () => syncVariantSku(row));
+        variantAttributesInput.addEventListener('input', updateContentScore);
+        variantAttributesInput.addEventListener('blur', function() {
+            this.value = normalizeAttributeTagsText(this.value);
+            syncVariantSku(row, true);
+            updateContentScore();
+        });
+        skuInput.addEventListener('input', function() {
+            const current = this.value.trim();
+            const generated = this.dataset.skuGenerated || '';
+            if (!current) {
+                this.dataset.skuManual = 'false';
+                syncVariantSku(row, true);
+                return;
+            }
+            if (current !== generated) {
+                this.dataset.skuManual = 'true';
+            }
+        });
+    }
+
+    function refreshAutoGeneratedVariantSkus() {
+        document.querySelectorAll('.variant-row').forEach(row => {
+            syncVariantSku(row);
+        });
+    }
+
+    function initializeMainProductSkuAuto() {
+        const productNameInput = document.getElementById('productName');
+        const productSkuInput = document.getElementById('productSku');
+        if (!productNameInput || !productSkuInput) return;
+
+        const generatedFromName = () => normalizeSkuPart(productNameInput.value, 24);
+
+        if (productSkuInput.value.trim()) {
+            productSkuInput.dataset.skuManual = 'true';
+            productSkuInput.dataset.skuGenerated = productSkuInput.value.trim();
+        } else {
+            productSkuInput.dataset.skuManual = 'false';
+            const generated = generatedFromName();
+            productSkuInput.value = generated;
+            productSkuInput.dataset.skuGenerated = generated;
+        }
+
+        const syncMainSku = (force = false) => {
+            if (!force && productSkuInput.dataset.skuManual === 'true') return;
+            const generated = generatedFromName();
+            productSkuInput.value = generated;
+            productSkuInput.dataset.skuGenerated = generated;
+        };
+
+        productNameInput.addEventListener('input', () => syncMainSku());
+        productSkuInput.addEventListener('input', function() {
+            const current = this.value.trim();
+            const generated = this.dataset.skuGenerated || '';
+            if (!current) {
+                this.dataset.skuManual = 'false';
+                syncMainSku(true);
+                return;
+            }
+            if (current !== generated) {
+                this.dataset.skuManual = 'true';
+            }
+        });
     }
 
     // ===== CHARACTER COUNTS =====
@@ -1759,6 +2465,7 @@
             if (this.value.length > 100) {
                 this.value = this.value.substring(0, 100);
             }
+            refreshAutoGeneratedVariantSkus();
         });
 
         descInput.addEventListener('input', function() {
@@ -1812,10 +2519,19 @@
         };
         removeBtn.style.display = 'none';
 
-        const mainBadge = document.createElement('span');
+        const mainBadge = document.createElement('button');
+        mainBadge.type = 'button';
         mainBadge.className = 'main-badge';
-        mainBadge.textContent = 'Main';
+        mainBadge.innerHTML = '<span class="main-indicator"><i class="ri-check-line"></i></span><span>Main</span>';
         mainBadge.style.display = 'none';
+        mainBadge.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (imageSlots[index] && imageSlots[index].hasImage && !imageSlots[index].markedForDeletion) {
+                setMainImageIndex(index);
+            }
+            return false;
+        };
 
         slot.appendChild(fileInput);
         slot.appendChild(img);
@@ -1839,7 +2555,8 @@
             imageId: imageData?.id || null,
             public_id: imageData?.public_id || null,
             cloudinary_url: imageData?.url || null,
-            markedForDeletion: false
+            markedForDeletion: false,
+            isMain: false
         };
 
         if (imageData) {
@@ -1854,8 +2571,9 @@
                 imageSlots[index].public_id = imageData.public_id;
                 imageSlots[index].cloudinary_url = imageData.url;
 
-                if (index === 0) {
-                    mainBadge.style.display = 'block';
+                mainBadge.style.display = 'inline-flex';
+                if (imageData.is_primary) {
+                    selectedMainImageIndex = index;
                 }
             }
         }
@@ -1877,6 +2595,7 @@
             slotData.slot.classList.add('has-image');
             slotData.slot.classList.remove('marked-for-deletion');
             slotData.removeBtn.style.display = 'flex';
+            slotData.mainBadge.style.display = 'inline-flex';
             slotData.file = file;
             slotData.hasImage = true;
             
@@ -1885,17 +2604,15 @@
             slotData.cloudinary_url = null;
             slotData.markedForDeletion = false;
 
-            if (index === 0) {
-                slotData.mainBadge.style.display = 'block';
-                for (let i = 1; i < imageSlots.length; i++) {
-                    if (imageSlots[i] && imageSlots[i].mainBadge) {
-                        imageSlots[i].mainBadge.style.display = 'none';
-                    }
-                }
+            if (selectedMainImageIndex === null || selectedMainImageIndex === index) {
+                setMainImageIndex(index);
+            } else {
+                ensureMainImageSelection();
             }
             
             const imageIdInfo = slotData.imageId ? `ID ${slotData.imageId}` : 'no existing ID';
             console.log(`📸 Image selected for slot ${index}:`, file.name, `(${imageIdInfo})`);
+            updateContentScore();
         };
         reader.readAsDataURL(file);
     }
@@ -1941,14 +2658,44 @@
             slotData.markedForDeletion = false;
         }
 
-        if (index === 0) {
-            for (let i = 1; i < imageSlots.length; i++) {
-                if (imageSlots[i] && imageSlots[i].hasImage && !imageSlots[i].markedForDeletion) {
-                    imageSlots[i].mainBadge.style.display = 'block';
-                    console.log(`🏷️ New primary image at index ${i}`);
-                    break;
-                }
+        if (selectedMainImageIndex === index) {
+            selectedMainImageIndex = null;
+        }
+        ensureMainImageSelection();
+        updateContentScore();
+    }
+
+    function setMainImageIndex(index) {
+        selectedMainImageIndex = index;
+        imageSlots.forEach((slot, i) => {
+            if (!slot) return;
+            const isSelectable = slot.hasImage && !slot.markedForDeletion;
+            const isMain = isSelectable && i === index;
+            slot.isMain = isMain;
+            slot.mainBadge.style.display = isSelectable ? 'inline-flex' : 'none';
+            slot.mainBadge.classList.toggle('active', isMain);
+        });
+    }
+
+    function ensureMainImageSelection() {
+        if (selectedMainImageIndex !== null) {
+            const current = imageSlots[selectedMainImageIndex];
+            if (current && current.hasImage && !current.markedForDeletion) {
+                setMainImageIndex(selectedMainImageIndex);
+                return;
             }
+        }
+        const fallbackIndex = imageSlots.findIndex(slot => slot && slot.hasImage && !slot.markedForDeletion);
+        if (fallbackIndex >= 0) {
+            setMainImageIndex(fallbackIndex);
+        } else {
+            selectedMainImageIndex = null;
+            imageSlots.forEach(slot => {
+                if (!slot) return;
+                slot.isMain = false;
+                slot.mainBadge.classList.remove('active');
+                slot.mainBadge.style.display = 'none';
+            });
         }
     }
 
@@ -2017,6 +2764,8 @@
             noVariantsMessage.style.display = 'flex';
             document.getElementById('variantsContainer').innerHTML = '';
         }
+        updateVariantCount();
+        updateContentScore();
     }
 
     function addVariantRow() {
@@ -2028,62 +2777,20 @@
         row.id = rowId;
         row.variantId = null;
 
-        row.innerHTML = `
-            <div class="variant-row-header">
-                <h5>Variant Option</h5>
-                <button type="button" class="btn btn-danger-outline btn-sm" onclick="removeVariantRow('${rowId}', false)">
-                    <i class="ri-delete-bin-line"></i>
-                </button>
-            </div>
-            <div class="variant-fields">
-                <div class="field-group">
-                    <label>Name</label>
-                    <input type="text" class="form-control" name="variant_name" placeholder="e.g., Small, Red" required>
-                </div>
-                <div class="field-group">
-                    <label>Price</label>
-                    <input type="number" class="form-control" name="variant_price" step="0.01" min="0" placeholder="0.00" required>
-                </div>
-                <div class="field-group">
-                    <label>Stock</label>
-                    <input type="number" class="form-control" name="variant_stock" min="0" placeholder="0" required>
-                </div>
-                <div class="field-group">
-                    <label>SKU</label>
-                    <input type="text" class="form-control" name="variant_sku" placeholder="Optional">
-                </div>
-            </div>
-            <div class="variant-fields" style="margin-top: 0.75rem;">
-                <div class="field-group" style="grid-column: span 2;">
-                    <label>Attributes (JSON)</label>
-                    <input type="text" class="form-control" name="variant_attributes" placeholder='{"color": "red", "size": "small"}'>
-                </div>
-                <div class="field-group" style="grid-column: span 2;">
-                    <label>Variant Image</label>
-                    <div class="variant-image-upload">
-                        <input type="file" class="variant-image-input" id="variant-image-${rowId}" accept="image/*" style="display: none;">
-                        <div class="variant-image-preview" onclick="document.getElementById('variant-image-${rowId}').click()">
-                            <i class="ri-image-add-line"></i>
-                            <span>Click to upload</span>
-                        </div>
-                        <div class="variant-image-preview-container" style="display: none;">
-                            <img class="variant-image-img" src="" alt="Variant preview">
-                            <button type="button" class="remove-variant-image" onclick="removeVariantImage('${rowId}')">
-                                <i class="ri-close-line"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <small class="form-hint">Leave empty to use product's main image</small>
-                </div>
-            </div>
-        `;
+        row.innerHTML = buildVariantRowHTML(rowId, null, '', false);
 
         container.appendChild(row);
+        attachVariantSkuAuto(row);
 
         const fileInput = document.getElementById(`variant-image-${rowId}`);
-        fileInput.addEventListener('change', function(e) {
-            handleVariantImageUpload(e, rowId);
-        });
+        if (fileInput) {
+            fileInput.addEventListener('change', function(e) {
+                handleVariantImageUpload(e, rowId);
+            });
+        }
+
+        updateVariantCount();
+        updateContentScore();
     }
 
     function handleVariantImageUpload(event, rowId) {
@@ -2091,16 +2798,15 @@
         if (!file) return;
 
         const row = document.getElementById(rowId);
-        const previewContainer = row.querySelector('.variant-image-preview-container');
-        const previewPlaceholder = row.querySelector('.variant-image-preview');
+        const thumbBtn = document.getElementById(`thumb-btn-${rowId}`);
+        const thumbImg = document.getElementById(`thumb-img-${rowId}`);
         const img = row.querySelector('.variant-image-img');
 
         const reader = new FileReader();
         reader.onload = (e) => {
-            img.src = e.target.result;
-            previewContainer.style.display = 'block';
-            previewPlaceholder.style.display = 'none';
-            
+            if (img) img.src = e.target.result;
+            if (thumbImg) thumbImg.style.display = 'block';
+            if (thumbBtn) thumbBtn.style.display = 'none';
             row.dataset.variantImage = 'true';
             row.variantImageFile = file;
         };
@@ -2109,17 +2815,20 @@
 
     function removeVariantImage(rowId, isExisting = false) {
         const row = document.getElementById(rowId);
+        if (!row) return;
         const fileInput = row.querySelector('.variant-image-input');
-        const previewContainer = row.querySelector('.variant-image-preview-container');
-        const previewPlaceholder = row.querySelector('.variant-image-preview');
-        
+        const thumbBtn = document.getElementById(`thumb-btn-${rowId}`);
+        const thumbImg = document.getElementById(`thumb-img-${rowId}`);
+        const img = row.querySelector('.variant-image-img');
+
         if (isExisting) {
             row.dataset.removeVariantImage = 'true';
         }
-        
-        fileInput.value = '';
-        previewContainer.style.display = 'none';
-        previewPlaceholder.style.display = 'flex';
+
+        if (fileInput) fileInput.value = '';
+        if (img) img.src = '';
+        if (thumbImg) thumbImg.style.display = 'none';
+        if (thumbBtn) thumbBtn.style.display = 'flex';
         delete row.variantImageFile;
         row.dataset.variantImage = 'false';
     }
@@ -2137,7 +2846,6 @@
             if (!confirm('Are you sure you want to delete this variant?')) {
                 return;
             }
-            
             row.setAttribute('data-delete-variant', 'true');
             row.style.display = 'none';
             console.log(`✅ Marked variant for deletion: ${rowId}`);
@@ -2153,6 +2861,9 @@
             console.log('ℹ️ No visible variants, adding one');
             addVariantRow();
         }
+
+        updateVariantCount();
+        updateContentScore();
     }
 
     function addExampleVariants(type) {
@@ -2169,86 +2880,45 @@
                 { name: 'Large', price: '200', stock: '20' }
             ],
             color: [
-                { name: 'Red', price: '120', stock: '12', attr: '{"color": "red"}' },
-                { name: 'Pink', price: '120', stock: '12', attr: '{"color": "pink"}' },
-                { name: 'White', price: '120', stock: '12', attr: '{"color": "white"}' }
+                { name: 'Red', price: '120', stock: '12', attr: 'red' },
+                { name: 'Pink', price: '120', stock: '12', attr: 'pink' },
+                { name: 'White', price: '120', stock: '12', attr: 'white' }
             ],
             stems: [
-                { name: '12 Stems', price: '150', stock: '15', attr: '{"stems": 12}' },
-                { name: '24 Stems', price: '280', stock: '10', attr: '{"stems": 24}' },
-                { name: '36 Stems', price: '400', stock: '5', attr: '{"stems": 36}' }
+                { name: '12 Stems', price: '150', stock: '15', attr: '12 stems' },
+                { name: '24 Stems', price: '280', stock: '10', attr: '24 stems' },
+                { name: '36 Stems', price: '400', stock: '5', attr: '36 stems' }
             ],
             bundle: [
-                { name: 'Single', price: '100', stock: '20', attr: '{"bundle": "single"}' },
-                { name: 'Pair', price: '180', stock: '15', attr: '{"bundle": "pair"}' },
-                { name: 'Bouquet', price: '250', stock: '10', attr: '{"bundle": "bouquet"}' }
+                { name: 'Single', price: '100', stock: '20', attr: 'single' },
+                { name: 'Pair', price: '180', stock: '15', attr: 'pair' },
+                { name: 'Bouquet', price: '250', stock: '10', attr: 'bouquet' }
             ]
         };
 
         examples[type].forEach(ex => {
-            const rowId = 'variant_' + Date.now() + Math.random();
+            const rowId = 'variant_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
             const row = document.createElement('div');
             row.className = 'variant-row';
             row.id = rowId;
             row.variantId = null;
 
-            row.innerHTML = `
-                <div class="variant-row-header">
-                    <h5>Variant Option</h5>
-                    <button type="button" class="btn btn-danger-outline btn-sm" onclick="removeVariantRow('${rowId}', false)">
-                        <i class="ri-delete-bin-line"></i>
-                    </button>
-                </div>
-                <div class="variant-fields">
-                    <div class="field-group">
-                        <label>Name</label>
-                        <input type="text" class="form-control" name="variant_name" value="${ex.name}" required>
-                    </div>
-                    <div class="field-group">
-                        <label>Price</label>
-                        <input type="number" class="form-control" name="variant_price" value="${ex.price}" step="0.01" min="0" required>
-                    </div>
-                    <div class="field-group">
-                        <label>Stock</label>
-                        <input type="number" class="form-control" name="variant_stock" value="${ex.stock}" min="0" required>
-                    </div>
-                    <div class="field-group">
-                        <label>SKU</label>
-                        <input type="text" class="form-control" name="variant_sku" placeholder="Optional">
-                    </div>
-                </div>
-                <div class="variant-fields" style="margin-top: 0.75rem;">
-                    <div class="field-group" style="grid-column: span 2;">
-                        <label>Attributes (JSON)</label>
-                        <input type="text" class="form-control" name="variant_attributes" value='${ex.attr || ""}'>
-                    </div>
-                    <div class="field-group" style="grid-column: span 2;">
-                        <label>Variant Image</label>
-                        <div class="variant-image-upload">
-                            <input type="file" class="variant-image-input" id="variant-image-${rowId}" accept="image/*" style="display: none;">
-                            <div class="variant-image-preview" onclick="document.getElementById('variant-image-${rowId}').click()">
-                                <i class="ri-image-add-line"></i>
-                                <span>Click to upload</span>
-                            </div>
-                            <div class="variant-image-preview-container" style="display: none;">
-                                <img class="variant-image-img" src="" alt="Variant preview">
-                                <button type="button" class="remove-variant-image" onclick="removeVariantImage('${rowId}')">
-                                    <i class="ri-close-line"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <small class="form-hint">Leave empty to use product's main image</small>
-                    </div>
-                </div>
-            `;
+            const fakeVariant = { name: ex.name, price: ex.price, stock_quantity: ex.stock, sku: '' };
+            row.innerHTML = buildVariantRowHTML(rowId, fakeVariant, ex.attr || '', false);
 
             container.appendChild(row);
+            attachVariantSkuAuto(row);
 
             const fileInput = document.getElementById(`variant-image-${rowId}`);
-            fileInput.addEventListener('change', function(e) {
-                handleVariantImageUpload(e, rowId);
-            });
+            if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                    handleVariantImageUpload(e, rowId);
+                });
+            }
         });
+
+        updateVariantCount();
+        updateContentScore();
     }
 
     function collectVariants() {
@@ -2273,25 +2943,39 @@
             const name = row.querySelector('[name="variant_name"]')?.value;
             const price = row.querySelector('[name="variant_price"]')?.value;
             const stock = row.querySelector('[name="variant_stock"]')?.value;
+            const stockFromAttribute = row.querySelector('[name="variant_stock"]')?.getAttribute('value');
 
-            if (name && price && stock) {
+            // For new variants (no ID), use input value; for existing variants, use attribute value to prevent accidental edits
+            const finalStock = variantId ? stockFromAttribute : stock;
+
+            if (name && price && finalStock) {
                 let attributes = {};
                 const attrText = row.querySelector('[name="variant_attributes"]')?.value;
                 if (attrText) {
                     try {
                         attributes = JSON.parse(attrText);
                     } catch (e) {
-                        attributes = { value: attrText };
+                        const normalizedTags = normalizeAttributeTagsText(attrText);
+                        row.querySelector('[name="variant_attributes"]').value = normalizedTags;
+                        attributes = { tags: normalizedTags ? normalizedTags.split(', ') : [] };
                     }
                 }
+
+                const specialPriceRaw = row.querySelector('[name="variant_special_price"]')?.value;
+                const specialPrice = specialPriceRaw && parseFloat(specialPriceRaw) > 0
+                    ? parseFloat(specialPriceRaw)
+                    : null;
+                const isAvailable = row.querySelector('[name="variant_available"]')?.checked ?? true;
 
                 const variantData = {
                     id: variantId || null,
                     name: name,
                     price: parseFloat(price),
-                    stock_quantity: parseInt(stock),
+                    special_price: specialPrice,
+                    stock_quantity: parseInt(finalStock),
                     sku: row.querySelector('[name="variant_sku"]')?.value || null,
-                    attributes: attributes
+                    attributes: attributes,
+                    is_available: isAvailable
                 };
 
                 if (row.variantImageFile) {
@@ -2318,7 +3002,8 @@
         const name = document.getElementById('productName').value.trim();
         const mainCategory = document.getElementById('mainCategory').value;
         const price = document.getElementById('productPrice').value;
-        const stock = document.getElementById('productStock').value;
+        const stockInput = document.getElementById('productStock');
+        const stock = stockInput ? stockInput.value : null;
 
         if (!name) {
             showToast('Please enter product name', 'error');
@@ -2332,7 +3017,7 @@
             showToast('Please enter a valid price', 'error');
             return false;
         }
-        if (!stock || parseInt(stock) < 0) {
+        if (!isEditMode && (!stock || parseInt(stock) < 0)) {
             showToast('Please enter valid stock quantity', 'error');
             return false;
         }
@@ -2396,7 +3081,15 @@
         formData.append('name', document.getElementById('productName').value.trim());
         formData.append('description', document.getElementById('productDescription').value.trim() || '');
         formData.append('price', document.getElementById('productPrice').value);
-        formData.append('stock_quantity', document.getElementById('productStock').value);
+        formData.append('special_price', document.getElementById('productSpecialPrice')?.value || '');
+        formData.append('sku', document.getElementById('productSku')?.value?.trim() || '');
+        if (!isEditMode) {
+            formData.append('stock_quantity', document.getElementById('productStock').value);
+        }
+        // SEO submission is temporarily disabled.
+        // formData.append('meta_title', document.getElementById('metaTitle')?.value?.trim() || '');
+        // formData.append('meta_description', document.getElementById('metaDescription')?.value?.trim() || '');
+        // formData.append('meta_keywords', document.getElementById('metaKeywords')?.value?.trim() || '');
         
         // ===== UPDATED: Category fields =====
         formData.append('main_category_id', document.getElementById('mainCategory').value);
@@ -2410,6 +3103,8 @@
 
         // Handle product images
         const imageFiles = getImageFiles();
+        ensureMainImageSelection();
+        const mainImageIndex = selectedMainImageIndex;
         
         const replacementImages = [];
         const newImages = [];
@@ -2420,16 +3115,20 @@
                     existingId: item.existingId,
                     file: item.file,
                     slotIndex: item.slotIndex,
-                    is_primary: item.slotIndex === 0
+                    is_primary: item.slotIndex === mainImageIndex
                 });
             } else {
                 newImages.push({
                     file: item.file,
                     slotIndex: item.slotIndex,
-                    is_primary: item.slotIndex === 0
+                    is_primary: item.slotIndex === mainImageIndex
                 });
             }
         });
+
+        if (mainImageIndex !== null && mainImageIndex !== undefined) {
+            formData.append('main_image_index', String(mainImageIndex));
+        }
 
         const cloudinaryResults = [];
         for (let i = 0; i < newImages.length; i++) {
@@ -2660,7 +3359,11 @@
     const selector = document.getElementById('productVariantSelector');
     const mainProductId = document.getElementById('productId').value;
     const mainProductName = document.getElementById('productName').value;
-    const mainProductStock = parseInt(document.getElementById('productStock').value) || 0;
+    const stockInput = document.getElementById('productStock');
+    const stockDisplay = document.getElementById('currentStockDisplay');
+    const mainProductStock = stockInput
+        ? (parseInt(stockInput.value) || 0)
+        : (parseInt(stockDisplay?.textContent) || 0);
     
     // Clear existing options
     selector.innerHTML = '<option value="">-- Choose a product/variant --</option>';
@@ -2835,9 +3538,15 @@
                 // Also update the variant data in the hidden JSON
                 updateVariantStockInData(selectedValue, data.variant.stock_quantity);
             } else if (data.product) {
-                // Update main product stock
-                document.getElementById('currentStockDisplay').textContent = data.product.stock_quantity;
-                document.getElementById('productStock').value = data.product.stock_quantity;
+                // Update main product stock (guard missing display elements)
+                const currentStockDisplay = document.getElementById('currentStockDisplay');
+                if (currentStockDisplay) {
+                    currentStockDisplay.textContent = data.product.stock_quantity;
+                }
+                const productStockInput = document.getElementById('productStock');
+                if (productStockInput) {
+                    productStockInput.value = data.product.stock_quantity;
+                }
             }
             
             // Refresh the selector
@@ -2877,6 +3586,232 @@ function updateVariantStockInData(variantId, newStock) {
         }
     }
 }
+
+    // ===== STOCK ADDITION FUNCTIONS =====
+    function openStockAdditionModal() {
+        const modal = document.getElementById('stockAdditionModal');
+        
+        // Populate product/variant selector
+        populateProductVariantSelectorAdd();
+        
+        // Reset form
+        document.getElementById('additionAmount').value = '';
+        // Select first reason radio button (found_stock)
+        document.querySelector('input[name="additionReason"][value="found_stock"]').checked = true;
+        document.getElementById('additionNotes').value = '';
+        document.getElementById('submitAdditionBtn').disabled = false;
+        
+        modal.style.display = 'flex';
+    }
+
+    function populateProductVariantSelectorAdd() {
+        const selector = document.getElementById('productVariantSelectorAdd');
+        const mainProductId = document.getElementById('productId').value;
+        const mainProductName = document.getElementById('productName').value;
+        const stockInput = document.getElementById('productStock');
+        const stockDisplay = document.getElementById('currentStockDisplay');
+        const mainProductStock = stockInput
+            ? (parseInt(stockInput.value) || 0)
+            : (parseInt(stockDisplay?.textContent) || 0);
+        
+        // Clear existing options
+        selector.innerHTML = '<option value="">-- Choose a product/variant --</option>';
+        
+        // Add main product
+        const mainOption = document.createElement('option');
+        mainOption.value = mainProductId;
+        mainOption.setAttribute('data-type', 'main');
+        mainOption.text = `${mainProductName} (Main - ${mainProductStock} units)`;
+        selector.appendChild(mainOption);
+        
+        // Add variants if they exist
+        const variantsScript = document.getElementById('productVariantsData');
+        if (variantsScript) {
+            try {
+                const data = JSON.parse(variantsScript.textContent);
+                if (data.variants && Array.isArray(data.variants)) {
+                    data.variants.forEach(variant => {
+                        const variantOption = document.createElement('option');
+                        variantOption.value = variant.id;
+                        variantOption.setAttribute('data-type', 'variant');
+                        variantOption.text = `${variant.name} (Variant - ${variant.stock_quantity} units)`;
+                        selector.appendChild(variantOption);
+                    });
+                }
+            } catch (e) {
+                console.log('No variants or error parsing variants data:', e);
+            }
+        }
+        
+        // Set initial selection
+        if (selector.options.length > 0) {
+            selector.selectedIndex = 0;
+        }
+        
+        updateStockDisplayAdd();
+    }
+
+    function updateStockDisplayAdd() {
+        const selector = document.getElementById('productVariantSelectorAdd');
+        const selectedProductId = selector.value;
+        const selectedOption = selector.options[selector.selectedIndex];
+        
+        if (!selectedProductId) {
+            document.getElementById('modalProductNameAdd').textContent = 'Select a product';
+            document.getElementById('modalCurrentStockAdd').textContent = '0';
+            document.getElementById('amountHintAdd').textContent = 'Select a product first';
+            return;
+        }
+        
+        selectedProductForAddition = selectedProductId;
+        
+        // Extract stock from option text
+        const optionText = selectedOption.text;
+        const stockMatch = optionText.match(/(\d+)\s*units/);
+        const stock = stockMatch ? parseInt(stockMatch[1]) : 0;
+        
+        // Update display
+        const productName = optionText.split(' (')[0];
+        document.getElementById('modalProductNameAdd').textContent = productName;
+        document.getElementById('modalCurrentStockAdd').textContent = stock;
+        document.getElementById('amountHintAdd').textContent = `Current stock: ${stock} units`;
+        
+        // Reset amount
+        document.getElementById('additionAmount').value = '';
+        validateAdditionAmount();
+    }
+
+    function closeStockAdditionModal() {
+        const modal = document.getElementById('stockAdditionModal');
+        modal.style.display = 'none';
+    }
+
+    function validateAdditionAmount() {
+        const amount = parseInt(document.getElementById('additionAmount').value) || 0;
+        const stockText = document.getElementById('modalCurrentStockAdd').textContent;
+        const currentStock = parseInt(stockText) || 0;
+        const amountHint = document.getElementById('amountHintAdd');
+        const submitBtn = document.getElementById('submitAdditionBtn');
+        
+        if (amount < 0) {
+            amountHint.textContent = '❌ Amount must be positive';
+            amountHint.style.color = '#f44336';
+            submitBtn.disabled = true;
+        } else if (amount === 0) {
+            amountHint.textContent = `Current stock: ${currentStock} units`;
+            amountHint.style.color = '#666';
+            submitBtn.disabled = true;
+        } else {
+            amountHint.textContent = `✓ Will increase to ${currentStock + amount} units`;
+            amountHint.style.color = '#4CAF50';
+            submitBtn.disabled = false;
+        }
+    }
+
+    async function submitStockAddition() {
+        const amount = parseInt(document.getElementById('additionAmount').value);
+        const reasonRadio = document.querySelector('input[name="additionReason"]:checked');
+        const reason = reasonRadio ? reasonRadio.value : null;
+        const notes = document.getElementById('additionNotes').value.trim();
+        const submitBtn = document.getElementById('submitAdditionBtn');
+        const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+        
+        // Get selected item info
+        const selector = document.getElementById('productVariantSelectorAdd');
+        const selectedValue = selector.value;
+        const selectedOption = selector.options[selector.selectedIndex];
+        const isVariant = selectedOption.getAttribute('data-type') === 'variant';
+        
+        if (!selectedValue) {
+            showToast('Please select a product or variant', 'error');
+            return;
+        }
+        
+        if (!amount || amount <= 0) {
+            showToast('Please enter a valid amount', 'error');
+            return;
+        }
+        
+        if (!reason) {
+            showToast('Please select a reason', 'error');
+            return;
+        }
+        
+        const mainProductId = document.getElementById('productId').value;
+        
+        // Build request body
+        const requestBody = {
+            amount: amount,
+            reason: reason,
+            reason_notes: notes
+        };
+        
+        // If this is a variant, add variant_id to the request
+        if (isVariant) {
+            requestBody.variant_id = parseInt(selectedValue);
+        }
+        
+        // Show loading state
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving...';
+        
+        try {
+            const response = await fetch(`/seller/products/${mainProductId}/add-stock`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(requestBody)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                showToast(`✅ Stock added successfully!`, 'success');
+                
+                // Update the stock display
+                if (isVariant && data.variant) {
+                    // Update variant stock in the selector
+                    const option = document.querySelector(`#productVariantSelectorAdd option[value="${selectedValue}"]`);
+                    if (option) {
+                        const currentText = option.text;
+                        const newStock = data.variant.stock_quantity;
+                        option.text = currentText.replace(/\((\d+) units\)/, `(${newStock} units)`);
+                    }
+                    
+                    // Also update the variant data in the hidden JSON
+                    updateVariantStockInData(selectedValue, data.variant.stock_quantity);
+                } else if (data.product) {
+                    // Update main product stock (guard missing display elements)
+                    const currentStockDisplay = document.getElementById('currentStockDisplay');
+                    if (currentStockDisplay) {
+                        currentStockDisplay.textContent = data.product.stock_quantity;
+                    }
+                    const productStockInput = document.getElementById('productStock');
+                    if (productStockInput) {
+                        productStockInput.value = data.product.stock_quantity;
+                    }
+                }
+                
+                // Refresh the selector
+                setTimeout(() => {
+                    populateProductVariantSelectorAdd();
+                }, 500);
+                
+                // Close modal
+                closeStockAdditionModal();
+            } else {
+                showToast(`❌ Error: ${data.error || 'Failed to add stock'}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error submitting stock addition:', error);
+            showToast('Network error. Please try again.', 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="ri-save-line"></i> Record Addition';
+        }
+    }
 
     async function openStockHistoryModal() {
         const modal = document.getElementById('stockHistoryModal');
@@ -2962,13 +3897,21 @@ function updateVariantStockInData(variantId, newStock) {
                     'spoilage': '#FFB74D',
                     'damage': '#EF5350',
                     'defect': '#AB47BC',
-                    'other': '#90A4AE'
+                    'other': '#90A4AE',
+                    'pos_sale': '#4CAF50',
+                    'found_stock': '#2196F3',
+                    'receiving_error': '#FF9800',
+                    'restock': '#8BC34A'
                 };
                 const reasonIcons = {
                     'spoilage': 'ri-leaf-line',
                     'damage': 'ri-alert-line',
                     'defect': 'ri-error-warning-line',
-                    'other': 'ri-question-line'
+                    'other': 'ri-question-line',
+                    'pos_sale': 'ri-shopping-cart-line',
+                    'found_stock': 'ri-search-line',
+                    'receiving_error': 'ri-error-warning-line',
+                    'restock': 'ri-inbox-archive-line'
                 };
                 
                 const reasonColor = reasonColors[reduction.reason] || '#90A4AE';
@@ -2998,24 +3941,30 @@ function updateVariantStockInData(variantId, newStock) {
                                     ${itemName}
                                     ${reduction.variant_info ? `<span style="font-size: 0.75rem; color: #9C27B0; margin-left: 6px;">(Variant)</span>` : ''}
                                 </div>
-                                <div style="font-size: 0.75rem; color: #999;">Reduced by ${reduction.reduced_by_user || 'Unknown'}</div>
+                                <div style="font-size: 0.75rem; color: #999;">${['found_stock', 'receiving_error', 'restock'].includes(reduction.reason) ? 'Added by' : 'Reduced by'} ${reduction.reduced_by_user || 'Unknown'}</div>
                             </div>
                             <div style="text-align: right; font-size: 0.75rem; color: #999; white-space: nowrap;">
                                 ${date}
                             </div>
                         </div>
                         
-                        <!-- Reduction details -->
+                        <!-- Amount details -->
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
                                 <div style="background: ${reasonColor}; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                     <i class="${reasonIcon}"></i>
                                 </div>
                                 <div style="flex: 1;">
-                                    <strong style="font-size: 1rem; color: #d32f2f;">-${reduction.reduction_amount} units</strong>
+                                    <strong style="font-size: 1rem; color: ${['found_stock', 'receiving_error', 'restock'].includes(reduction.reason) ? '#4CAF50' : '#d32f2f'};">${['found_stock', 'receiving_error', 'restock'].includes(reduction.reason) ? '+' : '-'}${reduction.reduction_amount} units</strong>
                                     <div style="font-size: 0.85rem; color: #666; margin-top: 2px;">
                                         <span style="background: ${reasonColor}; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 500;">
-                                            ${reduction.reason.charAt(0).toUpperCase() + reduction.reason.slice(1)}
+                                            ${
+                                                reduction.reason === 'pos_sale' ? 'POS Sale' :
+                                                reduction.reason === 'found_stock' ? 'Found Stock' :
+                                                reduction.reason === 'receiving_error' ? 'Receiving Error' :
+                                                reduction.reason === 'restock' ? 'Restock' :
+                                                reduction.reason.charAt(0).toUpperCase() + reduction.reason.slice(1)
+                                            }
                                         </span>
                                     </div>
                                 </div>
@@ -3058,15 +4007,29 @@ function updateVariantStockInData(variantId, newStock) {
         if (amountInput) {
             amountInput.addEventListener('input', validateReductionAmount);
         }
+
+        const additionAmountInput = document.getElementById('additionAmount');
+        if (additionAmountInput) {
+            additionAmountInput.addEventListener('input', validateAdditionAmount);
+        }
         
         // Modal backdrop click handlers - close when clicking outside modal
         const stockReductionModal = document.getElementById('stockReductionModal');
+        const stockAdditionModal = document.getElementById('stockAdditionModal');
         const stockHistoryModal = document.getElementById('stockHistoryModal');
         
         if (stockReductionModal) {
             stockReductionModal.addEventListener('click', function(e) {
                 if (e.target === stockReductionModal) {
                     closeStockReductionModal();
+                }
+            });
+        }
+
+        if (stockAdditionModal) {
+            stockAdditionModal.addEventListener('click', function(e) {
+                if (e.target === stockAdditionModal) {
+                    closeStockAdditionModal();
                 }
             });
         }
@@ -3090,6 +4053,107 @@ function updateVariantStockInData(variantId, newStock) {
         document.head.appendChild(style);
     });
 
+    // ===== VARIANT COUNT BADGE =====
+    function updateVariantCount() {
+        const visibleRows = document.querySelectorAll('.variant-row:not([data-delete-variant="true"])');
+        const badge = document.getElementById('variantCountBadge');
+        if (badge) {
+            const count = visibleRows.length;
+            badge.textContent = `${count} variant${count !== 1 ? 's' : ''}`;
+        }
+    }
+
+    // ===== CONTENT SCORE TRACKER =====
+    function initializeContentScore() {
+        const watchIds = ['productName', 'mainCategory', 'productDescription'];
+        watchIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', updateContentScore);
+                el.addEventListener('change', updateContentScore);
+            }
+        });
+
+        const hasVariantsEl = document.getElementById('hasVariants');
+        if (hasVariantsEl) {
+            hasVariantsEl.addEventListener('change', updateContentScore);
+        }
+
+        updateContentScore();
+    }
+
+    function updateContentScore() {
+        // ---- check each step ----
+        const productName = (document.getElementById('productName')?.value || '').trim();
+        const mainCategory = document.getElementById('mainCategory')?.value || '';
+        const description = (document.getElementById('productDescription')?.value || '').trim();
+        const hasVariantsEnabled = document.getElementById('hasVariants')?.checked;
+        const activeVariantRows = document.querySelectorAll('.variant-row:not([data-delete-variant="true"])');
+        const hasImages = imageSlots && imageSlots.some(s => s && s.hasImage);
+
+        // Step checks
+        const basicDone = productName.length >= 3 && mainCategory;
+        const specDone = (() => {
+            if (!hasVariantsEnabled || activeVariantRows.length === 0) return false;
+            let anyHasTag = false;
+            activeVariantRows.forEach(row => {
+                const tags = row.querySelector('[name="variant_attributes"]')?.value?.trim();
+                if (tags && tags.length > 0) anyHasTag = true;
+            });
+            return anyHasTag;
+        })();
+        const variantsDone = hasVariantsEnabled && activeVariantRows.length > 0;
+        const descDone = description.length >= 50;
+        const imagesDone = hasImages;
+
+        const steps = [
+            { key: 'basic',         done: basicDone },
+            { key: 'specification', done: specDone },
+            { key: 'variants',      done: variantsDone },
+            { key: 'description',   done: descDone },
+            { key: 'images',        done: imagesDone }
+        ];
+
+        let doneCount = 0;
+        steps.forEach(step => {
+            const circle = document.getElementById('circle-' + step.key);
+            const stepEl = document.getElementById('step-' + step.key);
+            const titleEl = stepEl ? stepEl.querySelector('.step-title') : null;
+
+            if (step.done) {
+                doneCount++;
+                circle?.classList.add('done');
+                if (titleEl) titleEl.classList.add('done-title');
+            } else {
+                circle?.classList.remove('done');
+                if (titleEl) titleEl.classList.remove('done-title');
+            }
+        });
+
+        const pct = Math.round((doneCount / steps.length) * 100);
+        const fillEl = document.getElementById('scoreBarFill');
+        const labelEl = document.getElementById('scoreLabel');
+        const pctEl = document.getElementById('scorePct');
+
+        if (fillEl) {
+            fillEl.style.width = pct + '%';
+            if (pct < 40)       fillEl.style.background = '#e74c3c';
+            else if (pct < 70)  fillEl.style.background = '#f0b429';
+            else if (pct < 100) fillEl.style.background = '#22c55e';
+            else                fillEl.style.background = '#16a34a';
+        }
+
+        if (labelEl) {
+            if (pct === 0)       labelEl.textContent = 'Incomplete';
+            else if (pct < 40)   labelEl.textContent = 'Needs Work';
+            else if (pct < 70)   labelEl.textContent = 'Getting There';
+            else if (pct < 100)  labelEl.textContent = 'Good';
+            else                 labelEl.textContent = 'Excellent';
+        }
+
+        if (pctEl) pctEl.textContent = pct + '%';
+    }
+
     // ===== GLOBAL FUNCTION EXPORTS =====
     window.addVariantRow = addVariantRow;
     window.removeVariantRow = removeVariantRow;
@@ -3107,11 +4171,19 @@ function updateVariantStockInData(variantId, newStock) {
     window.openStockReductionModal = openStockReductionModal;
     window.closeStockReductionModal = closeStockReductionModal;
     window.submitStockReduction = submitStockReduction;
+    window.openStockAdditionModal = openStockAdditionModal;
+    window.closeStockAdditionModal = closeStockAdditionModal;
+    window.submitStockAddition = submitStockAddition;
+    window.validateAdditionAmount = validateAdditionAmount;
+    window.populateProductVariantSelectorAdd = populateProductVariantSelectorAdd;
+    window.updateStockDisplayAdd = updateStockDisplayAdd;
     window.openStockHistoryModal = openStockHistoryModal;
     window.closeStockHistoryModal = closeStockHistoryModal;
     window.loadStockHistory = loadStockHistory;
     window.validateReductionAmount = validateReductionAmount;
     window.populateProductVariantSelector = populateProductVariantSelector;
     window.updateStockDisplay = updateStockDisplay;
+    window.updateContentScore = updateContentScore;
+    window.updateVariantCount = updateVariantCount;
 </script>
 {% endblock %}

@@ -59,6 +59,22 @@
         overflow: hidden;
     }
 
+    .orders-stat[data-filter-type] {
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .orders-stat[data-filter-type]:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .orders-stat.is-active {
+        border-color: var(--deep-rose);
+        box-shadow: 0 0 0 2px rgba(181, 68, 90, 0.12), var(--shadow-md);
+        background: rgba(181, 68, 90, 0.03);
+    }
+
     .orders-stat::before {
         content: '';
         position: absolute;
@@ -162,6 +178,11 @@
         margin: 0.25rem 0 0;
         color: var(--muted);
         font-size: 13px;
+    }
+
+    .orders-panel-sub strong {
+        color: var(--deep-rose);
+        font-weight: 700;
     }
 
     .orders-toolbar {
@@ -357,6 +378,65 @@
         font-size: 2.25rem;
         margin-bottom: 0.75rem;
         opacity: 0.35;
+    }
+
+    .orders-pagination {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        padding: 1rem 1.5rem 1.25rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .orders-pagination-info {
+        font-size: 13px;
+        color: var(--muted);
+    }
+
+    .orders-pagination-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .orders-page-btn {
+        min-width: 38px;
+        height: 38px;
+        padding: 0 0.8rem;
+        border-radius: 999px;
+        border: 1px solid var(--border-strong);
+        background: #fff;
+        color: var(--charcoal);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .orders-page-btn:hover:not(:disabled) {
+        border-color: var(--deep-rose);
+        color: var(--deep-rose);
+        background: rgba(181, 68, 90, 0.05);
+    }
+
+    .orders-page-btn.active {
+        background: var(--deep-rose);
+        border-color: var(--deep-rose);
+        color: #fff;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .orders-page-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
     }
 
     .details-grid {
@@ -709,7 +789,7 @@
     </div>
 
     <div class="orders-summary">
-        <div class="orders-stat rose">
+        <div class="orders-stat rose" data-filter-type="today">
             <div class="orders-stat-head">
                 <div class="orders-stat-label">Today</div>
                 <div class="orders-stat-icon"><i class="ri-calendar-event-line"></i></div>
@@ -717,7 +797,7 @@
             <div class="orders-stat-value">{{ order_stats.today }}</div>
             <div class="orders-stat-sub">New orders today</div>
         </div>
-        <div class="orders-stat gold">
+        <div class="orders-stat gold" data-filter-type="payment" data-filter-value="pending_verification">
             <div class="orders-stat-head">
                 <div class="orders-stat-label">Payment Review</div>
                 <div class="orders-stat-icon"><i class="ri-bank-card-line"></i></div>
@@ -725,7 +805,7 @@
             <div class="orders-stat-value">{{ order_stats.payment_review }}</div>
             <div class="orders-stat-sub">Receipts to check</div>
         </div>
-        <div class="orders-stat terra">
+        <div class="orders-stat terra" data-filter-type="status-group" data-filter-value="accepted,preparing">
             <div class="orders-stat-head">
                 <div class="orders-stat-label">Preparing</div>
                 <div class="orders-stat-icon"><i class="ri-box-3-line"></i></div>
@@ -733,7 +813,7 @@
             <div class="orders-stat-value">{{ order_stats.preparing }}</div>
             <div class="orders-stat-sub">Accepted and preparing</div>
         </div>
-        <div class="orders-stat bark">
+        <div class="orders-stat bark" data-filter-type="status" data-filter-value="on_delivery">
             <div class="orders-stat-head">
                 <div class="orders-stat-label">On Delivery</div>
                 <div class="orders-stat-icon"><i class="ri-truck-line"></i></div>
@@ -741,7 +821,7 @@
             <div class="orders-stat-value">{{ order_stats.on_delivery }}</div>
             <div class="orders-stat-sub">Currently out for delivery</div>
         </div>
-        <div class="orders-stat sage">
+        <div class="orders-stat sage" data-filter-type="status" data-filter-value="delivered">
             <div class="orders-stat-head">
                 <div class="orders-stat-label">Delivered</div>
                 <div class="orders-stat-icon"><i class="ri-checkbox-circle-line"></i></div>
@@ -749,7 +829,7 @@
             <div class="orders-stat-value">{{ order_stats.delivered }}</div>
             <div class="orders-stat-sub">Completed orders</div>
         </div>
-        <div class="orders-stat rose">
+        <div class="orders-stat rose" data-filter-type="status" data-filter-value="delivered">
             <div class="orders-stat-head">
                 <div class="orders-stat-label">Revenue</div>
                 <div class="orders-stat-icon"><i class="ri-money-dollar-circle-line"></i></div>
@@ -788,7 +868,7 @@
         <div class="orders-panel-head">
             <div>
                 <h2 class="orders-panel-title">Store Orders</h2>
-                <p class="orders-panel-sub">{{ store.name }} • {{ order_stats.total }} total orders</p>
+                <p class="orders-panel-sub" id="sellerOrdersPanelSub">{{ store.name }} • {{ order_stats.total }} total orders</p>
             </div>
         </div>
 
@@ -830,6 +910,7 @@
                         data-order-id="{{ order.id }}"
                         data-status="{{ order.status }}"
                         data-payment-status="{{ order.payment_status }}"
+                        data-is-today="{{ 'true' if order.date_formatted == today_str else 'false' }}"
                         data-search="{{ (
                             '#' ~ order.id ~ ' ' ~
                             (order.customer_name or '') ~ ' ' ~
@@ -908,6 +989,15 @@
             </table>
         </div>
 
+        {% if orders %}
+        <div class="orders-pagination" id="sellerOrdersPagination">
+            <div class="orders-pagination-info" id="sellerOrdersPaginationInfo">
+                Showing 0 orders
+            </div>
+            <div class="orders-pagination-controls" id="sellerOrdersPaginationControls"></div>
+        </div>
+        {% endif %}
+
         {% if not orders %}
         <div class="orders-empty">
             <i class="ri-inbox-line"></i>
@@ -962,7 +1052,15 @@
     const sellerRows = Array.from(document.querySelectorAll('.seller-order-row'));
     const sellerOrderDetailsModal = document.getElementById('sellerOrderDetailsModal');
     const sellerPaymentProofModal = document.getElementById('sellerPaymentProofModal');
+    const sellerPaginationInfo = document.getElementById('sellerOrdersPaginationInfo');
+    const sellerPaginationControls = document.getElementById('sellerOrdersPaginationControls');
+    const sellerPaginationWrap = document.getElementById('sellerOrdersPagination');
+    const sellerPanelSub = document.getElementById('sellerOrdersPanelSub');
+    const sellerStatCards = Array.from(document.querySelectorAll('.orders-stat[data-filter-type]'));
     let activePaymentOrderId = null;
+    let sellerCurrentPage = 1;
+    const sellerRowsPerPage = 10;
+    let sellerCardFilter = null;
 
     function openModal(modal) {
         if (!modal) return;
@@ -1038,23 +1136,159 @@
         }
     }
 
-    function applySellerFilters() {
+    function getFilteredSellerRows() {
         const search = (document.getElementById('sellerOrderSearch').value || '').trim().toLowerCase();
         const status = document.getElementById('sellerStatusSelect').value;
         const payment = document.getElementById('sellerPaymentSelect').value;
 
-        sellerRows.forEach(row => {
+        return sellerRows.filter(row => {
             const matchesSearch = !search || (row.dataset.search || '').includes(search);
             const matchesStatus = status === 'all' || row.dataset.status === status;
             const matchesPayment = payment === 'all' || row.dataset.paymentStatus === payment;
-            row.style.display = matchesSearch && matchesStatus && matchesPayment ? '' : 'none';
+            let matchesCard = true;
+
+            if (sellerCardFilter?.type === 'status') {
+                matchesCard = row.dataset.status === sellerCardFilter.value;
+            } else if (sellerCardFilter?.type === 'status-group') {
+                matchesCard = sellerCardFilter.values.includes(row.dataset.status);
+            } else if (sellerCardFilter?.type === 'payment') {
+                matchesCard = row.dataset.paymentStatus === sellerCardFilter.value;
+            } else if (sellerCardFilter?.type === 'today') {
+                matchesCard = (row.dataset.isToday || '') === 'true';
+            }
+
+            return matchesSearch && matchesStatus && matchesPayment && matchesCard;
         });
     }
 
-    document.getElementById('sellerOrderSearch').addEventListener('input', applySellerFilters);
-    document.getElementById('sellerStatusSelect').addEventListener('change', applySellerFilters);
-    document.getElementById('sellerPaymentSelect').addEventListener('change', applySellerFilters);
+    function updateSellerPanelSubtitle(totalRows) {
+        if (!sellerPanelSub) return;
+
+        const baseText = '{{ store.name }} • {{ order_stats.total }} total orders';
+        if (!sellerCardFilter) {
+            sellerPanelSub.innerHTML = baseText;
+            return;
+        }
+
+        const label = sellerCardFilter.label || 'Filtered';
+        sellerPanelSub.innerHTML = `${baseText} • <strong>${label} (${totalRows})</strong>`;
+    }
+
+    function updateActiveSellerCard() {
+        sellerStatCards.forEach(card => {
+            const isActive = sellerCardFilter && card.dataset.filterType === sellerCardFilter.type && card.dataset.filterValue === (sellerCardFilter.rawValue || '');
+            const isTodayActive = sellerCardFilter?.type === 'today' && card.dataset.filterType === 'today';
+            card.classList.toggle('is-active', !!(isActive || isTodayActive));
+        });
+    }
+
+    function renderSellerPagination(totalPages) {
+        if (!sellerPaginationControls) return;
+        sellerPaginationControls.innerHTML = '';
+
+        const prevBtn = document.createElement('button');
+        prevBtn.type = 'button';
+        prevBtn.className = 'orders-page-btn';
+        prevBtn.innerHTML = '<i class="ri-arrow-left-s-line"></i>';
+        prevBtn.disabled = sellerCurrentPage <= 1;
+        prevBtn.addEventListener('click', () => {
+            if (sellerCurrentPage > 1) {
+                sellerCurrentPage -= 1;
+                applySellerFilters();
+            }
+        });
+        sellerPaginationControls.appendChild(prevBtn);
+
+        for (let page = 1; page <= totalPages; page += 1) {
+            const pageBtn = document.createElement('button');
+            pageBtn.type = 'button';
+            pageBtn.className = `orders-page-btn${page === sellerCurrentPage ? ' active' : ''}`;
+            pageBtn.textContent = page;
+            pageBtn.addEventListener('click', () => {
+                sellerCurrentPage = page;
+                applySellerFilters();
+            });
+            sellerPaginationControls.appendChild(pageBtn);
+        }
+
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.className = 'orders-page-btn';
+        nextBtn.innerHTML = '<i class="ri-arrow-right-s-line"></i>';
+        nextBtn.disabled = sellerCurrentPage >= totalPages;
+        nextBtn.addEventListener('click', () => {
+            if (sellerCurrentPage < totalPages) {
+                sellerCurrentPage += 1;
+                applySellerFilters();
+            }
+        });
+        sellerPaginationControls.appendChild(nextBtn);
+    }
+
+    function applySellerFilters(resetPage = false) {
+        if (resetPage) sellerCurrentPage = 1;
+
+        const filteredRows = getFilteredSellerRows();
+        const totalRows = filteredRows.length;
+        const totalPages = Math.max(1, Math.ceil(totalRows / sellerRowsPerPage));
+        if (sellerCurrentPage > totalPages) sellerCurrentPage = totalPages;
+
+        const startIndex = totalRows === 0 ? 0 : (sellerCurrentPage - 1) * sellerRowsPerPage;
+        const endIndex = Math.min(startIndex + sellerRowsPerPage, totalRows);
+        const visibleRows = new Set(filteredRows.slice(startIndex, endIndex));
+
+        sellerRows.forEach(row => {
+            row.style.display = visibleRows.has(row) ? '' : 'none';
+        });
+
+        if (sellerPaginationWrap) {
+            sellerPaginationWrap.style.display = totalRows > 0 ? 'flex' : 'none';
+        }
+
+        if (sellerPaginationInfo) {
+            if (totalRows === 0) {
+                sellerPaginationInfo.textContent = 'No matching orders';
+            } else {
+                sellerPaginationInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalRows} orders`;
+            }
+        }
+
+        updateSellerPanelSubtitle(totalRows);
+        updateActiveSellerCard();
+
+        if (sellerPaginationControls) {
+            renderSellerPagination(totalPages);
+        }
+    }
+
+    document.getElementById('sellerOrderSearch').addEventListener('input', () => applySellerFilters(true));
+    document.getElementById('sellerStatusSelect').addEventListener('change', () => applySellerFilters(true));
+    document.getElementById('sellerPaymentSelect').addEventListener('change', () => applySellerFilters(true));
     document.getElementById('refreshOrdersBtn').addEventListener('click', () => window.location.reload());
+
+    sellerStatCards.forEach(card => {
+        card.addEventListener('click', () => {
+            const type = card.dataset.filterType;
+            const rawValue = card.dataset.filterValue || '';
+            const label = card.querySelector('.orders-stat-label')?.textContent?.trim() || 'Filtered';
+
+            const sameFilter = sellerCardFilter &&
+                sellerCardFilter.type === type &&
+                sellerCardFilter.rawValue === rawValue;
+
+            if (sameFilter) {
+                sellerCardFilter = null;
+            } else if (type === 'status-group') {
+                sellerCardFilter = { type, rawValue, values: rawValue.split(',').map(v => v.trim()), label };
+            } else if (type === 'today') {
+                sellerCardFilter = { type, rawValue, label };
+            } else {
+                sellerCardFilter = { type, rawValue, value: rawValue, label };
+            }
+
+            applySellerFilters(true);
+        });
+    });
 
     document.querySelectorAll('.seller-view-order').forEach(button => {
         button.addEventListener('click', async () => {
@@ -1394,12 +1628,12 @@
 
     // Update batch UI when filters change
     const originalApplySellerFilters = applySellerFilters;
-    applySellerFilters = function() {
-        originalApplySellerFilters();
+    applySellerFilters = function(resetPage = false) {
+        originalApplySellerFilters(resetPage);
         updateBatchUI();
     };
 
     // Initialize UI
-    updateBatchUI();
+    applySellerFilters(true);
 </script>
 {% endblock %}

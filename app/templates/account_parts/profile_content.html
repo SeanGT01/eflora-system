@@ -51,6 +51,22 @@
         transform: translateY(-2px);
     }
 
+    .profile-card.highlight-required {
+        border-color: #c0392b;
+        box-shadow: 0 0 0 3px rgba(192,57,43,0.14), 0 12px 32px rgba(192,57,43,0.10);
+        animation: profileHighlightPulse 1.2s ease-in-out 2;
+        scroll-margin-top: 110px;
+    }
+
+    @keyframes profileHighlightPulse {
+        0%, 100% {
+            box-shadow: 0 0 0 3px rgba(192,57,43,0.10), 0 12px 32px rgba(192,57,43,0.08);
+        }
+        50% {
+            box-shadow: 0 0 0 6px rgba(192,57,43,0.18), 0 12px 32px rgba(192,57,43,0.12);
+        }
+    }
+
     .card-header {
         padding: clamp(0.65rem, 1.3vw, 0.75rem) clamp(0.875rem, 1.7vw, 1rem);
         border-bottom: 1px solid var(--border);
@@ -1339,11 +1355,10 @@
 <!-- ─── Header ─── -->
 <div class="content-header">
     <div class="content-eyebrow">Account</div>
-    <h1 class="content-title">My Profile</h1>
 </div>
 
 <!-- ─── Profile Card ─── -->
-<div class="profile-card">
+<div class="profile-card" id="basicInformationCard">
     <!-- Avatar -->
     <div class="avatar-section">
         <div class="avatar-circle" onclick="document.getElementById('avatarInput').click()">
@@ -1402,13 +1417,17 @@
                     <label class="form-label">Phone Number</label>
                     <input type="tel" class="form-control" name="phone"
                            value="{{ user.phone if user else '' }}"
-                           placeholder="+63 900 000 0000">
+                           placeholder="09xxxxxxxxx"
+                           inputmode="numeric"
+                           maxlength="11"
+                           pattern="09[0-9]{9}"
+                           oninput="this.value = this.value.replace(/\D/g, '').slice(0, 11);">
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Birthday</label>
                     <input type="date" class="form-control" name="birthday"
-                           value="{{ user.birthday if user else '' }}">
+                           value="{% if user and user.birthday %}{{ user.birthday if user.birthday is string else user.birthday.strftime('%Y-%m-%d') }}{% else %}{% endif %}">
                 </div>
 
                 <div class="form-group form-group-full">
@@ -2177,9 +2196,18 @@ function setupAvatarUpload() {
 
 // ===== SELLER APPLICATION WITH CLOUDINARY =====
 function setupSellerApplicationForm() {
-    document.getElementById('sellerAppForm')?.addEventListener('submit', async function(e) {
+    const sellerAppForm = document.getElementById('sellerAppForm');
+    if (!sellerAppForm || sellerAppForm.dataset.bound === 'true') return;
+    sellerAppForm.dataset.bound = 'true';
+
+    sellerAppForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         
+        const prev = window._rejectedAppData;
+        const isRejectedResubmission = !!(prev && prev.status === 'rejected');
+        const rejectionDetails = (isRejectedResubmission && prev.rejection_details) || {};
+        const isRejectedField = field => !!rejectionDetails[field]?.rejected;
+
         const storeName = this.querySelector('[name="store_name"]').value.trim();
         const storeDesc = this.querySelector('[name="store_description"]').value.trim();
         const agreeTerms = this.querySelector('[name="agree_terms"]').checked;
@@ -2187,8 +2215,13 @@ function setupSellerApplicationForm() {
         const storeLogoFile = this.querySelector('[name="store_logo"]').files[0];
         const govIdFile = this.querySelector('[name="government_id"]').files[0];
         
-        if (!storeName || !storeDesc) {
-            showToast('Please fill in all required fields', 'error');
+        if ((!isRejectedResubmission || isRejectedField('store_name')) && !storeName) {
+            showToast('Please enter your store name', 'error');
+            return;
+        }
+
+        if ((!isRejectedResubmission || isRejectedField('store_description')) && !storeDesc) {
+            showToast('Please enter your store description', 'error');
             return;
         }
         
@@ -2197,34 +2230,34 @@ function setupSellerApplicationForm() {
             return;
         }
         
-        if (!storeLogoFile) {
+        if ((!isRejectedResubmission || isRejectedField('store_logo')) && !storeLogoFile) {
             showToast('Please upload a store logo', 'error');
             return;
         }
         
-        if (!govIdFile) {
+        if ((!isRejectedResubmission || isRejectedField('government_id')) && !govIdFile) {
             showToast('Please upload your government ID', 'error');
             return;
         }
         
         const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-        if (!allowedTypes.includes(storeLogoFile.type)) {
+        if (storeLogoFile && !allowedTypes.includes(storeLogoFile.type)) {
             showToast('Store logo must be JPG, PNG, GIF, or WebP', 'error');
             return;
         }
         
-        if (!allowedTypes.includes(govIdFile.type)) {
+        if (govIdFile && !allowedTypes.includes(govIdFile.type)) {
             showToast('Government ID must be JPG, PNG, GIF, or WebP', 'error');
             return;
         }
         
         const maxSize = 5 * 1024 * 1024; // 5MB
-        if (storeLogoFile.size > maxSize) {
+        if (storeLogoFile && storeLogoFile.size > maxSize) {
             showToast('Store logo must be less than 5MB', 'error');
             return;
         }
         
-        if (govIdFile.size > maxSize) {
+        if (govIdFile && govIdFile.size > maxSize) {
             showToast('Government ID must be less than 5MB', 'error');
             return;
         }
@@ -2242,58 +2275,74 @@ function setupSellerApplicationForm() {
         const logoText = document.getElementById('logoProgressText');
         const idText = document.getElementById('idProgressText');
         
-        logoProgress.style.display = 'block';
-        idProgress.style.display = 'block';
+        logoProgress.style.display = storeLogoFile ? 'block' : 'none';
+        idProgress.style.display = govIdFile ? 'block' : 'none';
         logoBar.style.width = '0%';
         idBar.style.width = '0%';
-        logoText.textContent = 'Uploading logo...';
-        idText.textContent = 'Uploading ID...';
+        logoText.textContent = storeLogoFile ? 'Uploading logo...' : 'Using previous logo';
+        idText.textContent = govIdFile ? 'Uploading ID...' : 'Using previous ID';
         
         try {
-            // Upload logo to Cloudinary
-            logoBar.style.width = '30%';
-            const logoResult = await uploadToCloudinary(storeLogoFile, 'e-flowers/sellers/{{ user.id }}/logo');
-            if (!logoResult.success) throw new Error('Logo upload failed: ' + (logoResult.error || 'Unknown error'));
-            logoBar.style.width = '70%';
+            let logoResult = null;
+            let idResult = null;
+
+            if (storeLogoFile) {
+                logoBar.style.width = '30%';
+                logoResult = await uploadToCloudinary(storeLogoFile, 'e-flowers/sellers/{{ user.id }}/logo');
+                if (!logoResult.success) throw new Error('Logo upload failed: ' + (logoResult.error || 'Unknown error'));
+                logoBar.style.width = '70%';
+            }
             
-            // Upload ID to Cloudinary
-            idBar.style.width = '30%';
-            const idResult = await uploadToCloudinary(govIdFile, 'e-flowers/sellers/{{ user.id }}/govt_id');
-            if (!idResult.success) throw new Error('ID upload failed: ' + (idResult.error || 'Unknown error'));
-            idBar.style.width = '70%';
+            if (govIdFile) {
+                idBar.style.width = '30%';
+                idResult = await uploadToCloudinary(govIdFile, 'e-flowers/sellers/{{ user.id }}/govt_id');
+                if (!idResult.success) throw new Error('ID upload failed: ' + (idResult.error || 'Unknown error'));
+                idBar.style.width = '70%';
+            }
             
             // Create form data with Cloudinary URLs
             const fd = new FormData();
             fd.append('store_name', storeName);
             fd.append('store_description', storeDesc);
             fd.append('agree_terms', agreeTerms);
-            fd.append('store_logo_public_id', logoResult.public_id);
-            fd.append('store_logo_url', logoResult.url);
-            fd.append('government_id_public_id', idResult.public_id);
-            fd.append('government_id_url', idResult.url);
+            if (logoResult) {
+                fd.append('store_logo_public_id', logoResult.public_id);
+                fd.append('store_logo_url', logoResult.url);
+            }
+            if (idResult) {
+                fd.append('government_id_public_id', idResult.public_id);
+                fd.append('government_id_url', idResult.url);
+            }
             
             // Add CSRF token
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 
                              document.querySelector('input[name="csrf_token"]')?.value;
-            fd.append('csrf_token', csrfToken);
             
-            logoBar.style.width = '90%';
-            idBar.style.width = '90%';
-            logoText.textContent = 'Submitting application...';
-            idText.textContent = 'Submitting application...';
+            if (storeLogoFile) {
+                logoBar.style.width = '90%';
+                logoText.textContent = 'Submitting application...';
+            }
+            if (govIdFile) {
+                idBar.style.width = '90%';
+                idText.textContent = 'Submitting application...';
+            }
             
-            // Submit application
+            // Submit application with CSRF token in header
             const r = await fetch('/seller/apply', { 
-                method: 'POST', 
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
                 body: fd 
             });
             const d = await r.json();
             
-            logoBar.style.width = '100%';
-            idBar.style.width = '100%';
+            if (storeLogoFile) logoBar.style.width = '100%';
+            if (govIdFile) idBar.style.width = '100%';
             
             if (d.success) {
-                showToast('✓ Application submitted!', 'success');
+                showToast('Application submitted!', 'success');
+                window._rejectedAppData = null;
                 cancelSellerApplication();
                 this.reset();
                 document.getElementById('logoPreview').style.display = 'none';
@@ -2925,6 +2974,59 @@ function updateGenderOtherVisibility() {
     }
 }
 
+function syncProfileUI(user) {
+    if (!user) return;
+
+    const avatarName = document.querySelector('.avatar-name');
+    const avatarMeta = document.querySelector('.avatar-meta');
+    const avatarCircle = document.querySelector('.avatar-circle');
+    const profileForm = document.getElementById('profileForm');
+
+    if (avatarName) avatarName.textContent = user.full_name || 'Your Name';
+    if (avatarMeta) avatarMeta.textContent = user.email || '';
+
+    if (avatarCircle) {
+        if (user.avatar_url) {
+            avatarCircle.innerHTML = `<img src="${user.avatar_url}?t=${Date.now()}" alt="Profile">`;
+        } else {
+            avatarCircle.textContent = user.full_name ? user.full_name.charAt(0).toUpperCase() : 'U';
+        }
+    }
+
+    if (!profileForm) return;
+
+    const setValue = (name, value) => {
+        const input = profileForm.querySelector(`[name="${name}"]`);
+        if (input) input.value = value || '';
+    };
+
+    setValue('first_name', user.first_name);
+    setValue('last_name', user.last_name);
+    setValue('email', user.email);
+    setValue('phone', user.phone);
+    setValue('birthday', user.birthday);
+
+    const genderValue = user.gender || '';
+    const standardGenders = ['male', 'female', 'other'];
+    const radios = profileForm.querySelectorAll('input[name="gender"]');
+    radios.forEach(radio => {
+        radio.checked = false;
+        if (standardGenders.includes(genderValue) && radio.value === genderValue) {
+            radio.checked = true;
+        }
+        if (!standardGenders.includes(genderValue) && genderValue && radio.value === 'other') {
+            radio.checked = true;
+        }
+    });
+
+    const otherInput = document.getElementById('gender_other');
+    if (otherInput) {
+        otherInput.value = !standardGenders.includes(genderValue) ? genderValue : '';
+    }
+
+    updateGenderOtherVisibility();
+}
+
 function setupProfileForm() {
     // Ensure custom gender field is correct on load
     updateGenderOtherVisibility();
@@ -2950,6 +3052,7 @@ function setupProfileForm() {
         e.preventDefault();
         const btn = this.querySelector('button[type="submit"]');
         const orig = btn.innerHTML;
+        let savedSuccessfully = false;
         btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving…';
         btn.disabled = true;
         try {
@@ -2963,7 +3066,9 @@ function setupProfileForm() {
             const r = await fetch('/api/account/profile/update', { method: 'POST', body: formData });
             const d = await r.json();
             if (d.success) {
+                syncProfileUI(d.user);
                 showToast('✓ Profile saved', 'success');
+                savedSuccessfully = true;
             } else {
                 showToast('Error: ' + (d.error || 'Unknown error'), 'error');
             }
@@ -2972,7 +3077,7 @@ function setupProfileForm() {
             showToast('Network error. Please try again.', 'error');
         } finally { 
             btn.innerHTML = orig; 
-            btn.disabled = true; 
+            btn.disabled = savedSuccessfully; 
         }
     });
 }
@@ -3124,21 +3229,54 @@ function checkApplicationStatus() {
         .catch(err => console.error('Error checking application status:', err));
 }
 
+function getSellerProfileRequirements() {
+    const phone = {{ (user.phone if user and user.phone else '')|tojson }};
+    const birthday = {{ (user.birthday if user and user.birthday else '')|tojson }};
+    const gender = {{ (user.gender if user and user.gender else '')|tojson }};
+    const missing = [];
+
+    if (!String(phone || '').trim()) missing.push('phone number');
+    if (!String(birthday || '').trim()) missing.push('birthday');
+    if (!String(gender || '').trim()) missing.push('gender');
+
+    return { phone, birthday, gender, missing };
+}
+
 function showSellerApplication() {
+    const profileRequirements = getSellerProfileRequirements();
+    if (profileRequirements.missing.length > 0) {
+        showToast(`Please complete your basic information first: ${profileRequirements.missing.join(', ')}.`, 'error');
+        const basicInfoCard = document.getElementById('basicInformationCard');
+        if (basicInfoCard) {
+            basicInfoCard.classList.remove('highlight-required');
+            void basicInfoCard.offsetWidth;
+            basicInfoCard.classList.add('highlight-required');
+            basicInfoCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            window.clearTimeout(window._basicInfoHighlightTimer);
+            window._basicInfoHighlightTimer = window.setTimeout(() => {
+                basicInfoCard.classList.remove('highlight-required');
+            }, 2600);
+        }
+        return;
+    }
+
     document.getElementById('applicationStatus').style.display = 'none';
     const formDiv = document.getElementById('sellerApplicationForm');
     formDiv.style.display = 'block';
+    const form = document.getElementById('sellerAppForm');
+    if (!form) return;
 
     // Pre-fill form with previous application data if rejected
     const prev = window._rejectedAppData;
     if (prev && prev.status === 'rejected') {
-        const form = document.getElementById('sellerAppForm');
-        if (!form) return;
-
         const nameInput = form.querySelector('[name="store_name"]');
         const descInput = form.querySelector('[name="store_description"]');
+        const logoInput = form.querySelector('[name="store_logo"]');
+        const idInput = form.querySelector('[name="government_id"]');
         if (nameInput && prev.store_name) nameInput.value = prev.store_name;
         if (descInput && prev.store_description) descInput.value = prev.store_description;
+        if (logoInput) logoInput.required = !!prev.rejection_details?.store_logo?.rejected;
+        if (idInput) idInput.required = !!prev.rejection_details?.government_id?.rejected;
 
         // Show rejection badges on fields
         const rd = prev.rejection_details || {};
@@ -3188,6 +3326,17 @@ function showSellerApplication() {
                 idPreview.querySelector('img').src = prev.government_id_url;
             }
         }
+    } else {
+        form.reset();
+        form.querySelectorAll('.rejection-indicator').forEach(el => el.remove());
+        const logoInput = form.querySelector('[name="store_logo"]');
+        const idInput = form.querySelector('[name="government_id"]');
+        if (logoInput) logoInput.required = true;
+        if (idInput) idInput.required = true;
+        const logoPreview = document.getElementById('logoPreview');
+        const idPreview = document.getElementById('idPreview');
+        if (logoPreview) logoPreview.style.display = 'none';
+        if (idPreview) idPreview.style.display = 'none';
     }
 }
 

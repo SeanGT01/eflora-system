@@ -709,7 +709,7 @@
                      data-main-category-id="{{ p.main_category_id|default('') }}"
                      data-store-category-id="{{ p.store_category_id|default('') }}"
                      data-store-category-name="{{ p.store_category_name|default('')|lower }}"
-                     data-price="{{ p.price }}"
+                     data-price="{{ p.special_price if p.special_price and p.special_price < p.price else p.price }}"
                      data-stock="{{ p.stock_quantity }}"
                      data-is-available="{{ 'true' if p.is_available else 'false' }}"
                      data-has-variants="{{ 'true' if p.variants else 'false' }}"
@@ -756,7 +756,14 @@
 
                     <div class="pos-tile-body">
                         <div class="pos-tile-name">{{ p.name }}</div>
-                        <div class="pos-tile-price">₱{{ "%.2f"|format(p.price) }}</div>
+                        <div class="pos-tile-price">
+                            {% if p.special_price and p.special_price < p.price %}
+                            ₱{{ "%.2f"|format(p.special_price) }}
+                            <span style="text-decoration:line-through;font-size:11px;opacity:0.65;margin-left:3px;">₱{{ "%.2f"|format(p.price) }}</span>
+                            {% else %}
+                            ₱{{ "%.2f"|format(p.price) }}
+                            {% endif %}
+                        </div>
                         <div class="pos-tile-stock">
                             {% if p.stock_quantity > 0 %}
                                 {{ p.stock_quantity }} in stock
@@ -1119,10 +1126,15 @@ function showVariantModal(tile) {
         <div class="variant-list">`;
 
     variants.forEach(v => {
-        const variantImg  = (v.image_url && v.image_url.trim()) ? v.image_url : productImg;
-        const inStock     = v.stock_quantity > 0;
-        const isAvailable = v.is_available && inStock;
-        const stockLabel  = inStock ? `${v.stock_quantity} in stock` : 'Out of stock';
+        const variantImg     = (v.image_url && v.image_url.trim()) ? v.image_url : productImg;
+        const inStock        = v.stock_quantity > 0;
+        const isAvailable    = v.is_available && inStock;
+        const stockLabel     = inStock ? `${v.stock_quantity} in stock` : 'Out of stock';
+        const effectivePrice = (v.special_price && parseFloat(v.special_price) > 0 && parseFloat(v.special_price) < parseFloat(v.price))
+            ? parseFloat(v.special_price) : parseFloat(v.price);
+        const priceHtml = (effectivePrice < parseFloat(v.price))
+            ? `<div class="variant-item-price">₱${effectivePrice.toFixed(2)} <span style="text-decoration:line-through;font-size:11px;opacity:0.65;">₱${parseFloat(v.price).toFixed(2)}</span></div>`
+            : `<div class="variant-item-price">₱${parseFloat(v.price).toFixed(2)}</div>`;
 
         const variantImgHtml = (variantImg && variantImg.trim())
             ? `<img class="variant-item-img" src="${variantImg}" alt="${esc(v.name)}">`
@@ -1130,7 +1142,7 @@ function showVariantModal(tile) {
 
         html += `
             <div class="variant-item ${isAvailable ? '' : 'unavailable'}"
-                 onclick="${isAvailable ? `selectVariant(${productId}, ${v.id}, '${esc(v.name)}', ${v.price}, '${variantImg || ''}', ${v.stock_quantity})` : ''}">
+                 onclick="${isAvailable ? `selectVariant(${productId}, ${v.id}, '${esc(v.name)}', ${effectivePrice}, '${variantImg || ''}', ${v.stock_quantity})` : ''}">
                 ${variantImgHtml}
                 <div class="variant-item-info">
                     <div class="variant-item-name">${esc(v.name)}</div>
@@ -1139,7 +1151,7 @@ function showVariantModal(tile) {
                         <span>${stockLabel}</span>
                     </div>
                 </div>
-                <div class="variant-item-price">₱${parseFloat(v.price).toFixed(2)}</div>
+                ${priceHtml}
             </div>`;
     });
 

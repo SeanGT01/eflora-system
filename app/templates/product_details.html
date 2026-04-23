@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_price_display.html" import price_tag %}
 
 {% block title %}{{ product.name }} — E-FLOWERS{% endblock %}
 
@@ -1508,10 +1509,14 @@
 
         <!-- Price -->
         <div class="price-block">
+            {% if product.special_price and product.special_price < product.price %}
+            <div class="price-current" id="currentPrice">₱{{ "%.0f"|format(product.special_price) }}</div>
+            <div class="price-original" id="originalPrice">₱{{ "%.0f"|format(product.price) }}</div>
+            <div class="price-discount-badge" id="discountBadge">{{ product.discount_pct }}% off</div>
+            {% else %}
             <div class="price-current" id="currentPrice">₱{{ "%.0f"|format(product.price) }}</div>
-            {% if product.price > 500 %}
-           <div class="price-original" id="originalPrice" style="display: none;">₱{{ "%.0f"|format(product.price|float * 1.2) }}</div>
-            <div class="price-discount-badge" id="discountBadge" style="display: none;">-17%</div>
+            <div class="price-original" id="originalPrice" style="display:none;"></div>
+            <div class="price-discount-badge" id="discountBadge" style="display:none;"></div>
             {% endif %}
         </div>
 
@@ -1545,6 +1550,9 @@
                             data-variant-image="{% if variant.image_url %}{{ variant.image_url }}{% endif %}"
                             onclick="selectVariant(this)">
                         {{ variant.name }}
+                        {% if variant.special_price and variant.special_price < variant.price %}
+                        <small style="display:block;font-size:10px;color:#b5445a;">₱{{ "%.0f"|format(variant.special_price) }}</small>
+                        {% endif %}
                     </button>
                     {% endfor %}
                 </div>
@@ -1592,7 +1600,8 @@
 
     <div class="addons-grid" id="addonsGrid">
         {% for ap in addon_products %}
-        <div class="addon-card" data-id="{{ ap.id }}" data-price="{{ ap.price }}"
+        <div class="addon-card" data-id="{{ ap.id }}"
+             data-price="{{ ap.special_price if ap.special_price and ap.special_price < ap.price else ap.price }}"
              data-name="{{ ap.name }}" data-cat="{{ ap.main_category.name if ap.main_category else 'other' }}"
              onclick="toggleAddon(this)">
             {% if ap.images and ap.images[0] %}
@@ -1606,7 +1615,14 @@
             </div>
             {% endif %}
             <div class="addon-card-name">{{ ap.name }}</div>
-            <div class="addon-card-price">₱{{ "%.0f"|format(ap.price) }}</div>
+            <div class="addon-card-price">
+                {% if ap.special_price and ap.special_price < ap.price %}
+                    ₱{{ "%.0f"|format(ap.special_price) }}
+                    <span style="text-decoration:line-through;font-size:0.8em;opacity:0.6;margin-left:2px;">₱{{ "%.0f"|format(ap.price) }}</span>
+                {% else %}
+                    ₱{{ "%.0f"|format(ap.price) }}
+                {% endif %}
+            </div>
             <div class="addon-check"><i class="ri-check-line"></i></div>
             <button class="addon-info-btn" onclick="event.stopPropagation(); showAddonInfo({{ ap.id }})">
                 <i class="ri-information-line"></i>
@@ -1708,22 +1724,22 @@
             <div class="product-content">
                 <div class="product-store">{{ rp.store.name if rp.store else 'Flower Shop' }}</div>
                 <h3 class="product-title">{{ rp.name }}</h3>
-                <div class="product-price">₱{{ "%.2f"|format(rp.price) }}</div>
+                <div class="product-price">{{ price_tag(rp, 'md') }}</div>
                 <div class="product-actions">
                     {% if rp.stock_quantity > 0 and rp.is_available %}
                     <button class="btn btn-primary" onclick='addToCart({
                         id: {{ rp.id }},
                         name: "{{ rp.name|replace('"', '\\"')|safe }}",
-                        price: {{ rp.price }},
+                        price: {{ rp.effective_price }},
                         store_id: {{ rp.store_id }},
                         store_name: "{{ (rp.store.name if rp.store else 'Flower Shop')|replace('"', '\\"')|safe }}",
                         image_url: "{{ rp.images[0].image_url if rp.images and rp.images[0] else '' }}"
                     })'>
                         <i class="ri-shopping-bag-line"></i> Add to Basket
                     </button>
-                    <button class="btn btn-outline btn-icon" onclick="viewProduct({{ rp.id }})">
+                    <a href="{{ url_for('templates.product_details', product_id=rp.id) }}" class="btn btn-outline btn-icon" title="View details" style="display:flex; align-items:center; justify-content:center;">
                         <i class="ri-eye-line"></i>
-                    </button>
+                    </a>
                     {% else %}
                     <button class="btn btn-outline" disabled style="flex:1;opacity:0.5;cursor:not-allowed;">Out of Stock</button>
                     {% endif %}
@@ -1748,7 +1764,7 @@
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="document.getElementById('addonInfoModal').classList.remove('active'); document.body.style.overflow='';">Close</button>
             <button class="btn btn-rose" id="addonInfoAddBtn">
-                <i class="ri-add-line"></i> Add to Order
+                <i class="ri-shopping-bag-line"></i> Add to Basket
             </button>
         </div>
     </div>
@@ -1762,10 +1778,26 @@
        VARIABLE DECLARATIONS
     ════════════════════════════════ */
    let selectedVariant = null;  // ✅ Will be { id, name, price, stock, image_url }
-let currentPrice = {{ product.price }};
+let currentPrice = {{ product.effective_price }};
 let currentStock = {{ product.stock_quantity }};
 let currentImage = null;
 let qty = 1;
+
+function updatePriceDisplay(price, specialPrice, discountPct) {
+    const priceEl    = document.getElementById('currentPrice');
+    const origEl     = document.getElementById('originalPrice');
+    const badgeEl    = document.getElementById('discountBadge');
+    if (!priceEl) return;
+    if (specialPrice && specialPrice > 0 && specialPrice < price) {
+        priceEl.textContent = '₱' + Math.round(specialPrice).toLocaleString();
+        if (origEl)  { origEl.textContent = '₱' + Math.round(price).toLocaleString(); origEl.style.display = ''; }
+        if (badgeEl) { badgeEl.textContent = discountPct + '% off'; badgeEl.style.display = ''; }
+    } else {
+        priceEl.textContent = '₱' + Math.round(price).toLocaleString();
+        if (origEl)  origEl.style.display = 'none';
+        if (badgeEl) badgeEl.style.display = 'none';
+    }
+}
 
 function updateGalleryStockTag() {
     const galleryStockTag = document.getElementById('galleryStockTag');
@@ -1860,6 +1892,9 @@ const mainProduct = {
     id: {{ product.id }},
     name: {{ product.name | tojson }},
     price: {{ product.price }},
+    special_price: {{ product.special_price if product.special_price else 'null' }},
+    effective_price: {{ product.effective_price }},
+    discount_pct: {{ product.discount_pct if product.discount_pct else 'null' }},
     stock: {{ product.stock_quantity }},
     store_id: {{ product.store_id }},
     store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
@@ -1879,6 +1914,9 @@ const variants = [
             id: {{ variant.id }},
             name: {{ variant.name | tojson }},
             price: {{ variant.price }},
+            special_price: {{ variant.special_price if variant.special_price else 'null' }},
+            effective_price: {{ variant.effective_price }},
+            discount_pct: {{ variant.discount_pct if variant.discount_pct else 'null' }},
             stock: {{ variant.stock_quantity }},
             image_url: {{ variant.image_url | tojson if variant.image_url else 'null' }},
             attributes: {{ variant.attributes | tojson if variant.attributes else 'null' }}
@@ -1993,11 +2031,11 @@ function setGalleryImages(nextImages) {
         console.log('✅ Main product selected');
         
         selectedVariant = null;  // ✅ CLEAR VARIANT
-        currentPrice = mainProduct.price;
+        currentPrice = mainProduct.effective_price || mainProduct.price;
         currentStock = mainProduct.stock;
         
         // Update price display
-        document.getElementById('currentPrice').textContent = '₱' + Math.round(mainProduct.price).toLocaleString();
+        updatePriceDisplay(mainProduct.price, mainProduct.special_price, mainProduct.discount_pct);
         
         // Update rating display for main product
         updateRatingDisplay('main');
@@ -2011,25 +2049,31 @@ function setGalleryImages(nextImages) {
         // ═══════════════════════════════════════════════════════════
         console.log('✅ Variant selected:', variantId);
         
+        // Find the matching variant to get special_price
+        const variantObj = variants.find(v => v.id === parseInt(variantId)) || {};
+
         // ✅ STORE VARIANT DATA CORRECTLY
         selectedVariant = {
             id: parseInt(variantId),
             name: variantName,
             price: variantPrice,
+            special_price: variantObj.special_price || null,
+            effective_price: variantObj.effective_price || variantPrice,
+            discount_pct: variantObj.discount_pct || null,
             stock: variantStock,
             image_url: variantImage && variantImage !== 'null' ? variantImage : null
         };
         
         console.log('✅ Stored selectedVariant:', selectedVariant);
         
-        currentPrice = variantPrice;
+        currentPrice = selectedVariant.effective_price;
         currentStock = variantStock;
         
         // Update rating display for this variant
         updateRatingDisplay(variantId);
         
         // Update price display
-        document.getElementById('currentPrice').textContent = '₱' + Math.round(variantPrice).toLocaleString();
+        updatePriceDisplay(variantPrice, selectedVariant.special_price, selectedVariant.discount_pct);
         
         const fallbackImage = variantImage && variantImage !== 'null' && variantImage !== ''
             ? variantImage
@@ -2159,20 +2203,22 @@ function clearDelivery() {
     /* ════════════════════════════════
        ADD-ONS
     ════════════════════════════════ */
-    const selectedAddons = new Map(); // id -> {name, price}
+    const selectedAddons = new Map(); // id -> {id, name, price, image_url}
 let addonInfoTarget = null;
  
 function toggleAddon(card) {
-    const id    = card.dataset.id;
+    const id = parseInt(card.dataset.id, 10);
     const price = parseFloat(card.dataset.price);
-    const name  = card.dataset.name;
+    const name = card.dataset.name;
+    const imageEl = card.querySelector('img');
+    const imageUrl = imageEl ? imageEl.src : '';
  
     if (card.classList.contains('selected')) {
         card.classList.remove('selected');
         selectedAddons.delete(id);
     } else {
         card.classList.add('selected');
-        selectedAddons.set(id, { name, price });
+        selectedAddons.set(id, { id, name, price, image_url: imageUrl });
     }
     updateTotal();
 }
@@ -2205,12 +2251,24 @@ function filterAddons(cat, btn) {
             </div>
         </div>`;
  
-    document.getElementById('addonInfoAddBtn').onclick = () => {
-        if (addonInfoTarget && !addonInfoTarget.classList.contains('selected')) {
-            toggleAddon(addonInfoTarget);
+    document.getElementById('addonInfoAddBtn').onclick = async () => {
+        if (!addonInfoTarget) return;
+        const btn = document.getElementById('addonInfoAddBtn');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+        btn.disabled = true;
+
+        try {
+            await addSingleAddonToCart(addonInfoTarget);
+            document.getElementById('addonInfoModal').classList.remove('active');
+            document.body.style.overflow = '';
+        } catch (error) {
+            console.error('❌ Failed to add add-on from modal:', error);
+            showToast('Could not add item. Please try again.', 'error');
+        } finally {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
         }
-        document.getElementById('addonInfoModal').classList.remove('active');
-        document.body.style.overflow = '';
     };
  
     document.getElementById('addonInfoModal').classList.add('active');
@@ -2423,6 +2481,35 @@ function updateTotal() {
     selectedAddons.forEach(addon => { total += addon.price; });
     document.getElementById('orderTotal').textContent = '₱' + Math.round(total).toLocaleString();
 }
+
+function buildAddonCartItem(addon) {
+    return {
+        id: addon.id,
+        name: addon.name,
+        price: addon.price,
+        store_id: mainProduct.store_id,
+        store_name: mainProduct.store_name,
+        image_url: addon.image_url || '',
+        quantity: 1
+    };
+}
+
+async function addSingleAddonToCart(addonCard) {
+    if (typeof window.addToCart !== 'function') {
+        throw new Error('addToCart function not found');
+    }
+
+    const addon = {
+        id: parseInt(addonCard.dataset.id, 10),
+        name: addonCard.dataset.name,
+        price: parseFloat(addonCard.dataset.price),
+        image_url: addonCard.querySelector('img') ? addonCard.querySelector('img').src : ''
+    };
+
+    const cartItem = buildAddonCartItem(addon);
+    await window.addToCart(cartItem);
+    showToast(`✓ ${addon.name} added to basket`);
+}
     /* ════════════════════════════════
        CART FUNCTIONS - MATCHING STORE_DETAIL.HTML
     ════════════════════════════════ */
@@ -2472,7 +2559,18 @@ async function addToCartWithVariant() {
         
         if (typeof window.addToCart === 'function') {
             await window.addToCart(product);
-            showToast(`✓ ${product.name} added to basket`);
+
+            if (selectedAddons.size > 0) {
+                for (const addon of selectedAddons.values()) {
+                    const addonItem = buildAddonCartItem(addon);
+                    await window.addToCart(addonItem);
+                }
+            }
+
+            const addonSuffix = selectedAddons.size > 0
+                ? ` (+${selectedAddons.size} add-on${selectedAddons.size > 1 ? 's' : ''})`
+                : '';
+            showToast(`✓ ${product.name} added to basket${addonSuffix}`);
         } else {
             console.error('❌ addToCart function not found');
             showToast('Error adding to cart. Please try again.', 'error');
@@ -2525,7 +2623,7 @@ async function addToCartWithVariant() {
 ════════════════════════════════ */
  
 function viewProduct(productId) {
-    window.location.href = "{{ url_for('templates.product_detail', product_id=0) }}".replace('0', productId);
+    window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
 }
 
 /* ════════════════════════════════

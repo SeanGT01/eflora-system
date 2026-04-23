@@ -285,13 +285,18 @@ def validate_checkout():
                 if not item.product.is_available:
                     raise Exception(f"{item.product.name} is no longer available")
 
-                item_price = item.variant.price if item.variant else item.product.price
+                src = item.variant if item.variant else item.product
+                item_price = Decimal(str(src.effective_price))
+                orig_price = float(src.price)
+                disc_pct = src.discount_pct
                 subtotal += item_price * item.quantity
                 order_items_data.append({
                     "product_id": item.product_id,
                     "variant_id": item.variant_id,
                     "quantity": item.quantity,
                     "price": float(item_price),
+                    "original_price": orig_price if disc_pct else None,
+                    "discount_pct": disc_pct,
                 })
 
             delivery_check = _check_store_delivery(store, address, subtotal)
@@ -388,9 +393,9 @@ def upload_proof_temp():
         if not file or file.filename == "":
             return jsonify({"error": "No file selected"}), 400
 
-        allowed_extensions = {"jpg", "jpeg", "png", "gif"}
+        allowed_extensions = {"jpg", "jpeg", "png", "gif", "webp", "heic", "heif"}
         if not ("." in file.filename and file.filename.rsplit(".", 1)[1].lower() in allowed_extensions):
-            return jsonify({"error": "Only image files allowed (jpg, png, gif)"}), 400
+            return jsonify({"error": "Only image files allowed (jpg, jpeg, png, gif, webp, heic, heif)"}), 400
 
         try:
             from app.utils.cloudinary_helper import upload_to_cloudinary
@@ -402,7 +407,9 @@ def upload_proof_temp():
             )
 
             if not result or not result.get("success"):
-                return jsonify({"error": "Upload failed"}), 500
+                error_message = (result or {}).get("error") or "Upload failed"
+                print(f"❌ Temp proof upload failed: {error_message}")
+                return jsonify({"error": f"Upload failed: {error_message}"}), 500
 
             return jsonify({
                 "success": True,
@@ -605,6 +612,9 @@ def toggle_item_selection(item_id):
                     'name': prod.name,
                     'description': prod.description,
                     'price': float(prod.price),
+                    'special_price': float(prod.special_price) if prod.special_price else None,
+                    'effective_price': prod.effective_price,
+                    'discount_pct': prod.discount_pct,
                     'stock_quantity': prod.stock_quantity,
                     'main_category_id': prod.main_category_id,
                     'main_category_name': prod.main_category.name if prod.main_category else 'Uncategorized',
@@ -695,6 +705,9 @@ def toggle_store_selection(store_id):
                     'name': prod.name,
                     'description': prod.description,
                     'price': float(prod.price),
+                    'special_price': float(prod.special_price) if prod.special_price else None,
+                    'effective_price': prod.effective_price,
+                    'discount_pct': prod.discount_pct,
                     'stock_quantity': prod.stock_quantity,
                     'main_category_id': prod.main_category_id,
                     'main_category_name': prod.main_category.name if prod.main_category else 'Uncategorized',
@@ -809,13 +822,18 @@ def process_checkout():
                 if not item.product.is_available:
                     raise Exception(f"{item.product.name} is no longer available")
 
-                item_price = item.variant.price if item.variant else item.product.price
+                src = item.variant if item.variant else item.product
+                item_price = Decimal(str(src.effective_price))
+                orig_price = float(src.price)
+                disc_pct = src.discount_pct
                 subtotal += item_price * item.quantity
                 order_items_data.append({
                     "product_id": int(item.product_id),
                     "variant_id": int(item.variant_id) if item.variant_id else None,
                     "quantity": int(item.quantity),
                     "price": float(item_price),
+                    "original_price": orig_price if disc_pct else None,
+                    "discount_pct": disc_pct,
                 })
 
             store_checkout_data[store_id] = {
@@ -1073,7 +1091,7 @@ def buy_now_validate():
             return jsonify({"error": f'"{product.name}" is no longer available'}), 400
 
         variant = None
-        item_price = product.price
+        item_price = Decimal(str(product.effective_price))
         if variant_id:
             variant = ProductVariant.query.filter_by(id=variant_id, product_id=product_id).first()
             if not variant:
@@ -1082,7 +1100,7 @@ def buy_now_validate():
                 return jsonify({"error": f'"{variant.name}" is no longer available'}), 400
             if variant.stock_quantity < quantity:
                 return jsonify({"error": f'Insufficient stock for "{variant.name}". Available: {variant.stock_quantity}'}), 400
-            item_price = variant.price
+            item_price = Decimal(str(variant.effective_price))
         else:
             if product.stock_quantity < quantity:
                 return jsonify({"error": f'Insufficient stock for "{product.name}". Available: {product.stock_quantity}'}), 400
@@ -1095,7 +1113,7 @@ def buy_now_validate():
         if not store:
             return jsonify({"error": "Store not found"}), 404
 
-        subtotal = Decimal(str(item_price)) * quantity
+        subtotal = item_price * quantity
         delivery_check = _check_store_delivery(store, address, subtotal)
 
         if not delivery_check["can_deliver"]:
@@ -1172,7 +1190,7 @@ def buy_now_create_order():
             return jsonify({"error": f'"{product.name}" is no longer available'}), 400
 
         variant = None
-        item_price = product.price
+        item_price = Decimal(str(product.effective_price))
         if variant_id:
             variant = ProductVariant.query.filter_by(id=variant_id, product_id=product_id).first()
             if not variant:
@@ -1181,7 +1199,7 @@ def buy_now_create_order():
                 return jsonify({"error": f'"{variant.name}" is no longer available'}), 400
             if variant.stock_quantity < quantity:
                 return jsonify({"error": f'Insufficient stock for "{variant.name}".'}), 400
-            item_price = variant.price
+            item_price = Decimal(str(variant.effective_price))
         else:
             if product.stock_quantity < quantity:
                 return jsonify({"error": f'Insufficient stock for "{product.name}".'}), 400
@@ -1194,7 +1212,7 @@ def buy_now_create_order():
         if not store:
             return jsonify({"error": "Store not found"}), 404
 
-        subtotal = Decimal(str(item_price)) * quantity
+        subtotal = item_price * quantity
         delivery_check = _check_store_delivery(store, address, subtotal)
 
         if not delivery_check["can_deliver"]:

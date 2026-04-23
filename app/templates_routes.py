@@ -294,7 +294,7 @@ def index():
         stores = Store.query\
             .filter_by(status='active')\
             .order_by(Store.created_at.desc())\
-            .limit(4)\
+            .limit(12)\
             .all()
         
         print(f"\n=== DEBUG STORES & LOGOS ===")
@@ -327,7 +327,8 @@ def index():
             products=product_list,
             stores=store_list,
             categories=featured_categories,  # For featured categories section
-            main_categories=main_categories   # For navigation menu
+            main_categories=main_categories,   # For navigation menu
+            now=datetime.now()
         )
     except Exception as e:
         print(f"ERROR loading landing page: {str(e)}")
@@ -1294,6 +1295,9 @@ def product_detail(product_id):
         product = Product.query.get_or_404(product_id)
         store = Store.query.get(product.store_id)
         
+        # Allow anyone (including sellers) to view public product pages
+        # This is NOT a seller-only page
+        
         # Get all main categories for the navigation
         from app.models import Category
         main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
@@ -1347,6 +1351,8 @@ def product_detail(product_id):
         print(f"  Categories for nav: {len(main_categories)}")
         print(f"  Related products: {len(related_products)}")
         print(f"  Add-on products: {len(addon_products)}")
+        print(f"  User role: {session.get('role', 'guest')}")
+        print(f"  ✅ Rendering product_detail.html (public page accessible to all)")
         
         return render_template(
             'product_detail.html',
@@ -1796,6 +1802,7 @@ def approve_seller_application(app_id):
             existing_store.status = 'active'
             existing_store.name = application.store_name
             existing_store.description = application.store_description
+            existing_store.seller_application_id = application.id
             print(f"♻️ Reactivated existing store ID {existing_store.id} for user {user.id}")
         else:
             # First-time approval — create a new store
@@ -1804,7 +1811,8 @@ def approve_seller_application(app_id):
                 name=application.store_name,
                 description=application.store_description,
                 address='Address pending - please update',
-                status='active'
+                status='active',
+                seller_application_id=application.id
             )
             db.session.add(store)
             print(f"🆕 Created new store for user {user.id}")
@@ -1978,6 +1986,7 @@ def create_product():
         
         is_available = request.form.get('is_available', 'false').lower() == 'true'
         has_variants = request.form.get('has_variants', 'false').lower() == 'true'
+        special_price_raw = request.form.get('special_price') or None
         
         print(f"📦 Product data: name={name}, main_category_id={main_category_id}, store_category_id={store_category_id}, has_variants={has_variants}")
         
@@ -2023,12 +2032,21 @@ def create_product():
             if not store_category:
                 return jsonify({'error': 'Invalid store subcategory'}), 400
         
+        special_price_float = None
+        if special_price_raw:
+            try:
+                sp = float(special_price_raw)
+                special_price_float = sp if sp > 0 else None
+            except ValueError:
+                pass
+
         # Create new product with category fields
         product = Product(
             store_id=store.id,
             name=name.strip(),
             description=description.strip() if description else None,
             price=price_float,
+            special_price=special_price_float,
             stock_quantity=stock_int,
             main_category_id=int(main_category_id),
             store_category_id=int(store_category_id) if store_category_id else None,
@@ -2073,6 +2091,23 @@ def create_product():
             print(f"❌ Error parsing cloudinary_images: {e}")
             db.session.rollback()
             return jsonify({'error': 'Invalid image data format'}), 400
+
+        # Respect selected main image index from UI when provided.
+        main_image_index_raw = request.form.get('main_image_index')
+        if main_image_index_raw is not None:
+            try:
+                main_image_index = int(main_image_index_raw)
+                for img in product.images:
+                    img.is_primary = (img.sort_order == main_image_index)
+                print(f"🏷️ Applied main image index: {main_image_index}")
+            except (TypeError, ValueError):
+                print(f"⚠️ Invalid main_image_index: {main_image_index_raw}")
+
+        # Ensure at least one image remains primary.
+        if product.images and not any(img.is_primary for img in product.images):
+            first_img = sorted(product.images, key=lambda x: x.sort_order)[0]
+            first_img.is_primary = True
+            print(f"🏷️ Fallback primary image set to ID: {first_img.id}")
         
         # ===== HANDLE VARIANTS =====
         if has_variants:
@@ -2088,15 +2123,24 @@ def create_product():
                         
                         print(f"  Variant {idx}: {variant_data.get('name')}")
                         
+                        v_special_price = None
+                        if variant_data.get('special_price'):
+                            try:
+                                sp = float(variant_data['special_price'])
+                                v_special_price = sp if sp > 0 else None
+                            except (ValueError, TypeError):
+                                pass
+
                         variant = ProductVariant(
                             product_id=product.id,
                             name=variant_data.get('name'),
                             price=Decimal(str(variant_data.get('price'))),
+                            special_price=v_special_price,
                             stock_quantity=int(variant_data.get('stock_quantity', 0)),
                             sku=variant_data.get('sku'),
                             attributes=variant_data.get('attributes'),
                             sort_order=idx,
-                            is_available=True
+                            is_available=variant_data.get('is_available', True)
                         )
                         
                         # Handle Cloudinary variant image
@@ -2181,6 +2225,16 @@ def manage_product(product_id):
                     product.price = float(request.form['price'])
                 except ValueError:
                     return jsonify({'error': 'Invalid price format'}), 400
+            if 'special_price' in request.form:
+                sp_raw = request.form['special_price']
+                if sp_raw == '' or sp_raw is None:
+                    product.special_price = None
+                else:
+                    try:
+                        sp = float(sp_raw)
+                        product.special_price = sp if sp > 0 else None
+                    except ValueError:
+                        pass
             if 'stock_quantity' in request.form:
                 try:
                     product.stock_quantity = int(request.form['stock_quantity'])
@@ -2312,6 +2366,25 @@ def manage_product(product_id):
                 except Exception as e:
                     print(f"❌ Error processing replacement images: {e}")
 
+            # Respect selected main image index from UI for existing/new/replaced images.
+            main_image_index_raw = request.form.get('main_image_index')
+            if main_image_index_raw is not None:
+                try:
+                    main_image_index = int(main_image_index_raw)
+                    active_images = ProductImage.query.filter_by(product_id=product.id).all()
+                    for img in active_images:
+                        img.is_primary = (img.sort_order == main_image_index)
+                    print(f"🏷️ Applied main image index on edit: {main_image_index}")
+                except (TypeError, ValueError):
+                    print(f"⚠️ Invalid main_image_index on edit: {main_image_index_raw}")
+
+            # Ensure one primary image if images remain.
+            active_images = ProductImage.query.filter_by(product_id=product.id).all()
+            if active_images and not any(img.is_primary for img in active_images):
+                first_img = sorted(active_images, key=lambda x: x.sort_order)[0]
+                first_img.is_primary = True
+                print(f"🏷️ Fallback primary image on edit set to ID: {first_img.id}")
+
             # ===== HANDLE VARIANTS UPDATE =====
             has_variants = request.form.get('has_variants', 'false').lower() == 'true'
             print(f"🎯 Has variants: {has_variants}")
@@ -2361,10 +2434,21 @@ def manage_product(product_id):
                                 if variant:
                                     variant.name = variant_data.get('name')
                                     variant.price = Decimal(str(variant_data.get('price')))
+                                    # special_price
+                                    v_sp_raw = variant_data.get('special_price')
+                                    if v_sp_raw is not None and v_sp_raw != '':
+                                        try:
+                                            sp = float(v_sp_raw)
+                                            variant.special_price = sp if sp > 0 else None
+                                        except (ValueError, TypeError):
+                                            pass
+                                    else:
+                                        variant.special_price = None
                                     variant.stock_quantity = int(variant_data.get('stock_quantity', 0))
                                     variant.sku = variant_data.get('sku')
                                     variant.attributes = variant_data.get('attributes')
                                     variant.sort_order = idx
+                                    variant.is_available = variant_data.get('is_available', True)
                                     variant.updated_at = datetime.utcnow()
                                     
                                     print(f"    ✅ Updated existing variant {variant_id}")
@@ -2392,15 +2476,25 @@ def manage_product(product_id):
                                     kept_variant_ids.append(variant_id)
                             else:
                                 # Create new variant
+                                v_sp_new = None
+                                v_sp_raw_new = variant_data.get('special_price')
+                                if v_sp_raw_new is not None and v_sp_raw_new != '':
+                                    try:
+                                        sp = float(v_sp_raw_new)
+                                        v_sp_new = sp if sp > 0 else None
+                                    except (ValueError, TypeError):
+                                        pass
+
                                 variant = ProductVariant(
                                     product_id=product.id,
                                     name=variant_data.get('name'),
                                     price=Decimal(str(variant_data.get('price'))),
+                                    special_price=v_sp_new,
                                     stock_quantity=int(variant_data.get('stock_quantity', 0)),
                                     sku=variant_data.get('sku'),
                                     attributes=variant_data.get('attributes'),
                                     sort_order=idx,
-                                    is_available=True
+                                    is_available=variant_data.get('is_available', True)
                                 )
                                 
                                 if variant_data.get('cloudinary_public_id'):
@@ -2555,7 +2649,7 @@ def reduce_product_stock(product_id):
     Expected JSON payload:
     {
         "amount": 5,
-        "reason": "damage",  # spoilage, damage, defect, other
+        "reason": "damage",  # spoilage, damage, defect, other, pos_sale
         "reason_notes": "Damaged during shipping",
         "variant_id": 123  # Optional, only for variants
     }
@@ -2676,6 +2770,149 @@ def reduce_product_stock(product_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@templates_bp.route('/seller/products/<int:product_id>/add-stock', methods=['POST'])
+def add_product_stock(product_id):
+    """
+    Record stock addition with audit trail.
+    Handles both main products and variants.
+    
+    Expected JSON payload:
+    {
+        "amount": 10,
+        "reason": "restock",  # found_stock, receiving_error, restock
+        "reason_notes": "Received new shipment",
+        "variant_id": 123  # Optional, only for variants
+    }
+    """
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Get seller's store
+        store = Store.query.filter_by(seller_id=user_id, status='active').first()
+        if not store:
+            return jsonify({'error': 'Store not found'}), 404
+        
+        # Parse request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Invalid JSON data'}), 400
+        
+        # Validate inputs
+        amount = data.get('amount')
+        reason = data.get('reason')
+        reason_notes = data.get('reason_notes', '')
+        variant_id = data.get('variant_id')  # Get variant_id if provided
+        
+        if not amount:
+            return jsonify({'error': 'Addition amount is required'}), 400
+        
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid addition amount - must be integer'}), 400
+        
+        if amount <= 0:
+            return jsonify({'error': 'Addition amount must be positive'}), 400
+        
+        if not reason:
+            return jsonify({'error': 'Reason for addition is required'}), 400
+        
+        if reason not in StockReduction.REASONS:
+            return jsonify({
+                'error': f'Invalid reason. Must be one of: {", ".join(StockReduction.REASONS)}'
+            }), 400
+        
+        # Find the product first
+        product = Product.query.filter_by(id=product_id, store_id=store.id).first()
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+        
+        # Handle variant addition if variant_id is provided
+        variant = None
+        if variant_id:
+            variant = ProductVariant.query.filter_by(id=variant_id, product_id=product.id).first()
+            if not variant:
+                return jsonify({'error': 'Variant not found'}), 404
+            
+            # Add stock to variant
+            variant.stock_quantity += amount
+            variant.updated_at = datetime.utcnow()
+            
+            # Create audit entry for stock addition
+            addition = StockReduction(
+                product_id=product.id,
+                variant_id=variant.id,
+                reduction_amount=amount,  # Using the same field, positive for addition
+                reason=reason,
+                reason_notes=reason_notes,
+                reduced_by=user_id
+            )
+            db.session.add(addition)
+            
+            print(f"✅ Variant stock addition recorded:")
+            print(f"   Product: {product.name} (ID: {product.id})")
+            print(f"   Variant: {variant.name} (ID: {variant.id})")
+            print(f"   Added: {amount} units")
+            print(f"   Reason: {reason}")
+            print(f"   New variant stock: {variant.stock_quantity}")
+            
+            # Update product's updated_at timestamp
+            product.updated_at = datetime.utcnow()
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Stock added {amount} units for variant {variant.name}',
+                'addition': addition.to_dict(),
+                'product': product.to_dict(),
+                'variant': variant.to_dict()
+            }), 200
+            
+        else:
+            # Add stock to main product
+            product.stock_quantity += amount
+            product.updated_at = datetime.utcnow()
+            
+            # Create audit entry for stock addition
+            addition = StockReduction(
+                product_id=product.id,
+                variant_id=None,
+                reduction_amount=amount,  # Using the same field, positive for addition
+                reason=reason,
+                reason_notes=reason_notes,
+                reduced_by=user_id
+            )
+            db.session.add(addition)
+            db.session.commit()
+            
+            print(f"✅ Main product stock addition recorded:")
+            print(f"   Product: {product.name} (ID: {product.id})")
+            print(f"   Added: {amount} units")
+            print(f"   Reason: {reason}")
+            print(f"   New stock: {product.stock_quantity}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Stock added {amount} units',
+                'addition': addition.to_dict(),
+                'product': product.to_dict()
+            }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        print(f"❌ Validation error: {str(e)}")
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error adding stock: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 @templates_bp.route('/seller/products/<int:product_id>/stock-history', methods=['GET'])
 def get_stock_history(product_id):
     """
@@ -3585,6 +3822,8 @@ def pos_create_order():
     if not store:
         return jsonify({'error': 'No active store found for your account.'}), 403
 
+    user_id = session.get('user_id')
+    
     data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'Invalid JSON payload.'}), 400
@@ -3678,26 +3917,56 @@ def pos_create_order():
         discount=discount  # Save the discount
     )
     db.session.add(pos_order)
+    db.session.flush()  # Assign ID to pos_order without committing
 
     # ── Add items and update stock ─────────────────────────────────────────────
-    for item in validated_items:
-        pos_item = POSOrderItem(
-            pos_order=pos_order,
-            product_id=item['product'].id,
-            variant_id=item['variant_id'],
-            quantity=item['quantity'],
-            price=item['price']
-        )
-        db.session.add(pos_item)
+    try:
+        for item in validated_items:
+            pos_item = POSOrderItem(
+                pos_order=pos_order,
+                product_id=item['product'].id,
+                variant_id=item['variant_id'],
+                quantity=item['quantity'],
+                price=item['price']
+            )
+            db.session.add(pos_item)
 
-        # Update stock based on variant or product
-        if item['variant_id']:
-            variant = ProductVariant.query.get(item['variant_id'])
-            variant.stock_quantity -= item['quantity']
-        else:
-            item['product'].stock_quantity -= item['quantity']
+            # Update stock based on variant or product
+            if item['variant_id']:
+                variant = ProductVariant.query.get(item['variant_id'])
+                variant.stock_quantity -= item['quantity']
+                
+                # Create StockReduction record for variant
+                stock_reduction = StockReduction(
+                    product_id=item['product'].id,
+                    variant_id=item['variant_id'],
+                    reduction_amount=item['quantity'],
+                    reason='pos_sale',
+                    reason_notes=f'POS Sale - Order #{pos_order.id}',
+                    reduced_by=user_id
+                )
+                db.session.add(stock_reduction)
+            else:
+                item['product'].stock_quantity -= item['quantity']
+                
+                # Create StockReduction record for main product
+                stock_reduction = StockReduction(
+                    product_id=item['product'].id,
+                    variant_id=None,
+                    reduction_amount=item['quantity'],
+                    reason='pos_sale',
+                    reason_notes=f'POS Sale - Order #{pos_order.id}',
+                    reduced_by=user_id
+                )
+                db.session.add(stock_reduction)
 
-    db.session.commit()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error creating POS order: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to process order: {str(e)}'}), 500
 
     return jsonify({
         'success': True,
@@ -4430,8 +4699,8 @@ def get_cart():
             if item.variant_id:
                 variant = ProductVariant.query.get(item.variant_id)
             
-            # Determine price (variant price takes precedence)
-            price = float(variant.price) if variant else float(product.price)
+            # Determine effective price (uses special_price when active)
+            price = float(variant.effective_price) if variant else float(product.effective_price)
             
             # Determine name
             if variant:
@@ -4460,6 +4729,9 @@ def get_cart():
                     if 'cloudinary_url' not in img and 'image_url' in img:
                         img['cloudinary_url'] = img['image_url']
             
+            original_price = float(variant.price) if variant else float(product.price)
+            discount_pct = variant.discount_pct if variant else product.discount_pct
+
             item_dict = {
                 'id': item.id,
                 'product_id': product.id,
@@ -4470,6 +4742,8 @@ def get_cart():
                 'product': product_dict,  # Full product dict with all image data
                 'store_name': product.store.name if product.store else None,
                 'price': price,
+                'original_price': original_price,
+                'discount_pct': discount_pct,
                 'name': name,
                 'image_url': image_url,  # Top-level convenience field
                 'subtotal': float(price * item.quantity)
@@ -6643,15 +6917,12 @@ def upload_store_logo():
         if not file or not file.filename:
             return jsonify({'success': False, 'error': 'Empty file'}), 400
         
-        # Validate file type
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-        if '.' in file.filename:
-            ext = file.filename.rsplit('.', 1)[1].lower()
-            if ext not in allowed_extensions:
-                return jsonify({
-                    'success': False, 
-                    'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'
-                }), 400
+        # File type validation - allow all image file types
+        if '.' not in file.filename:
+            return jsonify({
+                'success': False, 
+                'error': 'File must have an extension'
+            }), 400
         
         # Validate file size (max 5MB for logos)
         file.seek(0, 2)
@@ -6818,16 +7089,13 @@ def cloudinary_upload():
         print(f"📄 Filename: {file.filename}")
         print(f"📄 File size: {file.tell()} bytes")
         
-        # Validate file type
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-        if '.' in file.filename:
-            ext = file.filename.rsplit('.', 1)[1].lower()
-            if ext not in allowed_extensions:
-                print(f"❌ Invalid file extension: {ext}")
-                return jsonify({
-                    'success': False, 
-                    'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'
-                }), 400
+        # File type validation - allow all image file types
+        if '.' not in file.filename:
+            print(f"❌ File has no extension: {file.filename}")
+            return jsonify({
+                'success': False, 
+                'error': 'File must have an extension'
+            }), 400
         
         # Validate file size (max 10MB)
         file.seek(0, 2)  # Seek to end

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_price_display.html" import price_tag %}
 
 {% block title %}E-FLOWERS - Beautiful Flowers & Plants{% endblock %}
 
@@ -69,7 +70,7 @@
             <div class="product-content">
                 <div class="product-store">{{ product.store_name }}</div>
                 <h3 class="product-title">{{ product.name }}</h3>
-                <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
+                <div class="product-price">{{ price_tag(product, 'md') }}</div>
                 
                 <div class="product-actions">
                     {% if product.stock_quantity > 0 and product.is_available %}
@@ -103,9 +104,13 @@
     <h2 style="font-size: 24px; margin-bottom: 1.5rem; font-weight: 600;">Featured Stores</h2>
     
     {% if stores %}
-    <div class="stores-scroll-container">
+    <div class="stores-carousel">
+        <button class="stores-arrow stores-arrow-left" onclick="scrollStores('left')" aria-label="Previous stores">
+            <i class="ri-chevron-left-line"></i>
+        </button>
+        <div class="stores-scroll-container" id="storesContainer">
     {% for store in stores %}
-    <div class="store-card">
+    <div class="store-card {% if store.approved_at and (now - store.approved_at).days < 7 %}newly-approved{% endif %}">
         <div class="store-avatar">
             {% if store.logo_url %}
                 <img src="{{ store.logo_url }}" alt="{{ store.name }}" onerror="this.style.display='none'; this.parentElement.innerHTML='{{ store.name[0] if store.name else 'S' }}'">
@@ -119,9 +124,18 @@
                 <i class="ri-star-fill" style="color: var(--sunflower);"></i>
                 <span>4.8 • {{ store.product_count }} products</span>
             </div>
-            <p style="color: var(--text-light); margin-bottom: 1rem;">{{ store.address }}</p>
+            <p style="color: var(--text-light); margin-bottom: 1rem;">
+                {% if store.barangay and store.municipality %}
+                    {{ store.barangay }}, {{ store.municipality }}
+                {% elif store.municipality %}
+                    {{ store.municipality }}
+                {% elif store.barangay %}
+                    {{ store.barangay }}
+                {% else %}
+                    {{ store.address or 'Location not available' }}
+                {% endif %}
+            </p>
             <div class="store-stats">
-                <span><i class="ri-truck-line"></i> Free delivery within {{ store.delivery_radius_km }}km</span>
                 <span><i class="ri-time-line"></i> Open Now</span>
             </div>
         </div>
@@ -130,6 +144,10 @@
         </a>
     </div>
     {% endfor %}
+    </div>
+    <button class="stores-arrow stores-arrow-right" onclick="scrollStores('right')" aria-label="Next stores">
+        <i class="ri-chevron-right-line"></i>
+    </button>
     </div>
     {% else %}
     <div class="empty-state">
@@ -171,33 +189,57 @@
 {% block extra_css %}
 <style>
     /* Scrollable container for featured stores */
+    .stores-carousel {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
     .stores-scroll-container {
         display: flex;
         flex-direction: row;
-        gap: 1.5rem;
-        overflow-x: auto;
+        gap: 0.75rem;
+        overflow-x: hidden;
         overflow-y: hidden;
-        padding-bottom: 0.5rem;
+        flex: 1;
         scroll-behavior: smooth;
     }
 
-    /* Scrollbar styling */
-    .stores-scroll-container::-webkit-scrollbar {
-        height: 6px;
-    }
-
-    .stores-scroll-container::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 10px;
-    }
-
-    .stores-scroll-container::-webkit-scrollbar-thumb {
+    .stores-arrow {
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
         background: #d4788a;
-        border-radius: 10px;
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        padding: 0;
+        line-height: 1;
     }
 
-    .stores-scroll-container::-webkit-scrollbar-thumb:hover {
+    .stores-arrow i {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+    }
+
+    .stores-arrow:hover {
         background: #b5445a;
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .stores-arrow:active {
+        transform: scale(0.95);
     }
 
     .store-card {
@@ -210,7 +252,8 @@
         border: 1px solid var(--border);
         transition: all 0.3s ease;
         flex-shrink: 0;
-        min-width: 450px;
+        min-width: 240px;
+        position: relative;
     }
 
     .store-card:hover {
@@ -232,6 +275,23 @@
         font-weight: 500;
         flex-shrink: 0;
         overflow: hidden;
+        position: relative;
+    }
+
+    /* Newly Approved Badge */
+    .store-card.newly-approved::after {
+        content: 'NEW';
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: #ff6b6b;
+        color: white;
+        padding: 0.35rem 0.65rem;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
     }
 
     .store-avatar img {
@@ -275,17 +335,25 @@
     }
 
     @media (max-width: 768px) {
+        .stores-carousel {
+            gap: 0.75rem;
+        }
+
         .stores-scroll-container {
             gap: 1rem;
+        }
+
+        .stores-arrow {
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
         }
 
         .store-card {
             flex-direction: column;
             text-align: center;
-            min-width: 280px;
+            min-width: 220px;
             padding: 1rem;
-            gap: 1rem;
-        }
             gap: 1rem;
         }
 
@@ -311,6 +379,25 @@
 <script>
     function viewProduct(productId) {
         window.location.href = "{{ url_for('customer.product', product_id=0) }}".replace('0', productId);
+    }
+
+    function scrollStores(direction) {
+        const container = document.getElementById('storesContainer');
+        if (!container) return;
+        
+        const scrollAmount = 252; // Width of one store card (240px) + gap (12px)
+        
+        if (direction === 'left') {
+            container.scrollBy({
+                left: -scrollAmount,
+                behavior: 'smooth'
+            });
+        } else if (direction === 'right') {
+            container.scrollBy({
+                left: scrollAmount,
+                behavior: 'smooth'
+            });
+        }
     }
 </script>
 {% endblock %}

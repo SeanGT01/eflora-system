@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_price_display.html" import price_tag %}
 
 {% block title %}{{ store.name }} — E-FLOWERS{% endblock %}
 
@@ -684,12 +685,7 @@
     <!-- ─── Products Column ─── -->
     <div>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem;">
-            <div>
-                <div style="font-size:10px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;color:var(--dusty-rose);margin-bottom:0.4rem;">Browse</div>
-                <h2 style="font-family:var(--font-display);font-size:clamp(24px,3vw,32px);font-weight:400;color:var(--charcoal);line-height:1.15;">
-                    Store Products
-                </h2>
-            </div>
+
             <div style="font-size:13px;color:var(--muted);">
                 <span id="visibleCount">{{ products|length }}</span> items
             </div>
@@ -762,7 +758,7 @@
                         {% endif %}
                         <div class="product-title">{{ product.name }}</div>
                         <div class="product-footer">
-                            <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
+                            <div class="product-price">{{ price_tag(product, 'md') }}</div>
                             <button class="add-btn"
                                 {% if not product.is_available or product.stock_quantity == 0 %}disabled{% endif %}
                                 onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'")|safe }}', {{ product.price }}, '{{ product.category|replace("'", "\\'")|safe }}')"
@@ -827,9 +823,9 @@
                     <i class="ri-time-line"></i>
                     <div>
                         <div class="info-row-label">Status</div>
-                        <div class="info-row-value" id="storeStatusSidebar">
+                       
                             <span class="status-open">Open Now</span>
-                        </div>
+                       
                     </div>
                 </div>
                 <div class="info-row" id="storeHoursRow" style="display:none;">
@@ -844,10 +840,10 @@
                     <div>
                         <div class="info-row-label">Member Since</div>
                         <div class="info-row-value">
-                            {% if store.approved_at %}
-                                {{ store.approved_at[:10] }}
+                            {% if store.created_at %}
+                                {{ store.created_at.strftime('%B %d, %Y') }}
                             {% else %}
-                                E-FLORA Partner
+                                Recently Joined
                             {% endif %}
                         </div>
                     </div>

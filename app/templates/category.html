@@ -1,5 +1,6 @@
 <!-- templates/category.html -->
 {% extends "base.html" %}
+{% from "_price_display.html" import price_tag %}
 
 {% block title %}{{ category_id|title }} - E-FLOWERS{% endblock %}
 
@@ -358,14 +359,16 @@
             <div class="product-content">
                <div class="product-store">{{ product.store_name or 'Flower Shop' }}</div>
                 <h3 class="product-title">{{ product.name }}</h3>
-                <div class="product-price">₱{{ "%.2f"|format(product.price) }}</div>
+                <div class="product-price">{{ price_tag(product, 'md') }}</div>
                 
                 <div class="product-actions">
                     {% if product.stock_quantity > 0 and product.is_available %}
                     <button class="btn btn-primary" onclick='addToCart({
                         id: {{ product.id }},
                         name: "{{ product.name|replace('"', '\\"')|safe }}",
-                        price: {{ product.price }},
+                        price: {{ product.effective_price }},
+                        special_price: {{ product.special_price if product.special_price else "null" }},
+                        effective_price: {{ product.effective_price }},
                         store_id: {{ product.store_id }},
                         store_name: "{{ product.store_name|replace('"', '\\"')|safe if product.store_name else 'Flower Shop' }}",
                         image_url: "{{ product.image_url|safe if product.image_url else '' }}"

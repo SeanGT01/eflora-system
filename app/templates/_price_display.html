@@ -1,0 +1,18 @@
+{% macro price_tag(obj, size='md', show_pct=true) %}
+{#
+  Renders an inline sale-price block.
+  obj   – any object with .price and optionally .special_price / .discount_pct
+  size  – 'sm' | 'md' | 'lg'
+#}
+{% set sp  = obj.special_price  if obj.special_price  else None %}
+{% set pct = obj.discount_pct   if obj.discount_pct   else None %}
+<span class="ep-price ep-price--{{ size }}">
+  {% if sp and sp < obj.price %}
+    <span class="ep-price__sale">₱{{ "%.2f"|format(sp) }}</span>
+    <span class="ep-price__original">₱{{ "%.2f"|format(obj.price) }}</span>
+    {% if show_pct and pct %}<span class="ep-price__badge">{{ pct }}% off</span>{% endif %}
+  {% else %}
+    <span class="ep-price__regular">₱{{ "%.2f"|format(obj.price) }}</span>
+  {% endif %}
+</span>
+{% endmacro %}
