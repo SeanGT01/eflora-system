@@ -484,6 +484,62 @@
             box-shadow: var(--shadow-md);
         }
 
+        /* Verification success modal */
+        .verify-modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: rgba(44, 37, 32, 0.46);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            animation: fadeIn 0.2s ease;
+        }
+        .verify-modal-card {
+            width: 100%;
+            max-width: 380px;
+            background: var(--warm-white);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: 1.25rem 1.25rem 1.1rem;
+            text-align: center;
+            animation: popIn 0.22s ease;
+        }
+        .verify-modal-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            margin: 0 auto 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(122, 158, 126, 0.13);
+            color: var(--deep-sage);
+            font-size: 26px;
+        }
+        .verify-modal-title {
+            font-family: var(--font-display);
+            font-size: 30px;
+            line-height: 1.1;
+            color: var(--charcoal);
+            margin-bottom: 0.35rem;
+        }
+        .verify-modal-text {
+            font-size: 13.5px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes popIn {
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
         /* Loading spin */
         @keyframes spin { to { transform: rotate(360deg); } }
         .spin { animation: spin 0.75s linear infinite; display: inline-block; }
@@ -769,6 +825,18 @@
     </div>
 </div>
 
+{% if verified %}
+<div class="verify-modal-overlay" id="verifyModal">
+    <div class="verify-modal-card">
+        <div class="verify-modal-icon"><i class="ri-checkbox-circle-fill"></i></div>
+        <h3 class="verify-modal-title">Email verified!</h3>
+        <p class="verify-modal-text">
+            Your account is ready. Sign in now with your credentials.
+        </p>
+    </div>
+</div>
+{% endif %}
+
 <script>
     /* ── Password toggle ── */
     document.getElementById('loginPwToggle').addEventListener('click', function() {
@@ -793,6 +861,16 @@
             btn.disabled  = false;
         }, 6000);
     });
+
+    /* ── Verification success modal (auto-hide) ── */
+    const verifyModal = document.getElementById('verifyModal');
+    if (verifyModal) {
+        setTimeout(() => {
+            verifyModal.style.opacity = '0';
+            verifyModal.style.transition = 'opacity 0.2s ease';
+            setTimeout(() => verifyModal.remove(), 220);
+        }, 1800);
+    }
 </script>
 </body>
 </html>

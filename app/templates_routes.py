@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, ProductRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, ProductRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -823,71 +823,262 @@ def login():
             else:  # customer
                 return redirect(url_for('templates.index'))
         else:
-            return render_template('login.html', error='Invalid email or password')
-    
-    return render_template('login.html')
+            return render_template(
+                'login.html',
+                error='Invalid email or password',
+                form_data={'email': email or ''},
+            )
+
+    verified = request.args.get('verified') == '1'
+    prefill_email = (request.args.get('email') or '').strip().lower()
+    form_data = {'email': prefill_email} if prefill_email else None
+    return render_template('login.html', verified=verified, form_data=form_data)
 
 @templates_bp.route('/register', methods=['GET', 'POST'])
 def register():
+    """
+    Step 1 of OTP-verified customer registration.
+
+    GET  → show the registration form.
+    POST → validate fields, generate OTP, email it to the customer,
+           store pending data in Flask session, redirect to /register/verify.
+    """
     if request.method == 'POST':
         try:
-            full_name = request.form.get('full_name')
-            email = request.form.get('email')
-            password = request.form.get('password')
-            confirm_password = request.form.get('confirm_password')
-            
-            # Validation
-            if not all([full_name, email, password, confirm_password]):
-                return render_template('register.html', 
-                                     error='All fields are required',
-                                     form_data=request.form)
-            
-            if password != confirm_password:
-                return render_template('register.html', 
-                                     error='Passwords do not match',
-                                     form_data=request.form)
-            
-            if len(password) < 6:
-                return render_template('register.html', 
-                                     error='Password must be at least 6 characters',
-                                     form_data=request.form)
-            
-            # Check if email exists
-            existing_user = User.query.filter_by(email=email).first()
-            if existing_user:
-                return render_template('register.html',
-                                     error='Email already registered',
-                                     form_data=request.form)
-            
-            # Create new user - ALWAYS as customer
-            user = User(
-                full_name=full_name.strip(),
-                email=email.lower().strip(),
-                role='customer',  # Always customer by default
-                status='active'
+            from werkzeug.security import generate_password_hash
+            from app.utils.otp_service import (
+                DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
+                can_resend, new_otp_pair,
             )
-            user.set_password(password)
-            
-            db.session.add(user)
+            from app.utils.email_helper import send_customer_otp_email
+
+            full_name        = (request.form.get('full_name')        or '').strip()
+            email            = (request.form.get('email')            or '').strip().lower()
+            password         = (request.form.get('password')         or '')
+            confirm_password = (request.form.get('confirm_password') or '')
+
+            # ── Validation ────────────────────────────────────────────────
+            if not all([full_name, email, password, confirm_password]):
+                return render_template('register.html',
+                                       error='All fields are required',
+                                       form_data=request.form)
+
+            if password != confirm_password:
+                return render_template('register.html',
+                                       error='Passwords do not match',
+                                       form_data=request.form)
+
+            if len(password) < 6:
+                return render_template('register.html',
+                                       error='Password must be at least 6 characters',
+                                       form_data=request.form)
+
+            if User.query.filter_by(email=email).first():
+                return render_template('register.html',
+                                       error='This email is already registered. Please sign in instead.',
+                                       form_data=request.form)
+
+            # ── Generate / refresh OTP ────────────────────────────────────
+            plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+            pending_data = {
+                'full_name':     full_name,
+                'password_hash': generate_password_hash(password),
+                'phone':         None,
+            }
+
+            record = CustomerOTP.query.filter_by(email=email).first()
+            if record:
+                allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+                if not allowed:
+                    # Still within cooldown — redirect to verify page as-is
+                    session['pending_reg_email'] = email
+                    return redirect(url_for('templates.register_verify',
+                                           cooldown=retry_after))
+                record.otp_hash      = otp_hash
+                record.customer_data = pending_data
+                record.expires_at    = expires_at
+                record.last_sent_at  = datetime.utcnow()
+                record.attempts      = 0
+                record.is_verified   = False
+                record.verified_at   = None
+            else:
+                record = CustomerOTP(
+                    email         = email,
+                    otp_hash      = otp_hash,
+                    customer_data = pending_data,
+                    expires_at    = expires_at,
+                    last_sent_at  = datetime.utcnow(),
+                )
+                db.session.add(record)
+
             db.session.commit()
-            
-            # Auto-login after registration
-            session['user_id'] = user.id
-            session['user_name'] = user.full_name
-            session['role'] = user.role
-            session['email'] = user.email
-            
-            # Redirect to home page
-            return redirect(url_for('templates.index'))
-                
+
+            # ── Send the email ────────────────────────────────────────────
+            sent = send_customer_otp_email(
+                recipient_email = email,
+                otp_code        = plain_code,
+                full_name       = full_name,
+                expiry_minutes  = DEFAULT_EXPIRY_MINUTES,
+            )
+            if not sent:
+                return render_template('register.html',
+                                       error='Failed to send verification email. Please try again.',
+                                       form_data=request.form)
+
+            # ── Store email in session and redirect ───────────────────────
+            session['pending_reg_email'] = email
+            return redirect(url_for('templates.register_verify'))
+
         except Exception as e:
             db.session.rollback()
-            print(f"Registration error: {str(e)}")
-            return render_template('register.html', 
-                                 error=f'Registration failed: {str(e)}',
-                                 form_data=request.form)
-    
+            current_app.logger.error(f"Registration error: {e}")
+            return render_template('register.html',
+                                   error=f'Registration failed. Please try again.',
+                                   form_data=request.form)
+
     return render_template('register.html')
+
+
+@templates_bp.route('/register/verify', methods=['GET', 'POST'])
+def register_verify():
+    """
+    Step 2 of OTP-verified customer registration.
+
+    GET  → show the OTP input page (email taken from session).
+    POST → validate OTP, create User, auto-login, redirect to home.
+    """
+    from app.utils.otp_service import MAX_VERIFY_ATTEMPTS, attempts_remaining, verify_otp
+
+    email = session.get('pending_reg_email')
+    if not email:
+        return redirect(url_for('templates.register'))
+
+    # GET — just render the form
+    if request.method == 'GET':
+        cooldown = request.args.get('cooldown', 0, type=int)
+        return render_template('register_verify.html',
+                               email=email,
+                               cooldown=cooldown)
+
+    # POST — verify OTP and create account
+    otp_code = (request.form.get('otp_code') or '').strip()
+    if not otp_code or len(otp_code) != 6 or not otp_code.isdigit():
+        return render_template('register_verify.html',
+                               email=email,
+                               error='Please enter the 6-digit code.')
+
+    record = CustomerOTP.query.filter_by(email=email).first()
+    if not record:
+        session.pop('pending_reg_email', None)
+        return redirect(url_for('templates.register'))
+
+    # Already verified (e.g. back-button replay)
+    if record.is_verified:
+        return _finalise_customer_registration(record, email)
+
+    if record.is_expired():
+        return render_template('register_verify.html',
+                               email=email,
+                               error='Your code has expired. Please request a new one.',
+                               expired=True)
+
+    if (record.attempts or 0) >= MAX_VERIFY_ATTEMPTS:
+        return render_template('register_verify.html',
+                               email=email,
+                               error='Too many incorrect attempts. Please request a new code.',
+                               locked=True)
+
+    if not verify_otp(otp_code, record.otp_hash):
+        record.attempts = (record.attempts or 0) + 1
+        db.session.commit()
+        left = attempts_remaining(record.attempts, MAX_VERIFY_ATTEMPTS)
+        return render_template('register_verify.html',
+                               email=email,
+                               error=f'Invalid code. {left} attempt{"s" if left != 1 else ""} remaining.')
+
+    # OTP correct — mark verified, create the user
+    record.is_verified = True
+    record.verified_at = datetime.utcnow()
+    db.session.commit()
+    return _finalise_customer_registration(record, email)
+
+
+def _finalise_customer_registration(record, email):
+    """Create the User row from the pending OTP data and send user to login."""
+    # Guard against duplicate registration (race condition or replay)
+    if User.query.filter_by(email=email).first():
+        db.session.delete(record)
+        db.session.commit()
+        session.pop('pending_reg_email', None)
+        return redirect(url_for('templates.login'))
+
+    pending = record.customer_data or {}
+    user = User(
+        full_name     = pending.get('full_name', ''),
+        email         = email,
+        role          = 'customer',
+        status        = 'active',
+        phone         = pending.get('phone'),
+    )
+    user.password_hash = pending.get('password_hash', '')
+    db.session.add(user)
+    db.session.delete(record)  # single-use: consume the OTP row
+    db.session.commit()
+
+    session.pop('pending_reg_email', None)
+    return redirect(url_for('templates.login', verified='1', email=user.email))
+
+
+@templates_bp.route('/register/resend-otp', methods=['POST'])
+def register_resend_otp():
+    """
+    AJAX endpoint — re-issue an OTP for the pending registration.
+    Returns JSON so the verify page can update the countdown without a full reload.
+    """
+    from app.utils.otp_service import (
+        DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
+        can_resend, new_otp_pair,
+    )
+    from app.utils.email_helper import send_customer_otp_email
+
+    email = session.get('pending_reg_email')
+    if not email:
+        return jsonify({'success': False, 'error': 'Session expired. Please register again.'}), 400
+
+    record = CustomerOTP.query.filter_by(email=email, is_verified=False).first()
+    if not record:
+        return jsonify({'success': False, 'error': 'No pending verification found.'}), 404
+
+    allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+    if not allowed:
+        return jsonify({
+            'success': False,
+            'error': 'Please wait before requesting another code.',
+            'retry_after_seconds': retry_after,
+        }), 429
+
+    plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+    record.otp_hash   = otp_hash
+    record.expires_at = expires_at
+    record.last_sent_at = datetime.utcnow()
+    record.attempts   = 0
+    db.session.commit()
+
+    pending = record.customer_data or {}
+    sent = send_customer_otp_email(
+        recipient_email = email,
+        otp_code        = plain_code,
+        full_name       = pending.get('full_name'),
+        expiry_minutes  = DEFAULT_EXPIRY_MINUTES,
+    )
+    if not sent:
+        return jsonify({'success': False, 'error': 'Failed to resend email.'}), 500
+
+    return jsonify({
+        'success': True,
+        'message': f'A new code has been sent to {email}.',
+        'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
+    }), 200
 
 
 @templates_bp.route('/api/account/orders/data')

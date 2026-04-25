@@ -273,6 +273,76 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
         return False
 
 
+def send_customer_otp_email(recipient_email, otp_code, full_name=None, expiry_minutes=5):
+    """
+    Send a 6-digit OTP code to a prospective customer for self-registration
+    via the same Gmail OAuth2 pipeline used by the rider flow.
+    """
+    try:
+        subject = "E-Flora - Confirm your email address"
+        greeting = f"Hi {full_name}!" if full_name else "Hi there!"
+
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">&#127800; E-Flora</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">Email Verification</p>
+            </div>
+
+            <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
+                <h2 style="color: #333; margin-top: 0;">{greeting}</h2>
+
+                <p style="color: #555; font-size: 16px;">
+                    Welcome to E-Flora! Use the verification code below to finish creating
+                    your customer account.
+                </p>
+
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="display: inline-block; background: #f4f4f8; border: 2px dashed #667eea;
+                                border-radius: 12px; padding: 20px 40px;">
+                        <span style="font-family: 'Courier New', monospace; font-size: 36px; font-weight: bold;
+                                     letter-spacing: 8px; color: #333;">{otp_code}</span>
+                    </div>
+                </div>
+
+                <p style="color: #888; font-size: 14px; text-align: center;">
+                    This code expires in <strong>{expiry_minutes} minutes</strong>.
+                </p>
+
+                <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;">
+
+                <p style="color: #888; font-size: 13px;">
+                    If you did not request this code, you can safely ignore this email.
+                    No account will be created without verification.
+                </p>
+            </div>
+
+            <div style="text-align: center; padding: 15px; background: #f9f9f9; border-radius: 0 0 10px 10px; border: 1px solid #e0e0e0; border-top: none;">
+                <p style="color: #aaa; font-size: 12px; margin: 0;">
+                    &copy; E-Flora Online Flower Shop
+                </p>
+            </div>
+        </div>
+        """
+
+        sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
+
+        app = current_app._get_current_object()
+        thread = threading.Thread(
+            target=_send_email_async,
+            args=(app, recipient_email, subject, html_body, sender),
+        )
+        thread.daemon = True
+        thread.start()
+
+        current_app.logger.info(f"📧 Customer OTP email queued for {recipient_email}")
+        return True
+
+    except Exception as e:
+        current_app.logger.error(f"❌ Failed to queue customer OTP email for {recipient_email}: {e}")
+        return False
+
+
 def send_rider_credentials_email(recipient_email, full_name, default_password, store_name):
     """
     Send rider their account credentials after successful OTP verification via SendGrid.

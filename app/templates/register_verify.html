@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email — E-FLOWERS</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --cream:        #faf6f0;
+            --warm-white:   #fffdf9;
+            --blush:        #f2c4ce;
+            --deep-rose:    #b5445a;
+            --dusty-rose:   #d4788a;
+            --sage:         #7a9e7e;
+            --deep-sage:    #4a6b4e;
+            --bark:         #6b4c3b;
+            --charcoal:     #2c2520;
+            --muted:        #9a8d85;
+            --border:       rgba(107,76,59,0.12);
+            --border-strong:rgba(107,76,59,0.22);
+
+            --font-display: 'Cormorant Garamond', serif;
+            --font-sans:    'DM Sans', sans-serif;
+
+            --shadow-sm: 0 2px 8px rgba(42,35,30,0.05);
+            --shadow-md: 0 4px 20px rgba(42,35,30,0.08);
+
+            --radius-sm:   6px;
+            --radius-md:  10px;
+            --radius-lg:  16px;
+            --radius-pill:100px;
+            --transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--cream);
+            color: var(--charcoal);
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        /* Grain overlay */
+        body::before {
+            content:'';
+            position:fixed; inset:0;
+            background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events:none; z-index:9999; opacity:0.4;
+        }
+
+        /* ── Left panel ── */
+        .panel-left {
+            background: var(--charcoal);
+            display: flex;
+            flex-direction: column;
+            padding: 3rem 3.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glow-1 { position:absolute; top:-140px; left:-100px; width:480px; height:480px; background:radial-gradient(circle,rgba(122,158,126,.18) 0%,transparent 70%); border-radius:50%; pointer-events:none; }
+        .glow-2 { position:absolute; bottom:-100px; right:-80px; width:340px; height:340px; background:radial-gradient(circle,rgba(212,120,138,.14) 0%,transparent 70%); border-radius:50%; pointer-events:none; }
+
+        .logo-link { display:flex; align-items:center; gap:.875rem; text-decoration:none; position:relative; z-index:1; }
+        .logo-mark  { width:42px; height:42px; flex-shrink:0; }
+        .logo-name  { font-family:var(--font-display); font-size:22px; font-weight:600; color:var(--blush); letter-spacing:.06em; }
+
+        .panel-copy { flex:1; display:flex; flex-direction:column; justify-content:center; position:relative; z-index:1; padding:4rem 0 3rem; }
+
+        .panel-eyebrow {
+            font-size:10px; font-weight:700; letter-spacing:.22em; text-transform:uppercase;
+            color:rgba(122,158,126,.65); margin-bottom:1.25rem;
+            display:flex; align-items:center; gap:.625rem;
+        }
+        .panel-eyebrow::before { content:''; width:20px; height:1px; background:rgba(122,158,126,.4); display:inline-block; }
+
+        .panel-headline { font-family:var(--font-display); font-size:clamp(36px,3.5vw,52px); font-weight:400; color:var(--cream); line-height:1.1; margin-bottom:1.5rem; }
+        .panel-headline em { font-style:italic; color:var(--blush); }
+        .panel-desc { font-size:14px; color:rgba(250,246,240,.42); line-height:1.8; max-width:300px; margin-bottom:2rem; }
+
+        /* Steps */
+        .steps-list { display:flex; flex-direction:column; gap:1.25rem; }
+        .step-item  { display:flex; align-items:flex-start; gap:1rem; }
+        .step-num {
+            width:28px; height:28px; border-radius:50%;
+            border:1px solid rgba(250,246,240,.12);
+            display:flex; align-items:center; justify-content:center;
+            font-family:var(--font-display); font-size:14px; font-weight:500; color:var(--blush);
+            flex-shrink:0; margin-top:1px;
+        }
+        .step-num.done {
+            background: rgba(122,158,126,.25);
+            border-color: rgba(122,158,126,.4);
+            color: #a8d5ad;
+        }
+        .step-num.active {
+            background: rgba(181,68,90,.2);
+            border-color: rgba(181,68,90,.4);
+            color: var(--blush);
+        }
+        .step-text { font-size:13px; color:rgba(250,246,240,.45); line-height:1.55; }
+        .step-text strong { display:block; color:rgba(250,246,240,.65); font-weight:600; margin-bottom:1px; }
+        .step-text.active-text strong { color:var(--blush); }
+
+        .panel-footer { font-size:11px; color:rgba(250,246,240,.18); position:relative; z-index:1; }
+
+        /* ── Right form panel ── */
+        .panel-right {
+            background: var(--warm-white);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem 2.5rem;
+            overflow-y: auto;
+        }
+
+        .form-card { width:100%; max-width:400px; }
+
+        /* Header */
+        .form-heading { margin-bottom:1.75rem; }
+        .form-eyebrow { font-size:10px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--sage); margin-bottom:.5rem; }
+        .form-title { font-family:var(--font-display); font-size:34px; font-weight:400; color:var(--charcoal); line-height:1.12; }
+        .form-subtitle { font-size:13.5px; color:var(--muted); margin-top:.4rem; line-height:1.55; }
+        .form-subtitle strong { color:var(--charcoal); }
+
+        /* Info box */
+        .info-box {
+            display:flex; align-items:flex-start; gap:.75rem;
+            padding:.875rem 1.125rem;
+            background:rgba(122,158,126,.08);
+            border:1px solid rgba(122,158,126,.22);
+            border-radius:var(--radius-md);
+            margin-bottom:1.5rem;
+            font-size:13px; color:var(--deep-sage);
+        }
+        .info-box i { font-size:17px; flex-shrink:0; margin-top:1px; }
+        .info-box strong { display:block; font-weight:700; margin-bottom:2px; }
+
+        /* Error banner */
+        .error-banner {
+            display:flex; align-items:flex-start; gap:.75rem;
+            padding:.875rem 1.125rem;
+            background:rgba(181,68,90,.07);
+            border:1px solid rgba(181,68,90,.2);
+            border-radius:var(--radius-md);
+            margin-bottom:1.5rem;
+            font-size:13.5px; color:var(--deep-rose);
+            animation: slideDown .25s ease;
+        }
+        .error-banner i { font-size:17px; flex-shrink:0; margin-top:1px; }
+
+        @keyframes slideDown { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin      { to { transform:rotate(360deg); } }
+        .spin { animation:spin .75s linear infinite; display:inline-block; }
+
+        /* OTP grid */
+        .otp-label {
+            font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+            color:var(--muted); margin-bottom:.75rem; display:block;
+        }
+
+        .otp-grid {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 1.25rem;
+        }
+
+        .otp-cell {
+            width: 52px;
+            height: 60px;
+            background: var(--cream);
+            border: 1.5px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--charcoal);
+            text-align: center;
+            outline: none;
+            caret-color: var(--deep-rose);
+            transition: var(--transition);
+        }
+
+        .otp-cell:focus {
+            border-color: var(--deep-rose);
+            background: var(--warm-white);
+            box-shadow: 0 0 0 3px rgba(181,68,90,.09);
+        }
+
+        .otp-cell.has-error {
+            border-color: var(--deep-rose);
+            background: rgba(181,68,90,.04);
+        }
+
+        .otp-cell:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+
+        /* Submit */
+        .btn-submit {
+            width:100%; padding:.9rem;
+            background: var(--deep-rose);
+            color: white; border:none;
+            border-radius: var(--radius-pill);
+            font-family: var(--font-sans); font-size:14px; font-weight:600; letter-spacing:.02em;
+            cursor:pointer; transition:var(--transition);
+            display:flex; align-items:center; justify-content:center; gap:.5rem;
+        }
+        .btn-submit:hover:not(:disabled) { background:var(--charcoal); box-shadow:0 6px 24px rgba(42,35,30,.2); transform:translateY(-1px); }
+        .btn-submit:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+
+        /* Resend area */
+        .resend-area { text-align:center; margin-top:1.25rem; }
+        .resend-countdown { font-size:13px; color:var(--muted); }
+        .resend-countdown span { font-weight:700; color:var(--deep-rose); }
+
+        .btn-resend {
+            background:none; border:none; cursor:pointer;
+            font-family:var(--font-sans); font-size:13.5px; font-weight:700;
+            color:var(--deep-rose); text-decoration:underline;
+            transition:var(--transition); display:inline-flex; align-items:center; gap:.3rem;
+            padding:.25rem 0;
+        }
+        .btn-resend:hover { color:var(--charcoal); }
+        .btn-resend:disabled { opacity:.5; cursor:not-allowed; text-decoration:none; }
+
+        .hint-text { font-size:12px; color:var(--muted); margin-top:.875rem; text-align:center; line-height:1.55; }
+
+        /* Back link */
+        .back-link { display:flex; align-items:center; gap:.35rem; font-size:13px; color:var(--muted); text-decoration:none; margin-bottom:1.5rem; transition:var(--transition); width:fit-content; }
+        .back-link:hover { color:var(--charcoal); }
+
+        /* ── Responsive ── */
+        @media (max-width:767px) {
+            body { grid-template-columns:1fr; }
+            .panel-left { display:none; }
+            .panel-right { min-height:100vh; padding:1.75rem 1.25rem; }
+            .form-card { max-width:100%; }
+            .otp-cell { width:44px; height:54px; font-size:24px; }
+        }
+        @media (min-width:768px) and (max-width:1023px) {
+            body { grid-template-columns:1.2fr 0.8fr; }
+            .panel-left { padding:2.5rem; }
+            .panel-right { padding:2rem; }
+            .otp-cell { width:46px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Left panel ── -->
+<div class="panel-left">
+    <div class="glow-1"></div>
+    <div class="glow-2"></div>
+
+    <a href="{{ url_for('templates.index') }}" class="logo-link">
+        <svg class="logo-mark" viewBox="0 0 42 42" fill="none">
+            <circle cx="21" cy="21" r="7" fill="#d4788a" opacity="0.9"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.8"  transform="rotate(0 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.65" transform="rotate(60 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.65" transform="rotate(120 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.55" transform="rotate(180 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.55" transform="rotate(240 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.45" transform="rotate(300 21 21)"/>
+            <circle cx="21" cy="21" r="5"   fill="#fffdf9"/>
+            <circle cx="21" cy="21" r="2.5" fill="#ffd700" opacity="0.7"/>
+        </svg>
+        <span class="logo-name">E-FLORA</span>
+    </a>
+
+    <div class="panel-copy">
+        <div class="panel-eyebrow">Step 2 of 2</div>
+        <h1 class="panel-headline">
+            One step<br>to <em>bloom</em>
+        </h1>
+        <p class="panel-desc">
+            Check your inbox for the 6-digit code and enter it to verify your email. The code expires in 5&nbsp;minutes.
+        </p>
+
+        <div class="steps-list">
+            <div class="step-item">
+                <div class="step-num done"><i class="ri-check-line" style="font-size:13px"></i></div>
+                <div class="step-text">
+                    <strong>Account details</strong>
+                    Name, email, and password saved.
+                </div>
+            </div>
+            <div class="step-item">
+                <div class="step-num active">2</div>
+                <div class="step-text active-text">
+                    <strong>Verify your email</strong>
+                    Enter the 6-digit code from your inbox.
+                </div>
+            </div>
+            <div class="step-item">
+                <div class="step-num" style="background:rgba(250,246,240,.04)">3</div>
+                <div class="step-text">
+                    <strong>Start shopping</strong>
+                    Browse and order fresh flowers.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-footer">&copy; 2025 E-FLOWERS &amp; PLANTS — Blooming with Technology</div>
+</div>
+
+<!-- ── Right form panel ── -->
+<div class="panel-right">
+    <div class="form-card">
+
+        <a href="{{ url_for('templates.register') }}" class="back-link">
+            <i class="ri-arrow-left-line"></i> Back to registration
+        </a>
+
+        <div class="form-heading">
+            <div class="form-eyebrow">Email verification</div>
+            <h2 class="form-title">Check your inbox</h2>
+            <p class="form-subtitle">
+                We sent a 6-digit code to <strong>{{ email }}</strong>.<br>
+                Enter it below to activate your account.
+            </p>
+        </div>
+
+        <!-- Info -->
+        <div class="info-box">
+            <i class="ri-mail-check-line"></i>
+            <div>
+                <strong>Didn't get it?</strong>
+                Check your spam folder, or use the resend button below after 60&nbsp;seconds.
+            </div>
+        </div>
+
+        <!-- Error banner -->
+        {% if error %}
+        <div class="error-banner" id="errorBanner">
+            <i class="ri-error-warning-line"></i>
+            <span>{{ error }}</span>
+        </div>
+        {% endif %}
+
+        <!-- OTP form -->
+        <form id="otpForm" method="POST" action="{{ url_for('templates.register_verify') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <!-- Hidden single field; JS populates it from the 6 cells before submit -->
+            <input type="hidden" name="otp_code" id="otpCodeField">
+
+            <label class="otp-label">Verification code</label>
+            <div class="otp-grid" id="otpGrid">
+                <input class="otp-cell {% if error %}has-error{% endif %}" type="text"
+                       inputmode="numeric" maxlength="1" autocomplete="off"
+                       data-idx="0" autofocus>
+                <input class="otp-cell {% if error %}has-error{% endif %}" type="text"
+                       inputmode="numeric" maxlength="1" autocomplete="off"
+                       data-idx="1">
+                <input class="otp-cell {% if error %}has-error{% endif %}" type="text"
+                       inputmode="numeric" maxlength="1" autocomplete="off"
+                       data-idx="2">
+                <input class="otp-cell {% if error %}has-error{% endif %}" type="text"
+                       inputmode="numeric" maxlength="1" autocomplete="off"
+                       data-idx="3">
+                <input class="otp-cell {% if error %}has-error{% endif %}" type="text"
+                       inputmode="numeric" maxlength="1" autocomplete="off"
+                       data-idx="4">
+                <input class="otp-cell {% if error %}has-error{% endif %}" type="text"
+                       inputmode="numeric" maxlength="1" autocomplete="off"
+                       data-idx="5">
+            </div>
+
+            <button type="submit" class="btn-submit" id="verifyBtn">
+                <i class="ri-check-double-line"></i> Verify &amp; Create Account
+            </button>
+        </form>
+
+        <!-- Resend -->
+        <div class="resend-area">
+            <div class="resend-countdown" id="resendCountdown" style="display:none">
+                Didn't receive it? Resend in <span id="countdownNum">60</span>s
+            </div>
+            <button class="btn-resend" id="resendBtn" style="display:none" disabled>
+                <i class="ri-refresh-line"></i> Resend code
+            </button>
+        </div>
+
+        <p class="hint-text">
+            The code expires in <strong>5 minutes</strong>.<br>
+            Make sure to check your spam or junk folder.
+        </p>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    /* ── OTP cell behaviour ── */
+    const cells   = Array.from(document.querySelectorAll('.otp-cell'));
+    const hidden  = document.getElementById('otpCodeField');
+    const verifyBtn = document.getElementById('verifyBtn');
+
+    function getCode() { return cells.map(c => c.value).join(''); }
+
+    function clearErrors() {
+        cells.forEach(c => c.classList.remove('has-error'));
+        const banner = document.getElementById('errorBanner');
+        if (banner) banner.style.display = 'none';
+    }
+
+    cells.forEach((cell, idx) => {
+        cell.addEventListener('keydown', function (e) {
+            // Backspace on empty → move back
+            if (e.key === 'Backspace' && !this.value && idx > 0) {
+                cells[idx - 1].focus();
+                cells[idx - 1].value = '';
+            }
+        });
+
+        cell.addEventListener('input', function (e) {
+            clearErrors();
+            const raw = this.value.replace(/\D/g, '');
+
+            // Handle paste across multiple cells
+            if (raw.length > 1) {
+                for (let i = 0; i < raw.length && (idx + i) < cells.length; i++) {
+                    cells[idx + i].value = raw[i];
+                }
+                const nextIdx = Math.min(idx + raw.length, cells.length - 1);
+                cells[nextIdx].focus();
+            } else {
+                this.value = raw;
+                if (raw && idx < cells.length - 1) {
+                    cells[idx + 1].focus();
+                }
+            }
+
+            // Auto-submit when all 6 filled
+            if (getCode().length === 6) {
+                hidden.value = getCode();
+                document.getElementById('otpForm').submit();
+            }
+        });
+
+        cell.addEventListener('paste', function (e) {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            const digits = text.replace(/\D/g, '').slice(0, 6);
+            digits.split('').forEach((d, i) => {
+                if (cells[idx + i]) cells[idx + i].value = d;
+            });
+            const nextIdx = Math.min(idx + digits.length, cells.length - 1);
+            cells[nextIdx].focus();
+            clearErrors();
+            if (getCode().length === 6) {
+                hidden.value = getCode();
+                document.getElementById('otpForm').submit();
+            }
+        });
+
+        // Select-all on focus for easy replacement
+        cell.addEventListener('focus', function () { this.select(); });
+    });
+
+    /* ── Form submit ── */
+    document.getElementById('otpForm').addEventListener('submit', function (e) {
+        const code = getCode();
+        if (code.length < 6 || !/^\d{6}$/.test(code)) {
+            e.preventDefault();
+            cells.forEach(c => c.classList.add('has-error'));
+            cells[0].focus();
+            return false;
+        }
+        hidden.value = code;
+        verifyBtn.innerHTML = '<i class="spin ri-loader-4-line"></i> Verifying…';
+        verifyBtn.disabled = true;
+        cells.forEach(c => c.disabled = true);
+    });
+
+    /* ── Resend countdown ── */
+    const COOLDOWN = {{ cooldown if cooldown else 60 }};
+    const countdownEl = document.getElementById('resendCountdown');
+    const countdownNum = document.getElementById('countdownNum');
+    const resendBtn    = document.getElementById('resendBtn');
+
+    let secondsLeft = COOLDOWN;
+
+    function startCountdown(seconds) {
+        secondsLeft = seconds;
+        if (seconds > 0) {
+            countdownEl.style.display = 'block';
+            resendBtn.style.display   = 'none';
+            countdownNum.textContent  = seconds;
+            const timer = setInterval(() => {
+                secondsLeft--;
+                countdownNum.textContent = secondsLeft;
+                if (secondsLeft <= 0) {
+                    clearInterval(timer);
+                    countdownEl.style.display = 'none';
+                    resendBtn.style.display   = 'inline-flex';
+                    resendBtn.disabled        = false;
+                }
+            }, 1000);
+        } else {
+            countdownEl.style.display = 'none';
+            resendBtn.style.display   = 'inline-flex';
+            resendBtn.disabled        = false;
+        }
+    }
+
+    startCountdown(COOLDOWN);
+
+    resendBtn.addEventListener('click', async function () {
+        this.disabled = true;
+        this.innerHTML = '<i class="spin ri-loader-4-line"></i> Sending…';
+
+        try {
+            const resp = await fetch('{{ url_for("templates.register_resend_otp") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrf_token]').value,
+                },
+                body: JSON.stringify({}),
+            });
+            const data = await resp.json();
+
+            if (resp.ok && data.success) {
+                // Clear cells and restart countdown
+                cells.forEach(c => { c.value = ''; c.classList.remove('has-error'); });
+                cells[0].focus();
+                startCountdown(data.resend_cooldown_seconds || 60);
+                // Show a brief success notice
+                showNotice('A new code has been sent!', false);
+            } else {
+                const retryAfter = data.retry_after_seconds || 60;
+                showNotice(data.error || 'Failed to resend. Try again.', true);
+                startCountdown(retryAfter);
+            }
+        } catch (err) {
+            showNotice('Network error — please try again.', true);
+            this.disabled = false;
+            this.innerHTML = '<i class="ri-refresh-line"></i> Resend code';
+        }
+    });
+
+    function showNotice(msg, isError) {
+        let el = document.getElementById('resendNotice');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'resendNotice';
+            el.style.cssText = 'text-align:center;font-size:13px;margin-top:.625rem;padding:.5rem .875rem;border-radius:8px;';
+            document.querySelector('.resend-area').after(el);
+        }
+        el.textContent = msg;
+        el.style.background = isError ? 'rgba(181,68,90,.08)' : 'rgba(122,158,126,.1)';
+        el.style.color      = isError ? 'var(--deep-rose)'    : 'var(--deep-sage)';
+        el.style.border     = isError ? '1px solid rgba(181,68,90,.2)' : '1px solid rgba(122,158,126,.22)';
+        setTimeout(() => { if (el) el.textContent = ''; }, 4000);
+    }
+})();
+</script>
+</body>
+</html>

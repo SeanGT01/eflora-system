@@ -1721,6 +1721,42 @@ class RiderOTP(db.Model):
         }
 
 
+class CustomerOTP(db.Model):
+    """Email verification for customer self-registration.
+
+    Mirrors the rider OTP design but is initiated by the prospective customer.
+    The OTP itself is stored as a salted hash (never plaintext); the pending
+    registration payload (full_name, password_hash, phone) lives in
+    `customer_data` until verification succeeds and a real `User` row is created.
+    """
+    __tablename__ = 'customer_otps'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    otp_hash = db.Column(db.String(255), nullable=False)
+    customer_data = db.Column(db.JSON, nullable=False)  # {full_name, password_hash, phone}
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    last_sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    verified_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'is_verified': self.is_verified,
+            'attempts': self.attempts,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class MunicipalityBoundary(db.Model):
     __tablename__ = 'municipality_boundaries'
     

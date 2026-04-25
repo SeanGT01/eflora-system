@@ -1,13 +1,377 @@
 # app/auth.py
 from flask import Blueprint, request, jsonify, current_app 
 from flask_jwt_extended import create_access_token, decode_token, jwt_required, get_jwt_identity, get_jwt
-from app.models import User
+from app.models import User, CustomerOTP
 from app.extensions import db
+from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 import jwt as pyjwt
+import re
     
 
 auth_bp = Blueprint('auth', __name__)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CUSTOMER REGISTRATION — OTP-VERIFIED FLOW
+# ═══════════════════════════════════════════════════════════════════════════════
+# Mirrors the rider OTP design (RiderOTP / send_rider_otp_email) but is initiated
+# by the prospective customer themselves. Three endpoints:
+#
+#   POST /api/v1/auth/customer/send-otp     → start registration, email a 6-digit code
+#   POST /api/v1/auth/customer/verify-otp   → confirm the code, mark row verified
+#   POST /api/v1/auth/customer/register     → finalise account creation, return JWT
+#
+# Plus an optional helper:
+#   POST /api/v1/auth/customer/resend-otp   → re-issue an OTP within cooldown limits
+#
+# Storage: app.models.CustomerOTP (one row per email). The OTP code itself is
+# hashed with werkzeug.security; only the hash is persisted.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+EMAIL_REGEX = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+
+
+def _normalize_email(value):
+    return (value or '').strip().lower()
+
+
+def _validate_registration_payload(data, require_password=True):
+    """Shared validation for send-otp + register payloads."""
+    full_name = (data.get('full_name') or '').strip()
+    email = _normalize_email(data.get('email'))
+    password = data.get('password') or ''
+    phone = (data.get('phone') or '').strip() or None
+
+    if not full_name:
+        return None, ('full_name is required', 400)
+    if not email or not EMAIL_REGEX.match(email):
+        return None, ('A valid email is required', 400)
+    if require_password:
+        if not password:
+            return None, ('password is required', 400)
+        if len(password) < 6:
+            return None, ('Password must be at least 6 characters', 400)
+
+    return {
+        'full_name': full_name,
+        'email': email,
+        'password': password,
+        'phone': phone,
+    }, None
+
+
+@auth_bp.route('/customer/send-otp', methods=['POST'])
+def customer_send_otp():
+    """
+    Begin customer registration. Stores pending account data + emails a 6-digit OTP.
+
+    Request JSON:
+        { "full_name": str, "email": str, "password": str (>=6), "phone": str? }
+
+    Responses:
+        200  { "success": true, "message": str, "expires_in_seconds": int }
+        400  validation error
+        409  email already belongs to an active account
+        429  resend cooldown not yet elapsed
+        500  email delivery failed
+    """
+    from app.utils.otp_service import (
+        DEFAULT_EXPIRY_MINUTES,
+        RESEND_COOLDOWN_SECONDS,
+        can_resend,
+        new_otp_pair,
+    )
+    from app.utils.email_helper import send_customer_otp_email
+
+    data = request.get_json(silent=True) or {}
+    fields, err = _validate_registration_payload(data, require_password=True)
+    if err:
+        return jsonify({'success': False, 'error': err[0]}), err[1]
+
+    email = fields['email']
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({
+            'success': False,
+            'error': 'This email is already registered. Please log in instead.',
+        }), 409
+
+    plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+
+    pending = {
+        'full_name': fields['full_name'],
+        'password_hash': generate_password_hash(fields['password']),
+        'phone': fields['phone'],
+    }
+
+    record = CustomerOTP.query.filter_by(email=email).first()
+    if record:
+        if not record.is_verified:
+            allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+            if not allowed:
+                return jsonify({
+                    'success': False,
+                    'error': 'Please wait before requesting another code.',
+                    'retry_after_seconds': retry_after,
+                }), 429
+        record.otp_hash = otp_hash
+        record.customer_data = pending
+        record.expires_at = expires_at
+        record.last_sent_at = datetime.utcnow()
+        record.attempts = 0
+        record.is_verified = False
+        record.verified_at = None
+    else:
+        record = CustomerOTP(
+            email=email,
+            otp_hash=otp_hash,
+            customer_data=pending,
+            expires_at=expires_at,
+            last_sent_at=datetime.utcnow(),
+        )
+        db.session.add(record)
+
+    db.session.commit()
+
+    sent = send_customer_otp_email(
+        recipient_email=email,
+        otp_code=plain_code,
+        full_name=fields['full_name'],
+        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+    )
+    if not sent:
+        return jsonify({
+            'success': False,
+            'error': 'Failed to send verification email. Please try again shortly.',
+        }), 500
+
+    return jsonify({
+        'success': True,
+        'message': f'A 6-digit verification code has been sent to {email}.',
+        'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
+        'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
+    }), 200
+
+
+@auth_bp.route('/customer/resend-otp', methods=['POST'])
+def customer_resend_otp():
+    """
+    Re-issue an OTP for an existing pending registration without requiring the
+    full payload again. Cooldown applies.
+
+    Request JSON: { "email": str }
+    """
+    from app.utils.otp_service import (
+        DEFAULT_EXPIRY_MINUTES,
+        RESEND_COOLDOWN_SECONDS,
+        can_resend,
+        new_otp_pair,
+    )
+    from app.utils.email_helper import send_customer_otp_email
+
+    data = request.get_json(silent=True) or {}
+    email = _normalize_email(data.get('email'))
+    if not email or not EMAIL_REGEX.match(email):
+        return jsonify({'success': False, 'error': 'A valid email is required'}), 400
+
+    record = CustomerOTP.query.filter_by(email=email, is_verified=False).first()
+    if not record:
+        return jsonify({
+            'success': False,
+            'error': 'No pending verification found for this email. Please start registration again.',
+        }), 404
+
+    allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+    if not allowed:
+        return jsonify({
+            'success': False,
+            'error': 'Please wait before requesting another code.',
+            'retry_after_seconds': retry_after,
+        }), 429
+
+    plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+    record.otp_hash = otp_hash
+    record.expires_at = expires_at
+    record.last_sent_at = datetime.utcnow()
+    record.attempts = 0
+    db.session.commit()
+
+    pending = record.customer_data or {}
+    sent = send_customer_otp_email(
+        recipient_email=email,
+        otp_code=plain_code,
+        full_name=pending.get('full_name'),
+        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+    )
+    if not sent:
+        return jsonify({
+            'success': False,
+            'error': 'Failed to send verification email. Please try again shortly.',
+        }), 500
+
+    return jsonify({
+        'success': True,
+        'message': f'A new verification code has been sent to {email}.',
+        'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
+    }), 200
+
+
+@auth_bp.route('/customer/verify-otp', methods=['POST'])
+def customer_verify_otp():
+    """
+    Verify a 6-digit OTP. On success the row is marked is_verified=True so the
+    follow-up /customer/register call may proceed. Codes cannot be reused —
+    once consumed they are deleted by /customer/register.
+
+    Request JSON: { "email": str, "otp_code": str }
+    """
+    from app.utils.otp_service import (
+        MAX_VERIFY_ATTEMPTS,
+        attempts_remaining,
+        verify_otp,
+    )
+
+    data = request.get_json(silent=True) or {}
+    email = _normalize_email(data.get('email'))
+    otp_code = (data.get('otp_code') or '').strip()
+
+    if not email or not otp_code:
+        return jsonify({'success': False, 'error': 'Email and OTP code are required'}), 400
+
+    record = CustomerOTP.query.filter_by(email=email).first()
+    if not record:
+        return jsonify({
+            'success': False,
+            'error': 'No verification request found for this email.',
+        }), 404
+
+    if record.is_verified:
+        return jsonify({
+            'success': True,
+            'message': 'Email already verified. You can finish registration.',
+            'verified': True,
+        }), 200
+
+    if record.is_expired():
+        return jsonify({
+            'success': False,
+            'error': 'OTP has expired. Please request a new code.',
+            'expired': True,
+        }), 400
+
+    if (record.attempts or 0) >= MAX_VERIFY_ATTEMPTS:
+        return jsonify({
+            'success': False,
+            'error': 'Too many incorrect attempts. Please request a new code.',
+            'locked': True,
+        }), 429
+
+    if not verify_otp(otp_code, record.otp_hash):
+        record.attempts = (record.attempts or 0) + 1
+        db.session.commit()
+        return jsonify({
+            'success': False,
+            'error': 'Invalid OTP code. Please try again.',
+            'attempts_remaining': attempts_remaining(record.attempts, MAX_VERIFY_ATTEMPTS),
+        }), 400
+
+    record.is_verified = True
+    record.verified_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Email verified. You can now finalise your registration.',
+        'verified': True,
+    }), 200
+
+
+@auth_bp.route('/customer/register', methods=['POST'])
+def customer_register():
+    """
+    Finalise customer registration. Requires the email to have been verified by
+    /customer/verify-otp. The pending data captured at /send-otp time is used to
+    create the User row, then the OTP record is consumed (deleted).
+
+    Request JSON: { "email": str }
+    Response   : same shape as the legacy /auth/register so existing Flutter code
+                 paths continue to work after a one-line URL swap.
+    """
+    data = request.get_json(silent=True) or {}
+    email = _normalize_email(data.get('email'))
+    if not email:
+        return jsonify({'success': False, 'error': 'Email is required'}), 400
+
+    record = CustomerOTP.query.filter_by(email=email).first()
+    if not record:
+        return jsonify({
+            'success': False,
+            'error': 'No verification record found. Please start registration again.',
+        }), 404
+
+    if not record.is_verified:
+        return jsonify({
+            'success': False,
+            'error': 'Email is not verified yet. Please verify the OTP first.',
+        }), 403
+
+    if User.query.filter_by(email=email).first():
+        # Race-condition safety: clean up the orphan OTP row.
+        db.session.delete(record)
+        db.session.commit()
+        return jsonify({
+            'success': False,
+            'error': 'This email is already registered. Please log in instead.',
+        }), 409
+
+    pending = record.customer_data or {}
+    full_name = pending.get('full_name')
+    password_hash = pending.get('password_hash')
+    phone = pending.get('phone')
+
+    if not full_name or not password_hash:
+        return jsonify({
+            'success': False,
+            'error': 'Stored registration data is incomplete. Please start over.',
+        }), 400
+
+    user = User(
+        full_name=full_name,
+        email=email,
+        role='customer',
+        status='active',
+        phone=phone,
+    )
+    user.password_hash = password_hash  # already hashed during /send-otp
+    db.session.add(user)
+    db.session.flush()
+
+    # Single-use OTP: drop the row so the same code can never be reused.
+    db.session.delete(record)
+    db.session.commit()
+
+    token = create_access_token(
+        identity=str(user.id),
+        expires_delta=timedelta(days=30),
+        additional_claims={
+            'sub': str(user.id),
+            'user_id': user.id,
+            'role': user.role,
+            'email': user.email,
+        },
+    )
+
+    return jsonify({
+        'success': True,
+        'message': 'Account created successfully.',
+        'token': token,
+        'user_id': user.id,
+        'full_name': user.full_name,
+        'email': user.email,
+        'role': user.role,
+        'user': user.to_dict(),
+    }), 201
 
 # In app/auth.py - Update login function
 # app/auth.py - Replace your login function with this
