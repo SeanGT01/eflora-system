@@ -55,7 +55,7 @@
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">System Name</label>
                                     <input type="text" class="form-control" name="system_name" 
-                                           value="E-FLOWERS Management System">
+                                           value="E-FLORA Management System">
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Timezone</label>
@@ -1607,7 +1607,7 @@ Thank you,
     });
     
     // Restore system
-    document.getElementById('restoreBtn').addEventListener('click', function() {
+    document.getElementById('restoreBtn').addEventListener('click', async function() {
         const fileInput = document.getElementById('restoreFile');
         
         if (!fileInput.files[0]) {
@@ -1615,7 +1615,7 @@ Thank you,
             return;
         }
         
-        if (!confirm('Are you sure you want to restore from backup? This will overwrite all current data.')) {
+        if (!await window.openConfirmModal('Are you sure you want to restore from backup? This will overwrite all current data.')) {
             return;
         }
         
@@ -1641,22 +1641,22 @@ Thank you,
     });
     
     document.querySelectorAll('.restore-backup').forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', async function() {
             const row = this.closest('tr');
             const backupName = row.querySelector('td').textContent.trim();
             
-            if (confirm(`Restore from ${backupName}? This will overwrite current data.`)) {
+            if (await window.openConfirmModal(`Restore from ${backupName}? This will overwrite current data.`)) {
                 showAlert('warning', `Restoring from ${backupName}...`);
             }
         });
     });
     
     document.querySelectorAll('.delete-backup').forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', async function() {
             const row = this.closest('tr');
             const backupName = row.querySelector('td').textContent.trim();
             
-            if (confirm(`Delete ${backupName}?`)) {
+            if (await window.openConfirmModal(`Delete ${backupName}?`)) {
                 row.remove();
                 showAlert('success', 'Backup deleted');
             }

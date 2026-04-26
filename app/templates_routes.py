@@ -2,15 +2,18 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, ProductRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, ProductRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, AccountBan
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
 from functools import wraps
 from decimal import Decimal
+from sqlalchemy import or_
+from sqlalchemy.exc import ProgrammingError, OperationalError, IntegrityError
 import uuid
 import time
 import jwt
+import re
 #from PIL import Image
 import io
 from flask import send_file
@@ -26,7 +29,90 @@ from sqlalchemy.orm import joinedload
 from app import limiter
 templates_bp = Blueprint('templates', __name__)
 
+PH_MOBILE_REGEX = re.compile(r'^(?:\+63|0)9\d{9}$')
 
+
+def _normalize_ph_mobile(phone_raw):
+    """Normalize PH mobile to 09XXXXXXXXX. Returns None for blank input."""
+    phone = (phone_raw or '').strip()
+    if not phone:
+        return None
+
+    compact = re.sub(r'[\s\-()]', '', phone)
+    if compact.startswith('+63'):
+        compact = '0' + compact[3:]
+    elif compact.startswith('63') and len(compact) == 12:
+        compact = '0' + compact[2:]
+
+    return compact
+
+
+def _ensure_home_page_testimonials_table():
+    """If Alembic has not been applied yet, create the table from the ORM (safe no-op when it exists)."""
+    from sqlalchemy import inspect
+
+    try:
+        if inspect(db.engine).has_table('home_page_testimonials'):
+            return True
+        HomePageTestimonial.__table__.create(db.engine, checkfirst=True)
+        try:
+            current_app.logger.info('Created missing table home_page_testimonials from model')
+        except RuntimeError:
+            pass
+        return True
+    except Exception as exc:
+        try:
+            current_app.logger.warning('Could not ensure home_page_testimonials table: %s', exc)
+        except RuntimeError:
+            pass
+        return False
+
+
+def _ensure_home_page_testimonials_schema():
+    """Compatibility no-op for current testimonial schema."""
+    return True
+
+
+def _ensure_support_faqs_table():
+    """Create support_faqs from ORM if migration wasn't run yet."""
+    from sqlalchemy import inspect
+
+    try:
+        if inspect(db.engine).has_table('support_faqs'):
+            return True
+        SupportFAQ.__table__.create(db.engine, checkfirst=True)
+        try:
+            current_app.logger.info('Created missing table support_faqs from model')
+        except RuntimeError:
+            pass
+        return True
+    except Exception as exc:
+        try:
+            current_app.logger.warning('Could not ensure support_faqs table: %s', exc)
+        except RuntimeError:
+            pass
+        return False
+
+
+def _ensure_account_bans_table():
+    """Create account_bans from ORM if migration wasn't run yet."""
+    from sqlalchemy import inspect
+
+    try:
+        if inspect(db.engine).has_table('account_bans'):
+            return True
+        AccountBan.__table__.create(db.engine, checkfirst=True)
+        try:
+            current_app.logger.info('Created missing table account_bans from model')
+        except RuntimeError:
+            pass
+        return True
+    except Exception as exc:
+        try:
+            current_app.logger.warning('Could not ensure account_bans table: %s', exc)
+        except RuntimeError:
+            pass
+        return False
 
 
 # Configure upload folder
@@ -220,6 +306,53 @@ def debug_test_email():
     return jsonify(result), 200
 
 
+def _public_storefront_product_base_query():
+    """Products eligible for the public storefront: active store, not archived, in stock (product or variant)."""
+    variant_in_stock_exists = db.session.query(ProductVariant.id).filter(
+        ProductVariant.product_id == Product.id,
+        ProductVariant.is_available == True,
+        ProductVariant.stock_quantity > 0
+    ).exists()
+    return (
+        Product.query
+        .join(Store, Product.store_id == Store.id)
+        .filter(
+            Product.is_archived == False,
+            Product.is_available == True,
+            Store.status == 'active',
+            db.or_(
+                Product.stock_quantity > 0,
+                variant_in_stock_exists
+            )
+        )
+    )
+
+
+def _product_list_for_storefront(orm_products):
+    """Match landing-page dict shape (store_name, nested categories) for Jinja cards."""
+    product_list = []
+    for product in orm_products:
+        product_dict = product.to_dict()
+        if product.store:
+            product_dict['store_name'] = product.store.name
+        else:
+            product_dict['store_name'] = 'Unknown Store'
+        if product.main_category:
+            product_dict['main_category'] = {
+                'id': product.main_category.id,
+                'name': product.main_category.name,
+                'slug': product.main_category.slug
+            }
+        if product.store_category:
+            product_dict['store_category'] = {
+                'id': product.store_category.id,
+                'name': product.store_category.name,
+                'slug': product.store_category.slug
+            }
+        product_list.append(product_dict)
+    return product_list
+
+
 @templates_bp.route('/')
 @limiter.limit("5 per minute")
 def index():
@@ -229,27 +362,13 @@ def index():
         from app.models import Category
         main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
 
-        variant_in_stock_exists = db.session.query(ProductVariant.id).filter(
-            ProductVariant.product_id == Product.id,
-            ProductVariant.is_available == True,
-            ProductVariant.stock_quantity > 0
-        ).exists()
-        
         # Get products for the landing page - only from active stores with stock
-        products = Product.query\
-            .join(Store, Product.store_id == Store.id)\
-            .filter(
-                Product.is_archived == False,
-                Product.is_available == True,
-                Store.status == 'active',
-                db.or_(
-                    Product.stock_quantity > 0,
-                    variant_in_stock_exists
-                )
-            )\
-            .order_by(Product.created_at.desc())\
-            .limit(8)\
+        products = (
+            _public_storefront_product_base_query()
+            .order_by(Product.created_at.desc())
+            .limit(8)
             .all()
+        )
         
         print("=== DEBUGGING PRODUCTS ===")
         print(f"Raw products count: {len(products)}")
@@ -260,35 +379,12 @@ def index():
             if p.store_category:
                 print(f"  Store Category: {p.store_category.name}")
         
-        # Convert products to dict and add store_name
-        product_list = []
+        product_list = _product_list_for_storefront(products)
         for product in products:
-            product_dict = product.to_dict()
-            # Add store name to each product
             if product.store:
-                product_dict['store_name'] = product.store.name
                 print(f"Added store name '{product.store.name}' to product '{product.name}'")
             else:
-                product_dict['store_name'] = 'Unknown Store'
                 print(f"WARNING: Product '{product.name}' has no associated store!")
-            
-            # Add main category info
-            if product.main_category:
-                product_dict['main_category'] = {
-                    'id': product.main_category.id,
-                    'name': product.main_category.name,
-                    'slug': product.main_category.slug
-                }
-            
-            # Add store category info
-            if product.store_category:
-                product_dict['store_category'] = {
-                    'id': product.store_category.id,
-                    'name': product.store_category.name,
-                    'slug': product.store_category.slug
-                }
-            
-            product_list.append(product_dict)
         
         # Get active stores - logo_url property now handles seller_application lookup by seller_id
         stores = Store.query\
@@ -303,7 +399,38 @@ def index():
             print(f"Store: {s.id} - {s.name} - Seller ID: {s.seller_id} - Logo URL: {s.logo_url}")
         print(f"=== END DEBUG ===\n")
         
-        store_list = [store.to_dict() for store in stores]
+        store_list = []
+        for store in stores:
+            store_data = store.to_dict()
+
+            # Overall store performance (1-5) for featured carousel.
+            # Pure fulfillment performance based on delivered/completed ratio.
+            order_counts = (
+                db.session.query(
+                    Order.status,
+                    db.func.count(Order.id)
+                )
+                .filter(Order.store_id == store.id)
+                .group_by(Order.status)
+                .all()
+            )
+            status_counts = {status: count for status, count in order_counts}
+            total_orders = sum(status_counts.values())
+            delivered_or_completed = (
+                status_counts.get('delivered', 0) +
+                status_counts.get('completed', 0)
+            )
+
+            fulfillment_score = (
+                (delivered_or_completed / total_orders) * 5.0
+                if total_orders > 0 else 0.0
+            )
+            performance_score = max(0.0, min(5.0, round(fulfillment_score, 1)))
+
+            store_data['performance_score'] = performance_score
+            store_data['performance_fulfilled_count'] = int(delivered_or_completed)
+            store_data['performance_order_count'] = int(total_orders)
+            store_list.append(store_data)
         
         # Format categories for the template (for featured categories section)
         featured_categories = []
@@ -321,25 +448,195 @@ def index():
         print(f"Final store_list count: {len(store_list)}")
         print(f"Main categories count: {len(main_categories)}")
         print("=== END DEBUG ===\n")
-        
+
+        try:
+            _ensure_home_page_testimonials_table()
+            _ensure_home_page_testimonials_schema()
+            home_testimonials = (
+                HomePageTestimonial.query.filter_by(is_approved=True)
+                .order_by(HomePageTestimonial.created_at.desc())
+                .limit(12)
+                .all()
+            )
+        except Exception as testimonial_err:
+            current_app.logger.warning('Home testimonials query skipped: %s', testimonial_err)
+            db.session.rollback()
+            home_testimonials = []
+
+        home_testimonial_author_name = None
+        home_testimonial_can_submit = False
+        home_testimonial_lock_reason = None
+        home_testimonial_existing = None
+        if session.get('user_id'):
+            _author = User.query.get(session['user_id'])
+            if _author and _author.full_name:
+                home_testimonial_author_name = _author.full_name.strip()
+                has_order = (
+                    db.session.query(Order.id)
+                    .filter(
+                        Order.customer_id == _author.id,
+                        Order.status.in_(['delivered', 'completed'])
+                    )
+                    .first() is not None
+                )
+                if has_order:
+                    home_testimonial_can_submit = True
+                    home_testimonial_existing = (
+                        HomePageTestimonial.query
+                        .filter(HomePageTestimonial.customer_name == home_testimonial_author_name)
+                        .order_by(HomePageTestimonial.created_at.desc())
+                        .first()
+                    )
+                else:
+                    home_testimonial_lock_reason = 'You can review the website after placing at least one order.'
+
         return render_template(
             'index.html',
             products=product_list,
             stores=store_list,
             categories=featured_categories,  # For featured categories section
             main_categories=main_categories,   # For navigation menu
-            now=datetime.now()
+            now=datetime.now(),
+            home_testimonials=home_testimonials,
+            home_testimonial_author_name=home_testimonial_author_name,
+            home_testimonial_can_submit=home_testimonial_can_submit,
+            home_testimonial_lock_reason=home_testimonial_lock_reason,
+            home_testimonial_existing=home_testimonial_existing.to_dict() if home_testimonial_existing else None,
         )
     except Exception as e:
         print(f"ERROR loading landing page: {str(e)}")
         import traceback
         traceback.print_exc()
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return render_template('index.html', 
                              products=[], 
                              stores=[], 
                              categories=[],
-                             main_categories=[])
-    
+                             main_categories=[],
+                             home_testimonials=[],
+                             home_testimonial_author_name=None,
+                             home_testimonial_can_submit=False,
+                             home_testimonial_lock_reason=None,
+                             home_testimonial_existing=None)
+
+
+@templates_bp.route('/home-testimonials', methods=['POST'])
+@limiter.limit('20 per minute')
+def submit_home_testimonial():
+    """Persist a public home-page testimonial (shown when is_approved is True)."""
+    if not request.is_json:
+        return jsonify({'success': False, 'error': 'JSON body required'}), 400
+
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({
+            'success': False,
+            'error': 'Please sign in to submit a testimonial. Your account name will be shown with your review.',
+        }), 401
+
+    user = User.query.get(uid)
+    if not user or not user.full_name:
+        return jsonify({'success': False, 'error': 'Account not found. Please sign in again.'}), 401
+
+    name = (user.full_name or '').strip()
+    if len(name) > 120:
+        name = name[:120]
+
+    has_order = (
+        db.session.query(Order.id)
+        .filter(
+            Order.customer_id == uid,
+            Order.status.in_(['delivered', 'completed'])
+        )
+        .first() is not None
+    )
+    if not has_order:
+        return jsonify({
+            'success': False,
+            'error': 'You can review the website after placing at least one order.',
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    comment = (data.get('comment') or '').strip()
+    if 'rating' not in data:
+        return jsonify({'success': False, 'error': 'Rating is required.'}), 400
+    try:
+        rating = int(data.get('rating'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Rating must be a number from 1 to 5.'}), 400
+    if rating < 1 or rating > 5:
+        return jsonify({'success': False, 'error': 'Rating must be between 1 and 5.'}), 400
+
+    if len(comment) < 10 or len(comment) > 2000:
+        return jsonify({'success': False, 'error': 'Testimonial must be between 10 and 2000 characters.'}), 400
+
+    if not _ensure_home_page_testimonials_table():
+        return jsonify({
+            'success': False,
+            'error': 'Could not create testimonials storage. Check database permissions or run: flask db upgrade',
+        }), 503
+    _ensure_home_page_testimonials_schema()
+
+    row = (
+        HomePageTestimonial.query
+        .filter(HomePageTestimonial.customer_name == name)
+        .order_by(HomePageTestimonial.created_at.desc())
+        .first()
+    )
+    if row:
+        row.customer_name = name
+        row.rating = rating
+        row.comment = comment
+        mode = 'updated'
+        status_code = 200
+    else:
+        row = HomePageTestimonial(
+            customer_name=name,
+            rating=rating,
+            comment=comment,
+            is_approved=True,
+        )
+        db.session.add(row)
+        mode = 'created'
+        status_code = 201
+    try:
+        db.session.commit()
+    except (ProgrammingError, OperationalError) as ex:
+        db.session.rollback()
+        current_app.logger.exception('submit_home_testimonial DB error: %s', ex)
+        err = str(getattr(ex, 'orig', ex)) or str(ex)
+        if 'home_page_testimonials' in err and (
+            'does not exist' in err
+            or 'UndefinedTable' in err
+            or 'no such table' in err.lower()
+        ):
+            return jsonify({
+                'success': False,
+                'error': 'Testimonials table is missing. Run: flask db upgrade (revision add_home_page_testimonials_001).',
+            }), 503
+        return jsonify({
+            'success': False,
+            'error': 'Database error while saving. Check server logs or run migrations.',
+        }), 500
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('submit_home_testimonial failed: %s', ex)
+        err = str(getattr(ex, 'orig', ex)) or str(ex)
+        if 'home_page_testimonials' in err and (
+            'does not exist' in err
+            or 'UndefinedTable' in err
+            or 'no such table' in err.lower()
+        ):
+            return jsonify({
+                'success': False,
+                'error': 'Testimonials table is missing. Run: flask db upgrade (revision add_home_page_testimonials_001).',
+            }), 503
+        return jsonify({'success': False, 'error': 'Could not save your testimonial. Please try again later.'}), 500
+
+    return jsonify({'success': True, 'id': row.id, 'mode': mode}), status_code
 
 
 def seller_required(f):
@@ -448,11 +745,37 @@ def _get_primary_image(product):
 def inject_user():
     """Make user available to all templates"""
     user = None
+    seller_orders_badge_count = 0
+    pos_orders_badge_count = 0
     if session.get('user_id'):
         user_obj = User.query.get(session['user_id'])
         if user_obj:
             user = user_obj.to_dict()
-    return dict(user=user)
+            if session.get('role') == 'seller':
+                active_store_ids = [
+                    store.id for store in Store.query.filter_by(
+                        seller_id=session['user_id'],
+                        status='active'
+                    ).all()
+                ]
+                if active_store_ids:
+                    seller_orders_badge_count = Order.query.filter(
+                        Order.store_id.in_(active_store_ids),
+                        or_(
+                            Order.payment_status == 'pending_verification',
+                            Order.status.in_(['pending', 'accepted', 'preparing']),
+                        )
+                    ).count()
+                    pos_orders_badge_count = POSOrder.query.filter(
+                        POSOrder.store_id.in_(active_store_ids),
+                        POSOrder.is_seen_by_seller.is_(False)
+                    ).count()
+    return dict(
+        user=user,
+        seller_orders_badge_count=seller_orders_badge_count,
+        pos_orders_badge_count=pos_orders_badge_count,
+        current_year=datetime.utcnow().year,
+    )
 
 
 @templates_bp.route('/seller/apply', methods=['POST'])
@@ -737,6 +1060,8 @@ def change_password():
 def my_account():
     if not session.get('user_id'):
         return redirect(url_for('templates.login'))
+    if session.get('role') == 'admin':
+        return redirect(url_for('templates.admin_users'))
 
 #Get the page parameter from URL (default to 'profile')
     page = request.args.get('page', 'profile')
@@ -793,6 +1118,16 @@ def home():
 
 @templates_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    if session.get('user_id'):
+        role = session.get('role')
+        if role == 'admin':
+            return redirect(url_for('templates.admin_users'))
+        if role == 'seller':
+            return redirect(url_for('templates.seller_products'))
+        if role == 'rider':
+            return redirect(url_for('templates.rider_dashboard'))
+        return redirect(url_for('templates.index'))
+
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
@@ -802,7 +1137,25 @@ def login():
         
         # Check if user exists and password is correct
         if user and user.check_password(password):
+            if (user.status or '').lower() == 'banned' and _ensure_account_bans_table():
+                active_ban = AccountBan.query.filter_by(user_id=user.id, is_active=True).order_by(AccountBan.created_at.desc()).first()
+                if active_ban and active_ban.banned_until and active_ban.banned_until <= datetime.utcnow():
+                    active_ban.is_active = False
+                    active_ban.lifted_at = datetime.utcnow()
+                    user.status = 'active'
+                    user.updated_at = datetime.utcnow()
+                    db.session.commit()
+
+            blocked_statuses = {'inactive', 'suspended', 'archived', 'deleted', 'banned'}
+            if (user.status or '').lower() in blocked_statuses:
+                return render_template(
+                    'login.html',
+                    error='This account is inactive. Please contact support.',
+                    form_data={'email': email or ''},
+                )
+
             # Set session
+            session.permanent = True
             session['user_id'] = user.id
             session['user_name'] = user.full_name
             session['role'] = user.role
@@ -836,6 +1189,9 @@ def login():
 
 @templates_bp.route('/register', methods=['GET', 'POST'])
 def register():
+    if session.get('user_id'):
+        return redirect(url_for('templates.index'))
+
     """
     Step 1 of OTP-verified customer registration.
 
@@ -1357,6 +1713,8 @@ def category(category_identifier):
     """Category page showing all products in a main category"""
     try:
         from app.models import Category
+        # For base navigation ("All", "Fresh Flowers", etc.)
+        main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
         
         # Try to find by ID first (if it's a number)
         category = None
@@ -1403,7 +1761,9 @@ def category(category_identifier):
         return render_template('category.html',
                              category=category,
                              products=product_list,
-                             category_identifier=category_identifier)
+                             category_identifier=category_identifier,
+                             category_id=category.name,
+                             categories=main_categories)
         
     except Exception as e:
         print(f"❌ Error loading category {category_identifier}: {str(e)}")
@@ -1468,17 +1828,61 @@ def categories():
     return render_template('categories.html', categories=categories_list)
 
 
+@templates_bp.route('/browse')
+def browse_products():
+    """Public catalog: search and filters (storefront). Seller inventory uses /seller/products."""
+    try:
+        main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+        products = (
+            _public_storefront_product_base_query()
+            .order_by(Product.created_at.desc())
+            .limit(500)
+            .all()
+        )
+        product_list = _product_list_for_storefront(products)
+        featured_categories = []
+        for cat in main_categories:
+            featured_categories.append({
+                'id': cat.id,
+                'name': cat.name,
+                'slug': cat.slug,
+                'icon': cat.icon or 'flower-line',
+                'description': cat.description,
+                'image_url': cat.image_url
+            })
+        initial_category = (request.args.get('category') or '').strip().lower()
+        return render_template(
+            'browse_products.html',
+            products=product_list,
+            categories=featured_categories,
+            main_categories=main_categories,
+            initial_category_filter=initial_category,
+        )
+    except Exception as e:
+        current_app.logger.exception('browse_products: %s', e)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return render_template(
+            'browse_products.html',
+            products=[],
+            categories=[],
+            main_categories=[],
+            initial_category_filter='',
+        )
+
+
 @templates_bp.route('/products')
 def products():
-    """All products page for web interface"""
-    try:
-        products = Product.query.filter_by(is_available=True).all()
-        return render_template('products.html', 
-                             products=[p.to_dict() for p in products])
-    except Exception as e:
-        print(f"Error loading products: {str(e)}")
-        return render_template('products.html', products=[])
-    
+    """Legacy URL used by marketing links; public catalog is /browse."""
+    qs = request.query_string.decode('utf-8') if request.query_string else ''
+    dest = url_for('templates.browse_products')
+    if qs:
+        dest = f'{dest}?{qs}'
+    return redirect(dest, code=302)
+
+
 @templates_bp.route('/product/<int:product_id>')
 def product_detail(product_id):
     """Product detail page with category support"""
@@ -1559,7 +1963,7 @@ def product_detail(product_id):
         import traceback
         traceback.print_exc()
         flash('Product not found', 'error')
-        return redirect(url_for('templates.products'))
+        return redirect(url_for('templates.browse_products'))
     
 @templates_bp.route('/dashboard')
 def dashboard():
@@ -1941,6 +2345,231 @@ def admin_users():
         return redirect(url_for('templates.dashboard'))
     return render_template('admin_users.html')
 
+@templates_bp.route('/api/admin/users/list')
+def api_admin_users_list():
+    """List all users for admin user management tab."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    users = User.query.order_by(User.created_at.desc()).all()
+    payload = []
+
+    for user in users:
+        user_data = user.to_dict()
+        user_data['store_count'] = Store.query.filter_by(seller_id=user.id).count()
+        user_data['order_count'] = Order.query.filter_by(customer_id=user.id).count()
+        payload.append(user_data)
+
+    stats = {
+        'total': len(payload),
+        'active': sum(1 for u in payload if (u.get('status') or '').lower() == 'active'),
+        'banned': sum(1 for u in payload if (u.get('status') or '').lower() == 'banned'),
+        'deleted': sum(1 for u in payload if (u.get('status') or '').lower() == 'deleted'),
+    }
+    stats['inactive'] = max(0, stats['total'] - (stats['active'] + stats['banned'] + stats['deleted']))
+
+    return jsonify({'users': payload, 'stats': stats}), 200
+
+
+@templates_bp.route('/api/admin/users/<int:user_id>/details')
+def api_admin_user_details(user_id):
+    """Get full user details for admin modal."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    user = User.query.get_or_404(user_id)
+    stores = Store.query.filter_by(seller_id=user.id).all()
+
+    return jsonify({
+        'user': user.to_dict(),
+        'meta': {
+            'store_count': len(stores),
+            'active_store_count': sum(1 for s in stores if s.status == 'active'),
+            'order_count': Order.query.filter_by(customer_id=user.id).count(),
+            'latest_store': stores[0].name if stores else None
+        }
+    }), 200
+
+
+@templates_bp.route('/api/admin/users/<int:user_id>/ban', methods=['POST'])
+def api_admin_user_ban(user_id):
+    """Ban a user account with reason and optional duration."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    if not _ensure_account_bans_table():
+        return jsonify({'error': 'Unable to initialize ban records table'}), 500
+
+    if session.get('user_id') == user_id:
+        return jsonify({'error': 'You cannot ban your own account'}), 400
+
+    user = User.query.get_or_404(user_id)
+    if user.role == 'admin':
+        return jsonify({'error': 'Admin accounts cannot be banned from this page'}), 400
+
+    data = request.get_json() or {}
+    reason = (data.get('reason') or '').strip()
+    duration_value = data.get('duration_value')
+    duration_unit = (data.get('duration_unit') or '').strip().lower()
+
+    if not reason:
+        return jsonify({'error': 'Ban reason is required'}), 400
+
+    banned_until = None
+    if duration_unit != 'permanent':
+        try:
+            duration_value = int(duration_value)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Duration must be a valid number'}), 400
+
+        if duration_value <= 0:
+            return jsonify({'error': 'Duration must be greater than zero'}), 400
+
+        if duration_unit == 'hours':
+            banned_until = datetime.utcnow() + timedelta(hours=duration_value)
+        elif duration_unit == 'days':
+            banned_until = datetime.utcnow() + timedelta(days=duration_value)
+        elif duration_unit == 'weeks':
+            banned_until = datetime.utcnow() + timedelta(weeks=duration_value)
+        elif duration_unit == 'months':
+            banned_until = datetime.utcnow() + timedelta(days=duration_value * 30)
+        else:
+            return jsonify({'error': 'Invalid duration unit'}), 400
+
+    # Deactivate older active bans for this user.
+    existing_bans = AccountBan.query.filter_by(user_id=user.id, is_active=True).all()
+    for existing in existing_bans:
+        existing.is_active = False
+        existing.lifted_at = datetime.utcnow()
+        existing.lifted_by = session.get('user_id')
+
+    ban = AccountBan(
+        user_id=user.id,
+        reason=reason,
+        banned_until=banned_until,
+        is_active=True,
+        banned_by=session.get('user_id')
+    )
+
+    user.status = 'banned'
+    user.updated_at = datetime.utcnow()
+
+    if user.role == 'seller':
+        seller_store = Store.query.filter_by(seller_id=user.id).all()
+        for store in seller_store:
+            store.status = 'inactive'
+            store.updated_at = datetime.utcnow()
+
+    db.session.add(ban)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'User banned successfully'}), 200
+
+
+@templates_bp.route('/api/admin/users/bans')
+def api_admin_user_bans():
+    """List active account bans for admin table."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    if not _ensure_account_bans_table():
+        return jsonify({'error': 'Unable to initialize ban records table'}), 500
+
+    now = datetime.utcnow()
+    expired = AccountBan.query.filter(
+        AccountBan.is_active == True,
+        AccountBan.banned_until.isnot(None),
+        AccountBan.banned_until <= now
+    ).all()
+    for ban in expired:
+        ban.is_active = False
+        ban.lifted_at = now
+        ban.lifted_by = session.get('user_id')
+        if ban.user and (ban.user.status or '').lower() == 'banned':
+            ban.user.status = 'active'
+            ban.user.updated_at = now
+    if expired:
+        db.session.commit()
+
+    bans = AccountBan.query.filter_by(is_active=True).order_by(AccountBan.created_at.desc()).all()
+    payload = []
+    for ban in bans:
+        item = ban.to_dict()
+        item['user_name'] = ban.user.full_name if ban.user else 'Unknown user'
+        item['user_email'] = ban.user.email if ban.user else None
+        item['banned_by_name'] = ban.banned_by_user.full_name if ban.banned_by_user else 'Admin'
+        payload.append(item)
+
+    return jsonify({'bans': payload}), 200
+
+
+@templates_bp.route('/api/admin/users/<int:user_id>/unban', methods=['POST'])
+def api_admin_user_unban(user_id):
+    """Lift a user's active account ban."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    if not _ensure_account_bans_table():
+        return jsonify({'error': 'Unable to initialize ban records table'}), 500
+
+    user = User.query.get_or_404(user_id)
+    active_bans = AccountBan.query.filter_by(user_id=user.id, is_active=True).all()
+    if not active_bans:
+        return jsonify({'error': 'No active ban found for this user'}), 404
+
+    now = datetime.utcnow()
+    for ban in active_bans:
+        ban.is_active = False
+        ban.lifted_at = now
+        ban.lifted_by = session.get('user_id')
+
+    user.status = 'active'
+    user.updated_at = now
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'User has been unbanned'}), 200
+
+
+@templates_bp.route('/api/admin/users/<int:user_id>/delete', methods=['DELETE'])
+def api_admin_user_delete(user_id):
+    """Delete a user when safe; fallback to soft-delete."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    if session.get('user_id') == user_id:
+        return jsonify({'error': 'You cannot delete your own account'}), 400
+
+    user = User.query.get_or_404(user_id)
+    if user.role == 'admin':
+        return jsonify({'error': 'Admin accounts cannot be deleted from this page'}), 400
+
+    # Always disable seller stores before delete/soft-delete.
+    if user.role == 'seller':
+        seller_store = Store.query.filter_by(seller_id=user.id).all()
+        for store in seller_store:
+            store.status = 'inactive'
+            store.updated_at = datetime.utcnow()
+
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'User deleted permanently'}), 200
+    except IntegrityError:
+        db.session.rollback()
+        # Keep relations intact, but lock the account as deleted.
+        user.status = 'deleted'
+        user.updated_at = datetime.utcnow()
+        user.email = f"deleted_{user.id}_{int(time.time())}@deleted.local"
+        user.full_name = f"Deleted User #{user.id}"
+        user.phone = None
+        user.role = 'customer'
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'User had linked records, so account was soft-deleted instead'
+        }), 200
+    except Exception as ex:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to delete user: {str(ex)}'}), 500
+
 @templates_bp.route('/api/admin/seller-applications')
 def get_seller_applications():
     """Get all seller applications with user details"""
@@ -2096,6 +2725,186 @@ def admin_orders():
     if session.get('role') != 'admin':
         return redirect(url_for('templates.dashboard'))
     return render_template('admin_orders.html')
+
+
+@templates_bp.route('/admin/testimonials')
+def admin_testimonials():
+    if session.get('role') != 'admin':
+        return redirect(url_for('templates.dashboard'))
+    return render_template('admin_testimonials.html')
+
+
+@templates_bp.route('/admin/support')
+def admin_support():
+    if session.get('role') != 'admin':
+        return redirect(url_for('templates.dashboard'))
+    return render_template('admin_support.html')
+
+
+@templates_bp.route('/api/admin/support-faqs', methods=['GET'])
+def api_admin_support_faqs_list():
+    """List all support FAQs (admin only)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        _ensure_support_faqs_table()
+        rows = SupportFAQ.query.order_by(SupportFAQ.updated_at.desc(), SupportFAQ.id.desc()).all()
+        return jsonify({'faqs': [r.to_dict() for r in rows]})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_support_faqs_list: %s', ex)
+        return jsonify({'faqs': [], 'error': 'Could not load FAQs'}), 500
+
+
+@templates_bp.route('/api/admin/support-faqs', methods=['POST'])
+def api_admin_support_faqs_create():
+    """Create support FAQ entry (admin only)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    question = (data.get('question') or '').strip()
+    answer = (data.get('answer') or '').strip()
+    if len(question) < 5 or len(question) > 255:
+        return jsonify({'error': 'Question must be between 5 and 255 characters.'}), 400
+    if len(answer) < 5 or len(answer) > 5000:
+        return jsonify({'error': 'Answer must be between 5 and 5000 characters.'}), 400
+    try:
+        if not _ensure_support_faqs_table():
+            return jsonify({'error': 'Could not prepare support FAQ storage.'}), 503
+        row = SupportFAQ(question=question, answer=answer, is_active=True)
+        db.session.add(row)
+        db.session.commit()
+        return jsonify({'success': True, 'faq': row.to_dict()}), 201
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_support_faqs_create: %s', ex)
+        return jsonify({'error': 'Could not create FAQ.'}), 500
+
+
+@templates_bp.route('/api/admin/support-faqs/<int:faq_id>', methods=['PUT'])
+def api_admin_support_faqs_update(faq_id):
+    """Update support FAQ entry (admin only)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    question = (data.get('question') or '').strip()
+    answer = (data.get('answer') or '').strip()
+    is_active = data.get('is_active', True)
+    if len(question) < 5 or len(question) > 255:
+        return jsonify({'error': 'Question must be between 5 and 255 characters.'}), 400
+    if len(answer) < 5 or len(answer) > 5000:
+        return jsonify({'error': 'Answer must be between 5 and 5000 characters.'}), 400
+    try:
+        row = SupportFAQ.query.get(faq_id)
+        if not row:
+            return jsonify({'error': 'FAQ not found.'}), 404
+        row.question = question
+        row.answer = answer
+        row.is_active = bool(is_active)
+        db.session.commit()
+        return jsonify({'success': True, 'faq': row.to_dict()})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_support_faqs_update: %s', ex)
+        return jsonify({'error': 'Could not update FAQ.'}), 500
+
+
+@templates_bp.route('/api/admin/support-faqs/<int:faq_id>', methods=['DELETE'])
+def api_admin_support_faqs_delete(faq_id):
+    """Delete support FAQ entry (admin only)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        row = SupportFAQ.query.get(faq_id)
+        if not row:
+            return jsonify({'error': 'FAQ not found.'}), 404
+        db.session.delete(row)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_support_faqs_delete: %s', ex)
+        return jsonify({'error': 'Could not delete FAQ.'}), 500
+
+
+@templates_bp.route('/api/support-faqs', methods=['GET'])
+def api_support_faqs_public():
+    """Expose active support FAQs for chat quick-help bot."""
+    try:
+        _ensure_support_faqs_table()
+        rows = (
+            SupportFAQ.query
+            .filter_by(is_active=True)
+            .order_by(SupportFAQ.updated_at.desc(), SupportFAQ.id.desc())
+            .limit(50)
+            .all()
+        )
+        return jsonify({'faqs': [r.to_dict() for r in rows]})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_support_faqs_public: %s', ex)
+        return jsonify({'faqs': []}), 200
+
+
+@templates_bp.route('/api/admin/home-testimonials')
+def api_admin_home_testimonials_list():
+    """List all public home-page testimonials (newest first)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        rows = HomePageTestimonial.query.order_by(HomePageTestimonial.created_at.desc()).all()
+        return jsonify({'testimonials': [r.to_dict() for r in rows]})
+    except Exception as ex:
+        current_app.logger.warning('api_admin_home_testimonials_list: %s', ex)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'testimonials': [], 'warning': 'Could not load testimonials (table missing or DB error).'})
+
+
+@templates_bp.route('/api/admin/home-testimonials/<int:tid>', methods=['DELETE'])
+def api_admin_home_testimonial_delete(tid):
+    """Delete a single home-page testimonial."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        row = HomePageTestimonial.query.get(tid)
+        if not row:
+            return jsonify({'error': 'Not found'}), 404
+        db.session.delete(row)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_home_testimonial_delete: %s', ex)
+        return jsonify({'error': 'Could not delete testimonial.'}), 500
+
+
+@templates_bp.route('/api/admin/home-testimonials/<int:tid>/visibility', methods=['POST'])
+def api_admin_home_testimonial_visibility(tid):
+    """Show or hide a home-page testimonial (is_approved controls public index)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    if 'is_approved' not in data:
+        return jsonify({'error': 'JSON body must include is_approved (true or false).'}), 400
+    val = data.get('is_approved')
+    if val not in (True, False, 1, 0):
+        return jsonify({'error': 'is_approved must be a boolean.'}), 400
+    approved = bool(val)
+    try:
+        row = HomePageTestimonial.query.get(tid)
+        if not row:
+            return jsonify({'error': 'Not found'}), 404
+        row.is_approved = approved
+        db.session.commit()
+        return jsonify({'success': True, 'is_approved': row.is_approved})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_home_testimonial_visibility: %s', ex)
+        return jsonify({'error': 'Could not update visibility.'}), 500
+
 
 @templates_bp.route('/seller/products')
 def seller_products():
@@ -3379,6 +4188,42 @@ def _serialize_seller_order_for_template(order):
     return order_dict
 
 
+@templates_bp.route('/api/seller/notifications', methods=['GET'])
+def seller_notifications_api():
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+    user_id = session.get('user_id')
+    notifications = Notification.query.filter_by(user_id=user_id)\
+        .order_by(Notification.created_at.desc()).limit(20).all()
+    unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+    return jsonify({
+        'notifications': [n.to_dict() for n in notifications],
+        'unread_count': unread_count,
+    }), 200
+
+
+@templates_bp.route('/api/seller/notifications/read-all', methods=['POST'])
+def seller_notifications_read_all_api():
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+    user_id = session.get('user_id')
+    Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
+    db.session.commit()
+    return jsonify({'success': True}), 200
+
+
+@templates_bp.route('/api/seller/notifications/<int:notif_id>/read', methods=['POST'])
+def seller_notification_read_api(notif_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+    user_id = session.get('user_id')
+    notif = Notification.query.filter_by(id=notif_id, user_id=user_id).first()
+    if notif:
+        notif.is_read = True
+        db.session.commit()
+    return jsonify({'success': True}), 200
+
+
 @templates_bp.route('/api/seller/orders/<int:order_id>', methods=['GET'])
 def seller_order_details_api(order_id):
     if session.get('role') != 'seller':
@@ -3571,9 +4416,9 @@ def seller_riders_api():
         'riders': riders_data,
         'pending_invitations': [otp.to_dict() for otp in pending_otps],
         'stats': {
-            'total': len(riders),
-            'active': sum(1 for r in riders if r.is_active),
-            'inactive': sum(1 for r in riders if not r.is_active)
+            'total': sum(1 for r in riders if not r.is_archived),
+            'active': sum(1 for r in riders if r.is_active and not r.is_archived),
+            'inactive': sum(1 for r in riders if (not r.is_active) and not r.is_archived)
         }
     }), 200
 
@@ -3595,12 +4440,15 @@ def seller_invite_rider_api():
 
     email = (data.get('email') or '').lower().strip()
     full_name = (data.get('full_name') or '').strip()
-    phone = (data.get('phone') or '').strip()
+    phone = _normalize_ph_mobile(data.get('phone'))
     vehicle_type = data.get('vehicle_type', '')
     license_plate = (data.get('license_plate') or '').strip()
 
     if not email or not full_name:
         return jsonify({'error': 'Email and full name are required'}), 400
+
+    if phone and not PH_MOBILE_REGEX.fullmatch(phone):
+        return jsonify({'error': 'Please enter a valid Philippine mobile number (e.g., 09171234567 or +639171234567).'}), 400
 
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
@@ -3743,6 +4591,8 @@ def seller_verify_rider_otp_api():
     else:
         user_account.set_password(default_password)
         user_account.status = 'active'
+        normalized_phone = _normalize_ph_mobile(rider_data.get('phone'))
+        user_account.phone = normalized_phone if (normalized_phone and PH_MOBILE_REGEX.fullmatch(normalized_phone)) else None
 
     # Create Rider record if not exists
     existing_rider = Rider.query.filter_by(
@@ -3853,7 +4703,10 @@ def seller_update_rider_api(rider_id):
         if 'full_name' in data:
             rider.user.full_name = data['full_name']
         if 'phone' in data:
-            rider.user.phone = data['phone']
+            normalized_phone = _normalize_ph_mobile(data.get('phone'))
+            if normalized_phone and not PH_MOBILE_REGEX.fullmatch(normalized_phone):
+                return jsonify({'error': 'Please enter a valid Philippine mobile number (e.g., 09171234567 or +639171234567).'}), 400
+            rider.user.phone = normalized_phone
 
     rider.updated_at = datetime.utcnow()
     db.session.commit()
@@ -3877,6 +4730,8 @@ def seller_rider_status_api(rider_id):
     data = request.get_json()
     if data and 'is_active' in data:
         rider.is_active = bool(data['is_active'])
+        if rider.is_active:
+            rider.is_archived = False
 
     rider.updated_at = datetime.utcnow()
     db.session.commit()
@@ -3908,12 +4763,18 @@ def seller_delete_rider_api(rider_id):
     if active_delivery:
         return jsonify({'error': 'Cannot remove rider with active deliveries'}), 400
 
-    # Delete related rider_locations first to avoid NOT NULL constraint
-    RiderLocation.query.filter_by(rider_id=rider.id).delete()
-    db.session.delete(rider)
+    # Soft-delete behavior: archive rider by deactivating instead of permanent removal
+    rider.is_active = False
+    rider.is_archived = True
+    rider.updated_at = datetime.utcnow()
     db.session.commit()
 
-    return jsonify({'success': True, 'message': 'Rider removed successfully'}), 200
+    return jsonify({
+        'success': True,
+        'message': 'Rider archived successfully (set to inactive)',
+        'rider': rider.to_dict(),
+        'archived': True
+    }), 200
 
 
 # ─── Helper ───────────────────────────────────────────────────────────────────
@@ -4080,6 +4941,8 @@ def pos_create_order():
     customer_name = data.get('customer_name', '').strip()
     customer_contact = data.get('customer_contact')
     payment_method = data.get('payment_method', 'cash')
+    if payment_method not in ['cash', 'gcash']:
+        return jsonify({'error': 'Invalid payment method. Allowed: cash, gcash'}), 400
     amount_given = Decimal(str(data.get('amount_given', 0)))
     change_amount = Decimal(str(data.get('change_amount', 0)))
     
@@ -4106,6 +4969,7 @@ def pos_create_order():
         payment_method=payment_method,
         customer_name=customer_name,
         customer_contact=customer_contact,
+        is_seen_by_seller=False,
         discount=discount  # Save the discount
     )
     db.session.add(pos_order)
@@ -4186,6 +5050,12 @@ def pos_orders():
     if not store:
         flash('Please set up your store first.', 'warning')
         return redirect(url_for('templates.dashboard'))
+
+    # Mark unseen POS orders as seen once seller opens POS order history.
+    POSOrder.query.filter_by(store_id=store.id, is_seen_by_seller=False).update(
+        {'is_seen_by_seller': True}
+    )
+    db.session.commit()
 
     import pytz
     ph_tz = pytz.timezone('Asia/Manila')
@@ -4455,17 +5325,137 @@ def pos_order_history():
 
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# ANALYTICS + REPORTS — backed by app.utils.report_service
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _resolve_report_store():
+    """Return the seller's active store, or ``None`` if missing.
+
+    Falls back to *any* store owned by the seller (so a brand-new store still
+    in pending review can preview reports). Returns ``None`` only when the
+    user truly has no store at all.
+    """
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+    return (Store.query.filter_by(seller_id=user_id, status='active').first()
+            or Store.query.filter_by(seller_id=user_id).first())
+
+
+def _request_period_args():
+    """Parse period args from request (used by both analytics + reports)."""
+    period = (request.args.get('period') or request.form.get('period') or 'week').lower()
+    fr = request.args.get('from') or request.form.get('from')
+    to = request.args.get('to') or request.form.get('to')
+    return period, fr, to
+
+
+def _human_size(num_bytes: int) -> str:
+    """Format bytes into a compact human-readable string."""
+    size = float(num_bytes or 0)
+    units = ['B', 'KB', 'MB', 'GB']
+    idx = 0
+    while size >= 1024 and idx < len(units) - 1:
+        size /= 1024.0
+        idx += 1
+    if idx == 0:
+        return f"{int(size)} {units[idx]}"
+    return f"{size:.1f} {units[idx]}"
+
+
+def _push_saved_report_entry(entry: dict) -> None:
+    """Store report metadata in session so it appears in Saved Reports UI."""
+    items = session.get('saved_reports') or []
+    items.insert(0, entry)
+    # Keep only latest 30 rows to prevent session bloat.
+    session['saved_reports'] = items[:30]
+    session.modified = True
+
+
 @templates_bp.route('/analytics')
 def analytics():
+    """Seller analytics dashboard — all numbers come from the database."""
     if 'user_id' not in session:
         return redirect(url_for('templates.login'))
-    return render_template('analytics.html')
+
+    store = _resolve_report_store()
+    if not store:
+        return render_template(
+            'analytics.html',
+            store=None,
+            period='week',
+            period_label='—',
+            totals={'revenue': 0, 'revenue_display': '₱0.00', 'orders': 0,
+                    'avg_order': 0, 'avg_order_display': '₱0.00', 'new_customers': 0,
+                    'all_customers': 0, 'all_products': 0, 'completed_orders': 0},
+            deltas={'revenue_pct': None, 'orders_pct': None, 'avg_pct': None, 'new_pct': None},
+            top_products=[], order_status={}, sales_by_category=[], peak_hours=[],
+            revenue_series={'labels': [], 'revenue': [], 'orders': []},
+            delivery={'on_time_rate': 0, 'avg_minutes': 0, 'cancellation_rate': 0,
+                      'series': {'labels': [], 'rates': []}},
+            recent_orders=[], rating={'average': 0, 'total': 0, 'distribution': {1:0,2:0,3:0,4:0,5:0}},
+            reviews=[],
+            no_store=True,
+        )
+
+    from app.utils.report_service import compute_analytics
+    period, fr, to = _request_period_args()
+    ctx = compute_analytics(store, period=period, custom_from=fr, custom_to=to)
+    ctx['no_store'] = False
+    return render_template('analytics.html', **ctx)
+
+
+@templates_bp.route('/analytics/data')
+def analytics_data():
+    """JSON endpoint used when the user changes the period selector."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    store = _resolve_report_store()
+    if not store:
+        return jsonify({'error': 'No store found for this seller'}), 404
+
+    from app.utils.report_service import compute_analytics
+    period, fr, to = _request_period_args()
+    ctx = compute_analytics(store, period=period, custom_from=fr, custom_to=to)
+
+    return jsonify({
+        'period': ctx['period'],
+        'period_label': ctx['period_label'],
+        'totals': {
+            'revenue': ctx['totals']['revenue'],
+            'revenue_display': ctx['totals']['revenue_display'],
+            'orders': ctx['totals']['orders'],
+            'avg_order': ctx['totals']['avg_order'],
+            'avg_order_display': ctx['totals']['avg_order_display'],
+            'new_customers': ctx['totals']['new_customers'],
+        },
+        'deltas': ctx['deltas'],
+        'top_products': ctx['top_products'],
+        'order_status': ctx['order_status'],
+        'sales_by_category': ctx['sales_by_category'],
+        'peak_hours': ctx['peak_hours'],
+        'revenue_series': ctx['revenue_series'],
+        'delivery': {
+            'on_time_rate': ctx['delivery']['on_time_rate'],
+            'avg_minutes': ctx['delivery']['avg_minutes'],
+            'cancellation_rate': ctx['delivery']['cancellation_rate'],
+            'series': ctx['delivery']['series'],
+        },
+        'recent_orders': [{
+            **o,
+            'created_at': o['created_at'].strftime('%b %d, %Y %H:%M') if o.get('created_at') else '',
+        } for o in ctx['recent_orders']],
+        'rating': ctx['rating'],
+    })
+
 
 @templates_bp.route('/profile')
 def profile():
     if 'user_id' not in session:
         return redirect(url_for('templates.login'))
-    return render_template('profile.html')
+    return redirect(url_for('templates.my_account', page='profile'))
 
 @templates_bp.route('/settings')
 def settings():
@@ -4473,16 +5463,138 @@ def settings():
         return redirect(url_for('templates.login'))
     return render_template('settings.html')
 
+
 @templates_bp.route('/reports')
 def reports():
+    """Reports landing page — multi-select report builder."""
     if 'user_id' not in session:
         return redirect(url_for('templates.login'))
-    return render_template('reports.html')
+
+    from app.utils.report_service import REPORT_TYPES, REPORT_TYPE_LABELS
+    store = _resolve_report_store()
+
+    report_type_options = [
+        {'value': key, 'label': REPORT_TYPE_LABELS[key]} for key in REPORT_TYPES
+    ]
+    return render_template(
+        'reports.html',
+        store=store,
+        report_type_options=report_type_options,
+        report_types=REPORT_TYPES,
+        saved_reports=session.get('saved_reports', []),
+        report_templates=[],
+    )
+
+
+@templates_bp.route('/reports/preview', methods=['GET', 'POST'])
+def reports_preview():
+    """Return a JSON payload for the report preview pane (multi-select aware)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    store = _resolve_report_store()
+    if not store:
+        return jsonify({'error': 'No store found for this seller'}), 404
+
+    from app.utils.report_service import build_report_payload
+
+    raw_types = (
+        request.values.getlist('types[]')
+        or request.values.getlist('types')
+        or (request.get_json(silent=True) or {}).get('types')
+        or []
+    )
+    period, fr, to = _request_period_args()
+    payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
+
+    return jsonify({
+        'period': payload['period'],
+        'period_label': payload['period_label'],
+        'types': payload['types'],
+        'sections': [{
+            'key': s['key'],
+            'title': s['title'],
+            'columns': s['columns'],
+            'rows': [[
+                f"{c:.2f}" if isinstance(c, float) else c for c in r
+            ] for r in s['rows']],
+            'summary': [list(t) for t in s['summary']],
+            'row_count': len(s['rows']),
+        } for s in payload['sections']],
+    })
+
+
+@templates_bp.route('/reports/generate', methods=['POST', 'GET'])
+def reports_generate():
+    """Generate a PDF or CSV/ZIP for the selected report types."""
+    if 'user_id' not in session:
+        return redirect(url_for('templates.login'))
+
+    store = _resolve_report_store()
+    if not store:
+        return jsonify({'error': 'No store found for this seller'}), 404
+
+    from app.utils.report_service import build_report_payload, render_pdf, render_csv_bundle
+
+    raw_types = (
+        request.values.getlist('types[]')
+        or request.values.getlist('types')
+        or (request.get_json(silent=True) or {}).get('types')
+        or []
+    )
+    fmt = (request.values.get('format')
+           or (request.get_json(silent=True) or {}).get('format')
+           or 'pdf').lower()
+    period = (request.values.get('period')
+              or (request.get_json(silent=True) or {}).get('period')
+              or 'month').lower()
+    fr = request.values.get('from') or (request.get_json(silent=True) or {}).get('from')
+    to = request.values.get('to') or (request.get_json(silent=True) or {}).get('to')
+
+    payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
+
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M')
+    if fmt == 'pdf':
+        pdf_bytes = render_pdf(payload)
+        filename = f"eflora_report_{timestamp}.pdf"
+        _push_saved_report_entry({
+            'name': filename,
+            'description': f"{len(payload.get('sections', []))} section(s) · {payload.get('period_label', '')}",
+            'type': ', '.join(payload.get('types', [])) or 'all',
+            'format': 'pdf',
+            'last_generated': datetime.utcnow().strftime('%b %d, %Y %H:%M UTC'),
+            'schedule': None,
+            'size': _human_size(len(pdf_bytes)),
+        })
+        response = make_response(pdf_bytes)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    # csv / zip
+    filename, data, mime = render_csv_bundle(payload)
+    _push_saved_report_entry({
+        'name': filename,
+        'description': f"{len(payload.get('sections', []))} section(s) · {payload.get('period_label', '')}",
+        'type': ', '.join(payload.get('types', [])) or 'all',
+        'format': 'excel' if mime == 'application/zip' else 'csv',
+        'last_generated': datetime.utcnow().strftime('%b %d, %Y %H:%M UTC'),
+        'schedule': None,
+        'size': _human_size(len(data)),
+    })
+    response = make_response(data)
+    response.headers['Content-Type'] = mime
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 @templates_bp.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('templates.login'))
+    response = redirect(url_for('templates.login'))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @templates_bp.route('/products/<int:product_id>')
 def product_details(product_id):
@@ -4615,7 +5727,7 @@ def product_details(product_id):
         import traceback
         traceback.print_exc()
         flash('Product not found', 'error')
-        return redirect(url_for('templates.products'))
+        return redirect(url_for('templates.browse_products'))
 
 
 @templates_bp.route('/checkout')

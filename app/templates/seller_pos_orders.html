@@ -91,21 +91,33 @@
     .stat-trend i { font-size: 14px; }
 
     .table-wrapper {
-        background: var(--warm-white); border-radius: var(--radius-lg);
-        border: 1px solid var(--border); overflow-x: auto;
-        margin-bottom: var(--spacing-xl); -webkit-overflow-scrolling: touch;
-        box-shadow: var(--shadow-sm);
+        background: var(--warm-white);
+        border-radius: var(--radius-xl);
+        border: 1px solid var(--border);
+        overflow: visible;
+        margin-bottom: var(--spacing-xl);
     }
 
-    table { width: 100%; border-collapse: collapse; min-width: 1200px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; min-width: 0; }
 
     th {
-        text-align: left; padding: var(--spacing-md) var(--spacing-lg);
-        background: var(--cream); font-size: 11px; font-weight: 600;
+        text-align: left;
+        padding: 0.875rem 1.25rem;
+        background: var(--cream);
+        font-size: 10.5px;
+        font-weight: 700;
         text-transform: uppercase; letter-spacing: 0.05em;
-        color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
     }
-    td { padding: var(--spacing-md) var(--spacing-lg); font-size: 13px; color: var(--charcoal); border-bottom: 1px solid var(--border); vertical-align: middle; }
+    td {
+        padding: 1rem 1.25rem;
+        font-size: 13.5px;
+        color: var(--charcoal);
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+    }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: rgba(181, 68, 90, 0.02); }
 
@@ -118,14 +130,21 @@
     .change-zero     { color: var(--muted); }
 
     .action-btn {
-        padding: 0.4rem 0.875rem; border-radius: var(--radius-md);
-        border: 1.5px solid var(--border-strong); background: none;
-        font-size: 11px; font-weight: 600; color: var(--muted);
-        cursor: pointer; transition: var(--transition);
-        display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1.5px solid var(--border-strong);
+        background: none;
+        color: var(--muted);
+        cursor: pointer;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
     }
-    .action-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); background: rgba(181, 68, 90, 0.02); }
-    .action-btn i { font-size: 14px; }
+    .action-btn:hover { background: var(--cream); color: var(--charcoal); border-color: var(--charcoal); }
+    .action-btn i { font-size: 14px; line-height: 1; }
 
     .pagination { display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: var(--spacing-xl); flex-wrap: wrap; }
     .page-btn { min-width: 36px; height: 36px; border-radius: var(--radius-md); border: 1.5px solid var(--border-strong); background: var(--warm-white); font-size: 13px; color: var(--charcoal); cursor: pointer; transition: var(--transition); display: flex; align-items: center; justify-content: center; padding: 0 0.5rem; }
@@ -201,7 +220,7 @@
         .stat-value { font-size: 28px; }
         .table-wrapper { border-radius: var(--radius-md); }
         td, th { padding: var(--spacing-sm) var(--spacing-md); }
-        .action-btn { padding: 0.3rem 0.6rem; font-size: 10px; }
+        .action-btn { width: 30px; height: 30px; padding: 0; }
         .action-btn i { font-size: 12px; }
         .pagination { gap: 0.25rem; }
         .page-btn { min-width: 32px; height: 32px; font-size: 12px; }
@@ -284,7 +303,6 @@
                 <option value="all">All Methods</option>
                 <option value="cash">Cash</option>
                 <option value="gcash">GCash</option>
-                <option value="card">Card</option>
             </select>
         </div>
         <div class="filter-group">
@@ -303,18 +321,15 @@
                     <th>Date &amp; Time</th>
                     <th>Customer</th>
                     <th>Items</th>
-                    <th>Subtotal</th>
-                    <th>Discount</th>
                     <th>Total</th>
                     <th>Amount Given</th>
-                    <th>Change</th>
                     <th>Payment</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="ordersTableBody">
                 <tr>
-                    <td colspan="11" style="text-align: center; padding: 3rem;">
+                    <td colspan="8" style="text-align: center; padding: 3rem;">
                         <div class="loading-spinner" style="margin: 0 auto 1rem;"></div>
                         <span style="color: var(--muted);">Loading orders...</span>
                     </td>
@@ -347,7 +362,6 @@
             <button class="btn btn-outline" onclick="window.print()">
                 <i class="ri-printer-line"></i> Print
             </button>
-            <button class="btn btn-rose" onclick="closeModal()">Close</button>
         </div>
     </div>
 </div>
@@ -454,7 +468,7 @@ function renderOrders(orders) {
     if (!orders || orders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="11" style="text-align: center; padding: 3rem;">
+                    <td colspan="8" style="text-align: center; padding: 3rem;">
                     <div class="empty-state">
                         <i class="ri-shopping-bag-line"></i>
                         <h3>No orders found</h3>
@@ -486,7 +500,6 @@ function renderOrders(orders) {
         }).format(dt);
         // ──────────────────────────────────────────────────────────────────────
 
-        const changeAmount = parseFloat(order.change_amount || 0);
         const amountGiven  = parseFloat(order.amount_given  || order.total_amount);
         const method       = order.payment_method || 'cash';
 
@@ -502,21 +515,16 @@ function renderOrders(orders) {
                     ${order.customer_contact ? `<div style="font-size:11px;color:var(--muted);">${order.customer_contact}</div>` : ''}
                 </td>
                 <td>${order.item_count} items</td>
-                <td>₱${parseFloat(order.subtotal   || 0).toFixed(2)}</td>
-                <td>${order.discount > 0 ? `-₱${parseFloat(order.discount).toFixed(2)}` : '—'}</td>
                 <td style="font-weight:600;">₱${parseFloat(order.total_amount).toFixed(2)}</td>
                 <td>₱${amountGiven.toFixed(2)}</td>
-                <td class="${changeAmount > 0 ? 'change-positive' : 'change-zero'}">
-                    ${changeAmount > 0 ? `₱${changeAmount.toFixed(2)}` : '—'}
-                </td>
                 <td>
                     <span class="status-badge status-${method}">
                         ${method.charAt(0).toUpperCase() + method.slice(1)}
                     </span>
                 </td>
                 <td>
-                    <button class="action-btn" onclick="viewOrder(${order.id})">
-                        <i class="ri-eye-line"></i> View
+                    <button class="action-btn" onclick="viewOrder(${order.id})" title="View" aria-label="View">
+                        <i class="ri-eye-line"></i>
                     </button>
                 </td>
             </tr>`;

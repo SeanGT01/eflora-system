@@ -156,7 +156,17 @@
 .chat-head .back-btn { display: none; cursor: pointer; background: none; border: none; color: var(--charcoal); font-size: 18px; margin-right: 4px; }
 
 /* ══════════ INBOX LIST ══════════ */
-.chat-inbox { flex: 1; overflow-y: auto; }
+#chat-inbox-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+.chat-inbox {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
 .chat-inbox-header {
     padding: 16px;
     font-size: 20px;
@@ -251,6 +261,106 @@
     cursor: pointer; white-space: nowrap;
 }
 .search-result-item .msg-btn:hover { opacity: .9; }
+
+/* ══════════ RECOMMENDED SHOPS ══════════ */
+.chat-recommended-wrap {
+    padding: 8px 10px 9px;
+    border-bottom: 1px solid var(--border);
+    background: var(--warm-white);
+}
+.chat-recommended-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.chat-recommended-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.chat-recommended-list {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+.chat-rec-item {
+    min-width: 98px;
+    max-width: 98px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+    padding: 6px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.chat-rec-item:hover { border-color: var(--deep-rose); transform: translateY(-1px); }
+.chat-rec-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    margin-bottom: 5px;
+    background: linear-gradient(135deg, var(--deep-rose), var(--dusty-rose));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    overflow: hidden;
+}
+.chat-rec-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.chat-rec-name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--charcoal);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-rec-meta {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.avatar-badge {
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    flex-shrink: 0;
+}
+.avatar-badge.admin {
+    background: linear-gradient(135deg, #7a2f44, #b5445a);
+}
+.avatar-badge.bot {
+    background: linear-gradient(135deg, #4a6b4e, #7a9e7e);
+}
+
+/* ══════════ QUICK ANSWERS ACCOUNT VIEW ══════════ */
+.qa-question {
+    border: 1px solid var(--border-strong);
+    background: #fff;
+    color: var(--charcoal);
+    border-radius: 14px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    cursor: pointer;
+    margin-top: 6px;
+}
+.qa-question:hover { border-color: var(--deep-rose); color: var(--deep-rose); }
 
 /* ══════════ MESSAGES AREA ══════════ */
 .chat-messages {
@@ -528,6 +638,12 @@
                 <input type="text" id="chat-store-search" placeholder="Search stores to message…" oninput="chatWidget.searchStores(this.value)">
             </div>
             <div class="chat-search-results" id="chat-search-results" style="display:none;"></div>
+            <div class="chat-recommended-wrap" id="chat-recommended-wrap">
+                <div class="chat-recommended-head">
+                    <div class="chat-recommended-title">Recommended shops</div>
+                </div>
+                <div class="chat-recommended-list" id="chat-recommended-list"></div>
+            </div>
             <div class="chat-inbox" id="chat-inbox-list">
                 <div class="inbox-empty" id="chat-inbox-empty">No conversations yet</div>
             </div>
@@ -560,7 +676,7 @@
                 <span class="preview-count" id="chat-preview-count"></span>
                 <button class="preview-cancel" onclick="chatWidget.cancelImage()" title="Clear all"><i class="ri-close-line"></i></button>
             </div>
-            <div class="chat-input-bar">
+            <div class="chat-input-bar" id="chat-input-bar">
                 <button class="attach-btn" onclick="document.getElementById('chat-file-input').click()" title="Send image"><i class="ri-image-add-line"></i></button>
                 <input type="file" id="chat-file-input" accept="image/*" multiple onchange="chatWidget.previewImage(this)">
                 <input type="text" id="chat-msg-input" placeholder="Type a message…" onkeydown="if(event.key==='Enter')chatWidget.send()" oninput="chatWidget.onType()">
@@ -578,12 +694,15 @@ const chatWidget = (() => {
     const API = '/api/v1/chat';
     let _token = null;
     let _userId = null;
+    let _userRole = null;
     let _convos = [];
     let _activeConvoId = null;
     let _messages = [];
     let _pollTimer = null;
     let _typingTimer = null;
     let _unreadPollTimer = null;
+    let _supportFaqs = null;
+    let _quickAnswersMode = false;
 
     function _headers() {
         const h = { 'Content-Type': 'application/json' };
@@ -621,11 +740,25 @@ const chatWidget = (() => {
         return `<div class="avatar-placeholder" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.37)}px;">${_initials(name)}</div>`;
     }
 
+    function _adminAvatar(size) {
+        size = size || 38;
+        const iconSize = Math.max(14, Math.round(size * 0.46));
+        return `<div class="avatar-badge admin" style="width:${size}px;height:${size}px;"><i class="ri-shield-user-line" style="font-size:${iconSize}px;"></i></div>`;
+    }
+
+    function _botAvatar(size) {
+        size = size || 38;
+        const iconSize = Math.max(14, Math.round(size * 0.46));
+        return `<div class="avatar-badge bot" style="width:${size}px;height:${size}px;"><i class="ri-robot-2-line" style="font-size:${iconSize}px;"></i></div>`;
+    }
+
     // ═══ INIT ═══
-    function init(token, userId) {
+    function init(token, userId, role) {
         _token = token;
         _userId = userId;
+        _userRole = role || _userRole;
         document.getElementById('chat-fab').style.display = 'flex';
+        _updateSupportEntryVisibility();
         if (_userId) {
             _pollUnread();
             _unreadPollTimer = setInterval(_pollUnread, 15000);
@@ -650,7 +783,7 @@ const chatWidget = (() => {
             })
             .then(data => {
                 if (data.user_id) {
-                    init(data.token || '', data.user_id);
+                    init(data.token || '', data.user_id, data.role || '');
                     open();
                 } else {
                     window.location.href = '/login';
@@ -674,11 +807,15 @@ const chatWidget = (() => {
     // ═══ INBOX ═══
     function showInbox() {
         _activeConvoId = null;
+        _quickAnswersMode = false;
         _stopPoll();
         document.getElementById('chat-inbox-view').style.display = '';
         document.getElementById('chat-detail-view').style.display = 'none';
+        _updateSupportEntryVisibility();
         _loadConversations();
     }
+
+    function _updateSupportEntryVisibility() {}
 
     async function _loadConversations() {
         try {
@@ -686,20 +823,124 @@ const chatWidget = (() => {
             const data = await res.json();
             _convos = data.conversations || [];
             _renderInbox();
+            _loadRecommendedShops();
         } catch(e) { console.error('Chat: load convos failed', e); }
+    }
+
+    async function _getAllStores() {
+        if (_allStores) return _allStores;
+        try {
+            const res = await fetch('/api/v1/customer/stores');
+            _allStores = await res.json();
+        } catch(e) {
+            console.error('Chat: failed to load stores', e);
+            _allStores = [];
+        }
+        return _allStores;
+    }
+
+    async function _loadRecommendedShops() {
+        const wrap = document.getElementById('chat-recommended-wrap');
+        const list = document.getElementById('chat-recommended-list');
+        if (!wrap || !list) return;
+
+        const stores = await _getAllStores();
+        if (!Array.isArray(stores) || stores.length === 0) {
+            wrap.style.display = 'none';
+            return;
+        }
+
+        const convoStoreIds = new Set(
+            (_convos || [])
+                .map(c => c.store_id)
+                .filter(id => typeof id === 'number' || typeof id === 'string')
+        );
+
+        const recommendations = stores
+            .filter(s => !convoStoreIds.has(s.id))
+            .sort((a, b) => {
+                const ar = Number(a.average_rating || a.rating || 0);
+                const br = Number(b.average_rating || b.rating || 0);
+                if (br !== ar) return br - ar;
+                const ac = Number(a.review_count || a.ratings_count || 0);
+                const bc = Number(b.review_count || b.ratings_count || 0);
+                if (bc !== ac) return bc - ac;
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            })
+            .slice(0, 8);
+
+        if (recommendations.length === 0) {
+            wrap.style.display = 'none';
+            return;
+        }
+
+        list.innerHTML = recommendations.map(s => {
+            const logo = s.logo_url
+                ? `<div class="chat-rec-avatar"><img src="${s.logo_url}" alt="" onerror="this.parentElement.textContent='${_esc((s.name || 'S')[0])}'"></div>`
+                : `<div class="chat-rec-avatar">${_esc((s.name || 'S')[0])}</div>`;
+            const rating = Number(s.average_rating || s.rating || 0);
+            const ratingText = rating > 0 ? `⭐ ${rating.toFixed(1)}` : (s.municipality || 'Shop');
+            return `<button type="button" class="chat-rec-item" onclick="chatWidget.openWithStore(${s.id})">
+                ${logo}
+                <div class="chat-rec-name">${_esc(s.name || 'Store')}</div>
+                <div class="chat-rec-meta">${_esc(ratingText)}</div>
+            </button>`;
+        }).join('');
+        wrap.style.display = '';
     }
 
     function _renderInbox() {
         const list = document.getElementById('chat-inbox-list');
         const empty = document.getElementById('chat-inbox-empty');
-        if (_convos.length === 0) {
+        const isAdmin = _userRole === 'admin';
+        const supportConvo = isAdmin
+            ? null
+            : _convos.find(c => c.other_user && c.other_user.role === 'admin');
+        const normalConvos = isAdmin
+            ? _convos
+            : _convos.filter(c => !(c.other_user && c.other_user.role === 'admin'));
+
+        const hasAnyItems = (!isAdmin) || normalConvos.length > 0;
+        if (!hasAnyItems) {
             empty.style.display = '';
             list.innerHTML = '';
             list.appendChild(empty);
             return;
         }
+
         empty.style.display = 'none';
-        list.innerHTML = _convos.map(c => {
+        const parts = [];
+        if (!isAdmin) {
+            const supportUnread = supportConvo ? (supportConvo.unread_count || 0) : 0;
+            const supportPreview = supportConvo
+                ? (supportConvo.last_message_text || 'Chat with admin support')
+                : 'Chat with admin support';
+            const supportTime = supportConvo ? _timeAgo(supportConvo.last_message_at) : '';
+            const supportAvatar = _adminAvatar(44);
+            parts.push(`<div class="inbox-item" data-support-item="1" onclick="chatWidget._openSupportFromInbox()">
+                ${supportAvatar}
+                <div class="info">
+                    <div class="name">Contact Support</div>
+                    <div class="preview">${_esc(supportPreview)}</div>
+                </div>
+                <div class="meta">
+                    <div class="time">${supportTime}</div>
+                    ${supportUnread > 0 ? `<div class="unread-badge">${supportUnread > 99 ? '99+' : supportUnread}</div>` : ''}
+                </div>
+            </div>`);
+
+            parts.push(`<div class="inbox-item" onclick="chatWidget.openQuickAnswers()">
+                ${_botAvatar(44)}
+                <div class="info">
+                    <div class="name">Quick Answers</div>
+                    <div class="preview">Tap to browse common questions</div>
+                </div>
+                <div class="meta">
+                    <div class="time"></div>
+                </div>
+            </div>`);
+        }
+        parts.push(...normalConvos.map(c => {
             const other = c.other_user || {};
             const unread = c.unread_count || 0;
             // Customers see the store name; sellers see the customer name
@@ -717,14 +958,17 @@ const chatWidget = (() => {
                     ${unread > 0 ? `<div class="unread-badge">${unread > 99 ? '99+' : unread}</div>` : ''}
                 </div>
             </div>`;
-        }).join('');
+        }));
+        list.innerHTML = parts.join('');
     }
 
     // ═══ OPEN CONVERSATION (by ID) ═══
     async function openConvo(convoId) {
+        _quickAnswersMode = false;
         _activeConvoId = convoId;
         document.getElementById('chat-inbox-view').style.display = 'none';
         document.getElementById('chat-detail-view').style.display = 'flex';
+        _setComposerVisible(true);
 
         // Find conversation data
         let convo = _convos.find(c => c.id === convoId);
@@ -749,26 +993,19 @@ const chatWidget = (() => {
     async function searchStores(query) {
         const resultsEl = document.getElementById('chat-search-results');
         const inboxEl = document.getElementById('chat-inbox-list');
+        const recEl = document.getElementById('chat-recommended-wrap');
 
         if (!query || query.trim().length === 0) {
             resultsEl.style.display = 'none';
             inboxEl.style.display = '';
+            if (recEl) recEl.style.display = '';
             return;
         }
+        if (recEl) recEl.style.display = 'none';
 
-        // Fetch stores if not cached
-        if (!_allStores) {
-            try {
-                const res = await fetch('/api/v1/customer/stores');
-                _allStores = await res.json();
-            } catch(e) {
-                console.error('Chat: failed to load stores', e);
-                _allStores = [];
-            }
-        }
-
+        const allStores = await _getAllStores();
         const q = query.toLowerCase().trim();
-        const matches = _allStores.filter(s => (s.name || '').toLowerCase().includes(q)).slice(0, 10);
+        const matches = allStores.filter(s => (s.name || '').toLowerCase().includes(q)).slice(0, 10);
 
         if (matches.length === 0) {
             resultsEl.innerHTML = '<div class="inbox-empty" style="padding:20px;">No stores found</div>';
@@ -808,7 +1045,7 @@ const chatWidget = (() => {
                 const chk = await fetch('/api/chat/session-check', { credentials: 'include' });
                 if (chk.ok) {
                     const d = await chk.json();
-                    if (d.user_id) { init(d.token || '', d.user_id); }
+                    if (d.user_id) { init(d.token || '', d.user_id, d.role || ''); }
                     else { window.location.href = '/login'; return; }
                 } else { window.location.href = '/login'; return; }
             } catch(e) { window.location.href = '/login'; return; }
@@ -829,12 +1066,119 @@ const chatWidget = (() => {
         } catch(e) { console.error('Chat: open with store failed', e); }
     }
 
+    async function openSupport() {
+        if (!_userId) {
+            try {
+                const chk = await fetch('/api/chat/session-check', { credentials: 'include' });
+                if (!chk.ok) { window.location.href = '/login'; return; }
+                const d = await chk.json();
+                if (d.user_id) {
+                    init(d.token || '', d.user_id, d.role || '');
+                } else {
+                    window.location.href = '/login';
+                    return;
+                }
+            } catch (e) {
+                window.location.href = '/login';
+                return;
+            }
+        }
+        try {
+            const res = await _fetch(API + '/conversations/support', {
+                method: 'POST',
+                headers: _headers(),
+            });
+            const data = await res.json();
+            if (res.ok && data.conversation) {
+                open();
+                openConvo(data.conversation.id);
+            } else {
+                alert(data.error || 'Could not open support chat');
+            }
+        } catch (e) {
+            console.error('Chat: open support failed', e);
+        }
+    }
+
+    async function _loadSupportFaqs() {
+        if (Array.isArray(_supportFaqs)) return _supportFaqs;
+        try {
+            const res = await fetch('/api/support-faqs', { credentials: 'same-origin' });
+            const data = await res.json();
+            _supportFaqs = Array.isArray(data.faqs) ? data.faqs : [];
+        } catch (e) {
+            _supportFaqs = [];
+        }
+        return _supportFaqs;
+    }
+
+    function _setComposerVisible(show) {
+        const inputBar = document.getElementById('chat-input-bar');
+        const replyBar = document.getElementById('chat-reply-bar');
+        const imgPreview = document.getElementById('chat-img-preview');
+        const typing = document.getElementById('chat-typing');
+        if (inputBar) inputBar.style.display = show ? '' : 'none';
+        if (replyBar) replyBar.style.display = show ? '' : 'none';
+        if (imgPreview) imgPreview.style.display = 'none';
+        if (typing) typing.style.display = 'none';
+    }
+
+    async function openQuickAnswers() {
+        _quickAnswersMode = true;
+        _activeConvoId = null;
+        _stopPoll();
+        document.getElementById('chat-inbox-view').style.display = 'none';
+        document.getElementById('chat-detail-view').style.display = 'flex';
+        _setComposerVisible(false);
+
+        document.getElementById('chat-detail-avatar').innerHTML = _botAvatar(38);
+        document.getElementById('chat-detail-name').textContent = 'Quick Answers';
+        document.getElementById('chat-detail-status').innerHTML = '<span class="online-dot"></span> Auto Help';
+
+        const area = document.getElementById('chat-messages-area');
+        area.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px 0;font-size:13px;">Loading FAQs...</div>';
+
+        const faqs = await _loadSupportFaqs();
+        if (!faqs.length) {
+            area.innerHTML = '<div style="text-align:center;color:var(--muted);padding:28px 0;font-size:13px;">No FAQs available yet.</div>';
+            return;
+        }
+
+        area.innerHTML = '<div class="msg-row received"><div class="bubble">Hi! Select a question below to get an instant answer.</div></div>' +
+            faqs.map(f => `<button type="button" class="qa-question" onclick="chatWidget.showFaqAnswer(${f.id})">${_esc(f.question)}</button>`).join('');
+        area.scrollTop = 0;
+    }
+
+    function showFaqAnswer(faqId) {
+        if (!Array.isArray(_supportFaqs)) return;
+        const hit = _supportFaqs.find(f => f.id === faqId);
+        if (!hit) return;
+        const area = document.getElementById('chat-messages-area');
+        if (!area) return;
+        area.innerHTML += `<div class="msg-row sent"><div class="bubble">${_esc(hit.question)}</div></div>`;
+        area.innerHTML += `<div class="msg-row received"><div class="bubble">${_esc(hit.answer || '')}</div></div>`;
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function _openSupportFromInbox() {
+        const supportConvo = _convos.find(c => c.other_user && c.other_user.role === 'admin');
+        if (supportConvo && supportConvo.id) {
+            openConvo(supportConvo.id);
+            return;
+        }
+        openSupport();
+    }
+
     function _renderHeader(convo) {
         const other = convo.other_user || {};
         const isSeller = (other.role === 'seller');
         const displayName = isSeller ? (convo.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown');
         const displayAvatar = isSeller ? (convo.store_logo || other.avatar_url) : other.avatar_url;
-        document.getElementById('chat-detail-avatar').innerHTML = _avatarHtml(displayAvatar, displayName, 38);
+        if (other.role === 'admin') {
+            document.getElementById('chat-detail-avatar').innerHTML = _adminAvatar(38);
+        } else {
+            document.getElementById('chat-detail-avatar').innerHTML = _avatarHtml(displayAvatar, displayName, 38);
+        }
         document.getElementById('chat-detail-name').textContent = displayName;
         // Check online
         _checkOnline(other.id || convo.seller_id);
@@ -1055,7 +1399,7 @@ const chatWidget = (() => {
     async function deleteMessage(msgId) {
         if (!_activeConvoId) return;
         _closeAllMenus();
-        if (!confirm('Delete this message?')) return;
+        if (!await window.openConfirmModal('Delete this message?')) return;
         try {
             const res = await _fetch(API + '/conversations/' + _activeConvoId + '/messages/' + msgId, {
                 method: 'DELETE', headers: _headers(),
@@ -1276,6 +1620,10 @@ const chatWidget = (() => {
         showInbox,
         openConvo,
         openWithStore,
+        openSupport,
+        openQuickAnswers,
+        showFaqAnswer,
+        _openSupportFromInbox,
         searchStores,
         send,
         sendImage,

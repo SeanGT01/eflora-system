@@ -729,6 +729,9 @@
             <button class="btn btn-outline" onclick="loadRiders()">
                 <i class="ri-refresh-line"></i>
             </button>
+            <button class="btn btn-outline" data-archive-toggle onclick="toggleArchivedSection()">
+                <i class="ri-archive-line"></i> Archived
+            </button>
             <button class="btn btn-rose" onclick="openInviteModal()">
                 <i class="ri-user-add-line"></i> Invite Rider
             </button>
@@ -794,6 +797,9 @@
                 <i class="ri-team-line"></i>
                 Verified Riders
             </div>
+            <button class="btn btn-outline btn-sm" data-archive-toggle onclick="toggleArchivedSection()">
+                <i class="ri-archive-line"></i> Archived
+            </button>
         </div>
 
         <!-- Loading -->
@@ -829,6 +835,33 @@
             </table>
         </div>
     </div>
+
+    <!-- Archived Riders Panel -->
+    <div class="riders-panel" id="archivedRidersSection" style="display: none;">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="ri-archive-line"></i>
+                Archived Riders
+                <span class="panel-badge" id="archivedRidersCount">0</span>
+            </div>
+        </div>
+        <div id="archivedRidersTableContainer">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Rider</th>
+                        <th>Contact</th>
+                        <th>Vehicle</th>
+                        <th>Status</th>
+                        <th>Deliveries</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="archivedRidersTableBody"></tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <!-- ═══════════ INVITE RIDER MODAL ═══════════ -->
@@ -860,7 +893,7 @@
                 <div class="form-group">
                     <label class="form-label">Phone Number</label>
                     <input type="tel" class="form-control" name="phone" id="invitePhone"
-                           placeholder="09xxxxxxxxx">
+                           placeholder="09xxxxxxxxx or +639xxxxxxxxx" inputmode="numeric" maxlength="13">
                 </div>
 
                 <div class="form-row">
@@ -901,9 +934,6 @@
             <button class="modal-close" onclick="closeModal('viewOverlay')"><i class="ri-close-line"></i></button>
         </div>
         <div class="modal-body" id="viewRiderBody"></div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-outline" onclick="closeModal('viewOverlay')">Close</button>
-        </div>
     </div>
 </div>
 
@@ -925,7 +955,7 @@
 
                 <div class="form-group">
                     <label class="form-label">Phone</label>
-                    <input type="tel" class="form-control" id="editPhone" name="phone">
+                    <input type="tel" class="form-control" id="editPhone" name="phone" placeholder="09xxxxxxxxx or +639xxxxxxxxx" inputmode="numeric" maxlength="13">
                 </div>
 
                 <div class="form-row">
@@ -960,6 +990,23 @@
     </div>
 </div>
 
+<!-- ═══════════ CONFIRM ACTION MODAL ═══════════ -->
+<div class="riders-overlay" id="confirmOverlay">
+    <div class="riders-modal sm">
+        <div class="modal-header">
+            <div class="modal-title">Please Confirm</div>
+            <button class="modal-close" onclick="handleConfirmCancel()"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <p id="confirmMessage" style="margin: 0; color: var(--charcoal); font-size: 14px; line-height: 1.6;"></p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="handleConfirmCancel()">Cancel</button>
+            <button type="button" class="btn btn-rose" id="confirmOkBtn">OK</button>
+        </div>
+    </div>
+</div>
+
 <!-- Toast Stack -->
 <div class="riders-toast-stack" id="toastStack"></div>
 {% endblock %}
@@ -967,6 +1014,76 @@
 {% block extra_js %}
 <script>
 const API_BASE = '/api/seller';
+let isArchivedSectionOpen = false;
+const PH_MOBILE_REGEX = /^(?:\+63|0)9\d{9}$/;
+
+function normalizePhMobile(phoneRaw) {
+    const raw = (phoneRaw || '').trim();
+    if (!raw) return '';
+
+    let compact = raw.replace(/[\s\-()]/g, '');
+    if (compact.startsWith('+63')) {
+        compact = `0${compact.slice(3)}`;
+    } else if (compact.startsWith('63') && compact.length === 12) {
+        compact = `0${compact.slice(2)}`;
+    }
+
+    return compact;
+}
+
+function validatePhMobile(phoneRaw) {
+    const normalized = normalizePhMobile(phoneRaw);
+    if (!normalized) return { ok: true, normalized: '' };
+    return {
+        ok: PH_MOBILE_REGEX.test(normalized),
+        normalized,
+        message: 'Enter a valid PH mobile number (e.g., 09171234567 or +639171234567).'
+    };
+}
+
+function enforcePhoneInputLimit(event) {
+    const input = event.target;
+    if (!input) return;
+
+    let value = (input.value || '').replace(/[^\d+]/g, '');
+    const hasLeadingPlus = value.startsWith('+');
+    value = hasLeadingPlus
+        ? `+${value.slice(1).replace(/\+/g, '')}`
+        : value.replace(/\+/g, '');
+
+    if (value.startsWith('+')) {
+        // Enforce +639 prefix and max length 13.
+        if (value === '+') {
+            input.value = '+';
+            input.maxLength = 13;
+            return;
+        }
+        if (!value.startsWith('+63')) {
+            value = '+63';
+        }
+        if (value.length >= 4 && value.charAt(3) !== '9') {
+            value = '+639';
+        }
+        input.maxLength = 13;
+        input.value = value.slice(0, 13);
+        return;
+    }
+
+    // Local format: force leading 0 then 9, max length 11 (09XXXXXXXXX).
+    if (value.length === 0) {
+        input.maxLength = 11;
+        input.value = '';
+        return;
+    }
+    if (value.charAt(0) !== '0') {
+        value = `0${value.replace(/^0+/, '')}`;
+    }
+    if (value.length >= 2 && value.charAt(1) !== '9') {
+        value = '09';
+    }
+    input.maxLength = 11;
+    input.value = value.slice(0, 11);
+}
 
 // ───────────────────────────────────────────────────
 // API Helper
@@ -1012,10 +1129,48 @@ function closeModal(id) {
     document.body.style.overflow = '';
 }
 
+let confirmResolver = null;
+
+function handleConfirmCancel() {
+    closeModal('confirmOverlay');
+    if (confirmResolver) {
+        confirmResolver(false);
+        confirmResolver = null;
+    }
+}
+
+function showConfirmModal(message) {
+    const messageEl = document.getElementById('confirmMessage');
+    const okBtn = document.getElementById('confirmOkBtn');
+    messageEl.textContent = message;
+    openModal('confirmOverlay');
+
+    return new Promise(resolve => {
+        confirmResolver = resolve;
+        okBtn.onclick = function() {
+            closeModal('confirmOverlay');
+            if (confirmResolver) {
+                confirmResolver(true);
+                confirmResolver = null;
+            }
+        };
+    });
+}
+
 function openInviteModal() {
     document.getElementById('inviteRiderForm').reset();
     document.getElementById('inviteError').style.display = 'none';
     openModal('inviteOverlay');
+}
+
+function toggleArchivedSection() {
+    isArchivedSectionOpen = !isArchivedSectionOpen;
+    document.querySelectorAll('[data-archive-toggle]').forEach(btn => {
+        btn.innerHTML = isArchivedSectionOpen
+        ? '<i class="ri-archive-line"></i> Hide Archived'
+        : '<i class="ri-archive-line"></i> Archived';
+    });
+    loadRiders();
 }
 
 document.querySelectorAll('.riders-overlay').forEach(overlay => {
@@ -1032,10 +1187,12 @@ async function loadRiders() {
     const noRiders = document.getElementById('noRiders');
     const tableContainer = document.getElementById('ridersTableContainer');
     const pendingSection = document.getElementById('pendingSection');
+    const archivedSection = document.getElementById('archivedRidersSection');
 
     loading.style.display = 'flex';
     noRiders.style.display = 'none';
     tableContainer.style.display = 'none';
+    archivedSection.style.display = 'none';
 
     try {
         const data = await apiFetch(`${API_BASE}/riders`);
@@ -1069,7 +1226,7 @@ async function loadRiders() {
 function renderPendingInvitations(invitations) {
     const list = document.getElementById('pendingList');
     list.innerHTML = invitations.map(inv => {
-        const expiresAt = new Date(inv.expires_at);
+        const expiresAt = parseServerDate(inv.expires_at);
         const now = new Date();
         const expiresMins = Math.max(0, Math.round((expiresAt - now) / 60000));
 
@@ -1107,6 +1264,9 @@ function renderPendingInvitations(invitations) {
 
 function renderRidersTable(riders) {
     const tbody = document.getElementById('ridersTableBody');
+    const archivedTbody = document.getElementById('archivedRidersTableBody');
+    const archivedSection = document.getElementById('archivedRidersSection');
+    const archivedCount = document.getElementById('archivedRidersCount');
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const statusFilter = document.getElementById('statusFilter').value;
 
@@ -1116,16 +1276,24 @@ function renderRidersTable(riders) {
             (r.email || '').toLowerCase().includes(searchTerm);
         const matchStatus = !statusFilter ||
             (statusFilter === 'active' && r.is_active) ||
-            (statusFilter === 'inactive' && !r.is_active);
+            (statusFilter === 'inactive' && !r.is_active && !r.is_archived);
         return matchSearch && matchStatus;
     });
 
     if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 2.5rem;">No riders match your filter</td></tr>';
+        archivedTbody.innerHTML = '';
+        archivedSection.style.display = 'none';
         return;
     }
 
-    tbody.innerHTML = filtered.map((rider, idx) => `
+    const activeRiders = filtered.filter(rider => rider.is_active || (!rider.is_active && !rider.is_archived));
+    const archivedRiders = filtered.filter(rider => rider.is_archived);
+
+    if (activeRiders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 2.5rem;">No active riders match your filter</td></tr>';
+    } else {
+        tbody.innerHTML = activeRiders.map((rider, idx) => `
         <tr>
             <td style="color: var(--muted);">${idx + 1}</td>
             <td>
@@ -1176,6 +1344,58 @@ function renderRidersTable(riders) {
             </td>
         </tr>
     `).join('');
+    }
+
+    if (archivedRiders.length > 0 && isArchivedSectionOpen) {
+        archivedSection.style.display = 'block';
+        archivedCount.textContent = archivedRiders.length;
+        archivedTbody.innerHTML = archivedRiders.map((rider, idx) => `
+        <tr>
+            <td style="color: var(--muted);">${idx + 1}</td>
+            <td>
+                <div class="rider-info">
+                    <div class="rider-avatar">
+                        ${rider.avatar_url
+                            ? `<img src="${rider.avatar_url}" alt="">`
+                            : '<i class="ri-motorbike-line"></i>'}
+                    </div>
+                    <div>
+                        <div class="rider-name">${escapeHtml(rider.full_name || 'Unknown')}</div>
+                        <div class="rider-sub">ID: ${rider.id}</div>
+                    </div>
+                </div>
+            </td>
+            <td>
+                <div style="font-size: 13.5px;">${escapeHtml(rider.email || '')}</div>
+                <div class="rider-sub">${escapeHtml(rider.phone || 'No phone')}</div>
+            </td>
+            <td>
+                <div style="font-size: 13.5px;">${escapeHtml(rider.vehicle_type || 'N/A')}</div>
+                <div class="rider-sub">${escapeHtml(rider.license_plate || '')}</div>
+            </td>
+            <td>
+                <span class="status-badge badge-cancelled">Archived</span>
+            </td>
+            <td style="text-align: center;">
+                <span style="font-family: var(--font-display); font-size: 20px; font-weight: 500;">${rider.total_deliveries || 0}</span>
+            </td>
+            <td style="text-align: right;">
+                <div class="action-btn-group" style="justify-content: flex-end;">
+                    <button class="action-btn" onclick="viewRider(${rider.id})" title="View">
+                        <i class="ri-eye-line"></i>
+                    </button>
+                    <button class="action-btn success" onclick="toggleRiderStatus(${rider.id}, true)" title="Restore">
+                        <i class="ri-refresh-line"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+        `).join('');
+    } else {
+        archivedTbody.innerHTML = '';
+        archivedSection.style.display = 'none';
+        archivedCount.textContent = archivedRiders.length;
+    }
 }
 
 // ───────────────────────────────────────────────────
@@ -1194,6 +1414,15 @@ document.getElementById('inviteRiderForm').addEventListener('submit', async func
         vehicle_type: document.getElementById('inviteVehicle').value,
         license_plate: document.getElementById('inviteLicensePlate').value.trim()
     };
+
+    const invitePhoneValidation = validatePhMobile(payload.phone);
+    if (!invitePhoneValidation.ok) {
+        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${invitePhoneValidation.message}`;
+        errorDiv.style.display = 'flex';
+        document.getElementById('invitePhone').focus();
+        return;
+    }
+    payload.phone = invitePhoneValidation.normalized;
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Sending OTP…';
@@ -1270,7 +1499,8 @@ async function resendInvitation(otpId) {
 // CANCEL INVITATION
 // ───────────────────────────────────────────────────
 async function cancelInvitation(otpId) {
-    if (!confirm('Cancel this rider invitation?')) return;
+    const confirmed = await showConfirmModal('Cancel this rider invitation?');
+    if (!confirmed) return;
     try {
         const data = await apiFetch(`${API_BASE}/riders/cancel-invitation`, {
             method: 'POST',
@@ -1377,6 +1607,15 @@ document.getElementById('editRiderForm').addEventListener('submit', async functi
         is_active: document.getElementById('editIsActive').checked
     };
 
+    const editPhoneValidation = validatePhMobile(payload.phone);
+    if (!editPhoneValidation.ok) {
+        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${editPhoneValidation.message}`;
+        errorDiv.style.display = 'flex';
+        document.getElementById('editPhone').focus();
+        return;
+    }
+    payload.phone = editPhoneValidation.normalized;
+
     try {
         const data = await apiFetch(`${API_BASE}/riders/${riderId}`, {
             method: 'PUT',
@@ -1409,7 +1648,8 @@ async function toggleRiderStatus(riderId, newActive) {
 }
 
 async function deleteRider(riderId, name) {
-    if (!confirm(`Remove rider "${name}" from your store? This cannot be undone.`)) return;
+    const confirmed = await showConfirmModal(`Archive rider "${name}"? This will set the rider to inactive instead of permanently deleting.`);
+    if (!confirmed) return;
     try {
         const data = await apiFetch(`${API_BASE}/riders/${riderId}`, { method: 'DELETE' });
         showToast('success', data.message);
@@ -1424,6 +1664,8 @@ async function deleteRider(riderId, name) {
 // ───────────────────────────────────────────────────
 document.getElementById('searchInput').addEventListener('input', () => loadRiders());
 document.getElementById('statusFilter').addEventListener('change', () => loadRiders());
+document.getElementById('invitePhone')?.addEventListener('input', enforcePhoneInputLimit);
+document.getElementById('editPhone')?.addEventListener('input', enforcePhoneInputLimit);
 
 // ───────────────────────────────────────────────────
 // HELPERS
@@ -1436,8 +1678,17 @@ function escapeHtml(str) {
 
 function formatDate(isoStr) {
     if (!isoStr) return 'N/A';
-    const d = new Date(isoStr);
+    const d = parseServerDate(isoStr);
     return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function parseServerDate(isoStr) {
+    if (!isoStr) return new Date(NaN);
+    // Backend sends UTC naive timestamps (no timezone suffix), so force UTC parse.
+    if (typeof isoStr === 'string' && !/[zZ]|[+\-]\d{2}:\d{2}$/.test(isoStr)) {
+        return new Date(isoStr + 'Z');
+    }
+    return new Date(isoStr);
 }
 
 // ───────────────────────────────────────────────────

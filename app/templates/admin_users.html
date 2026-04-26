@@ -1,10 +1,23 @@
 {% extends "layout.html" %}
 
-{% block title %}Seller Applications - Admin{% endblock %}
+{% block title %}Users - Admin{% endblock %}
 
-{% block page_title %}Seller Applications{% endblock %}
+{% block page_title %}Users{% endblock %}
 
 {% block content %}
+<!-- Sub-categories -->
+<div class="card" style="padding: 0.75rem; margin-bottom: 1rem;">
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button class="subcat-btn active" id="subcat-applications" onclick="switchSubCategory('applications')">
+            <i class="ri-file-list-line"></i> Seller Applications
+        </button>
+        <button class="subcat-btn" id="subcat-users" onclick="switchSubCategory('users')">
+            <i class="ri-user-3-line"></i> All Users
+        </button>
+    </div>
+</div>
+
+<div id="applications-panel">
 <!-- Stats Cards Row -->
 <div class="stat-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.75rem;">
     <div class="stat-card">
@@ -82,7 +95,7 @@
     <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
         <div style="position: relative; flex: 1; min-width: 300px;">
             <i class="ri-search-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted);"></i>
-            <input type="text" id="searchInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Search by name, store, or email..." onkeyup="filterApplications()">
+            <input type="text" id="searchInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Search by name, store, or email..." onkeyup="filterCurrentSection()">
         </div>
         <button class="btn btn-outline btn-sm" onclick="refreshApplications()" style="padding: 0.7rem 1.5rem;">
             <i class="ri-refresh-line"></i> Refresh
@@ -191,6 +204,100 @@
                 </tr>
             </tbody>
         </table>
+    </div>
+</div>
+</div>
+
+<div id="users-panel" style="display: none;">
+    <div class="stat-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.75rem;">
+        <div class="stat-card">
+            <div class="stat-card-stripe stripe-primary" style="background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));"></div>
+            <div class="stat-card-header">
+                <div class="stat-label">Total Users</div>
+                <div class="stat-card-icon icon-rose"><i class="ri-group-line"></i></div>
+            </div>
+            <div class="stat-number" id="totalUsers">0</div>
+            <div class="stat-sub">Registered accounts</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-stripe stripe-success" style="background: linear-gradient(90deg, var(--sage), var(--deep-sage));"></div>
+            <div class="stat-card-header">
+                <div class="stat-label">Active Users</div>
+                <div class="stat-card-icon icon-sage"><i class="ri-user-follow-line"></i></div>
+            </div>
+            <div class="stat-number" id="activeUsers">0</div>
+            <div class="stat-sub">Can use the platform</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-stripe stripe-warning" style="background: linear-gradient(90deg, #f0b429, #f5d657);"></div>
+            <div class="stat-card-header">
+                <div class="stat-label">Banned</div>
+                <div class="stat-card-icon icon-terra"><i class="ri-forbid-2-line"></i></div>
+            </div>
+            <div class="stat-number" id="bannedUsers">0</div>
+            <div class="stat-sub">Restricted accounts</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-stripe stripe-danger" style="background: linear-gradient(90deg, #c0392b, #e74c3c);"></div>
+            <div class="stat-card-header">
+                <div class="stat-label">Deleted</div>
+                <div class="stat-card-icon icon-bark"><i class="ri-delete-bin-line"></i></div>
+            </div>
+            <div class="stat-number" id="deletedUsers">0</div>
+            <div class="stat-sub">Removed or soft-deleted</div>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>User</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Joined</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody">
+                <tr>
+                    <td colspan="6" class="text-center py-4">
+                        <div class="loading"><div class="spinner"></div> Loading users...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div id="usersPagination" style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem;"></div>
+
+    <div class="card" style="margin-top: 1rem; padding: 1rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+            <h4 style="margin: 0; font-size: 15px; font-weight: 600; color: var(--charcoal);">Banned Accounts</h4>
+            <button class="btn btn-outline btn-sm" onclick="loadBannedAccounts()"><i class="ri-refresh-line"></i> Refresh</button>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Reason</th>
+                        <th>Banned Until</th>
+                        <th>Banned By</th>
+                        <th>Banned At</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="bannedUsersTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center py-4">
+                            <div class="loading"><div class="spinner"></div> Loading banned accounts...</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="bannedPagination" style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem;"></div>
     </div>
 </div>
 
@@ -314,13 +421,155 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- User Details Modal -->
+<div class="modal-overlay" id="userDetailsModal">
+    <div class="modal" style="max-width: 760px; width: 94%;">
+        <div class="modal-header">
+            <h3 class="modal-title">User Details</h3>
+            <button class="modal-close" onclick="closeModal('userDetailsModal')"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body" id="userDetailsContent">
+            <div class="loading"><div class="spinner"></div> Loading user details...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Ban User Modal -->
+<div class="modal-overlay" id="banUserModal">
+    <div class="modal" style="max-width: 680px; width: 92%;">
+        <div class="modal-header">
+            <h3 class="modal-title">Ban Account</h3>
+            <button class="modal-close" onclick="closeModal('banUserModal')"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="banUserId">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label class="form-label">Why will this account be banned? <span class="required-star">*</span></label>
+                <textarea id="banReason" class="form-control" rows="3" placeholder="Provide the reason for banning this account..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Ban Duration <span class="required-star">*</span></label>
+                <div style="display: grid; grid-template-columns: 120px 1fr; gap: 0.5rem;">
+                    <input type="number" id="banDurationValue" class="form-control" min="1" value="7">
+                    <select id="banDurationUnit" class="form-control">
+                        <option value="hours">Hours</option>
+                        <option value="days" selected>Days</option>
+                        <option value="weeks">Weeks</option>
+                        <option value="months">Months</option>
+                        <option value="permanent">Permanent</option>
+                    </select>
+                </div>
+            </div>
+        </div>
         <div class="modal-footer">
-            <button type="button" class="btn btn-outline" onclick="closeModal('documentsModal')">Close</button>
+            <button type="button" class="btn btn-outline" onclick="closeModal('banUserModal')">Cancel</button>
+            <button type="button" class="btn btn-danger" onclick="submitUserBan()" style="background: #c0392b; color: white; border: none;">
+                <i class="ri-forbid-2-line"></i> Ban Account
+            </button>
         </div>
     </div>
 </div>
 
 <style>
+    .subcat-btn {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: var(--radius-pill);
+        padding: 0.5rem 0.95rem;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        transition: var(--transition);
+    }
+
+    .subcat-btn:hover {
+        border-color: var(--border-strong);
+        color: var(--charcoal);
+    }
+
+    .subcat-btn.active {
+        background: rgba(181, 68, 90, 0.08);
+        color: var(--deep-rose);
+        border-color: rgba(181, 68, 90, 0.35);
+    }
+
+    .user-details-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .user-details-panel {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 0.9rem 1rem;
+    }
+
+    .user-details-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--charcoal);
+        margin: 0 0 0.6rem 0;
+    }
+
+    .user-details-row {
+        margin: 0 0 0.35rem 0;
+        font-size: 13px;
+        color: var(--charcoal);
+        line-height: 1.4;
+    }
+
+    .user-details-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .user-details-row strong {
+        color: var(--muted);
+        font-weight: 600;
+    }
+
+    .user-metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.9rem;
+    }
+
+    .user-metric-card {
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 0.7rem 0.8rem;
+    }
+
+    .user-metric-label {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 0.2rem;
+    }
+
+    .user-metric-value {
+        font-size: 22px;
+        line-height: 1.1;
+        font-weight: 700;
+        color: var(--charcoal);
+    }
+
+    @media (max-width: 720px) {
+        .user-details-grid,
+        .user-metrics-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
     /* Tab styles */
     .tab-btn.active {
         color: var(--deep-rose) !important;
@@ -435,7 +684,13 @@
 {% block extra_js %}
 <script>
     let currentApplications = [];
+    let currentUsers = [];
+    let currentBans = [];
+    const PAGE_SIZE = 6;
+    let currentUsersPage = 1;
+    let currentBansPage = 1;
     let currentTab = 'pending';
+    let currentSubCategory = 'applications';
     let currentReviewOriginal = null;
 
     function collectRejectionDetails() {
@@ -484,6 +739,8 @@
     
     document.addEventListener('DOMContentLoaded', function() {
         loadApplications();
+        loadUsers();
+        loadBannedAccounts();
         
         // Handle decision radio buttons
         document.querySelectorAll('input[name="decision"]').forEach(radio => {
@@ -514,8 +771,36 @@
         document.querySelector('textarea[name="admin_notes"]')?.addEventListener('input', updateReviewActionState);
         
         // Search functionality
-        document.getElementById('searchInput').addEventListener('input', filterApplications);
+        document.getElementById('searchInput').addEventListener('input', filterCurrentSection);
+
+        document.getElementById('banDurationUnit')?.addEventListener('change', function() {
+            const durationInput = document.getElementById('banDurationValue');
+            const isPermanent = this.value === 'permanent';
+            durationInput.disabled = isPermanent;
+            if (isPermanent) {
+                durationInput.value = '';
+            } else if (!durationInput.value) {
+                durationInput.value = 7;
+            }
+        });
     });
+
+    function switchSubCategory(category) {
+        currentSubCategory = category;
+
+        document.querySelectorAll('.subcat-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`subcat-${category}`).classList.add('active');
+
+        const isApplications = category === 'applications';
+        document.getElementById('applications-panel').style.display = isApplications ? 'block' : 'none';
+        document.getElementById('users-panel').style.display = isApplications ? 'none' : 'block';
+
+        const searchInput = document.getElementById('searchInput');
+        searchInput.placeholder = isApplications
+            ? 'Search by name, store, or email...'
+            : 'Search by name, email, role, or status...';
+        searchInput.value = '';
+    }
     
     function switchTab(tabId) {
         // Update tab buttons
@@ -531,7 +816,7 @@
         document.getElementById(`${tabId}-table`).style.display = 'block';
         
         currentTab = tabId;
-        filterApplications(); // Re-apply filters when switching tabs
+        filterCurrentSection(); // Re-apply filters when switching tabs
     }
     
     function switchDocumentTab(tabId) {
@@ -797,6 +1082,317 @@
             }
         });
     }
+
+    function filterUsers() {
+        currentUsersPage = 1;
+        renderUsersTable();
+    }
+
+    function filterCurrentSection() {
+        if (currentSubCategory === 'users') {
+            filterUsers();
+            return;
+        }
+        filterApplications();
+    }
+
+    function loadUsers() {
+        fetch('/api/admin/users/list')
+            .then(response => response.json())
+            .then(data => {
+                currentUsers = data.users || [];
+                currentUsersPage = 1;
+                updateUserStats(data.stats || {});
+                renderUsersTable();
+                loadBannedAccounts();
+            })
+            .catch(error => {
+                console.error('Error loading users:', error);
+                showAlert('danger', 'Failed to load users');
+            });
+    }
+
+    function updateUserStats(stats) {
+        document.getElementById('totalUsers').textContent = stats.total || 0;
+        document.getElementById('activeUsers').textContent = stats.active || 0;
+        document.getElementById('bannedUsers').textContent = stats.banned || 0;
+        document.getElementById('deletedUsers').textContent = stats.deleted || 0;
+    }
+
+    function renderUsersTable() {
+        const tbody = document.getElementById('usersTableBody');
+        const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase();
+        const filteredUsers = currentUsers.filter(user => {
+            if (!searchTerm) return true;
+            const text = `${user.full_name || ''} ${user.email || ''} ${user.role || ''} ${user.status || ''}`.toLowerCase();
+            return text.includes(searchTerm);
+        });
+
+        const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+        if (currentUsersPage > totalPages) currentUsersPage = totalPages;
+        if (currentUsersPage < 1) currentUsersPage = 1;
+
+        const start = (currentUsersPage - 1) * PAGE_SIZE;
+        const pagedUsers = filteredUsers.slice(start, start + PAGE_SIZE);
+
+        if (!filteredUsers.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="empty-state"><i class="ri-user-search-line empty-state-icon"></i><p>No users found</p></div></td></tr>';
+            renderUsersPagination(1, 1, 0);
+            return;
+        }
+
+        tbody.innerHTML = pagedUsers.map(user => {
+            const status = (user.status || 'unknown').toLowerCase();
+            let statusClass = 'status-pending';
+            if (status === 'active') statusClass = 'status-approved';
+            if (status === 'banned' || status === 'deleted' || status === 'inactive' || status === 'suspended') statusClass = 'status-rejected';
+            const safeName = user.full_name || 'N/A';
+            const initial = safeName.charAt(0).toUpperCase();
+            const isLocked = status === 'deleted' || user.role === 'admin' || status === 'banned';
+
+            return `
+                <tr>
+                    <td><span style="font-weight: 600;">#${user.id}</span></td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div class="avatar" style="background: linear-gradient(135deg, var(--dusty-rose), var(--deep-rose)); color: white;">${initial}</div>
+                            <div>
+                                <div style="font-weight: 600; color: var(--charcoal);">${safeName}</div>
+                                <div style="font-size: 12px; color: var(--muted);">${user.email || 'N/A'}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="text-transform: capitalize;">${user.role || 'N/A'}</td>
+                    <td><span class="status-badge ${statusClass}" style="text-transform: capitalize;">${status}</span></td>
+                    <td>${user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</td>
+                    <td>
+                        <div class="action-btn-group">
+                            <button class="btn btn-icon btn-sm btn-outline" onclick="viewUserDetails(${user.id})" title="View Details" style="width: 32px; height: 32px;">
+                                <i class="ri-eye-line"></i>
+                            </button>
+                            <button class="btn btn-icon btn-sm" onclick="openBanModal(${user.id})" title="Ban Account" style="background: #f0b429; color: white; width: 32px; height: 32px;" ${isLocked ? 'disabled' : ''}>
+                                <i class="ri-forbid-2-line"></i>
+                            </button>
+                            <button class="btn btn-icon btn-sm" onclick="deleteUser(${user.id})" title="Delete User" style="background: #c0392b; color: white; width: 32px; height: 32px;" ${isLocked ? 'disabled' : ''}>
+                                <i class="ri-delete-bin-line"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        renderUsersPagination(currentUsersPage, totalPages, filteredUsers.length);
+    }
+
+    function loadBannedAccounts() {
+        fetch('/api/admin/users/bans')
+            .then(response => response.json())
+            .then(data => {
+                currentBans = data.bans || [];
+                currentBansPage = 1;
+                renderBannedUsersTable();
+            })
+            .catch(() => {
+                const tbody = document.getElementById('bannedUsersTableBody');
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4" style="color:#c0392b;">Failed to load banned accounts</td></tr>';
+                }
+            });
+    }
+
+    function renderBannedUsersTable() {
+        const tbody = document.getElementById('bannedUsersTableBody');
+        if (!tbody) return;
+        const totalPages = Math.max(1, Math.ceil(currentBans.length / PAGE_SIZE));
+        if (currentBansPage > totalPages) currentBansPage = totalPages;
+        if (currentBansPage < 1) currentBansPage = 1;
+
+        const start = (currentBansPage - 1) * PAGE_SIZE;
+        const pagedBans = currentBans.slice(start, start + PAGE_SIZE);
+
+        if (!currentBans.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="empty-state"><i class="ri-shield-check-line empty-state-icon"></i><p>No active bans</p></div></td></tr>';
+            renderBannedPagination(1, 1, 0);
+            return;
+        }
+
+        tbody.innerHTML = pagedBans.map(ban => `
+            <tr>
+                <td>
+                    <div style="font-weight: 600; color: var(--charcoal);">${ban.user_name || 'Unknown'}</div>
+                    <div style="font-size: 12px; color: var(--muted);">${ban.user_email || ''}</div>
+                </td>
+                <td style="max-width: 260px;"><span style="font-size: 13px; color: var(--muted);">${ban.reason || 'No reason provided'}</span></td>
+                <td>${ban.banned_until ? new Date(ban.banned_until).toLocaleString() : '<span class="status-badge status-rejected">Permanent</span>'}</td>
+                <td>${ban.banned_by_name || 'Admin'}</td>
+                <td>${ban.created_at ? new Date(ban.created_at).toLocaleString() : 'N/A'}</td>
+                <td>
+                    <button class="btn btn-outline btn-sm" onclick="unbanUser(${ban.user_id})" style="padding: 4px 10px;">
+                        <i class="ri-lock-unlock-line"></i> Unban
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        renderBannedPagination(currentBansPage, totalPages, currentBans.length);
+    }
+
+    function renderUsersPagination(page, totalPages, totalItems) {
+        const el = document.getElementById('usersPagination');
+        if (!el) return;
+        el.innerHTML = `
+            <button class="btn btn-outline btn-sm" onclick="goToUsersPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>Prev</button>
+            <span style="align-self:center; font-size:12px; color:var(--muted);">Page ${page} of ${totalPages}</span>
+            <button class="btn btn-outline btn-sm" onclick="goToUsersPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>Next</button>
+        `;
+    }
+
+    function renderBannedPagination(page, totalPages, totalItems) {
+        const el = document.getElementById('bannedPagination');
+        if (!el) return;
+        el.innerHTML = `
+            <button class="btn btn-outline btn-sm" onclick="goToBannedPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>Prev</button>
+            <span style="align-self:center; font-size:12px; color:var(--muted);">Page ${page} of ${totalPages}</span>
+            <button class="btn btn-outline btn-sm" onclick="goToBannedPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>Next</button>
+        `;
+    }
+
+    function goToUsersPage(page) {
+        currentUsersPage = page;
+        renderUsersTable();
+    }
+
+    function goToBannedPage(page) {
+        currentBansPage = page;
+        renderBannedUsersTable();
+    }
+
+    function viewUserDetails(userId) {
+        const modalContent = document.getElementById('userDetailsContent');
+        modalContent.innerHTML = '<div class="loading"><div class="spinner"></div> Loading user details...</div>';
+        openModal('userDetailsModal');
+
+        fetch(`/api/admin/users/${userId}/details`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    modalContent.innerHTML = `<p style="color: #c0392b;">${data.error}</p>`;
+                    return;
+                }
+                const user = data.user || {};
+                const meta = data.meta || {};
+                modalContent.innerHTML = `
+                    <div class="user-details-grid">
+                        <div class="user-details-panel">
+                            <h6 class="user-details-title">Account</h6>
+                            <p class="user-details-row"><strong>Name:</strong> ${user.full_name || 'N/A'}</p>
+                            <p class="user-details-row"><strong>Email:</strong> ${user.email || 'N/A'}</p>
+                            <p class="user-details-row"><strong>Phone:</strong> ${user.phone || 'N/A'}</p>
+                        </div>
+                        <div class="user-details-panel">
+                            <h6 class="user-details-title">Access</h6>
+                            <p class="user-details-row"><strong>Role:</strong> ${(user.role || 'N/A')}</p>
+                            <p class="user-details-row"><strong>Status:</strong> ${(user.status || 'N/A')}</p>
+                            <p class="user-details-row"><strong>Joined:</strong> ${user.created_at ? new Date(user.created_at).toLocaleString() : 'N/A'}</p>
+                        </div>
+                    </div>
+                    <div class="user-metrics-grid">
+                        <div class="user-metric-card">
+                            <div class="user-metric-label">Stores</div>
+                            <div class="user-metric-value">${meta.store_count || 0}</div>
+                        </div>
+                        <div class="user-metric-card">
+                            <div class="user-metric-label">Active Stores</div>
+                            <div class="user-metric-value">${meta.active_store_count || 0}</div>
+                        </div>
+                        <div class="user-metric-card">
+                            <div class="user-metric-label">Orders</div>
+                            <div class="user-metric-value">${meta.order_count || 0}</div>
+                        </div>
+                    </div>
+                `;
+            })
+            .catch(() => {
+                modalContent.innerHTML = '<p style="color: #c0392b;">Failed to load user details.</p>';
+            });
+    }
+
+    function openBanModal(userId) {
+        document.getElementById('banUserId').value = userId;
+        document.getElementById('banReason').value = '';
+        document.getElementById('banDurationValue').value = 7;
+        document.getElementById('banDurationUnit').value = 'days';
+        openModal('banUserModal');
+    }
+
+    function submitUserBan() {
+        const userId = document.getElementById('banUserId').value;
+        const reason = document.getElementById('banReason').value.trim();
+        const durationValue = document.getElementById('banDurationValue').value;
+        const durationUnit = document.getElementById('banDurationUnit').value;
+
+        if (!reason) {
+            showAlert('warning', 'Please provide a reason for the ban.');
+            return;
+        }
+        if (durationUnit !== 'permanent' && (!durationValue || Number(durationValue) <= 0)) {
+            showAlert('warning', 'Please provide a valid ban duration.');
+            return;
+        }
+
+        fetch(`/api/admin/users/${userId}/ban`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                reason: reason,
+                duration_value: durationUnit === 'permanent' ? null : Number(durationValue),
+                duration_unit: durationUnit
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeModal('banUserModal');
+                    showAlert('success', data.message || 'User banned');
+                    loadUsers();
+                    loadBannedAccounts();
+                } else {
+                    showAlert('danger', data.error || 'Failed to ban user');
+                }
+            })
+            .catch(() => showAlert('danger', 'Network error while banning user'));
+    }
+
+    async function unbanUser(userId) {
+        if (!await window.openConfirmModal('Lift ban for this account?')) return;
+        fetch(`/api/admin/users/${userId}/unban`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message || 'User unbanned');
+                    loadUsers();
+                    loadBannedAccounts();
+                } else {
+                    showAlert('danger', data.error || 'Failed to unban user');
+                }
+            })
+            .catch(() => showAlert('danger', 'Network error while unbanning user'));
+    }
+
+    async function deleteUser(userId) {
+        if (!await window.openConfirmModal('Delete this user? This action may permanently remove the account.')) return;
+
+        fetch(`/api/admin/users/${userId}/delete`, { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message || 'User deleted');
+                    loadUsers();
+                } else {
+                    showAlert('danger', data.error || 'Failed to delete user');
+                }
+            })
+            .catch(() => showAlert('danger', 'Network error while deleting user'));
+    }
     
     function viewDocuments(applicationId) {
         const app = currentApplications.find(a => a.id === applicationId);
@@ -968,6 +1564,11 @@
     }
     
     function refreshApplications() {
+        if (currentSubCategory === 'users') {
+            loadUsers();
+            loadBannedAccounts();
+            return;
+        }
         loadApplications();
     }
     
@@ -998,9 +1599,18 @@
     }
     
     // Make functions globally available
+    window.switchSubCategory = switchSubCategory;
     window.switchTab = switchTab;
     window.switchDocumentTab = switchDocumentTab;
     window.filterApplications = filterApplications;
+    window.filterCurrentSection = filterCurrentSection;
+    window.viewUserDetails = viewUserDetails;
+    window.openBanModal = openBanModal;
+    window.submitUserBan = submitUserBan;
+    window.unbanUser = unbanUser;
+    window.goToUsersPage = goToUsersPage;
+    window.goToBannedPage = goToBannedPage;
+    window.deleteUser = deleteUser;
     window.viewDocuments = viewDocuments;
     window.openReviewModal = openReviewModal;
     window.viewApplication = viewApplication;

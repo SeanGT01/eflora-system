@@ -4,7 +4,7 @@ from app.models import Product, Store, User, CartItem
 from app.extensions import db
 from datetime import datetime
 from functools import wraps
-import os
+from app.utils.cloudinary_helper import delete_from_cloudinary
 
 archive_bp = Blueprint('archive', __name__, url_prefix='/api/v1/seller/archive')
 
@@ -144,13 +144,20 @@ def permanent_delete_product(product_id):
                 'error': f'Cannot permanently delete. Product is in {carts_with_product} carts.'
             }), 400
         
-        # Delete associated images from filesystem
-        from app.templates_routes import BASE_DIR
-        upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
+        # Delete associated media from Cloudinary (best effort per asset)
         for image in product.images:
-            image_path = os.path.join(upload_path, image.filename)
-            if os.path.exists(image_path):
-                os.remove(image_path)
+            if image.public_id:
+                try:
+                    delete_from_cloudinary(image.public_id)
+                except Exception:
+                    pass
+
+        for variant in product.variants:
+            if variant.image_public_id:
+                try:
+                    delete_from_cloudinary(variant.image_public_id)
+                except Exception:
+                    pass
         
         # Store name for message
         product_name = product.name
@@ -259,8 +266,6 @@ def bulk_permanent_delete():
         if not product_ids:
             return jsonify({'error': 'No product IDs provided'}), 400
         
-        from app.templates_routes import BASE_DIR
-        upload_path = os.path.join(BASE_DIR, 'static', 'uploads', 'products')
         deleted_count = 0
         failed_products = []
         
@@ -277,11 +282,20 @@ def bulk_permanent_delete():
                     })
                     continue
                 
-                # Delete images
+                # Delete associated media from Cloudinary (best effort per asset)
                 for image in product.images:
-                    image_path = os.path.join(upload_path, image.filename)
-                    if os.path.exists(image_path):
-                        os.remove(image_path)
+                    if image.public_id:
+                        try:
+                            delete_from_cloudinary(image.public_id)
+                        except Exception:
+                            pass
+
+                for variant in product.variants:
+                    if variant.image_public_id:
+                        try:
+                            delete_from_cloudinary(variant.image_public_id)
+                        except Exception:
+                            pass
                 
                 db.session.delete(product)
                 deleted_count += 1

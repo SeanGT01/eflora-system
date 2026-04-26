@@ -575,6 +575,8 @@ def update_rider_status(rider_id):
     is_active = data.get('is_active')
     if is_active is not None:
         rider.is_active = bool(is_active)
+        if rider.is_active:
+            rider.is_archived = False
     
     rider.updated_at = datetime.utcnow()
     db.session.commit()
@@ -589,7 +591,7 @@ def update_rider_status(rider_id):
 @seller_bp.route('/riders/<int:rider_id>', methods=['DELETE'])
 @seller_required
 def delete_rider(rider_id):
-    """Remove a rider from the store"""
+    """Archive a rider (soft delete)"""
     user_id = get_jwt_identity()
     store = get_seller_store(user_id)
     if not store:
@@ -605,12 +607,16 @@ def delete_rider(rider_id):
     if active_delivery:
         return jsonify({'error': 'Cannot remove rider with active deliveries'}), 400
     
-    db.session.delete(rider)
+    rider.is_active = False
+    rider.is_archived = True
+    rider.updated_at = datetime.utcnow()
     db.session.commit()
     
     return jsonify({
         'success': True,
-        'message': 'Rider removed successfully'
+        'message': 'Rider archived successfully (set to inactive)',
+        'rider': rider.to_dict(),
+        'archived': True
     }), 200
 
 

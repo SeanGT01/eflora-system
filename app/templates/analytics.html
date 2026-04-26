@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Analytics — E-FLOWERS{% endblock %}
+{% block title %}Analytics — E-FLORA{% endblock %}
 {% block page_title %}Analytics{% endblock %}
 
 {% block extra_css %}
@@ -583,6 +583,8 @@ table.ana-table {
 .sp-processing::before { background:var(--deep-rose); }
 .sp-pending   { background:rgba(107,76,59,.1); color:var(--muted); }
 .sp-pending::before { background:var(--muted); }
+.sp-cancel    { background:rgba(180,90,90,.13); color:#a64646; }
+.sp-cancel::before { background:#a64646; }
 
 @keyframes blink {
   0%,100% { opacity:1; } 50% { opacity:.3; }
@@ -868,22 +870,33 @@ table.ana-table {
   <!-- ─── Header ──────────────────────────────────────────── -->
   <div class="ana-header">
     <div>
-      <div class="ana-eyebrow">Store Insights</div>
+      <div class="ana-eyebrow">Store Insights{% if store %} — {{ store.name }}{% endif %}</div>
       <h1 class="ana-title">Your Analytics, <em>in full bloom</em></h1>
+      <div style="font-size:12px;color:var(--muted);margin-top:.4rem;">{{ period_label }}</div>
     </div>
 
     <!-- Period selector -->
     <div class="period-bar">
-      <button class="period-btn" data-period="today"  onclick="setPeriod('today',this)">Today</button>
-      <button class="period-btn active" data-period="week" onclick="setPeriod('week',this)">This Week</button>
-      <button class="period-btn" data-period="month" onclick="setPeriod('month',this)">Month</button>
-      <button class="period-btn" data-period="year"  onclick="setPeriod('year',this)">Year</button>
+      <button class="period-btn {% if period == 'today' %}active{% endif %}" data-period="today"  onclick="setPeriod('today',this)">Today</button>
+      <button class="period-btn {% if period == 'week' or not period %}active{% endif %}" data-period="week" onclick="setPeriod('week',this)">This Week</button>
+      <button class="period-btn {% if period == 'month' %}active{% endif %}" data-period="month" onclick="setPeriod('month',this)">Month</button>
+      <button class="period-btn {% if period == 'year' %}active{% endif %}" data-period="year"  onclick="setPeriod('year',this)">Year</button>
       <div class="period-divider"></div>
-      <button class="custom-btn" id="customToggle" onclick="toggleCustom()">
+      <button class="custom-btn {% if period == 'custom' %}active{% endif %}" id="customToggle" onclick="toggleCustom()">
         <i class="ri-calendar-2-line"></i> Custom
       </button>
     </div>
   </div>
+
+  {% if no_store %}
+  <div class="panel" style="padding:2rem;text-align:center;margin-bottom:1.5rem;">
+    <div style="font-family:var(--font-display);font-size:22px;color:var(--charcoal);margin-bottom:.4rem;">No active store</div>
+    <div style="font-size:13px;color:var(--muted);">
+      Your seller account isn’t attached to an active store yet, so analytics are empty.
+      Submit your seller application or wait for approval to start seeing live data here.
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Custom date drawer -->
   <div class="custom-drawer" id="customDrawer">
@@ -901,15 +914,25 @@ table.ana-table {
   </div>
 
   <!-- ─── KPIs ────────────────────────────────────────────── -->
+  {% macro delta_badge(pct) -%}
+    {% if pct is none %}
+      <span class="kpi-badge" style="background:rgba(154,141,133,.15);color:var(--muted);">— vs prev.</span>
+    {% elif pct >= 0 %}
+      <span class="kpi-badge badge-up"><i class="ri-arrow-up-line"></i>{{ '%.1f' % pct }}%</span>
+    {% else %}
+      <span class="kpi-badge badge-down"><i class="ri-arrow-down-line"></i>{{ '%.1f' % (pct|abs) }}%</span>
+    {% endif %}
+  {%- endmacro %}
+
   <div class="kpi-row">
     <div class="kpi-card">
       <div class="kpi-top">
         <span class="kpi-label">Total Revenue</span>
         <div class="kpi-ico"><i class="ri-money-dollar-circle-line"></i></div>
       </div>
-      <div class="kpi-val" id="kpiRevenue">₱24,580</div>
+      <div class="kpi-val" id="kpiRevenue">{{ totals.revenue_display }}</div>
       <div class="kpi-sub">This period</div>
-      <span class="kpi-badge badge-up"><i class="ri-arrow-up-line"></i>12.5%</span>
+      {{ delta_badge(deltas.revenue_pct) }}
     </div>
 
     <div class="kpi-card">
@@ -917,9 +940,9 @@ table.ana-table {
         <span class="kpi-label">Total Orders</span>
         <div class="kpi-ico"><i class="ri-shopping-bag-line"></i></div>
       </div>
-      <div class="kpi-val" id="kpiOrders">156</div>
+      <div class="kpi-val" id="kpiOrders">{{ '{:,}'.format(totals.orders) }}</div>
       <div class="kpi-sub">Orders placed</div>
-      <span class="kpi-badge badge-up"><i class="ri-arrow-up-line"></i>8.2%</span>
+      {{ delta_badge(deltas.orders_pct) }}
     </div>
 
     <div class="kpi-card">
@@ -927,9 +950,9 @@ table.ana-table {
         <span class="kpi-label">Avg. Order Value</span>
         <div class="kpi-ico"><i class="ri-line-chart-line"></i></div>
       </div>
-      <div class="kpi-val" id="kpiAvg">₱1,575</div>
+      <div class="kpi-val" id="kpiAvg">{{ totals.avg_order_display }}</div>
       <div class="kpi-sub">Per order</div>
-      <span class="kpi-badge badge-up"><i class="ri-arrow-up-line"></i>4.1%</span>
+      {{ delta_badge(deltas.avg_pct) }}
     </div>
 
     <div class="kpi-card">
@@ -937,9 +960,37 @@ table.ana-table {
         <span class="kpi-label">New Customers</span>
         <div class="kpi-ico"><i class="ri-user-add-line"></i></div>
       </div>
-      <div class="kpi-val" id="kpiNew">24</div>
+      <div class="kpi-val" id="kpiNew">{{ '{:,}'.format(totals.new_customers) }}</div>
       <div class="kpi-sub">This period</div>
-      <span class="kpi-badge badge-down"><i class="ri-arrow-down-line"></i>2.3%</span>
+      {{ delta_badge(deltas.new_pct) }}
+    </div>
+  </div>
+
+  <!-- Secondary all-time totals strip -->
+  <div class="kpi-row" style="grid-template-columns:repeat(3,1fr);margin-top:-.5rem;">
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">All Customers</span>
+        <div class="kpi-ico"><i class="ri-team-line"></i></div>
+      </div>
+      <div class="kpi-val">{{ '{:,}'.format(totals.all_customers) }}</div>
+      <div class="kpi-sub">Unique buyers (all time)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Active Products</span>
+        <div class="kpi-ico"><i class="ri-plant-line"></i></div>
+      </div>
+      <div class="kpi-val">{{ '{:,}'.format(totals.all_products) }}</div>
+      <div class="kpi-sub">In your catalogue</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top">
+        <span class="kpi-label">Completed Orders</span>
+        <div class="kpi-ico"><i class="ri-checkbox-circle-line"></i></div>
+      </div>
+      <div class="kpi-val">{{ '{:,}'.format(totals.completed_orders) }}</div>
+      <div class="kpi-sub">Delivered this period</div>
     </div>
   </div>
 
@@ -955,7 +1006,7 @@ table.ana-table {
         </div>
       </div>
       <div class="chart-pad">
-        <canvas id="revenueChart" height="230"></canvas>
+        <canvas id="revenueChart" height="115"></canvas>
       </div>
     </div>
 
@@ -965,31 +1016,27 @@ table.ana-table {
         <a href="{{ url_for('templates.seller_products') }}" class="panel-link">All <i class="ri-arrow-right-line"></i></a>
       </div>
 
-      <div class="prod-rank">
-        <div class="rk-num gold">1</div>
-        <div class="rk-info"><div class="rk-name">Rose Bouquet</div><div class="rk-cat">Fresh Flowers</div></div>
-        <div class="rk-right"><div class="rk-rev">₱12,000</div><div class="rk-qty">48 sold</div></div>
-      </div>
-      <div class="prod-rank">
-        <div class="rk-num silver">2</div>
-        <div class="rk-info"><div class="rk-name">Tulips Set</div><div class="rk-cat">Spring Picks</div></div>
-        <div class="rk-right"><div class="rk-rev">₱8,000</div><div class="rk-qty">32 sold</div></div>
-      </div>
-      <div class="prod-rank">
-        <div class="rk-num bronze">3</div>
-        <div class="rk-info"><div class="rk-name">Orchid Pots</div><div class="rk-cat">Potted Plants</div></div>
-        <div class="rk-right"><div class="rk-rev">₱7,000</div><div class="rk-qty">28 sold</div></div>
-      </div>
-      <div class="prod-rank">
-        <div class="rk-num plain">4</div>
-        <div class="rk-info"><div class="rk-name">Sunflower Bundle</div><div class="rk-cat">Summer Edition</div></div>
-        <div class="rk-right"><div class="rk-rev">₱5,250</div><div class="rk-qty">21 sold</div></div>
-      </div>
-      <div class="prod-rank">
-        <div class="rk-num plain">5</div>
-        <div class="rk-info"><div class="rk-name">Succulent Mix</div><div class="rk-cat">Miniatures</div></div>
-        <div class="rk-right"><div class="rk-rev">₱4,500</div><div class="rk-qty">18 sold</div></div>
-      </div>
+      {% if top_products %}
+        {% for p in top_products %}
+          {% set rank_class = 'gold' if loop.index == 1 else ('silver' if loop.index == 2 else ('bronze' if loop.index == 3 else 'plain')) %}
+          <div class="prod-rank">
+            <div class="rk-num {{ rank_class }}">{{ loop.index }}</div>
+            <div class="rk-info">
+              <div class="rk-name">{{ p.name }}</div>
+              <div class="rk-cat">{{ p.category }}</div>
+            </div>
+            <div class="rk-right">
+              <div class="rk-rev">₱{{ '{:,.0f}'.format(p.revenue) }}</div>
+              <div class="rk-qty">{{ '{:,}'.format(p.quantity) }} sold</div>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div style="padding:1.6rem;text-align:center;color:var(--muted);font-size:13px;">
+          <i class="ri-plant-line" style="font-size:30px;display:block;margin-bottom:.5rem;color:var(--blush);"></i>
+          No completed sales yet for this period.
+        </div>
+      {% endif %}
     </div>
   </div>
 
@@ -1019,15 +1066,15 @@ table.ana-table {
       <div class="panel-head"><span class="panel-title">Delivery Performance</span></div>
       <div class="delivery-stats">
         <div class="dstat">
-          <div class="dstat-val green">98.2%</div>
+          <div class="dstat-val green">{{ '%.1f' % delivery.on_time_rate }}%</div>
           <div class="dstat-label">On-time Rate</div>
         </div>
         <div class="dstat">
-          <div class="dstat-val blue">24.5 min</div>
+          <div class="dstat-val blue">{{ '%.1f' % delivery.avg_minutes }} min</div>
           <div class="dstat-label">Avg. Delivery</div>
         </div>
         <div class="dstat">
-          <div class="dstat-val amber">1.2%</div>
+          <div class="dstat-val amber">{{ '%.1f' % delivery.cancellation_rate }}%</div>
           <div class="dstat-label">Cancellation</div>
         </div>
       </div>
@@ -1044,56 +1091,62 @@ table.ana-table {
       </div>
 
       <div class="rating-big">
-        <div class="rating-num">4.8</div>
+        <div class="rating-num">{{ '%.1f' % rating.average }}</div>
         <div class="stars-row">
-          <i class="ri-star-fill star-full"></i>
-          <i class="ri-star-fill star-full"></i>
-          <i class="ri-star-fill star-full"></i>
-          <i class="ri-star-fill star-full"></i>
-          <i class="ri-star-half-fill star-half"></i>
+          {% set full = rating.average|round(0,'floor')|int %}
+          {% set has_half = (rating.average - full) >= 0.25 and (rating.average - full) < 0.75 %}
+          {% set effective_full = full if has_half else (rating.average|round(0)|int) %}
+          {% for _ in range(effective_full) %}<i class="ri-star-fill star-full"></i>{% endfor %}
+          {% if has_half %}<i class="ri-star-half-fill star-half"></i>{% endif %}
+          {% set empties = 5 - effective_full - (1 if has_half else 0) %}
+          {% if empties > 0 %}{% for _ in range(empties) %}<i class="ri-star-line star-half"></i>{% endfor %}{% endif %}
         </div>
-        <div class="rating-count">Based on 124 reviews</div>
+        <div class="rating-count">Based on {{ '{:,}'.format(rating.total) }} review{{ '' if rating.total == 1 else 's' }}</div>
       </div>
 
       <div class="rating-bars">
-        <div class="rbar-row"><span class="rbar-label">5 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:72%"></div></div><span class="rbar-count">89</span></div>
-        <div class="rbar-row"><span class="rbar-label">4 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:18%"></div></div><span class="rbar-count">22</span></div>
-        <div class="rbar-row"><span class="rbar-label">3 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:6%"></div></div><span class="rbar-count">8</span></div>
-        <div class="rbar-row"><span class="rbar-label">2 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:3%"></div></div><span class="rbar-count">3</span></div>
-        <div class="rbar-row"><span class="rbar-label">1 <i class="ri-star-fill"></i></span><div class="rbar-track"><div class="rbar-fill" style="width:1.5%"></div></div><span class="rbar-count">2</span></div>
+        {% set total_r = rating.total or 1 %}
+        {% for star in [5, 4, 3, 2, 1] %}
+          {% set count = rating.distribution[star] %}
+          {% set pct = (count / total_r * 100) if rating.total else 0 %}
+          <div class="rbar-row">
+            <span class="rbar-label">{{ star }} <i class="ri-star-fill"></i></span>
+            <div class="rbar-track"><div class="rbar-fill" style="width:{{ '%.1f' % pct }}%"></div></div>
+            <span class="rbar-count">{{ '{:,}'.format(count) }}</span>
+          </div>
+        {% endfor %}
       </div>
 
       <div class="reviews-feed">
-        <div class="review-item">
-          <div class="rv-avatar" style="background:linear-gradient(135deg,var(--blush),var(--dusty-rose))">M</div>
-          <div class="rv-body">
-            <div class="rv-top">
-              <span class="rv-name">Maria Santos</span>
-              <div class="rv-stars"><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i></div>
+        {% if reviews %}
+          {% set palette = [
+            ('var(--blush)','var(--dusty-rose)'),
+            ('var(--sage)','var(--deep-sage)'),
+            ('var(--terracotta)','var(--bark)'),
+            ('#a9c5e8','#6b8fb5'),
+          ] %}
+          {% for rv in reviews %}
+            {% set p = palette[loop.index0 % palette|length] %}
+            <div class="review-item">
+              <div class="rv-avatar" style="background:linear-gradient(135deg,{{ p[0] }},{{ p[1] }})">{{ rv.customer_name[:1]|upper }}</div>
+              <div class="rv-body">
+                <div class="rv-top">
+                  <span class="rv-name">{{ rv.customer_name }}</span>
+                  <div class="rv-stars">
+                    {% for i in range(5) %}
+                      {% if i < rv.rating %}<i class="ri-star-fill"></i>{% else %}<i class="ri-star-line"></i>{% endif %}
+                    {% endfor %}
+                  </div>
+                </div>
+                <div class="rv-text">{{ rv.comment or 'No comment provided.' }}</div>
+              </div>
             </div>
-            <div class="rv-text">Flowers arrived so fresh! Delivery was right on time. Will absolutely order again.</div>
+          {% endfor %}
+        {% else %}
+          <div style="padding:1.4rem;text-align:center;color:var(--muted);font-size:13px;">
+            No reviews yet — your first one will appear here.
           </div>
-        </div>
-        <div class="review-item">
-          <div class="rv-avatar" style="background:linear-gradient(135deg,var(--sage),var(--deep-sage))">J</div>
-          <div class="rv-body">
-            <div class="rv-top">
-              <span class="rv-name">John Dela Cruz</span>
-              <div class="rv-stars"><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-line"></i></div>
-            </div>
-            <div class="rv-text">Beautiful bouquet for my wife's birthday. Exactly as pictured, great packaging.</div>
-          </div>
-        </div>
-        <div class="review-item">
-          <div class="rv-avatar" style="background:linear-gradient(135deg,var(--terracotta),var(--bark))">A</div>
-          <div class="rv-body">
-            <div class="rv-top">
-              <span class="rv-name">Anna Reyes</span>
-              <div class="rv-stars"><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i></div>
-            </div>
-            <div class="rv-text">Succulents arrived healthy and well-packaged. Impressive variety, highly recommend.</div>
-          </div>
-        </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -1116,34 +1169,44 @@ table.ana-table {
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td><span class="oid">#00124</span></td>
-            <td><div class="cust-cell"><div class="c-av" style="background:linear-gradient(135deg,var(--blush),var(--dusty-rose))">M</div><span class="c-nm">Maria Santos</span></div></td>
-            <td><span class="amt-cell">₱1,250</span></td>
-            <td><span class="s-pill sp-delivery">On Delivery</span></td>
-            <td style="color:var(--muted);font-size:12px;">Today, 10:30 AM</td>
-          </tr>
-          <tr>
-            <td><span class="oid">#00123</span></td>
-            <td><div class="cust-cell"><div class="c-av" style="background:linear-gradient(135deg,var(--sage),var(--deep-sage))">J</div><span class="c-nm">John Dela Cruz</span></div></td>
-            <td><span class="amt-cell">₱2,800</span></td>
-            <td><span class="s-pill sp-delivered">Delivered</span></td>
-            <td style="color:var(--muted);font-size:12px;">Yesterday, 3:45 PM</td>
-          </tr>
-          <tr>
-            <td><span class="oid">#00122</span></td>
-            <td><div class="cust-cell"><div class="c-av" style="background:linear-gradient(135deg,var(--terracotta),var(--bark))">A</div><span class="c-nm">Anna Reyes</span></div></td>
-            <td><span class="amt-cell">₱950</span></td>
-            <td><span class="s-pill sp-delivered">Delivered</span></td>
-            <td style="color:var(--muted);font-size:12px;">Nov 28, 2024</td>
-          </tr>
-          <tr>
-            <td><span class="oid">#00121</span></td>
-            <td><div class="cust-cell"><div class="c-av" style="background:linear-gradient(135deg,#a9c5e8,#6b8fb5)">C</div><span class="c-nm">Carlos Garcia</span></div></td>
-            <td><span class="amt-cell">₱1,750</span></td>
-            <td><span class="s-pill sp-processing">Processing</span></td>
-            <td style="color:var(--muted);font-size:12px;">Nov 27, 2024</td>
-          </tr>
+          {% set order_palette = [
+            ('var(--blush)','var(--dusty-rose)'),
+            ('var(--sage)','var(--deep-sage)'),
+            ('var(--terracotta)','var(--bark)'),
+            ('#a9c5e8','#6b8fb5'),
+            ('#e0c1a8','#9c7e64'),
+          ] %}
+          {% if recent_orders %}
+            {% for o in recent_orders %}
+              {% set p = order_palette[loop.index0 % order_palette|length] %}
+              {% set st = (o.status or 'pending').lower() %}
+              {% set pill_class = {
+                'delivered':   'sp-delivered',
+                'on_delivery': 'sp-delivery',
+                'preparing':   'sp-processing',
+                'pending':     'sp-processing',
+                'cancelled':   'sp-cancel',
+              }.get(st, 'sp-processing') %}
+              <tr>
+                <td><span class="oid">{{ o.order_no }}</span></td>
+                <td>
+                  <div class="cust-cell">
+                    <div class="c-av" style="background:linear-gradient(135deg,{{ p[0] }},{{ p[1] }})">{{ o.customer_name[:1]|upper }}</div>
+                    <span class="c-nm">{{ o.customer_name }}</span>
+                  </div>
+                </td>
+                <td><span class="amt-cell">₱{{ '{:,.2f}'.format(o.amount) }}</span></td>
+                <td><span class="s-pill {{ pill_class }}">{{ st.replace('_',' ')|title }}</span></td>
+                <td style="color:var(--muted);font-size:12px;">{{ o.created_at.strftime('%b %d, %Y %H:%M') if o.created_at else '' }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" style="text-align:center;color:var(--muted);padding:1.5rem 1rem;font-size:13px;">
+                No orders yet for this store.
+              </td>
+            </tr>
+          {% endif %}
         </tbody>
       </table>
     </div>
@@ -1153,15 +1216,15 @@ table.ana-table {
   <div class="export-bar">
     <div class="export-label">Export your <span>analytics data</span></div>
     <div class="export-btns">
-      <button class="exp-btn" onclick="showToast('Exporting to Excel…')">
-        <i class="ri-file-excel-2-line"></i> Excel
+      <button class="exp-btn" onclick="exportAnalytics('csv')">
+        <i class="ri-file-excel-2-line"></i> CSV
       </button>
-      <button class="exp-btn" onclick="showToast('Generating PDF…')">
+      <button class="exp-btn" onclick="exportAnalytics('pdf')">
         <i class="ri-file-pdf-2-line"></i> PDF
       </button>
-      <button class="exp-btn" onclick="showToast('Building report…')">
-        <i class="ri-bar-chart-grouped-line"></i> Report
-      </button>
+      <a class="exp-btn" href="{{ url_for('templates.reports') }}">
+        <i class="ri-bar-chart-grouped-line"></i> Custom Report
+      </a>
       <button class="exp-btn primary" onclick="openShareModal()">
         <i class="ri-share-forward-line"></i> Share
       </button>
@@ -1250,6 +1313,17 @@ const tooltipDefaults = {
   bodyFont:  { family: FONT_SANS,    size: 12 },
 };
 
+/* ── Live data injected from the backend ───────────────── */
+const ANALYTICS_DATA = {{ {
+  'period': period,
+  'period_label': period_label,
+  'revenue_series': revenue_series,
+  'order_status': order_status,
+  'sales_by_category': sales_by_category,
+  'peak_hours': peak_hours,
+  'delivery_series': delivery.series,
+}|tojson }};
+
 /* ── Revenue Chart ─────────────────────────────────────── */
 const rCtx = document.getElementById('revenueChart').getContext('2d');
 const rGrad = rCtx.createLinearGradient(0,0,0,230);
@@ -1257,17 +1331,19 @@ rGrad.addColorStop(0,'rgba(181,68,90,.18)');
 rGrad.addColorStop(1,'rgba(181,68,90,.02)');
 
 let chartType = 'line';
-let revenueChart = buildRevenueChart('line');
+let revenueChart = null;
+revenueChart = buildRevenueChart('line');
 
 function buildRevenueChart(type) {
   if (revenueChart) revenueChart.destroy();
+  const series = ANALYTICS_DATA.revenue_series || { labels: [], revenue: [] };
   return new Chart(rCtx, {
     type,
     data: {
-      labels: ['Nov 1','Nov 5','Nov 10','Nov 15','Nov 20','Nov 25','Nov 30'],
+      labels: series.labels,
       datasets: [{
         label: 'Revenue (₱)',
-        data: [1200,1900,3000,5000,2800,3600,4500],
+        data: series.revenue,
         borderColor: C.rose,
         backgroundColor: type === 'line' ? rGrad : C.roseA,
         borderWidth: 2.5,
@@ -1287,7 +1363,7 @@ function buildRevenueChart(type) {
         legend: { display: false },
         tooltip: {
           ...tooltipDefaults,
-          callbacks: { label: c => `  ₱${c.parsed.y.toLocaleString()}` }
+          callbacks: { label: c => `  ₱${Number(c.parsed.y || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` }
         }
       },
       scales: {
@@ -1300,7 +1376,7 @@ function buildRevenueChart(type) {
           ticks: {
             font: { family: FONT_SANS, size: 11 },
             color: '#9a8d85',
-            callback: v => '₱' + v.toLocaleString()
+            callback: v => '₱' + Number(v).toLocaleString()
           }
         }
       }
@@ -1316,13 +1392,25 @@ function toggleChartType() {
 }
 
 /* ── Status Doughnut ───────────────────────────────────── */
+const statusMap = ANALYTICS_DATA.order_status || {};
+const statusLabels = ['Delivered', 'On Delivery', 'Preparing', 'Pending', 'Cancelled'];
+const statusValues = [
+  statusMap.delivered   || 0,
+  statusMap.on_delivery || 0,
+  statusMap.preparing   || 0,
+  statusMap.pending     || 0,
+  statusMap.cancelled   || 0,
+];
+const statusTotal = statusValues.reduce((a,b)=>a+b, 0);
 new Chart(document.getElementById('statusChart'), {
   type: 'doughnut',
   data: {
-    labels: ['Delivered','On Delivery','Processing','Pending','Cancelled'],
+    labels: statusLabels,
     datasets: [{
-      data: [45,15,20,15,5],
-      backgroundColor: [C.sage, C.terra, C.rose, C.bark, C.muted],
+      data: statusTotal ? statusValues : [1],
+      backgroundColor: statusTotal
+        ? [C.sage, C.terra, C.rose, C.bark, C.muted]
+        : ['rgba(154,141,133,.20)'],
       borderColor: '#fffdf9',
       borderWidth: 3,
       hoverOffset: 6,
@@ -1341,20 +1429,28 @@ new Chart(document.getElementById('statusChart'), {
           padding: 12,
         }
       },
-      tooltip: tooltipDefaults
+      tooltip: {
+        ...tooltipDefaults,
+        callbacks: {
+          label: c => statusTotal ? `  ${c.label}: ${c.parsed} order(s)` : '  No orders yet'
+        }
+      }
     }
   }
 });
 
 /* ── Category Bar ──────────────────────────────────────── */
+const cats = ANALYTICS_DATA.sales_by_category || [];
+const catColours = [C.roseA, C.sageA, C.dustyA, C.terraA, 'rgba(107,76,59,.13)'];
+const catBorders = [C.rose,  C.sage,  C.dusty,  C.terra,  C.bark];
 new Chart(document.getElementById('categoryChart'), {
   type: 'bar',
   data: {
-    labels: ['Flowers','Plants','Bouquets','Succulents','Seasonal'],
+    labels: cats.map(c => c.name),
     datasets: [{
-      data: [12000,8000,15000,5000,7000],
-      backgroundColor: [C.roseA, C.sageA, C.dustyA, C.terraA, 'rgba(107,76,59,.13)'],
-      borderColor:     [C.rose,  C.sage,  C.dusty,  C.terra,  C.bark],
+      data: cats.map(c => c.revenue),
+      backgroundColor: cats.map((_, i) => catColours[i % catColours.length]),
+      borderColor:     cats.map((_, i) => catBorders[i % catBorders.length]),
       borderWidth: 1.5,
       borderRadius: 6,
     }]
@@ -1365,27 +1461,30 @@ new Chart(document.getElementById('categoryChart'), {
       legend: { display: false },
       tooltip: {
         ...tooltipDefaults,
-        callbacks: { label: c => `  ₱${c.parsed.y.toLocaleString()}` }
+        callbacks: { label: c => `  ₱${Number(c.parsed.y || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` }
       }
     },
     scales: {
       x: { grid: { display:false }, ticks: { font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } },
-      y: { grid:{ color:'rgba(107,76,59,.05)' }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85', callback: v => '₱' + v.toLocaleString() } }
+      y: { grid:{ color:'rgba(107,76,59,.05)' }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85', callback: v => '₱' + Number(v).toLocaleString() } }
     }
   }
 });
 
 /* ── Peak Hours ────────────────────────────────────────── */
+const peaks = ANALYTICS_DATA.peak_hours || [];
+const peakMax = peaks.reduce((m, p) => Math.max(m, p.count || 0), 0) || 1;
 new Chart(document.getElementById('peakChart'), {
   type: 'bar',
   data: {
-    labels: ['8AM','10AM','12PM','2PM','4PM','6PM','8PM'],
+    labels: peaks.map(p => p.label),
     datasets: [{
-      data: [12,25,45,30,28,35,15],
+      data: peaks.map(p => p.count),
       backgroundColor: ctx => {
         const v = ctx.parsed?.y ?? 0;
-        if (v >= 40) return C.rose;
-        if (v >= 28) return C.dusty;
+        const ratio = v / peakMax;
+        if (ratio >= 0.75) return C.rose;
+        if (ratio >= 0.45) return C.dusty;
         return C.roseA;
       },
       borderRadius: 6,
@@ -1399,7 +1498,7 @@ new Chart(document.getElementById('peakChart'), {
     },
     scales: {
       x: { grid:{ display:false }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } },
-      y: { grid:{ color:'rgba(107,76,59,.05)' }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } }
+      y: { beginAtZero: true, grid:{ color:'rgba(107,76,59,.05)' }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85', precision: 0 } }
     }
   }
 });
@@ -1410,13 +1509,14 @@ const dGrad = dCtx.createLinearGradient(0,0,0,160);
 dGrad.addColorStop(0,'rgba(122,158,126,.2)');
 dGrad.addColorStop(1,'rgba(122,158,126,.02)');
 
+const delSeries = ANALYTICS_DATA.delivery_series || { labels: [], rates: [] };
 new Chart(dCtx, {
   type: 'line',
   data: {
-    labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+    labels: delSeries.labels,
     datasets: [{
       label: 'On-time Rate',
-      data: [97,98,99,98,97,99,98],
+      data: delSeries.rates,
       borderColor: C.sage,
       backgroundColor: dGrad,
       borderWidth: 2.5,
@@ -1440,7 +1540,7 @@ new Chart(dCtx, {
     scales: {
       x: { grid:{ display:false }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } },
       y: {
-        min: 90, max: 100,
+        min: 0, max: 100,
         grid:{ color:'rgba(107,76,59,.05)' },
         ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85', callback: v => v+'%' }
       }
@@ -1448,39 +1548,15 @@ new Chart(dCtx, {
   }
 });
 
-/* ── Period KPI Data ───────────────────────────────────── */
-const periodData = {
-  today: { rev:'₱4,520',  orders:'12',   avg:'₱376',   newC:'3' },
-  week:  { rev:'₱24,580', orders:'156',  avg:'₱1,575', newC:'24' },
-  month: { rev:'₱98,450', orders:'625',  avg:'₱1,575', newC:'96' },
-  year:  { rev:'₱1.18M',  orders:'7,500',avg:'₱1,575', newC:'1,150' },
-};
-
+/* ── Period buttons → re-load page with ?period= ─────── */
 function setPeriod(p, btn) {
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  const d = periodData[p] || periodData.week;
-
-  // animate out then back in
-  const vals = ['kpiRevenue','kpiOrders','kpiAvg','kpiNew'];
-  vals.forEach(id => {
-    const el = document.getElementById(id);
-    el.style.opacity = '.3';
-    el.style.transform = 'translateY(4px)';
-  });
-
-  setTimeout(() => {
-    document.getElementById('kpiRevenue').textContent = d.rev;
-    document.getElementById('kpiOrders').textContent  = d.orders;
-    document.getElementById('kpiAvg').textContent     = d.avg;
-    document.getElementById('kpiNew').textContent     = d.newC;
-    vals.forEach(id => {
-      const el = document.getElementById(id);
-      el.style.transition = 'opacity .3s ease, transform .3s ease';
-      el.style.opacity = '1';
-      el.style.transform = 'translateY(0)';
-    });
-  }, 200);
+  const url = new URL(window.location.href);
+  url.searchParams.set('period', p);
+  url.searchParams.delete('from');
+  url.searchParams.delete('to');
+  window.location.href = url.toString();
 }
 
 /* ── Custom Date Drawer ────────────────────────────────── */
@@ -1494,8 +1570,24 @@ function applyCustom() {
   const to   = document.getElementById('toDate').value;
   if (!from || !to) { showToast('Please select both dates'); return; }
   if (new Date(from) > new Date(to)) { showToast('From date must be before To date'); return; }
-  document.getElementById('customDrawer').classList.remove('open');
-  showToast(`✓ Showing data: ${from} → ${to}`);
+  const url = new URL(window.location.href);
+  url.searchParams.set('period', 'custom');
+  url.searchParams.set('from', from);
+  url.searchParams.set('to', to);
+  window.location.href = url.toString();
+}
+
+/* ── Quick export from analytics page ──────────────────── */
+function exportAnalytics(fmt) {
+  const url = new URL("{{ url_for('templates.reports_generate') }}", window.location.origin);
+  url.searchParams.set('format', fmt);
+  url.searchParams.set('types', 'all');
+  const cur = new URL(window.location.href);
+  if (cur.searchParams.get('period')) url.searchParams.set('period', cur.searchParams.get('period'));
+  if (cur.searchParams.get('from'))   url.searchParams.set('from',   cur.searchParams.get('from'));
+  if (cur.searchParams.get('to'))     url.searchParams.set('to',     cur.searchParams.get('to'));
+  showToast(fmt === 'pdf' ? 'Generating PDF…' : 'Generating CSV…');
+  window.location.href = url.toString();
 }
 
 /* ── Share Modal ───────────────────────────────────────── */
@@ -1526,11 +1618,21 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { el.style.width = w; }, 600);
   });
 
-  // set default custom dates
-  const today = new Date();
-  const weekAgo = new Date(); weekAgo.setDate(today.getDate() - 7);
-  document.getElementById('fromDate').valueAsDate = weekAgo;
-  document.getElementById('toDate').valueAsDate = today;
+  // Default the custom date inputs to the active range (if "custom"), else last 7d
+  const url = new URL(window.location.href);
+  const qsFrom = url.searchParams.get('from');
+  const qsTo   = url.searchParams.get('to');
+  const fromEl = document.getElementById('fromDate');
+  const toEl   = document.getElementById('toDate');
+  if (qsFrom && qsTo) {
+    fromEl.value = qsFrom;
+    toEl.value   = qsTo;
+  } else {
+    const today = new Date();
+    const weekAgo = new Date(); weekAgo.setDate(today.getDate() - 7);
+    fromEl.valueAsDate = weekAgo;
+    toEl.valueAsDate   = today;
+  }
 });
 </script>
 {% endblock %}

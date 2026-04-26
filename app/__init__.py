@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_cors import CORS
 import os
 import mimetypes
+from datetime import timedelta
 
 # Import extensions from the new extensions module
 from app.extensions import db, migrate, jwt, mail
@@ -19,6 +20,7 @@ from flask_limiter.util import get_remote_address
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
+from sqlalchemy import inspect, text
 
 # Initialize extensions at module level
 csrf = CSRFProtect()
@@ -55,9 +57,12 @@ def create_app(config_class='default'):
     app.config['WTF_CSRF_ENABLED'] = True
     app.config['WTF_CSRF_CHECK_DEFAULT'] = False
     app.config['WTF_CSRF_SSL_STRICT'] = False if app.debug else True
-    app.config['WTF_CSRF_TIME_LIMIT'] = 3600
+    # 2 hours keeps security while reducing accidental expiry during testing.
+    app.config['WTF_CSRF_TIME_LIMIT'] = 7200
     app.config['SECRET_KEY'] = app.config.get('SECRET_KEY', os.urandom(24))
     app.config['WTF_CSRF_SECRET_KEY'] = app.config.get('SECRET_KEY')
+    # Disable Flask-Limiter globally for this project environment.
+    app.config['RATELIMIT_ENABLED'] = False
     
     # ====================================================
     # SESSION SECURITY CONFIGURATION
@@ -65,6 +70,7 @@ def create_app(config_class='default'):
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = not app.debug
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
     app.config['REMEMBER_COOKIE_HTTPONLY'] = True
     app.config['REMEMBER_COOKIE_SECURE'] = not app.debug
     app.config['REMEMBER_COOKIE_DURATION'] = 86400 * 30
@@ -168,6 +174,40 @@ def create_app(config_class='default'):
     
     # Import models here to ensure they're registered with SQLAlchemy
     from app import models
+
+    # Backward-safe DB patch: add riders.is_archived if missing.
+    with app.app_context():
+        try:
+            inspector = inspect(db.engine)
+            rider_columns = {col['name'] for col in inspector.get_columns('riders')}
+            if 'is_archived' not in rider_columns:
+                db.session.execute(
+                    text("ALTER TABLE riders ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT FALSE")
+                )
+                db.session.commit()
+                app.logger.info("✅ Added riders.is_archived column with default false")
+        except Exception as db_patch_error:
+            db.session.rollback()
+            app.logger.warning(f"⚠️ Could not apply riders.is_archived patch: {db_patch_error}")
+
+    # Backward-safe DB patch: add pos_orders.is_seen_by_seller if missing.
+    with app.app_context():
+        try:
+            inspector = inspect(db.engine)
+            pos_order_columns = {col['name'] for col in inspector.get_columns('pos_orders')}
+            if 'is_seen_by_seller' not in pos_order_columns:
+                db.session.execute(
+                    text("ALTER TABLE pos_orders ADD COLUMN is_seen_by_seller BOOLEAN NOT NULL DEFAULT FALSE")
+                )
+                # Existing historical rows should not count as "new/unseen".
+                db.session.execute(
+                    text("UPDATE pos_orders SET is_seen_by_seller = TRUE")
+                )
+                db.session.commit()
+                app.logger.info("✅ Added pos_orders.is_seen_by_seller column and marked existing rows as seen")
+        except Exception as db_patch_error:
+            db.session.rollback()
+            app.logger.warning(f"⚠️ Could not apply pos_orders.is_seen_by_seller patch: {db_patch_error}")
     
     # ====================================================
     # REGISTER BLUEPRINTS (INCLUDING CLOUDINARY)
@@ -284,6 +324,12 @@ def create_app(config_class='default'):
         
         if not app.debug:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+
+        # Avoid stale auth/session pages being shown from browser history cache.
+        if request.path in ('/login', '/register') or session.get('user_id'):
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
         
         return response
     
@@ -311,8 +357,77 @@ def create_app(config_class='default'):
             csrf.protect()
         except Exception as e:
             app.logger.error(f"CSRF protection error: {str(e)}")
+
+            # API requests stay JSON.
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'CSRF token missing or invalid'}), 400
+
+            # Web form UX: show friendly message instead of raw JSON 400.
+            if request.path == '/login':
+                return render_template(
+                    'login.html',
+                    error='Your form session expired. Please try signing in again.',
+                    form_data={'email': (request.form.get('email') or '').strip().lower()},
+                ), 400
+
+            if request.path == '/register':
+                return render_template(
+                    'register.html',
+                    error='Your form session expired. Please submit registration again.',
+                    form_data=request.form,
+                ), 400
+
             return jsonify({'error': 'CSRF token missing or invalid'}), 400
-    
+
+    @app.before_request
+    def enforce_role_page_access():
+        """Block access to other role account pages."""
+        # Ignore static and API requests (API endpoints already have own checks).
+        if request.path.startswith('/static/') or request.path.startswith('/api/'):
+            return
+
+        user_id = session.get('user_id')
+        role = session.get('role')
+        if not user_id or not role:
+            return
+
+        normalized_path = request.path.rstrip('/') or '/'
+
+        def role_home_redirect():
+            if role == 'admin':
+                return redirect(url_for('templates.admin_users'))
+            if role == 'seller':
+                return redirect(url_for('templates.seller_dashboard'))
+            if role == 'rider':
+                # Rider dashboard lives in rider blueprint.
+                return redirect(url_for('rider.rider_dashboard'))
+            return redirect(url_for('templates.index'))
+
+        seller_only_paths = ('/seller', '/analytics', '/reports')
+        admin_only_paths = ('/admin',)
+        # Storefront-only paths. /my-account, /profile, /settings are intentionally
+        # excluded so sellers/admins can view/edit their own user profile too;
+        # those route handlers manage role-specific redirects internally.
+        customer_only_paths = ('/orders', '/home')
+
+        if (
+            any(normalized_path == p or normalized_path.startswith(f'{p}/') for p in seller_only_paths)
+            and role != 'seller'
+        ):
+            return role_home_redirect()
+
+        if (
+            any(normalized_path == p or normalized_path.startswith(f'{p}/') for p in admin_only_paths)
+            and role != 'admin'
+        ):
+            return role_home_redirect()
+
+        if (
+            any(normalized_path == p or normalized_path.startswith(f'{p}/') for p in customer_only_paths)
+            and role != 'customer'
+        ):
+            return role_home_redirect()
+
     # ====================================================
     # DEBUG: PRINT ALL REGISTERED ROUTES
     # ====================================================

@@ -1,0 +1,235 @@
+{% extends "layout.html" %}
+
+{% block title %}Support - E-FLOWERS{% endblock %}
+{% block page_title %}Support{% endblock %}
+
+{% block content %}
+<div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap: wrap;">
+        <div>
+            <div class="section-eyebrow">Admin Console</div>
+            <h2 class="section-title" style="margin-top: 0.15rem;">User Contact Support</h2>
+            <p style="color: var(--muted); margin-top: 0.45rem;">
+                Support chats from users appear in the floating chat widget. Open the widget at the bottom-right to reply.
+            </p>
+        </div>
+        <button class="btn btn-rose" type="button" onclick="openSupportInboxFromPage()">
+            <i class="ri-chat-3-line"></i>
+            Open Support Inbox
+        </button>
+    </div>
+</div>
+
+<div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <div>
+            <div class="section-eyebrow">Knowledge Base</div>
+            <h3 class="section-title" style="font-size: 1.35rem; margin-top: 0.2rem;">Frequently Asked Questions</h3>
+        </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+        <div>
+            <label class="form-label" for="faqQuestion">Question</label>
+            <input id="faqQuestion" class="form-control" type="text" maxlength="255" placeholder="Example: How do I track my order?">
+        </div>
+        <div>
+            <label class="form-label" for="faqAnswer">Answer</label>
+            <textarea id="faqAnswer" class="form-control" rows="4" maxlength="5000" placeholder="Write the full support answer here."></textarea>
+        </div>
+    </div>
+
+    <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
+        <button class="btn btn-rose" type="button" id="faqSaveBtn" onclick="saveFaq()">
+            <i class="ri-add-line"></i>
+            Add FAQ
+        </button>
+        <button class="btn btn-outline" type="button" id="faqCancelBtn" onclick="cancelFaqEdit()" style="display:none;">
+            <i class="ri-close-line"></i>
+            Cancel Edit
+        </button>
+    </div>
+</div>
+
+<div class="table-wrap">
+    <table class="table">
+        <thead>
+            <tr>
+                <th style="width: 36%;">Question</th>
+                <th>Answer</th>
+                <th style="width: 120px;">Status</th>
+                <th style="width: 190px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="faqTableBody">
+            <tr>
+                <td colspan="4" style="text-align:center; color: var(--muted); padding: 2rem;">Loading FAQs...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let supportFaqs = [];
+let editingFaqId = null;
+
+function csrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? (meta.getAttribute('content') || '') : '';
+}
+
+function openSupportInboxFromPage() {
+    if (window.chatWidget && typeof window.chatWidget.toggle === 'function') {
+        window.chatWidget.toggle();
+    } else {
+        window.location.reload();
+    }
+}
+
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+}
+
+async function loadFaqs() {
+    const tbody = document.getElementById('faqTableBody');
+    try {
+        const res = await fetch('/api/admin/support-faqs', { credentials: 'same-origin' });
+        const data = await res.json();
+        supportFaqs = Array.isArray(data.faqs) ? data.faqs : [];
+
+        if (!supportFaqs.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--muted); padding: 2rem;">No FAQs yet. Add one above.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = supportFaqs.map(f => {
+            const statusClass = f.is_active ? 'badge-active' : 'badge-cancelled';
+            const statusText = f.is_active ? 'Active' : 'Hidden';
+            return `<tr>
+                <td style="font-weight:600;">${esc(f.question)}</td>
+                <td style="white-space:pre-wrap;">${esc(f.answer)}</td>
+                <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                <td>
+                    <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                        <button class="btn btn-outline" style="padding:0.42rem 0.7rem; font-size:12px;" onclick="startEditFaq(${f.id})"><i class="ri-edit-line"></i> Edit</button>
+                        <button class="btn btn-outline" style="padding:0.42rem 0.7rem; font-size:12px;" onclick="toggleFaq(${f.id})">
+                            <i class="ri-${f.is_active ? 'eye-off' : 'eye'}-line"></i> ${f.is_active ? 'Hide' : 'Show'}
+                        </button>
+                        <button class="btn" style="padding:0.42rem 0.7rem; font-size:12px; background: rgba(192,57,43,0.12); color:#9b1c1c;" onclick="deleteFaq(${f.id})"><i class="ri-delete-bin-line"></i> Delete</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: #9b1c1c; padding: 2rem;">Could not load FAQs.</td></tr>';
+    }
+}
+
+function startEditFaq(id) {
+    const f = supportFaqs.find(x => x.id === id);
+    if (!f) return;
+    editingFaqId = id;
+    document.getElementById('faqQuestion').value = f.question || '';
+    document.getElementById('faqAnswer').value = f.answer || '';
+    document.getElementById('faqSaveBtn').innerHTML = '<i class="ri-save-3-line"></i> Update FAQ';
+    document.getElementById('faqCancelBtn').style.display = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelFaqEdit() {
+    editingFaqId = null;
+    document.getElementById('faqQuestion').value = '';
+    document.getElementById('faqAnswer').value = '';
+    document.getElementById('faqSaveBtn').innerHTML = '<i class="ri-add-line"></i> Add FAQ';
+    document.getElementById('faqCancelBtn').style.display = 'none';
+}
+
+async function saveFaq() {
+    const question = (document.getElementById('faqQuestion').value || '').trim();
+    const answer = (document.getElementById('faqAnswer').value || '').trim();
+    if (question.length < 5 || answer.length < 5) {
+        showToast('Question and answer should be at least 5 characters', 'error');
+        return;
+    }
+
+    const payload = { question, answer, is_active: true };
+    const isEdit = !!editingFaqId;
+    const url = isEdit ? `/api/admin/support-faqs/${editingFaqId}` : '/api/admin/support-faqs';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const res = await fetch(url, {
+            method,
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken()
+            },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Could not save FAQ', 'error');
+            return;
+        }
+        showToast(isEdit ? 'FAQ updated' : 'FAQ added', 'success');
+        cancelFaqEdit();
+        loadFaqs();
+    } catch (e) {
+        showToast('Network error while saving FAQ', 'error');
+    }
+}
+
+async function toggleFaq(id) {
+    const f = supportFaqs.find(x => x.id === id);
+    if (!f) return;
+    try {
+        const res = await fetch(`/api/admin/support-faqs/${id}`, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken()
+            },
+            body: JSON.stringify({ question: f.question, answer: f.answer, is_active: !f.is_active })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Could not update FAQ', 'error');
+            return;
+        }
+        showToast('FAQ status updated', 'success');
+        loadFaqs();
+    } catch (e) {
+        showToast('Network error while updating FAQ', 'error');
+    }
+}
+
+async function deleteFaq(id) {
+    if (!await window.openConfirmModal('Delete this FAQ?')) return;
+    try {
+        const res = await fetch(`/api/admin/support-faqs/${id}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: { 'X-CSRFToken': csrfToken() }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Could not delete FAQ', 'error');
+            return;
+        }
+        showToast('FAQ deleted', 'success');
+        if (editingFaqId === id) cancelFaqEdit();
+        loadFaqs();
+    } catch (e) {
+        showToast('Network error while deleting FAQ', 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadFaqs);
+</script>
+{% endblock %}

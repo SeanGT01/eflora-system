@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Reports — E-FLOWERS{% endblock %}
+{% block title %}Reports — E-FLORA{% endblock %}
 {% block page_title %}Reports{% endblock %}
 
 {% block extra_css %}
@@ -89,8 +89,9 @@
   padding: 2rem 2.25rem;
   margin-bottom: 1.75rem;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   animation: fadeUp .4s ease both;
+  z-index: 120;
 }
 
 .builder-panel::before {
@@ -210,6 +211,193 @@
 }
 
 .apply-range-btn:hover { background: #9b3048; transform: translateY(-1px); }
+
+/* ─── Multi-Select (Report Types) ───────────────────────── */
+.multi-wrapper { position: relative; }
+
+.multi-trigger {
+  width: 100%;
+  padding: .75rem 2.5rem .75rem 1rem;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--charcoal);
+  background: var(--cream);
+  transition: var(--transition);
+  cursor: pointer;
+  text-align: left;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  min-height: 44px;
+}
+
+.multi-trigger::after {
+  content: '';
+  position: absolute;
+  top: 50%; right: .9rem;
+  width: 12px; height: 12px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%239a8d85' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") center / contain no-repeat;
+  transform: translateY(-50%);
+  transition: transform .25s ease;
+}
+
+.multi-trigger.open::after { transform: translateY(-50%) rotate(180deg); }
+
+.multi-trigger:hover, .multi-trigger:focus, .multi-trigger.open {
+  border-color: var(--deep-rose);
+  background: var(--warm-white);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(181,68,90,.08);
+}
+
+.multi-trigger-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--charcoal);
+}
+
+.multi-trigger-label.placeholder { color: var(--muted); }
+
+.multi-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 .55rem;
+  border-radius: 100px;
+  background: var(--deep-rose);
+  color: var(--cream);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.multi-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0; right: 0;
+  background: var(--warm-white);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
+  padding: .55rem;
+  box-shadow: 0 12px 32px rgba(42,35,30,.14);
+  z-index: 9999;
+  display: none;
+  flex-direction: column;
+  gap: .15rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.multi-panel.open { display: flex; animation: fadeUp .18s ease; }
+
+.multi-opt {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .6rem .75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background .2s ease;
+  font-size: 13px;
+  color: var(--charcoal);
+  user-select: none;
+}
+
+.multi-opt:hover { background: rgba(181,68,90,.06); }
+.multi-opt.is-all { border-bottom: 1px dashed var(--border); border-radius: 0; padding-top: .55rem; padding-bottom: .55rem; margin-bottom: .25rem; font-weight: 600; }
+
+.multi-cb {
+  appearance: none;
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--border-md);
+  border-radius: 4px;
+  cursor: pointer;
+  position: relative;
+  transition: all .2s ease;
+  background: var(--cream);
+  flex-shrink: 0;
+}
+
+.multi-cb:checked {
+  background: var(--deep-rose);
+  border-color: var(--deep-rose);
+}
+
+.multi-cb:checked::after {
+  content: '';
+  position: absolute;
+  top: 1.5px; left: 4.5px;
+  width: 4px; height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.multi-cb:indeterminate {
+  background: var(--deep-rose);
+  border-color: var(--deep-rose);
+}
+.multi-cb:indeterminate::after {
+  content: '';
+  position: absolute;
+  top: 6px; left: 3px;
+  right: 3px;
+  height: 2px;
+  background: white;
+  border-radius: 1px;
+}
+
+.multi-opt-label { flex: 1; }
+
+/* ─── Generated section preview ─────────────────────────── */
+.section-block { margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px dashed var(--border); }
+.section-block:last-child { border-bottom: none; padding-bottom: 0; }
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--deep-rose);
+  margin-bottom: .35rem;
+}
+
+.section-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: .75rem 1rem;
+  background: var(--cream);
+  border-radius: var(--radius-md);
+}
+
+.section-summary-item {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.section-summary-item strong {
+  font-weight: 700;
+  color: var(--charcoal);
+  margin-left: .35rem;
+}
+
+.section-empty {
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+  font-size: 13px;
+  background: var(--cream);
+  border-radius: var(--radius-md);
+}
 
 /* ─── Quick Report Cards ────────────────────────────────── */
 .quick-row {
@@ -904,24 +1092,45 @@ table.saved-table {
   <!-- ─── Header ──────────────────────────────────────────── -->
   <div class="rpt-header">
     <div>
-      <div class="rpt-eyebrow">Data & Insights</div>
+      <div class="rpt-eyebrow">Data & Insights{% if store %} — {{ store.name }}{% endif %}</div>
       <h1 class="rpt-title">Reports, <em>beautifully presented</em></h1>
     </div>
   </div>
 
+  {% if not store %}
+  <div class="builder-panel" style="text-align:center;">
+    <div style="font-family:var(--font-display);font-size:22px;color:var(--charcoal);margin-bottom:.4rem;">No store yet</div>
+    <div style="font-size:13px;color:var(--muted);">
+      Reports become available once you have an active store.
+    </div>
+  </div>
+  {% endif %}
+
   <!-- ─── Builder ─────────────────────────────────────────── -->
-  <div class="builder-panel">
+  <form class="builder-panel" id="builderForm" onsubmit="event.preventDefault(); generateReport();">
     <div class="builder-grid">
       <div class="field-group">
-        <span class="field-label">Report Type</span>
-        <select class="field-select" id="reportType">
-          <option value="sales">Sales Report</option>
-          <option value="orders">Orders Report</option>
-          <option value="products">Products Report</option>
-          <option value="customers">Customers Report</option>
-          <option value="riders">Riders Report</option>
-          <option value="inventory">Inventory Report</option>
-        </select>
+        <span class="field-label">Report Types</span>
+
+        <div class="multi-wrapper" id="reportTypesWrap">
+          <button type="button" class="multi-trigger" id="reportTypesTrigger" aria-haspopup="listbox" aria-expanded="false" onclick="toggleMulti(event)">
+            <span class="multi-trigger-label" id="reportTypesLabel">All Reports</span>
+            <span class="multi-pill-count" id="reportTypesCount">{{ report_type_options|length }}</span>
+          </button>
+
+          <div class="multi-panel" id="reportTypesPanel" role="listbox" aria-multiselectable="true">
+            <label class="multi-opt is-all">
+              <input type="checkbox" class="multi-cb" id="reportTypeAll" onchange="onAllToggle(this)" checked>
+              <span class="multi-opt-label">Select All</span>
+            </label>
+            {% for opt in report_type_options %}
+              <label class="multi-opt">
+                <input type="checkbox" class="multi-cb report-type-cb" name="types" value="{{ opt.value }}" onchange="onTypeToggle()" checked>
+                <span class="multi-opt-label">{{ opt.label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
       </div>
 
       <div class="field-group">
@@ -933,6 +1142,7 @@ table.saved-table {
           <option value="month" selected>This Month</option>
           <option value="quarter">This Quarter</option>
           <option value="year">This Year</option>
+          <option value="all">All Time</option>
           <option value="custom">Custom Range…</option>
         </select>
       </div>
@@ -940,14 +1150,13 @@ table.saved-table {
       <div class="field-group">
         <span class="field-label">Format</span>
         <select class="field-select" id="reportFormat">
-          <option value="html">Web View</option>
+          <option value="html" selected>Preview</option>
           <option value="pdf">PDF</option>
-          <option value="excel">Excel</option>
-          <option value="csv">CSV</option>
+          <option value="csv">CSV / ZIP</option>
         </select>
       </div>
 
-      <button class="generate-btn" id="generateBtn" onclick="generateReport()">
+      <button class="generate-btn" id="generateBtn" type="submit">
         <i class="ri-file-chart-line"></i> Generate
       </button>
     </div>
@@ -962,39 +1171,39 @@ table.saved-table {
         <span class="field-label">To</span>
         <input type="date" class="field-input" id="toDate">
       </div>
-      <button class="apply-range-btn" onclick="applyRange()">
+      <button type="button" class="apply-range-btn" onclick="applyRange()">
         <i class="ri-check-line"></i> Apply
       </button>
     </div>
-  </div>
+  </form>
 
   <!-- ─── Quick Report Cards ──────────────────────────────── -->
   <div class="quick-row">
-    <div class="quick-card qc-rose" onclick="quickReport('sales')">
-      <div class="quick-ico"><i class="ri-money-dollar-circle-line"></i></div>
-      <div class="quick-name">Daily Sales</div>
-      <div class="quick-desc">Today's revenue, orders, and top earners at a glance</div>
+    <div class="quick-card qc-rose" onclick="quickReport(['orders'])">
+      <div class="quick-ico"><i class="ri-shopping-bag-line"></i></div>
+      <div class="quick-name">Orders Report</div>
+      <div class="quick-desc">Every order in the period with status, amount, and payment</div>
       <div class="quick-cta">Generate <i class="ri-arrow-right-line"></i></div>
     </div>
 
-    <div class="quick-card qc-sage" onclick="quickReport('products')">
+    <div class="quick-card qc-sage" onclick="quickReport(['products'])">
       <div class="quick-ico"><i class="ri-plant-line"></i></div>
-      <div class="quick-name">Top Products</div>
-      <div class="quick-desc">Best selling items ranked by revenue and units sold</div>
+      <div class="quick-name">Products Report</div>
+      <div class="quick-desc">Catalogue with sales, revenue, stock levels and alerts</div>
       <div class="quick-cta">Generate <i class="ri-arrow-right-line"></i></div>
     </div>
 
-    <div class="quick-card qc-terra" onclick="quickReport('customers')">
+    <div class="quick-card qc-terra" onclick="quickReport(['customers'])">
       <div class="quick-ico"><i class="ri-user-heart-line"></i></div>
-      <div class="quick-name">Customer Analysis</div>
-      <div class="quick-desc">Demographics, repeat buyers, and acquisition trends</div>
+      <div class="quick-name">Customers Report</div>
+      <div class="quick-desc">Customers ranked by spend, with order counts and last activity</div>
       <div class="quick-cta">Generate <i class="ri-arrow-right-line"></i></div>
     </div>
 
-    <div class="quick-card qc-bark" onclick="quickReport('inventory')">
-      <div class="quick-ico"><i class="ri-stack-line"></i></div>
-      <div class="quick-name">Inventory Status</div>
-      <div class="quick-desc">Stock levels, low-stock alerts, and reorder suggestions</div>
+    <div class="quick-card qc-bark" onclick="quickReport(['revenue'])">
+      <div class="quick-ico"><i class="ri-money-dollar-circle-line"></i></div>
+      <div class="quick-name">Revenue Report</div>
+      <div class="quick-desc">Daily revenue, orders, and average order value</div>
       <div class="quick-cta">Generate <i class="ri-arrow-right-line"></i></div>
     </div>
   </div>
@@ -1002,19 +1211,19 @@ table.saved-table {
   <!-- ─── Report Preview ──────────────────────────────────── -->
   <div class="panel" style="margin-bottom:1.75rem;">
     <div class="panel-head">
-      <span class="panel-title">Report Preview</span>
+      <span class="panel-title">Report Preview <small id="previewMeta" style="font-size:12px;color:var(--muted);font-family:var(--font-sans);font-weight:400;margin-left:.5rem;"></small></span>
       <div class="panel-actions">
-        <button class="pa-btn" onclick="generateReport()"><i class="ri-refresh-line"></i> Refresh</button>
-        <button class="pa-btn" onclick="exportReport()"><i class="ri-download-line"></i> Export</button>
-        <button class="pa-btn" onclick="window.print()"><i class="ri-printer-line"></i> Print</button>
-        <button class="pa-btn primary" onclick="openSchedule()"><i class="ri-time-line"></i> Schedule</button>
+        <button class="pa-btn" type="button" onclick="generateReport()"><i class="ri-refresh-line"></i> Refresh</button>
+        <button class="pa-btn" type="button" onclick="downloadReport('pdf')"><i class="ri-file-pdf-2-line"></i> PDF</button>
+        <button class="pa-btn" type="button" onclick="downloadReport('csv')"><i class="ri-file-excel-2-line"></i> CSV</button>
+        <button class="pa-btn" type="button" onclick="window.print()"><i class="ri-printer-line"></i> Print</button>
       </div>
     </div>
     <div class="preview-body" id="previewBody">
       <div class="empty-preview">
         <div class="empty-icon"><i class="ri-file-chart-line"></i></div>
         <div class="empty-title">No report generated yet</div>
-        <div class="empty-sub">Select a report type above and click Generate, or choose a quick report card to get started.</div>
+        <div class="empty-sub">Select one or more report types above and click Generate. Use “Select All” to combine every report into one document.</div>
       </div>
     </div>
   </div>
@@ -1108,7 +1317,7 @@ table.saved-table {
       </div>
       {% else %}
       <!-- Fallback static templates if none from backend -->
-      <div class="tpl-card" onclick="quickReport('sales')">
+      <div class="tpl-card" onclick="quickReport(['revenue'])">
         <div class="tpl-top">
           <div class="tpl-ico ti-rose"><i class="ri-money-dollar-circle-line"></i></div>
           <div><div class="tpl-name">Monthly Sales Summary</div><div class="tpl-desc">Full revenue breakdown with trend analysis</div></div>
@@ -1116,7 +1325,7 @@ table.saved-table {
         <div class="tpl-foot"><span class="tpl-last">Last used: Nov 30</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
       </div>
 
-      <div class="tpl-card" onclick="quickReport('orders')">
+      <div class="tpl-card" onclick="quickReport(['orders'])">
         <div class="tpl-top">
           <div class="tpl-ico ti-sage"><i class="ri-shopping-bag-line"></i></div>
           <div><div class="tpl-name">Weekly Order Report</div><div class="tpl-desc">Order status, fulfilment, and rider performance</div></div>
@@ -1124,7 +1333,7 @@ table.saved-table {
         <div class="tpl-foot"><span class="tpl-last">Last used: Nov 28</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
       </div>
 
-      <div class="tpl-card" onclick="quickReport('inventory')">
+      <div class="tpl-card" onclick="quickReport(['products'])">
         <div class="tpl-top">
           <div class="tpl-ico ti-terra"><i class="ri-stack-line"></i></div>
           <div><div class="tpl-name">Inventory Audit</div><div class="tpl-desc">Stock levels, reorder alerts, and dead stock</div></div>
@@ -1132,7 +1341,7 @@ table.saved-table {
         <div class="tpl-foot"><span class="tpl-last">Last used: Nov 25</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
       </div>
 
-      <div class="tpl-card" onclick="quickReport('customers')">
+      <div class="tpl-card" onclick="quickReport(['customers'])">
         <div class="tpl-top">
           <div class="tpl-ico ti-bark"><i class="ri-user-heart-line"></i></div>
           <div><div class="tpl-name">Customer Loyalty</div><div class="tpl-desc">Repeat buyers, churn rate, and lifetime value</div></div>
@@ -1140,7 +1349,7 @@ table.saved-table {
         <div class="tpl-foot"><span class="tpl-last">Last used: Nov 20</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
       </div>
 
-      <div class="tpl-card" onclick="quickReport('riders')">
+      <div class="tpl-card" onclick="quickReport(['riders'])">
         <div class="tpl-top">
           <div class="tpl-ico ti-blush"><i class="ri-motorbike-line"></i></div>
           <div><div class="tpl-name">Rider Performance</div><div class="tpl-desc">Delivery times, success rates, and earnings</div></div>
@@ -1148,7 +1357,7 @@ table.saved-table {
         <div class="tpl-foot"><span class="tpl-last">Last used: Nov 18</span><span class="tpl-use">Use <i class="ri-arrow-right-line"></i></span></div>
       </div>
 
-      <div class="tpl-card" onclick="quickReport('sales')">
+      <div class="tpl-card" onclick="quickReport(['year_end'], 'year')">
         <div class="tpl-top">
           <div class="tpl-ico ti-charcoal"><i class="ri-bar-chart-grouped-line"></i></div>
           <div><div class="tpl-name">Year-End Summary</div><div class="tpl-desc">Annual performance overview for stakeholders</div></div>
@@ -1226,12 +1435,84 @@ table.saved-table {
 
 {% block extra_js %}
 <script>
-/* ── Date Range ────────────────────────────────────────── */
+const STORE_NAME    = {{ (store.name if store else 'E-FLORA')|tojson }};
+const PREVIEW_URL   = "{{ url_for('templates.reports_preview') }}";
+const GENERATE_URL  = "{{ url_for('templates.reports_generate') }}";
+const REPORT_TYPES  = {{ report_types|tojson }};
+const TYPE_LABELS   = {{ report_type_options|tojson }};
+
+/* ───────── Multi-select dropdown ─────────────────────── */
+function toggleMulti(e) {
+  e.stopPropagation();
+  const trigger = document.getElementById('reportTypesTrigger');
+  const panel   = document.getElementById('reportTypesPanel');
+  const open = panel.classList.toggle('open');
+  trigger.classList.toggle('open', open);
+  trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closeMulti() {
+  document.getElementById('reportTypesPanel').classList.remove('open');
+  const trigger = document.getElementById('reportTypesTrigger');
+  trigger.classList.remove('open');
+  trigger.setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('reportTypesWrap');
+  if (wrap && !wrap.contains(e.target)) closeMulti();
+});
+
+function getSelectedTypes() {
+  return Array.from(document.querySelectorAll('.report-type-cb:checked')).map(c => c.value);
+}
+
+function syncTriggerLabel() {
+  const selected = getSelectedTypes();
+  const label = document.getElementById('reportTypesLabel');
+  const count = document.getElementById('reportTypesCount');
+  const total = document.querySelectorAll('.report-type-cb').length;
+  count.textContent = selected.length;
+
+  if (selected.length === 0) {
+    label.textContent = 'Select reports…';
+    label.classList.add('placeholder');
+  } else if (selected.length === total) {
+    label.textContent = 'All Reports';
+    label.classList.remove('placeholder');
+  } else {
+    const map = Object.fromEntries(TYPE_LABELS.map(o => [o.value, o.label.replace(' Report', '')]));
+    label.textContent = selected.map(v => map[v] || v).join(', ');
+    label.classList.remove('placeholder');
+  }
+}
+
+function syncAllCheckbox() {
+  const all = document.getElementById('reportTypeAll');
+  const cbs = document.querySelectorAll('.report-type-cb');
+  const checked = Array.from(cbs).filter(c => c.checked).length;
+  if (checked === 0)            { all.checked = false; all.indeterminate = false; }
+  else if (checked === cbs.length) { all.checked = true;  all.indeterminate = false; }
+  else                          { all.checked = false; all.indeterminate = true;  }
+}
+
+function onAllToggle(checkbox) {
+  const cbs = document.querySelectorAll('.report-type-cb');
+  cbs.forEach(c => { c.checked = checkbox.checked; });
+  checkbox.indeterminate = false;
+  syncTriggerLabel();
+}
+
+function onTypeToggle() {
+  syncAllCheckbox();
+  syncTriggerLabel();
+}
+
+/* ───────── Date Range ────────────────────────────────── */
 function handleDateChange(sel) {
   const drawer = document.getElementById('dateDrawer');
-  sel.value === 'custom'
-    ? drawer.classList.add('open')
-    : drawer.classList.remove('open');
+  if (sel.value === 'custom') drawer.classList.add('open');
+  else drawer.classList.remove('open');
 }
 
 function applyRange() {
@@ -1239,207 +1520,254 @@ function applyRange() {
   const to   = document.getElementById('toDate').value;
   if (!from || !to) { showToast('Please select both dates'); return; }
   if (new Date(from) > new Date(to)) { showToast('From date must be before To date'); return; }
-  document.getElementById('dateDrawer').classList.remove('open');
-  showToast(`✓ Range set: ${from} → ${to}`);
+  showToast(`Range set: ${from} → ${to}`);
 }
 
-/* ── Quick Reports ─────────────────────────────────────── */
-function quickReport(type) {
-  document.getElementById('reportType').value = type;
+/* ───────── Quick Reports ─────────────────────────────── */
+function quickReport(types, period = null) {
+  const cbs = document.querySelectorAll('.report-type-cb');
+  cbs.forEach(c => { c.checked = types.includes(c.value); });
+  if (period) {
+    const rangeSel = document.getElementById('dateRange');
+    rangeSel.value = period;
+    handleDateChange(rangeSel);
+  }
+  syncAllCheckbox();
+  syncTriggerLabel();
   generateReport();
 }
 
 function useTemplate(id) {
   showToast(`Loading template ${id}…`);
-  setTimeout(generateReport, 600);
+  setTimeout(generateReport, 400);
 }
 
-/* ── Generate ──────────────────────────────────────────── */
-function generateReport() {
-  const type    = document.getElementById('reportType').value;
-  const range   = document.getElementById('dateRange').value;
+/* ───────── Build query payload ────────────────────────── */
+function getReportParams() {
+  const types = getSelectedTypes();
+  const period = document.getElementById('dateRange').value;
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  return { types, period, from, to };
+}
+
+function buildSearchParams(params, format) {
+  const sp = new URLSearchParams();
+  params.types.forEach(t => sp.append('types[]', t));
+  sp.set('period', params.period);
+  if (params.from) sp.set('from', params.from);
+  if (params.to)   sp.set('to', params.to);
+  if (format) sp.set('format', format);
+  return sp;
+}
+
+/* ───────── Generate (Preview / PDF / CSV) ─────────────── */
+async function generateReport() {
+  const fmt = document.getElementById('reportFormat').value;
+  if (fmt === 'pdf' || fmt === 'csv') return downloadReport(fmt);
+
+  const params = getReportParams();
+  if (!params.types.length) {
+    showToast('Pick at least one report type');
+    return;
+  }
+  if (params.period === 'custom' && (!params.from || !params.to)) {
+    showToast('Please pick both custom dates');
+    return;
+  }
+
   const btn     = document.getElementById('generateBtn');
   const preview = document.getElementById('previewBody');
 
-  // Loading state
   btn.classList.add('loading');
   btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;margin-right:.4rem;vertical-align:middle"></span> Generating…';
   preview.innerHTML = `
     <div class="loading-state">
       <div class="spinner"></div>
       <div class="loading-text">Building your report…</div>
-      <div class="loading-sub">This only takes a moment</div>
+      <div class="loading-sub">Reading live data from your store</div>
     </div>`;
 
-  setTimeout(() => {
+  try {
+    const res = await fetch(PREVIEW_URL + '?' + buildSearchParams(params).toString(), {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load report');
+    renderPreview(data);
+    showToast('Report generated');
+  } catch (err) {
+    preview.innerHTML = `
+      <div class="empty-preview">
+        <div class="empty-icon"><i class="ri-error-warning-line"></i></div>
+        <div class="empty-title">Couldn't load report</div>
+        <div class="empty-sub">${err.message}</div>
+      </div>`;
+  } finally {
     btn.classList.remove('loading');
     btn.innerHTML = '<i class="ri-file-chart-line"></i> Generate';
-
-    const generators = {
-      sales:     salesReport,
-      orders:    ordersReport,
-      products:  productsReport,
-      customers: customersReport,
-      riders:    ridersReport,
-      inventory: inventoryReport,
-    };
-
-    preview.innerHTML = (generators[type] || salesReport)(range);
-    showToast('✓ Report generated');
-  }, 1800);
+  }
 }
 
-/* ── Report HTML Builders ──────────────────────────────── */
-function masthead(title, range) {
-  return `
+function downloadReport(fmt) {
+  const params = getReportParams();
+  if (!params.types.length) {
+    showToast('Pick at least one report type');
+    return;
+  }
+  showToast(fmt === 'pdf' ? 'Generating PDF…' : 'Generating CSV…');
+  window.location.href = GENERATE_URL + '?' + buildSearchParams(params, fmt).toString();
+}
+
+/* ───────── Render preview ────────────────────────────── */
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function statusPillFor(value) {
+  const v = String(value || '').toLowerCase();
+  if (/(delivered|paid|verified|active|available|ok)/.test(v)) return 'sp-green';
+  if (/(processing|preparing|pending|low)/.test(v))            return 'sp-rose';
+  if (/(on delivery|inactive|on leave|out of stock)/.test(v))  return 'sp-terra';
+  return 'sp-bark';
+}
+
+function formatNumberLike(value, minimumFractionDigits = 0, maximumFractionDigits = 2) {
+  const n = Number(String(value).replace(/,/g, ''));
+  if (!Number.isFinite(n)) return String(value);
+  return n.toLocaleString('en-US', { minimumFractionDigits, maximumFractionDigits });
+}
+
+function formatCurrencyText(text) {
+  if (text === null || text === undefined) return '';
+  const raw = String(text);
+  return raw.replace(/(₱\s*|PHP\s*|Php\s*)(\d[\d,]*(?:\.\d+)?)/g, function(_, prefix, amount) {
+    return prefix + formatNumberLike(amount, 2, 2);
+  });
+}
+
+function isMoneyColumn(columnName) {
+  const c = String(columnName || '').toLowerCase();
+  return /(amount|total|subtotal|revenue|sales|price|aov|average order value|earnings|fee|cost|income)/.test(c);
+}
+
+function formatReportCell(columnName, cellValue) {
+  if (cellValue === null || cellValue === undefined) return '';
+  const raw = String(cellValue);
+
+  // Format values already prefixed by currency labels/symbols.
+  if (/(₱|PHP|Php)/.test(raw)) {
+    return formatCurrencyText(raw);
+  }
+
+  // Format money columns even if backend sends plain numbers.
+  if (isMoneyColumn(columnName)) {
+    const n = Number(raw.replace(/,/g, ''));
+    if (Number.isFinite(n)) {
+      return `₱${formatNumberLike(n, 2, 2)}`;
+    }
+  }
+
+  return raw;
+}
+
+function renderPreview(payload) {
+  const preview  = document.getElementById('previewBody');
+  const meta     = document.getElementById('previewMeta');
+  meta.textContent = payload.period_label ? `· ${payload.period_label}` : '';
+
+  if (!payload.sections || !payload.sections.length) {
+    preview.innerHTML = `
+      <div class="empty-preview">
+        <div class="empty-icon"><i class="ri-file-chart-line"></i></div>
+        <div class="empty-title">Nothing to show</div>
+        <div class="empty-sub">No report types are selected.</div>
+      </div>`;
+    return;
+  }
+
+  const titleLabel = payload.types.length === REPORT_TYPES.length
+    ? 'All Reports'
+    : payload.sections.map(s => s.title).join(' · ');
+
+  let html = `
     <div class="report-masthead">
       <div>
-        <div class="report-brand">E-<em>FLOWERS</em></div>
-        <div style="font-size:12px;color:var(--muted);margin-top:.25rem;">Automated Report System</div>
+        <div class="report-brand">E-<em>FLORA</em></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:.25rem;">${escapeHtml(STORE_NAME)} · Automated Report System</div>
       </div>
       <div class="report-meta">
-        <div class="report-meta-title">${title}</div>
-        <div class="report-meta-date">Period: ${range} &nbsp;·&nbsp; Generated ${new Date().toLocaleString('en-PH')}</div>
+        <div class="report-meta-title">${escapeHtml(titleLabel)}</div>
+        <div class="report-meta-date">Period: ${escapeHtml(payload.period_label)} &nbsp;·&nbsp; Generated ${new Date().toLocaleString('en-PH')}</div>
       </div>
     </div>`;
+
+  for (const section of payload.sections) {
+    html += `<div class="section-block">`;
+    html += `<div class="section-title">${escapeHtml(section.title)}</div>`;
+
+    if (section.summary && section.summary.length) {
+      html += `<div class="section-summary">`;
+      for (const [k, v] of section.summary) {
+        const summaryVal = formatReportCell(k, v);
+        html += `<div class="section-summary-item">${escapeHtml(k)}: <strong>${escapeHtml(summaryVal)}</strong></div>`;
+      }
+      html += `</div>`;
+    }
+
+    if (!section.row_count) {
+      html += `<div class="section-empty">No data found for this period.</div></div>`;
+      continue;
+    }
+
+    html += `<div class="table-scroll"><table class="rpt-table"><thead><tr>`;
+    for (const col of section.columns) html += `<th>${escapeHtml(col)}</th>`;
+    html += `</tr></thead><tbody>`;
+
+    const statusIdx = section.columns.findIndex(c => /status/i.test(c));
+    const previewRows = section.rows.slice(0, 25);
+    for (const row of previewRows) {
+      html += `<tr>`;
+      row.forEach((cell, i) => {
+        const columnName = section.columns[i] || '';
+        const displayValue = formatReportCell(columnName, cell);
+        if (statusIdx > -1 && i === statusIdx) {
+          html += `<td><span class="s-pill ${statusPillFor(displayValue)}">${escapeHtml(displayValue)}</span></td>`;
+        } else {
+          html += `<td>${escapeHtml(displayValue)}</td>`;
+        }
+      });
+      html += `</tr>`;
+    }
+    html += `</tbody></table></div>`;
+
+    if (section.row_count > previewRows.length) {
+      html += `<div style="font-size:12px;color:var(--muted);margin-top:.6rem;">Showing ${previewRows.length} of ${section.row_count.toLocaleString()} row(s) — download PDF or CSV for the full list.</div>`;
+    }
+    html += `</div>`;
+  }
+
+  html += `<div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+  preview.innerHTML = html;
 }
 
-function salesReport(range) {
-  return masthead('Sales Report', range) + `
-    <div class="report-kpi-row">
-      <div class="report-kpi"><div class="report-kpi-val">₱24,580</div><div class="report-kpi-lbl">Total Revenue</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">156</div><div class="report-kpi-lbl">Orders</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">₱1,575</div><div class="report-kpi-lbl">Avg. Order</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">24</div><div class="report-kpi-lbl">New Customers</div></div>
-    </div>
-
-    <table class="rpt-table">
-      <thead><tr><th>Date</th><th>Orders</th><th>Revenue</th><th>Avg. Order</th><th>Growth</th></tr></thead>
-      <tbody>
-        <tr><td>Mon, Nov 27</td><td>24</td><td>₱4,520</td><td>₱188</td><td><span class="growth-up">↑ 12.5%</span></td></tr>
-        <tr><td>Tue, Nov 28</td><td>28</td><td>₱5,200</td><td>₱186</td><td><span class="growth-up">↑ 8.2%</span></td></tr>
-        <tr><td>Wed, Nov 29</td><td>32</td><td>₱6,150</td><td>₱192</td><td><span class="growth-up">↑ 15.3%</span></td></tr>
-        <tr><td>Thu, Nov 30</td><td>30</td><td>₱5,800</td><td>₱193</td><td><span class="growth-down">↓ 5.7%</span></td></tr>
-        <tr><td>Fri, Dec 1</td><td>35</td><td>₱6,750</td><td>₱193</td><td><span class="growth-up">↑ 16.4%</span></td></tr>
-      </tbody>
-    </table>
-
-    <div class="report-two-col">
-      <div class="list-block">
-        <div class="list-block-title">Top Products by Revenue</div>
-        <div class="list-block-item"><span>Rose Bouquet</span><strong>₱4,800</strong></div>
-        <div class="list-block-item"><span>Sunflower Arrangement</span><strong>₱3,200</strong></div>
-        <div class="list-block-item"><span>Orchid Plant</span><strong>₱2,850</strong></div>
-      </div>
-      <div class="list-block">
-        <div class="list-block-title">Payment Method Split</div>
-        <div class="list-block-item"><span>GCash</span><strong>45%</strong></div>
-        <div class="list-block-item"><span>Cash on Delivery</span><strong>30%</strong></div>
-        <div class="list-block-item"><span>Credit Card</span><strong>25%</strong></div>
-      </div>
-    </div>
-    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+/* ───────── Saved Reports + Schedule (UI-only) ────────── */
+async function deleteRow(btn) {
+  if (!await window.openConfirmModal('Delete this saved report?')) return;
+  const tr = btn.closest('tr');
+  tr.style.transition = 'opacity .3s, transform .3s';
+  tr.style.opacity = '0';
+  tr.style.transform = 'translateX(20px)';
+  setTimeout(() => { tr.remove(); showToast('Report deleted'); }, 300);
 }
 
-function ordersReport(range) {
-  return masthead('Orders Report', range) + `
-    <table class="rpt-table">
-      <thead><tr><th>Order ID</th><th>Customer</th><th>Date</th><th>Items</th><th>Amount</th><th>Status</th><th>Payment</th></tr></thead>
-      <tbody>
-        <tr><td>#00124</td><td>Maria Santos</td><td>Dec 1, 10:30 AM</td><td>3</td><td>₱1,250</td><td><span class="s-pill sp-green">Delivered</span></td><td><span class="s-pill sp-sage">Verified</span></td></tr>
-        <tr><td>#00123</td><td>John Dela Cruz</td><td>Nov 30, 3:45 PM</td><td>5</td><td>₱2,800</td><td><span class="s-pill sp-terra">Processing</span></td><td><span class="s-pill sp-green">Paid</span></td></tr>
-        <tr><td>#00122</td><td>Anna Reyes</td><td>Nov 28, 2:15 PM</td><td>2</td><td>₱950</td><td><span class="s-pill sp-green">Delivered</span></td><td><span class="s-pill sp-green">Verified</span></td></tr>
-        <tr><td>#00121</td><td>Carlos Garcia</td><td>Nov 27, 11:00 AM</td><td>4</td><td>₱1,750</td><td><span class="s-pill sp-rose">Pending</span></td><td><span class="s-pill sp-bark">Pending</span></td></tr>
-      </tbody>
-    </table>
-    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
-}
-
-function productsReport(range) {
-  return masthead('Products Report', range) + `
-    <table class="rpt-table">
-      <thead><tr><th>Product</th><th>Category</th><th>Units Sold</th><th>Revenue</th><th>Stock Left</th><th>Status</th></tr></thead>
-      <tbody>
-        <tr><td>Rose Bouquet</td><td>Fresh Flowers</td><td>48</td><td>₱12,000</td><td>12</td><td><span class="s-pill sp-green">Available</span></td></tr>
-        <tr><td>Tulips Set</td><td>Spring Picks</td><td>32</td><td>₱8,000</td><td>5</td><td><span class="s-pill sp-terra">Low Stock</span></td></tr>
-        <tr><td>Orchid Pots</td><td>Potted Plants</td><td>28</td><td>₱7,000</td><td>0</td><td><span class="s-pill sp-rose">Out of Stock</span></td></tr>
-        <tr><td>Sunflower Bundle</td><td>Summer Edition</td><td>21</td><td>₱5,250</td><td>18</td><td><span class="s-pill sp-green">Available</span></td></tr>
-        <tr><td>Succulent Mix</td><td>Miniatures</td><td>18</td><td>₱4,500</td><td>24</td><td><span class="s-pill sp-green">Available</span></td></tr>
-      </tbody>
-    </table>
-    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
-}
-
-function customersReport(range) {
-  return masthead('Customers Report', range) + `
-    <div class="report-kpi-row">
-      <div class="report-kpi"><div class="report-kpi-val">342</div><div class="report-kpi-lbl">Active Customers</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">24</div><div class="report-kpi-lbl">New This Period</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">68%</div><div class="report-kpi-lbl">Repeat Rate</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">₱4,820</div><div class="report-kpi-lbl">Avg. Lifetime Value</div></div>
-    </div>
-    <table class="rpt-table">
-      <thead><tr><th>Customer</th><th>Total Orders</th><th>Total Spent</th><th>Last Order</th><th>Status</th></tr></thead>
-      <tbody>
-        <tr><td>Maria Santos</td><td>14</td><td>₱18,200</td><td>Dec 1</td><td><span class="s-pill sp-green">Active</span></td></tr>
-        <tr><td>John Dela Cruz</td><td>9</td><td>₱11,500</td><td>Nov 30</td><td><span class="s-pill sp-green">Active</span></td></tr>
-        <tr><td>Anna Reyes</td><td>6</td><td>₱7,800</td><td>Nov 28</td><td><span class="s-pill sp-green">Active</span></td></tr>
-        <tr><td>Carlos Garcia</td><td>3</td><td>₱4,200</td><td>Nov 27</td><td><span class="s-pill sp-terra">Inactive</span></td></tr>
-      </tbody>
-    </table>
-    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
-}
-
-function ridersReport(range) {
-  return masthead('Riders Report', range) + `
-    <table class="rpt-table">
-      <thead><tr><th>Rider</th><th>Deliveries</th><th>On-time Rate</th><th>Avg. Time</th><th>Earnings</th><th>Status</th></tr></thead>
-      <tbody>
-        <tr><td>Rico Valdes</td><td>52</td><td><span class="growth-up">99.1%</span></td><td>22 min</td><td>₱3,640</td><td><span class="s-pill sp-green">Active</span></td></tr>
-        <tr><td>Ben Cruz</td><td>45</td><td><span class="growth-up">97.8%</span></td><td>25 min</td><td>₱3,150</td><td><span class="s-pill sp-green">Active</span></td></tr>
-        <tr><td>Manny Reyes</td><td>38</td><td><span class="growth-down">94.7%</span></td><td>31 min</td><td>₱2,660</td><td><span class="s-pill sp-terra">On Leave</span></td></tr>
-      </tbody>
-    </table>
-    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
-}
-
-function inventoryReport(range) {
-  return masthead('Inventory Report', range) + `
-    <div class="report-kpi-row">
-      <div class="report-kpi"><div class="report-kpi-val">124</div><div class="report-kpi-lbl">Total SKUs</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">8</div><div class="report-kpi-lbl">Low Stock</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">3</div><div class="report-kpi-lbl">Out of Stock</div></div>
-      <div class="report-kpi"><div class="report-kpi-val">₱48,200</div><div class="report-kpi-lbl">Inventory Value</div></div>
-    </div>
-    <table class="rpt-table">
-      <thead><tr><th>Product</th><th>Category</th><th>In Stock</th><th>Reorder At</th><th>Value</th><th>Alert</th></tr></thead>
-      <tbody>
-        <tr><td>Rose Bouquet</td><td>Fresh Flowers</td><td>12</td><td>10</td><td>₱6,000</td><td><span class="s-pill sp-terra">Low Stock</span></td></tr>
-        <tr><td>Tulips Set</td><td>Spring Picks</td><td>5</td><td>10</td><td>₱2,500</td><td><span class="s-pill sp-rose">⚠ Critical</span></td></tr>
-        <tr><td>Orchid Pots</td><td>Potted Plants</td><td>0</td><td>5</td><td>₱0</td><td><span class="s-pill sp-rose">Out of Stock</span></td></tr>
-        <tr><td>Succulent Mix</td><td>Miniatures</td><td>24</td><td>8</td><td>₱6,000</td><td><span class="s-pill sp-green">OK</span></td></tr>
-        <tr><td>Sunflower Bundle</td><td>Summer Edition</td><td>18</td><td>10</td><td>₱4,500</td><td><span class="s-pill sp-green">OK</span></td></tr>
-      </tbody>
-    </table>
-    <div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
-}
-
-/* ── Export ────────────────────────────────────────────── */
-function exportReport() {
-  const fmt = document.getElementById('reportFormat').value;
-  showToast(`Exporting as ${fmt.toUpperCase()}…`);
-}
-
-/* ── Delete row ────────────────────────────────────────── */
-function deleteRow(btn) {
-  if (!confirm('Delete this saved report?')) return;
-  btn.closest('tr').style.transition = 'opacity .3s, transform .3s';
-  btn.closest('tr').style.opacity = '0';
-  btn.closest('tr').style.transform = 'translateX(20px)';
-  setTimeout(() => { btn.closest('tr').remove(); showToast('Report deleted'); }, 300);
-}
-
-/* ── Schedule Modal ────────────────────────────────────── */
 function openSchedule()  { document.getElementById('schedModal').classList.add('open'); }
 function closeSchedule() { document.getElementById('schedModal').classList.remove('open'); }
 
@@ -1447,11 +1775,11 @@ function saveSchedule(e) {
   e.preventDefault();
   const freq = document.getElementById('schedFreq').value;
   const time = document.getElementById('schedTime').value;
-  showToast(`✓ Scheduled ${freq} at ${time}`);
+  showToast(`Scheduled ${freq} at ${time}`);
   closeSchedule();
 }
 
-/* ── Toast ─────────────────────────────────────────────── */
+/* ───────── Toast ─────────────────────────────────────── */
 let _tt;
 function showToast(msg) {
   const t = document.getElementById('rptToast');
@@ -1461,13 +1789,16 @@ function showToast(msg) {
   _tt = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-/* ── Init ──────────────────────────────────────────────── */
+/* ───────── Init ──────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   const today  = new Date();
   const week   = new Date(); week.setDate(today.getDate() - 7);
   document.getElementById('fromDate').valueAsDate = week;
   document.getElementById('toDate').valueAsDate   = today;
-  document.getElementById('schedTime').value = '09:00';
+  const schedTime = document.getElementById('schedTime');
+  if (schedTime) schedTime.value = '09:00';
+  syncAllCheckbox();
+  syncTriggerLabel();
 });
 </script>
 {% endblock %}

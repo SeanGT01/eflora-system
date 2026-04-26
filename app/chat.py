@@ -63,6 +63,39 @@ def _current_user():
     return None
 
 
+def _support_store_for_chat(customer_id, admin_user_id=None):
+    """
+    Pick a store context for support that does NOT collide with an existing
+    customer/store conversation (unique_customer_store_conversation).
+    """
+    used_store_ids = {
+        row[0]
+        for row in db.session.query(Conversation.store_id)
+        .filter(Conversation.customer_id == customer_id)
+        .all()
+    }
+
+    # Prefer stores owned by the selected admin (if any), then any store named support.
+    candidates = []
+    if admin_user_id:
+        candidates.extend(
+            Store.query.filter_by(seller_id=admin_user_id).order_by(Store.id.asc()).all()
+        )
+    candidates.extend(
+        Store.query.filter(Store.name.ilike('%support%')).order_by(Store.id.asc()).all()
+    )
+    candidates.extend(Store.query.order_by(Store.id.asc()).all())
+
+    seen = set()
+    for store in candidates:
+        if not store or store.id in seen:
+            continue
+        seen.add(store.id)
+        if store.id not in used_store_ids:
+            return store
+    return None
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # CONVERSATIONS
 # ═══════════════════════════════════════════════════════════════════════
@@ -78,16 +111,18 @@ def list_conversations():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    if user.role == 'seller':
-        convos = Conversation.query.filter(
-            Conversation.seller_id == user.id,
-            Conversation.seller_deleted_at.is_(None)
-        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
-    else:
-        convos = Conversation.query.filter(
-            Conversation.customer_id == user.id,
-            Conversation.customer_deleted_at.is_(None)
-        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
+    convos = Conversation.query.filter(
+        db.or_(
+            db.and_(
+                Conversation.customer_id == user.id,
+                Conversation.customer_deleted_at.is_(None)
+            ),
+            db.and_(
+                Conversation.seller_id == user.id,
+                Conversation.seller_deleted_at.is_(None)
+            )
+        )
+    ).order_by(Conversation.last_message_at.desc().nullslast()).all()
 
     return jsonify({
         'conversations': [c.to_dict(current_user_id=user.id) for c in convos]
@@ -133,6 +168,57 @@ def create_or_get_conversation():
         customer_id=user.id,
         seller_id=store.seller_id,
         store_id=store.id,
+    )
+    db.session.add(convo)
+    db.session.commit()
+
+    return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 201
+
+
+@chat_bp.route('/conversations/support', methods=['POST'])
+@chat_auth_required
+def create_or_get_support_conversation():
+    """
+    POST /api/v1/chat/conversations/support
+    Creates (or returns) a conversation between the current user and an admin account.
+    """
+    user = _current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    if user.role == 'admin':
+        return jsonify({'error': 'Admins already receive support chats in their inbox.'}), 400
+
+    admin_user = User.query.filter_by(role='admin').order_by(User.id.asc()).first()
+    if not admin_user:
+        return jsonify({'error': 'No admin account available for support.'}), 503
+
+    # First priority: reuse an existing thread with this admin.
+    convo = (
+        Conversation.query
+        .filter_by(customer_id=user.id, seller_id=admin_user.id)
+        .order_by(Conversation.updated_at.desc())
+        .first()
+    )
+    if convo:
+        changed = False
+        if convo.customer_deleted_at:
+            convo.customer_deleted_at = None
+            changed = True
+        if changed:
+            db.session.commit()
+        return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
+
+    support_store = _support_store_for_chat(user.id, admin_user.id)
+    if not support_store:
+        return jsonify({'error': 'No available support slot. Please contact admin directly.'}), 503
+
+    convo = Conversation(
+        customer_id=user.id,
+        seller_id=admin_user.id,
+        store_id=support_store.id,
+        last_message_text='Support thread opened',
+        last_message_at=pht_now(),
+        last_sender_id=user.id,
     )
     db.session.add(convo)
     db.session.commit()
@@ -438,16 +524,15 @@ def total_unread_count():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    if user.role == 'seller':
-        total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
-            .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
-            .scalar()
-    else:
-        total = db.session.query(db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)) \
-            .filter(Conversation.customer_id == user.id, Conversation.customer_deleted_at.is_(None)) \
-            .scalar()
+    seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
+        .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
+        .scalar()
+    customer_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)) \
+        .filter(Conversation.customer_id == user.id, Conversation.customer_deleted_at.is_(None)) \
+        .scalar()
+    total = int(seller_total or 0) + int(customer_total or 0)
 
-    return jsonify({'unread_count': int(total)}), 200
+    return jsonify({'unread_count': total}), 200
 
 
 # ═══════════════════════════════════════════════════════════════════════

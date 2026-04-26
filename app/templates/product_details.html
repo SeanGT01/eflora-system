@@ -374,11 +374,80 @@
         font-size: 13px;
         color: var(--muted);
     }
+    .rating-count-btn {
+        border: 0;
+        background: none;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        transition: var(--transition);
+    }
+    .rating-count-btn:hover {
+        color: var(--deep-rose);
+    }
 
     .rating-divider {
         width: 1px;
         height: 14px;
         background: var(--border-strong);
+    }
+
+    .reviews-modal {
+        width: min(680px, 96vw);
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+    }
+    .reviews-modal-headline {
+        font-size: 13px;
+        color: var(--muted);
+        margin-top: 0.3rem;
+    }
+    .reviews-modal-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+    }
+    .review-row {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 0.8rem 0.95rem;
+        background: var(--warm-white);
+    }
+    .review-row-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.35rem;
+        flex-wrap: wrap;
+    }
+    .review-author {
+        font-weight: 600;
+        color: var(--charcoal);
+        font-size: 13px;
+    }
+    .review-date {
+        color: var(--muted);
+        font-size: 11px;
+    }
+    .review-stars {
+        color: #f0b429;
+        font-size: 13px;
+        display: inline-flex;
+        gap: 1px;
+        margin-bottom: 0.4rem;
+    }
+    .review-comment {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .reviews-empty {
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 1.25rem 0.5rem;
     }
 
     .store-link {
@@ -1498,7 +1567,9 @@
                 {% endfor %}
             </div>
             <span class="rating-score">{{ avg_rating }}</span>
-            <span class="rating-count">({{ total_ratings }} review{{ 's' if total_ratings != 1 else '' }})</span>
+            <button type="button" class="rating-count rating-count-btn" onclick="openReviewsModal()">
+                ({{ total_ratings }} review{{ 's' if total_ratings != 1 else '' }})
+            </button>
             <span class="rating-divider"></span>
             {% if product.store %}
             <a href="{{ url_for('templates.store_detail', store_id=product.store_id) }}" class="store-link">
@@ -1550,9 +1621,6 @@
                             data-variant-image="{% if variant.image_url %}{{ variant.image_url }}{% endif %}"
                             onclick="selectVariant(this)">
                         {{ variant.name }}
-                        {% if variant.special_price and variant.special_price < variant.price %}
-                        <small style="display:block;font-size:10px;color:#b5445a;">₱{{ "%.0f"|format(variant.special_price) }}</small>
-                        {% endif %}
                     </button>
                     {% endfor %}
                 </div>
@@ -1762,10 +1830,24 @@
         </div>
         <div class="modal-body" id="addonInfoBody"></div>
         <div class="modal-footer">
-            <button class="btn btn-outline" onclick="document.getElementById('addonInfoModal').classList.remove('active'); document.body.style.overflow='';">Close</button>
             <button class="btn btn-rose" id="addonInfoAddBtn">
                 <i class="ri-shopping-bag-line"></i> Add to Basket
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Product Reviews Modal ─── -->
+<div class="modal-overlay" id="productReviewsModal">
+    <div class="modal reviews-modal">
+        <div class="modal-header">
+            <h3 class="modal-title">Product Reviews</h3>
+            <button class="modal-close" onclick="closeReviewsModal()">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="modal-body reviews-modal-body" id="reviewsModalBody">
+            <div class="reviews-empty">Loading reviews...</div>
         </div>
     </div>
 </div>
@@ -1928,6 +2010,7 @@ const variants = [
 /* Per-variant rating aggregates  (key "main" = standard product) */
 const variantRatings = {{ variant_ratings | tojson }};
 const overallRating = { avg: {{ avg_rating }}, count: {{ total_ratings }} };
+let productReviewsCache = null;
  
 
     /* ════════════════════════════════
@@ -2127,6 +2210,94 @@ function setGalleryImages(nextImages) {
         const countEl = ratingRow.querySelector('.rating-count');
         countEl.textContent = '(' + count + ' review' + (count !== 1 ? 's' : '') + ')';
     }
+
+function closeReviewsModal() {
+    const modal = document.getElementById('productReviewsModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function formatReviewDate(isoString) {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function esc(text) {
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function buildReviewStars(rating) {
+    const r = Math.max(0, Math.min(5, Number(rating) || 0));
+    let stars = '';
+    for (let i = 0; i < r; i += 1) stars += '<i class="ri-star-fill"></i>';
+    for (let i = r; i < 5; i += 1) stars += '<i class="ri-star-line"></i>';
+    return stars;
+}
+
+function getCurrentVariantFilter() {
+    if (!selectedVariant || !selectedVariant.id) return null;
+    return Number(selectedVariant.id);
+}
+
+function renderReviewsInModal(payload) {
+    const body = document.getElementById('reviewsModalBody');
+    if (!body) return;
+    const activeVariantId = getCurrentVariantFilter();
+    const allRatings = Array.isArray(payload?.ratings) ? payload.ratings : [];
+    const ratings = activeVariantId
+        ? allRatings.filter(r => Number(r.variant_id) === activeVariantId)
+        : allRatings;
+
+    const variantNote = activeVariantId && selectedVariant
+        ? `<div class="reviews-modal-headline">Showing reviews for <strong>${esc(selectedVariant.name)}</strong> variant.</div>`
+        : '';
+
+    if (!ratings.length) {
+        body.innerHTML = `${variantNote}<div class="reviews-empty">No reviews yet for this selection.</div>`;
+        return;
+    }
+
+    const rows = ratings.map(r => `
+        <div class="review-row">
+            <div class="review-row-top">
+                <div class="review-author">${esc(r.customer_name || 'Anonymous')}</div>
+                <div class="review-date">${esc(formatReviewDate(r.created_at))}</div>
+            </div>
+            <div class="review-stars">${buildReviewStars(r.rating)}</div>
+            <div class="review-comment">${esc(r.comment || 'No written comment.')}</div>
+        </div>
+    `).join('');
+
+    body.innerHTML = `${variantNote}${rows}`;
+}
+
+async function openReviewsModal() {
+    const modal = document.getElementById('productReviewsModal');
+    const body = document.getElementById('reviewsModalBody');
+    if (!modal || !body) return;
+
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    body.innerHTML = '<div class="reviews-empty">Loading reviews...</div>';
+
+    try {
+        if (!productReviewsCache) {
+            const res = await fetch(`/api/products/${mainProduct.id}/ratings?page=1&per_page=50`);
+            productReviewsCache = await res.json();
+        }
+        renderReviewsInModal(productReviewsCache || {});
+    } catch (error) {
+        body.innerHTML = '<div class="reviews-empty">Unable to load reviews right now.</div>';
+    }
+}
 
     /* ════════════════════════════════
        GALLERY FUNCTIONS
@@ -2652,6 +2823,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Verify addToCart exists
     if (typeof window.addToCart !== 'function') {
         console.warn('⚠️ addToCart function not found in global scope');
+    }
+
+    const reviewsModal = document.getElementById('productReviewsModal');
+    if (reviewsModal) {
+        reviewsModal.addEventListener('click', function(e) {
+            if (e.target === reviewsModal) closeReviewsModal();
+        });
     }
 });
 </script>

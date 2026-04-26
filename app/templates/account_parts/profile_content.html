@@ -1393,22 +1393,22 @@
             <div class="form-grid">
                 <div class="form-group">
                     <label class="form-label">First Name</label>
-                    <input type="text" class="form-control" name="first_name"
+                    <input type="text" class="form-control" name="first_name" id="profileFirstName"
                            value="{{ user.first_name if user else '' }}" required
                            placeholder="Enter first name"
-                           oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
+                           oninput="this.value=this.value.replace(/[^A-Za-z\s]/g,'').replace(/\s{2,}/g,' ').replace(/^\s+/,'').replace(/\b\w/g,function(c){return c.toUpperCase();});">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Last Name</label>
-                    <input type="text" class="form-control" name="last_name"
+                    <input type="text" class="form-control" name="last_name" id="profileLastName"
                            value="{{ user.last_name if user else '' }}" required
                            placeholder="Enter last name"
-                           oninput="this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);">
+                           oninput="this.value=this.value.replace(/[^A-Za-z\s]/g,'').replace(/\s{2,}/g,' ').replace(/^\s+/,'').replace(/\b\w/g,function(c){return c.toUpperCase();});">
                 </div>
 
                 <div class="form-group form-group-full">
                     <label class="form-label">Email Address</label>
-                    <input type="email" class="form-control" name="email"
+                    <input type="email" class="form-control" name="email" id="profileEmail"
                            value="{{ user.email if user else '' }}" readonly>
                     <div class="form-hint">Email address cannot be changed</div>
                 </div>
@@ -1633,6 +1633,25 @@
 </div>
 {% endif %}
 
+<!-- Discard Confirmation Modal -->
+<div id="discardConfirmModal" style="display:none;position:fixed;inset:0;z-index:1200;background:rgba(42,35,30,0.35);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:1rem;">
+    <div style="width:min(460px,100%);background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xl);overflow:hidden;">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.6rem;">
+            <i class="ri-error-warning-line" style="color:var(--deep-rose);font-size:1.2rem;"></i>
+            <div style="font-weight:600;">Discard changes?</div>
+        </div>
+        <div style="padding:1rem 1.25rem;color:var(--muted);font-size:14px;">
+            Your unsaved profile edits will be lost.
+        </div>
+        <div style="padding:0 1.25rem 1rem;display:flex;justify-content:flex-end;gap:0.6rem;">
+            <button type="button" class="btn btn-outline" onclick="closeDiscardConfirmModal(false)">Cancel</button>
+            <button type="button" class="btn btn-rose" onclick="closeDiscardConfirmModal(true)">
+                <i class="ri-delete-bin-line"></i> Discard
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Terms and Conditions Modal -->
 <div id="termsModal" class="modal">
     <div class="modal-content">
@@ -1699,7 +1718,6 @@
         <label for="acceptTerms" id="termsLabel">I have read and agree to the Seller Terms & Conditions (please scroll to the bottom)</label>
     </div>
     <div class="modal-actions">
-        <button class="btns btn-secondarys" onclick="closeTermsModal()">Close</button>
         <button class="btns btn-rose" id="acceptTermsBtn" disabled onclick="acceptTermsAndClose()">
             <i class="ri-check-line"></i>
             Accept Terms
@@ -2856,7 +2874,7 @@ async function editAddress(addressId) {
 }
 
 async function deleteAddress(addressId) {
-    if (!confirm('Delete this address? This action cannot be undone.')) return;
+    if (!await window.openConfirmModal('Delete this address? This action cannot be undone.')) return;
     
     try {
         const r = await fetch(`/api/account/addresses/${addressId}`, { method: 'DELETE' });
@@ -3038,8 +3056,41 @@ function setupProfileForm() {
 
     const profileForm = document.getElementById('profileForm');
     const submitBtn = document.getElementById('profileSubmitBtn');
+    const firstNameInput = document.getElementById('profileFirstName');
+    const lastNameInput = document.getElementById('profileLastName');
+    const emailInput = document.getElementById('profileEmail');
     
     if (!profileForm || !submitBtn) return;
+
+    function sanitizeName(value) {
+        return (value || '')
+            .replace(/[^A-Za-z\s]/g, '')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/^\s+/, '');
+    }
+
+    function isValidName(value) {
+        const trimmed = (value || '').trim();
+        return /^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmed);
+    }
+
+    function wireNameValidation(inputEl) {
+        if (!inputEl) return;
+        inputEl.addEventListener('input', function () {
+            const cleaned = sanitizeName(inputEl.value);
+            if (cleaned !== inputEl.value) inputEl.value = cleaned;
+            inputEl.setCustomValidity('');
+        });
+    }
+
+    wireNameValidation(firstNameInput);
+    wireNameValidation(lastNameInput);
+    if (emailInput) {
+        emailInput.addEventListener('input', function () {
+            emailInput.value = (emailInput.value || '').toLowerCase();
+            emailInput.setCustomValidity('');
+        });
+    }
     
     // Enable button on any input change
     const inputs = profileForm.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="radio"], select, textarea');
@@ -3050,6 +3101,25 @@ function setupProfileForm() {
 
     profileForm.addEventListener('submit', async function(e) {
         e.preventDefault();
+        if (firstNameInput) firstNameInput.value = sanitizeName(firstNameInput.value).trim();
+        if (lastNameInput) lastNameInput.value = sanitizeName(lastNameInput.value).trim();
+        if (emailInput) emailInput.value = (emailInput.value || '').trim().toLowerCase();
+
+        if (firstNameInput && !isValidName(firstNameInput.value)) {
+            firstNameInput.setCustomValidity('First name must contain letters only, with single spaces.');
+            firstNameInput.reportValidity();
+            firstNameInput.focus();
+            return;
+        }
+        if (lastNameInput && !isValidName(lastNameInput.value)) {
+            lastNameInput.setCustomValidity('Last name must contain letters only, with single spaces.');
+            lastNameInput.reportValidity();
+            lastNameInput.focus();
+            return;
+        }
+        if (firstNameInput) firstNameInput.setCustomValidity('');
+        if (lastNameInput) lastNameInput.setCustomValidity('');
+
         const btn = this.querySelector('button[type="submit"]');
         const orig = btn.innerHTML;
         let savedSuccessfully = false;
@@ -3129,35 +3199,77 @@ function setupPasswordForm() {
 }
 
 function resetForm() {
-    if (confirm('Discard all changes?')) {
+    openDiscardConfirmModal().then(function(confirmed) {
+        if (!confirmed) return;
         document.getElementById('profileForm')?.reset();
         updateGenderOtherVisibility();
         document.getElementById('profileSubmitBtn').disabled = true;
         showToast('Changes discarded', 'info');
+    });
+}
+
+// Expose modal-based reset so parent templates can delegate safely.
+window.resetProfileFormWithModal = resetForm;
+
+let _discardConfirmResolve = null;
+function openDiscardConfirmModal() {
+    const m = document.getElementById('discardConfirmModal');
+    if (m) m.style.display = 'flex';
+    return new Promise(function(resolve) {
+        _discardConfirmResolve = resolve;
+    });
+}
+
+function closeDiscardConfirmModal(confirmed) {
+    const m = document.getElementById('discardConfirmModal');
+    if (m) m.style.display = 'none';
+    if (_discardConfirmResolve) {
+        const fn = _discardConfirmResolve;
+        _discardConfirmResolve = null;
+        fn(!!confirmed);
     }
 }
 
 function checkApplicationStatus() {
     const statusDiv = document.getElementById('applicationStatus');
     if (!statusDiv) return;
+    const formDiv = document.getElementById('sellerApplicationForm');
+
+    const renderDefaultApplyState = function(showRetryNote) {
+        statusDiv.innerHTML = `
+            <div style="padding:1.5rem;background:var(--cream);border-radius:var(--radius-lg);border:1px solid var(--border);">
+                <div class="seller-banner">
+                    <div class="seller-banner-icon" style="background:rgba(181,68,90,0.08);color:var(--deep-rose)"><i class="ri-store-line"></i></div>
+                    <div class="seller-banner-text">
+                        <div class="seller-banner-title">Start selling on E-FLOWERS</div>
+                        <div class="seller-banner-sub">Join our community of local flower shops and growers.</div>
+                        ${showRetryNote ? '<div style="font-size:12px;color:var(--muted);margin-top:4px;">Could not load previous application status, but you can still apply now.</div>' : ''}
+                    </div>
+                    <button class="btn btn-rose" onclick="showSellerApplication()" style="flex-shrink:0;">
+                        <i class="ri-add-line"></i> Apply Now
+                    </button>
+                </div>
+            </div>`;
+        if (formDiv) formDiv.style.display = 'none';
+    };
+
+    statusDiv.innerHTML = `
+        <div style="padding:1rem 1.2rem;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--warm-white);display:flex;align-items:center;gap:.6rem;color:var(--muted);font-size:13px;">
+            <i class="ri-loader-4-line ri-spin"></i>
+            <span>Loading seller application status...</span>
+        </div>`;
+
     fetch('/seller/application/status')
-        .then(r => r.json())
+        .then(async r => {
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                throw new Error(data.error || 'Failed to load seller application status');
+            }
+            return data;
+        })
         .then(data => {
-            const formDiv = document.getElementById('sellerApplicationForm');
             if (data.status === 'none') {
-                statusDiv.innerHTML = `
-                    <div style="padding:1.5rem;background:var(--cream);border-radius:var(--radius-lg);border:1px solid var(--border);">
-                        <div class="seller-banner">
-                            <div class="seller-banner-icon" style="background:rgba(181,68,90,0.08);color:var(--deep-rose)"><i class="ri-store-line"></i></div>
-                            <div class="seller-banner-text">
-                                <div class="seller-banner-title">Start selling on E-FLOWERS</div>
-                                <div class="seller-banner-sub">Join our community of local flower shops and growers.</div>
-                            </div>
-                            <button class="btn btn-rose" onclick="showSellerApplication()" style="flex-shrink:0;">
-                                <i class="ri-add-line"></i> Apply Now
-                            </button>
-                        </div>
-                    </div>`;
+                renderDefaultApplyState(false);
             } else if (data.status === 'pending') {
                 statusDiv.innerHTML = `
                     <div style="display:flex;align-items:center;gap:1rem;padding:1.25rem;background:rgba(240,180,41,0.06);border-radius:var(--radius-lg);border:1px solid rgba(240,180,41,0.2);">
@@ -3224,9 +3336,14 @@ function checkApplicationStatus() {
                         </button>
                     </div>`;
                 if (formDiv) formDiv.style.display = 'none';
+            } else {
+                renderDefaultApplyState(true);
             }
         })
-        .catch(err => console.error('Error checking application status:', err));
+        .catch(err => {
+            console.error('Error checking application status:', err);
+            renderDefaultApplyState(true);
+        });
 }
 
 function getSellerProfileRequirements() {

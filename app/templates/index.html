@@ -9,9 +9,9 @@
     .hero-section {
         position: relative;
         border-radius: 24px;
-        overflow: hidden;
+        overflow: hidden;   
         margin-bottom: 3rem;
-        min-height: 480px;
+        min-height: 510px;
         display: grid;
         grid-template-columns: 0.75fr 1.25fr;
         transition: background 0.7s ease;
@@ -675,9 +675,19 @@
 
     .product-price {
         font-family: var(--font-display);
-        font-size: 19px;
+        font-size: 22px;
         font-weight: 600;
         color: var(--deep-rose);
+    }
+
+    /* Explicitly size each part of the price row in product cards */
+    .product-price .ep-price__sale,
+    .product-price .ep-price__regular {
+        font-size: 1em;
+    }
+
+    .product-price .ep-price__original {
+        font-size: 0.68em;
     }
 
     .add-btn {
@@ -950,12 +960,18 @@
     }
 
     /* ─── Testimonials ─── */
-    .testimonials-section { margin-bottom: 5rem; }
+    .testimonials-section { margin-bottom: 100px; }
 
     .testimonials-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 1.5rem;
+        transition: opacity 0.28s ease, transform 0.28s ease;
+    }
+
+    .testimonials-grid.testimonial-rotating {
+        opacity: 0.2;
+        transform: translateY(6px);
     }
 
     .testimonial-card {
@@ -1088,6 +1104,69 @@
         outline: none;
         border-color: var(--deep-rose);
         box-shadow: 0 0 0 3px rgba(181, 68, 90, 0.08);
+    }
+
+    /* Testimonial submit banner (reuses newsletter look, sits under testimonial cards) */
+    .newsletter-section.testimonial-banner {
+        margin-top: 1rem;
+        margin-bottom: 0;
+    }
+
+    .testimonial-submit-form {
+        max-width: 560px;
+        margin: 0 auto;
+    }
+
+    .testimonial-banner .newsletter-form {
+        max-width: 100%;
+        width: 100%;
+    }
+
+    .testimonial-rating-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .testimonial-rating-row .rating-label {
+        font-family: var(--font-sans);
+        font-size: 13px;
+        color: var(--muted);
+        margin-right: 0.5rem;
+    }
+
+    .testimonial-rating-row button {
+        background: none;
+        border: none;
+        padding: 0.15rem;
+        cursor: pointer;
+        color: #f0b429;
+        font-size: 22px;
+        line-height: 1;
+        transition: var(--transition);
+    }
+
+    .testimonial-rating-row button:hover,
+    .testimonial-rating-row button:focus-visible {
+        transform: scale(1.12);
+        outline: none;
+    }
+
+    .testimonial-comment-input {
+        width: 100%;
+        min-height: 110px;
+        resize: vertical;
+        border-radius: 20px;
+        margin-bottom: 1rem;
+        box-sizing: border-box;
+    }
+
+    .newsletter-form.testimonial-submit-single {
+        justify-content: center;
+        max-width: 100%;
     }
 
     /* ─── Responsive Hero ─── */
@@ -1253,7 +1332,7 @@
         .newsletter-section { 
             padding: 2.5rem 1.5rem; 
         }
-        
+
         .stores-carousel {
             gap: 0.5rem;
         }
@@ -1332,8 +1411,17 @@
         }
         
         .product-card .product-price {
-            font-size: 16px;
+            font-size: 18px;
             margin-bottom: 0.5rem;
+        }
+
+        .product-card .product-price .ep-price__sale,
+        .product-card .product-price .ep-price__regular {
+            font-size: 1em;
+        }
+
+        .product-card .product-price .ep-price__original {
+            font-size: 0.64em;
         }
         
         /* Keep buttons side by side, not stacked */
@@ -1419,8 +1507,17 @@
         }
         
         .product-card .product-price {
-            font-size: 14px;
+            font-size: 16px;
             margin-bottom: 0.4rem;
+        }
+
+        .product-card .product-price .ep-price__sale,
+        .product-card .product-price .ep-price__regular {
+            font-size: 1em;
+        }
+
+        .product-card .product-price .ep-price__original {
+            font-size: 0.6em;
         }
         
         /* Keep buttons side by side on very small screens */
@@ -1872,7 +1969,7 @@
             <div class="section-label">Handpicked for you</div>
             <h2 class="section-title">Featured Products</h2>
         </div>
-        <a href="{{ url_for('templates.products') }}" class="btn btn-outline" style="flex-shrink:0;">
+        <a href="{{ url_for('templates.browse_products') }}" class="btn btn-outline" style="flex-shrink:0;">
             View All <i class="ri-arrow-right-line"></i>
         </a>
     </div>
@@ -1974,7 +2071,9 @@
                     {% endif %}
                 </div>
                 <div class="store-meta">
-                    <span><i class="ri-star-fill"></i> 4.8</span>
+                    <span title="Overall store performance based on ratings and fulfilled orders">
+                        <i class="ri-star-fill"></i> {{ '%.1f'|format(store.performance_score or 0) }}
+                    </span>
                 </div>
             </div>
             <a href="{{ url_for('templates.store_detail', store_id=store.id) }}" class="btn btn-outline" style="flex-shrink:0;padding:0.6rem 1rem;font-size:13px;">
@@ -2033,59 +2132,76 @@
             <h2 class="section-title">What They're Saying</h2>
         </div>
     </div>
-    <div class="testimonials-grid">
-        <div class="testimonial-card">
-            <div class="reviewer">
-                <div class="reviewer-avatar" style="background:linear-gradient(135deg,var(--blush),var(--dusty-rose));">M</div>
-                <div>
-                    <div class="reviewer-name">Maria Santos</div>
-                    <div class="stars">
-                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i>
-                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i>
+    {% set avatar_gradients = [
+        'linear-gradient(135deg,var(--blush),var(--dusty-rose))',
+        'linear-gradient(135deg,var(--sage),var(--deep-sage))',
+        'linear-gradient(135deg,var(--terracotta),var(--bark))'
+    ] %}
+    {% set testimonial_rows = home_testimonials|default([], true) %}
+    <div class="testimonials-grid" id="homeTestimonialsGrid">
+        {% if testimonial_rows|length > 0 %}
+            {% for t in testimonial_rows %}
+            <div class="testimonial-card">
+                <div class="reviewer">
+                    <div class="reviewer-avatar" style="background:{{ avatar_gradients[loop.index0 % 3] }};">{{ (t.customer_name[0] if t.customer_name else '?')|upper }}</div>
+                    <div>
+                        <div class="reviewer-name">{{ t.customer_name }}</div>
+                        <div class="stars">
+                            {% for i in range(1, 6) %}
+                            <i class="ri-star-{{ 'fill' if i <= t.rating else 'line' }}"></i>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
+                <p class="testimonial-text">{{ t.comment }}</p>
             </div>
-            <p class="testimonial-text">The flowers arrived fresh and absolutely stunning! Delivery was faster than expected. Will definitely be ordering again for my next event.</p>
-        </div>
-
-        <div class="testimonial-card">
-            <div class="reviewer">
-                <div class="reviewer-avatar" style="background:linear-gradient(135deg,var(--sage),var(--deep-sage));">J</div>
-                <div>
-                    <div class="reviewer-name">John Dela Cruz</div>
-                    <div class="stars">
-                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i>
-                        <i class="ri-star-fill"></i><i class="ri-star-half-fill"></i>
-                    </div>
-                </div>
+            {% endfor %}
+        {% else %}
+            <div class="testimonial-card testimonial-empty" style="grid-column: 1 / -1; text-align: center;">
+                <p class="testimonial-text" style="margin: 0;">No testimonials yet — be the first to share your experience below.</p>
             </div>
-            <p class="testimonial-text">Perfect birthday surprise for my wife. The bouquet was exactly as shown online, and customer service was excellent throughout the whole process.</p>
-        </div>
-
-        <div class="testimonial-card">
-            <div class="reviewer">
-                <div class="reviewer-avatar" style="background:linear-gradient(135deg,var(--terracotta),var(--bark));">A</div>
-                <div>
-                    <div class="reviewer-name">Anna Reyes</div>
-                    <div class="stars">
-                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i><i class="ri-star-fill"></i>
-                        <i class="ri-star-fill"></i><i class="ri-star-fill"></i>
-                    </div>
-                </div>
-            </div>
-            <p class="testimonial-text">As a plant enthusiast, I'm truly impressed. The succulents arrived healthy, beautifully packaged, and the variety available is just wonderful.</p>
-        </div>
+        {% endif %}
     </div>
-</section>
 
-<!-- ─── Newsletter ─── -->
-<section class="newsletter-section">
-    <div class="section-label" style="justify-content:center;display:flex;">Stay in Bloom</div>
-    <h2 class="section-title" style="margin-bottom:0.75rem;">Exclusive Offers & Arrivals</h2>
-    <p class="newsletter-desc">Subscribe for seasonal deals, new flower collections, and care tips delivered to your inbox.</p>
-    <div class="newsletter-form">
-        <input type="email" class="newsletter-input" id="newsletterEmail" placeholder="Your email address">
-        <button class="btn btn-rose" onclick="subscribeNewsletter()">Subscribe</button>
+    <!-- Same gradient banner style as newsletter; used here for customer testimonials -->
+    <div class="newsletter-section testimonial-banner" style="max-width: 860px; margin: 2.85rem auto 0; padding: 1.25rem 1.25rem 1.4rem;">
+        <div class="section-label" style="justify-content:center;display:flex;">Share the love</div>
+        <h2 class="section-title" style="margin-bottom:0.35rem; font-size: clamp(1.75rem, 3vw, 2.25rem);">Tell us about your experience</h2>
+        <p class="newsletter-desc" style="max-width: 520px; margin: 0 auto 0.65rem; font-size: 14px;">Your kind words help other shoppers choose E-FLORA. Leave a short review below.</p>
+        {% if home_testimonial_author_name %}
+        <p class="newsletter-desc" style="margin-top: -0.35rem; margin-bottom: 0.45rem; font-size: 12px;">
+            Posting as <strong>{{ home_testimonial_author_name }}</strong>
+        </p>
+        {% endif %}
+        <div class="testimonial-submit-form">
+            {% if session.get('user_id') %}
+            {% if not home_testimonial_can_submit %}
+            <p class="newsletter-desc" style="margin: 0;">
+                {{ home_testimonial_lock_reason or 'You can review after placing at least one order.' }}
+            </p>
+            {% else %}
+            <div class="testimonial-rating-row" role="group" aria-label="Star rating">
+                <span class="rating-label">Rating</span>
+                <button type="button" class="home-testimonial-star" data-value="1" aria-label="1 star"><i class="ri-star-fill"></i></button>
+                <button type="button" class="home-testimonial-star" data-value="2" aria-label="2 stars"><i class="ri-star-fill"></i></button>
+                <button type="button" class="home-testimonial-star" data-value="3" aria-label="3 stars"><i class="ri-star-fill"></i></button>
+                <button type="button" class="home-testimonial-star" data-value="4" aria-label="4 stars"><i class="ri-star-fill"></i></button>
+                <button type="button" class="home-testimonial-star" data-value="5" aria-label="5 stars"><i class="ri-star-fill"></i></button>
+            </div>
+            <input type="hidden" id="homeTestimonialRating" value="{{ home_testimonial_existing.rating if home_testimonial_existing else 5 }}">
+            <textarea class="newsletter-input testimonial-comment-input" id="homeTestimonialComment" placeholder="Write your testimonial…" maxlength="2000" rows="3" style="max-width: 560px; margin: 0 auto;">{{ home_testimonial_existing.comment if home_testimonial_existing else '' }}</textarea>
+            <div class="newsletter-form testimonial-submit-single">
+                <button type="button" class="btn btn-rose" style="width:100%;max-width:260px;margin:0 auto;" onclick="submitHomeTestimonial()">
+                    {{ 'Update review' if home_testimonial_existing else 'Submit review' }}
+                </button>
+            </div>
+            {% endif %}
+            {% else %}
+            <p class="newsletter-desc" style="margin-bottom: 0;">
+                <a href="{{ url_for('templates.login') }}" class="btn btn-rose" style="display:inline-flex;text-decoration:none;">Sign in to submit a testimonial</a>
+            </p>
+            {% endif %}
+        </div>
     </div>
 </section>
 
@@ -2097,38 +2213,146 @@
         window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
     }
 
-    function subscribeNewsletter() {
-        const email = document.getElementById('newsletterEmail').value;
-        if (email && email.includes('@')) {
-            showToast('✓ Thanks for subscribing! Check your email for offers.');
-            document.getElementById('newsletterEmail').value = '';
-        } else {
-            showToast('Please enter a valid email address');
-        }
+    function syncHomeTestimonialStars(rating) {
+        const r = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+        document.querySelectorAll('.home-testimonial-star').forEach(function (btn) {
+            const v = parseInt(btn.getAttribute('data-value'), 10);
+            const icon = btn.querySelector('i');
+            if (icon) {
+                icon.className = v <= r ? 'ri-star-fill' : 'ri-star-line';
+            }
+        });
+        const hidden = document.getElementById('homeTestimonialRating');
+        if (hidden) hidden.value = String(r);
     }
 
-    // Animated falling petals
+    function submitHomeTestimonial() {
+        const comment = (document.getElementById('homeTestimonialComment') || {}).value || '';
+        const ratingEl = document.getElementById('homeTestimonialRating');
+        if (!ratingEl) {
+            showToast('You can review this section after placing at least one order.');
+            return;
+        }
+        const rating = Math.max(1, Math.min(5, parseInt(ratingEl && ratingEl.value, 10) || 5));
+        const trimmedComment = comment.trim();
+        if (trimmedComment.length < 10) {
+            showToast('Please write a few more words for your testimonial');
+            return;
+        }
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        const hidden = document.querySelector('input[name="csrf_token"]');
+        const csrf = (meta && meta.getAttribute('content')) || (hidden && hidden.value) || '';
+        if (!csrf) {
+            showToast('Security token missing. Please refresh the page and try again.');
+            return;
+        }
+        fetch("{{ url_for('templates.submit_home_testimonial') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                comment: trimmedComment,
+                rating: rating,
+                csrf_token: csrf
+            })
+        })
+            .then(function (res) {
+                var ct = res.headers.get('content-type') || '';
+                if (ct.indexOf('application/json') !== -1) {
+                    return res.json().then(function (data) {
+                        return { ok: res.ok, status: res.status, data: data || {} };
+                    });
+                }
+                return { ok: res.ok, status: res.status, data: {} };
+            })
+            .then(function (result) {
+                if (result.ok && result.data && result.data.success) {
+                    showToast((result.data.mode === 'updated') ? 'Your review has been updated.' : 'Thank you! Your testimonial has been saved.');
+                    window.location.reload();
+                    return;
+                }
+                var msg = (result.data && result.data.error)
+                    ? result.data.error
+                    : (result.status === 429 ? 'Too many attempts. Please wait a minute and try again.' : 'Could not save your testimonial.');
+                showToast(msg);
+            })
+            .catch(function () {
+                showToast('Could not save your testimonial. Please try again.');
+            });
+    }
+
+    // Animated falling petals + testimonial star controls
     document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.home-testimonial-star').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const v = parseInt(btn.getAttribute('data-value'), 10);
+                syncHomeTestimonialStars(v);
+            });
+        });
+        syncHomeTestimonialStars({{ home_testimonial_existing.rating if home_testimonial_existing else 5 }});
+
         const container = document.getElementById('heroPetals');
-        if (!container) return;
-        for (let i = 0; i < 8; i++) {
-            const petal = document.createElement('div');
-            petal.className = 'petal';
-            petal.style.cssText = `
-                left: ${10 + Math.random() * 80}%;
-                animation-duration: ${5 + Math.random() * 6}s;
-                animation-delay: ${Math.random() * 5}s;
-                width: ${8 + Math.random() * 8}px;
-                height: ${12 + Math.random() * 10}px;
-                transform: rotate(${Math.random() * 360}deg);
-                opacity: ${0.15 + Math.random() * 0.2};
-            `;
-            container.appendChild(petal);
+        if (container) {
+            for (let i = 0; i < 8; i++) {
+                const petal = document.createElement('div');
+                petal.className = 'petal';
+                petal.style.cssText = `
+                    left: ${10 + Math.random() * 80}%;
+                    animation-duration: ${5 + Math.random() * 6}s;
+                    animation-delay: ${Math.random() * 5}s;
+                    width: ${8 + Math.random() * 8}px;
+                    height: ${12 + Math.random() * 10}px;
+                    transform: rotate(${Math.random() * 360}deg);
+                    opacity: ${0.15 + Math.random() * 0.2};
+                `;
+                container.appendChild(petal);
+            }
         }
 
-        // Safety check for addToCart function
         if (typeof addToCart !== 'function') {
             console.warn('addToCart function not found in base.html - make sure base.html is properly loaded');
+        }
+
+        // Rotate testimonials: show 3 at a time and cycle.
+        const testimonialsGrid = document.getElementById('homeTestimonialsGrid');
+        if (testimonialsGrid) {
+            const allCards = Array.from(testimonialsGrid.querySelectorAll('.testimonial-card:not(.testimonial-empty)'))
+                .map(card => card.outerHTML);
+
+            if (allCards.length > 3) {
+                let pageIndex = 0;
+                const PAGE_SIZE = 3;
+                const pageCount = Math.ceil(allCards.length / PAGE_SIZE);
+
+                const getPageCards = function(index) {
+                    const start = index * PAGE_SIZE;
+                    let chunk = allCards.slice(start, start + PAGE_SIZE);
+                    // Keep exactly 3 cards visible by wrapping from start.
+                    if (chunk.length < PAGE_SIZE) {
+                        chunk = chunk.concat(allCards.slice(0, PAGE_SIZE - chunk.length));
+                    }
+                    return chunk;
+                };
+
+                const renderPage = function(index) {
+                    testimonialsGrid.innerHTML = getPageCards(index).join('');
+                };
+
+                // Enforce 3 visible cards immediately on first load.
+                renderPage(pageIndex);
+
+                setInterval(function() {
+                    testimonialsGrid.classList.add('testimonial-rotating');
+                    setTimeout(function() {
+                        pageIndex = (pageIndex + 1) % pageCount;
+                        renderPage(pageIndex);
+                        testimonialsGrid.classList.remove('testimonial-rotating');
+                    }, 180);
+                }, 4500);
+            }
         }
     });
 
@@ -2165,28 +2389,28 @@ document.addEventListener('DOMContentLoaded', function() {
             title: 'The New<br><em>Must Haves</em>',
             eyebrow: 'Fresh Flowers',
             subtitle: 'Roses, tulips, lilies & more — handpicked from local farms, delivered fresh to your door.',
-            shopUrl: '/products?category=fresh-flowers',
+            shopUrl: '/browse?category=fresh-flowers',
             bg: 'linear-gradient(135deg, #b5445a 0%, #d4788a 60%, #e8a0b2 100%)',
         },
         {
             title: 'Bring Life<br><em>Indoors</em>',
             eyebrow: 'Potted Plants',
             subtitle: 'Indoor & outdoor beauties that transform any space into a green sanctuary.',
-            shopUrl: '/products?category=potted-plants',
+            shopUrl: '/browse?category=potted-plants',
             bg: 'linear-gradient(135deg, #3a7a58 0%, #5fa07a 60%, #7aba93 100%)',
         },
         {
             title: 'Perfect For<br><em>Every Moment</em>',
             eyebrow: 'Bouquets',
             subtitle: 'Curated arrangements for birthdays, anniversaries, and every occasion worth celebrating.',
-            shopUrl: '/products?category=bouquets',
+            shopUrl: '/browse?category=bouquets',
             bg: 'linear-gradient(135deg, #8b3a7a 0%, #b56aa0 60%, #d490c0 100%)',
         },
         {
             title: 'Low Care<br><em>High Beauty</em>',
             eyebrow: 'Succulents',
             subtitle: 'Resilient, stylish, and endlessly charming — perfect for busy plant lovers.',
-            shopUrl: '/products?category=succulents',
+            shopUrl: '/browse?category=succulents',
             bg: 'linear-gradient(135deg, #2a6a8a 0%, #4a90b0 60%, #6aadcc 100%)',
         },
     ];

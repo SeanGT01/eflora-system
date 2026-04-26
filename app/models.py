@@ -112,6 +112,37 @@ class User(db.Model):
         }
 
 
+class AccountBan(db.Model):
+    __tablename__ = 'account_bans'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    reason = db.Column(db.Text, nullable=False)
+    banned_until = db.Column(db.DateTime, nullable=True)  # null means permanent
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    banned_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    lifted_at = db.Column(db.DateTime, nullable=True)
+    lifted_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    user = db.relationship('User', foreign_keys=[user_id], backref='account_bans')
+    banned_by_user = db.relationship('User', foreign_keys=[banned_by], backref='issued_account_bans')
+    lifted_by_user = db.relationship('User', foreign_keys=[lifted_by], backref='lifted_account_bans')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'reason': self.reason,
+            'banned_until': self.banned_until.isoformat() if self.banned_until else None,
+            'is_active': self.is_active,
+            'banned_by': self.banned_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'lifted_at': self.lifted_at.isoformat() if self.lifted_at else None,
+            'lifted_by': self.lifted_by
+        }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # GCASH QR CODE MODEL
 # ═════════════════════════════════════════════════════════════════════════════
@@ -527,6 +558,7 @@ class Rider(db.Model):
     vehicle_type = db.Column(db.String(50))
     license_plate = db.Column(db.String(20))
     is_active = db.Column(db.Boolean, default=True)
+    is_archived = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -541,10 +573,13 @@ class Rider(db.Model):
             'store_id': self.store_id,
             'full_name': self.user.full_name if self.user else None,
             'email': self.user.email if self.user else None,
+            'phone': self.user.phone if self.user else None,
             'avatar_url': self.user.avatar_url if self.user else None,  # Cloudinary only
+            'store_name': self.store.name if self.store else None,
             'vehicle_type': self.vehicle_type,
             'license_plate': self.license_plate,
-            'is_active': self.is_active
+            'is_active': self.is_active,
+            'is_archived': self.is_archived
         }
 
 class Category(db.Model):
@@ -1320,6 +1355,7 @@ class POSOrder(db.Model):
     
     customer_name = db.Column(db.String(100))
     customer_contact = db.Column(db.String(20))
+    is_seen_by_seller = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -1347,6 +1383,7 @@ class POSOrder(db.Model):
             'payment_method': self.payment_method or 'cash',
             'customer_name': self.customer_name,
             'customer_contact': self.customer_contact,
+            'is_seen_by_seller': self.is_seen_by_seller,
             'items': [item.to_dict() for item in self.items],
             'item_count': len(self.items),
             'created_at': self.created_at.isoformat() if self.created_at else None
@@ -1429,6 +1466,50 @@ class Testimonial(db.Model):
             'customer_name': self.customer.full_name if self.customer else None,
             'customer_avatar': self.customer.avatar_url if self.customer else None,  # Cloudinary only
             'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class HomePageTestimonial(db.Model):
+    """Public testimonials submitted from the marketing home page (not tied to a store order)."""
+    __tablename__ = 'home_page_testimonials'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_name = db.Column(db.String(120), nullable=False)
+    rating = db.Column(db.Integer, nullable=False)  # 1–5
+    comment = db.Column(db.Text, nullable=False)
+    is_approved = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_name': self.customer_name,
+            'rating': self.rating,
+            'comment': self.comment,
+            'is_approved': self.is_approved,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SupportFAQ(db.Model):
+    """Editable support FAQs managed by admins."""
+    __tablename__ = 'support_faqs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    question = db.Column(db.String(255), nullable=False)
+    answer = db.Column(db.Text, nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'question': self.question,
+            'answer': self.answer,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
 

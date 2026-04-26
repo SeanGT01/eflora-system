@@ -19,7 +19,7 @@ from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 
 from app.extensions import db
-from app.models import Cart, CartItem, Order, OrderItem, Product, ProductVariant, Store, User, UserAddress
+from app.models import Cart, CartItem, Notification, Order, OrderItem, Product, ProductVariant, Store, User, UserAddress
 
 # Create blueprint
 checkout_bp = Blueprint("checkout", __name__)
@@ -541,6 +541,15 @@ def create_orders():
                 print(f"    ✅ Added item: product {item_data['product_id']} x {item_data['quantity']}")
 
             db.session.flush()
+
+            db.session.add(Notification(
+                user_id=store.seller_id,
+                title='New Order Received',
+                message=f'Order #{order.id} — ₱{float(order.total_amount):,.2f} is awaiting payment verification.',
+                type='new_order',
+                reference_id=order.id,
+            ))
+
             orders_created.append(order.to_dict())
 
         _reduce_stock_lookup(
@@ -911,6 +920,14 @@ def process_checkout():
 
             db.session.flush()
 
+            db.session.add(Notification(
+                user_id=store.seller_id,
+                title='New Order Received',
+                message=f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {customer.full_name} is awaiting payment verification.',
+                type='new_order',
+                reference_id=order.id,
+            ))
+
             order_dict = order.to_dict()
             order_dict["items"] = [oi.to_dict() for oi in order.items]
             order_dict["gcash_qr_codes"] = [qr.to_dict() for qr in store.gcash_qr_images]
@@ -1271,6 +1288,16 @@ def buy_now_create_order():
             reason_notes=f"Buy Now order #{order.id} by customer #{user_id}",
             variant=variant,
         )
+
+        _customer = User.query.get(user_id)
+        _customer_name = _customer.full_name if _customer else f'Customer #{user_id}'
+        db.session.add(Notification(
+            user_id=store.seller_id,
+            title='New Order Received',
+            message=f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {_customer_name} is awaiting payment verification.',
+            type='new_order',
+            reference_id=order.id,
+        ))
 
         db.session.commit()
         print(f"✅ Buy Now order #{order.id} created successfully")

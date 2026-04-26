@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+{% from "_price_display.html" import price_tag %}
+
+{% block title %}Browse products — E-FLORA{% endblock %}
+
+{% block extra_css %}
+<style>
+    .browse-page { max-width: 1200px; margin: 0 auto; padding: 0 1.25rem 4rem; }
+    .browse-breadcrumb {
+        display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;
+        padding-top: 0.5rem; font-size: 14px; color: var(--muted);
+    }
+    .browse-breadcrumb a { color: var(--muted); text-decoration: none; }
+    .browse-breadcrumb a:hover { color: var(--deep-rose); }
+    .browse-hero { margin-bottom: 2rem; }
+    .browse-hero .section-label {
+        font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--deep-rose); font-weight: 600; margin-bottom: 0.35rem;
+    }
+    .browse-hero h1 {
+        font-family: var(--font-display); font-size: clamp(1.75rem, 4vw, 2.35rem);
+        font-weight: 500; color: var(--charcoal);
+    }
+    .browse-toolbar {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1.25rem 1.35rem;
+        margin-bottom: 2rem;
+        display: flex; flex-wrap: wrap; gap: 1rem 1.25rem;
+        align-items: flex-end;
+        box-shadow: var(--shadow-petal);
+    }
+    .browse-field { flex: 1 1 200px; min-width: 160px; }
+    .browse-field label {
+        display: block; font-size: 12px; font-weight: 600; color: var(--muted);
+        margin-bottom: 0.4rem; letter-spacing: 0.04em;
+    }
+    .browse-input-wrap { position: relative; }
+    .browse-input-wrap i {
+        position: absolute; left: 0.95rem; top: 50%; transform: translateY(-50%);
+        color: var(--muted); font-size: 18px; pointer-events: none;
+    }
+    .browse-input-wrap input,
+    .browse-field select {
+        width: 100%; padding: 0.65rem 0.85rem 0.65rem 2.5rem;
+        border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+        font-family: var(--font-sans); font-size: 15px; background: #fff;
+    }
+    .browse-field select { padding-left: 0.85rem; cursor: pointer; }
+    .browse-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; flex: 1 1 100%; }
+    .browse-chip {
+        border: 1px solid var(--border-strong); background: #fff;
+        border-radius: var(--radius-pill); padding: 0.45rem 1rem;
+        font-size: 13px; font-family: var(--font-sans); cursor: pointer;
+        color: var(--charcoal); transition: var(--transition);
+    }
+    .browse-chip:hover { border-color: var(--dusty-rose); color: var(--deep-rose); }
+    .browse-chip--active {
+        background: var(--deep-rose); color: #fff; border-color: var(--deep-rose);
+    }
+    .product-grid { gap: 1.5rem; }
+    .product-card { display: flex; flex-direction: column; }
+    .product-content {
+        padding: 1rem 1.25rem 1.25rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .product-category {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--sage);
+        margin-bottom: 0.3rem;
+        font-family: var(--font-sans);
+    }
+    .product-title {
+        font-size: 17px;
+        min-height: 2.8rem;
+        margin-bottom: 0.5rem;
+    }
+    .product-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: auto;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
+    }
+    .product-price {
+        font-family: var(--font-display);
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--deep-rose);
+        margin-bottom: 0;
+    }
+    .product-price .ep-price__sale,
+    .product-price .ep-price__regular { font-size: 1em; }
+    .product-price .ep-price__original { font-size: 0.68em; }
+    .product-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(42,35,30,0);
+        transition: var(--transition);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+    .product-card:hover .product-overlay { background: rgba(42,35,30,0.25); }
+    .overlay-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: white;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transform: translateY(10px);
+        opacity: 0;
+        transition: var(--transition);
+        font-size: 16px;
+        color: var(--charcoal);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .product-card:hover .overlay-btn {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    .overlay-btn:nth-child(2) { transition-delay: 0.05s; }
+    .overlay-btn:hover { background: var(--deep-rose); color: white; transform: scale(1.1) !important; }
+    .add-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--deep-rose);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: white;
+        font-size: 18px;
+        transition: var(--transition);
+        flex-shrink: 0;
+    }
+    .add-btn:hover { background: var(--dusty-rose); transform: scale(1.1) rotate(90deg); }
+    .add-btn:disabled { background: var(--border-strong); cursor: not-allowed; transform: none; }
+    #browseEmptyState {
+        display: none; text-align: center; padding: 3rem 1rem;
+        color: var(--muted); font-family: var(--font-sans);
+    }
+    #browseEmptyState i { font-size: 2.5rem; opacity: 0.35; display: block; margin-bottom: 0.75rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div
+    id="browsePageConfig"
+    class="browse-page"
+    data-initial-category="{{ initial_category_filter|e }}"
+>
+    <nav class="browse-breadcrumb" aria-label="Breadcrumb">
+        <a href="{{ url_for('templates.index') }}">Home</a>
+        <span aria-hidden="true">/</span>
+        <span style="color:var(--charcoal);font-weight:500;">All products</span>
+    </nav>
+
+    <header class="browse-hero">
+        <div class="section-label">Shop</div>
+        <h1>All products</h1>
+        <p style="color:var(--muted);max-width:36rem;margin-top:0.5rem;font-size:15px;">
+            Search and filter by category. Everything here is in stock from active partner stores.
+        </p>
+    </header>
+
+    <div class="browse-toolbar">
+        <div class="browse-field" style="flex:2 1 260px;">
+            <label for="browseSearchInput">Search</label>
+            <div class="browse-input-wrap">
+                <i class="ri-search-line"></i>
+                <input type="search" id="browseSearchInput" autocomplete="off"
+                    placeholder="Search by name, store, or category…">
+            </div>
+        </div>
+        <div class="browse-field" style="flex:1 1 180px;">
+            <label for="browseSort">Sort</label>
+            <select id="browseSort">
+                <option value="newest">Newest first</option>
+                <option value="price_low">Price: low to high</option>
+                <option value="price_high">Price: high to low</option>
+                <option value="name">Name A–Z</option>
+            </select>
+        </div>
+        <div class="browse-chips" role="tablist" aria-label="Category filter">
+            <button type="button" class="browse-chip browse-chip--active" data-category-slug="" id="browseChipAll">All</button>
+            {% for cat in categories %}
+            <button type="button" class="browse-chip" data-category-slug="{{ (cat.slug or '')|e }}">{{ cat.name }}</button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div id="browseEmptyState">
+        <i class="ri-search-line"></i>
+        <p>No products match your filters.</p>
+        <p style="font-size:13px;margin-top:0.35rem;">Try another search or choose “All”.</p>
+    </div>
+
+    {% if products and products|length > 0 %}
+    <div class="product-grid" id="browseProductGrid">
+        {% for product in products %}
+        {% set mc = product.main_category %}
+        {% set slug = (mc.slug if mc else '') or '' %}
+        {% set hay = (product.name ~ ' ' ~ (product.store_name or '') ~ ' ' ~ (mc.name if mc else ''))|lower %}
+        <div
+            class="product-card"
+            onclick="viewProduct({{ product.id }})"
+            data-product-id="{{ product.id }}"
+            data-category-slug="{{ slug|e }}"
+            data-search-hay="{{ hay|e }}"
+            data-effective-price="{{ product.effective_price }}"
+            data-name="{{ (product.name or '')|lower|e }}"
+            data-created="{{ product.created_at or '' }}"
+        >
+            {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
+            {% set has_sellable_stock = product.is_available and (product.stock_quantity > 0 or has_variant_stock) %}
+            {% if product.stock_quantity < 10 and not has_variant_stock %}
+            <div class="product-badge badge-low">Low Stock</div>
+            {% endif %}
+
+            <div class="product-image">
+                {% if product.image_url %}
+                <img src="{{ product.image_url }}" alt="{{ product.name }}"
+                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;opacity:0.2\'><i class=\'ri-image-line\'></i></div>';">
+                {% else %}
+                <div style="font-size:48px;opacity:0.2"><i class="ri-image-line"></i></div>
+                {% endif %}
+                <div class="product-overlay">
+                    <button class="overlay-btn" type="button" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="View Details">
+                        <i class="ri-eye-line"></i>
+                    </button>
+                    {% if product.stock_quantity > 0 and product.is_available %}
+                    <button class="overlay-btn" type="button" onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.effective_price }}, '')" title="Quick Add">
+                        <i class="ri-shopping-bag-line"></i>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="product-content">
+                <div class="product-category">{{ product.store_name or 'Flower Shop' }}</div>
+                <h3 class="product-title">{{ product.name }}</h3>
+                <div class="product-footer">
+                    <div class="product-price">{{ price_tag(product, 'md') }}</div>
+                    <button class="add-btn" type="button"
+                        {% if not product.is_available or product.stock_quantity == 0 %}disabled{% endif %}
+                        onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.effective_price }}, '')"
+                        title="{{ 'Add to cart' if product.is_available and product.stock_quantity > 0 else 'Out of stock' }}">
+                        <i class="ri-add-line"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="text-align:center;padding:3rem 1rem;">
+        <i class="ri-leaf-line empty-state-icon"></i>
+        <p>No products available right now.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function viewProduct(productId) {
+        window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
+    }
+
+    async function quickAdd(productId, productName, productPrice, productCategory) {
+        const button = event.currentTarget;
+        const originalHtml = button.innerHTML;
+        button.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+        button.disabled = true;
+        try {
+            const productCard = button.closest('.product-card');
+            const imageElement = productCard ? productCard.querySelector('.product-image img') : null;
+            const imageUrl = imageElement ? imageElement.src : '';
+            const product = {
+                id: productId,
+                name: productName,
+                price: productPrice,
+                store_id: null,
+                store_name: 'Flower Shop',
+                image_url: imageUrl
+            };
+            if (typeof window.addToCart === 'function') {
+                await window.addToCart(product);
+                showToast('✓ ' + productName + ' added to basket');
+            } else {
+                const response = await fetch('/api/cart/items', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product_id: productId, quantity: 1 })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast('✓ ' + productName + ' added to basket');
+                    if (typeof window.updateCartCount === 'function') window.updateCartCount();
+                    if (typeof window.loadCart === 'function') window.loadCart();
+                } else {
+                    showToast(data.error || 'Could not add to cart');
+                }
+            }
+        } catch (error) {
+            console.error('Error adding to cart:', error);
+            showToast('Network error — please try again');
+        } finally {
+            setTimeout(function () {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, 500);
+        }
+    }
+
+    (function () {
+        const cfg = document.getElementById('browsePageConfig');
+        const grid = document.getElementById('browseProductGrid');
+        const searchEl = document.getElementById('browseSearchInput');
+        const sortEl = document.getElementById('browseSort');
+        const emptyEl = document.getElementById('browseEmptyState');
+        if (!grid || !searchEl || !sortEl) return;
+
+        let activeCategorySlug = ((cfg && cfg.dataset.initialCategory) || '').toLowerCase().trim();
+
+        function norm(s) { return (s || '').toLowerCase(); }
+
+        function setActiveChip() {
+            document.querySelectorAll('.browse-chip').forEach(function (btn) {
+                const s = norm(btn.getAttribute('data-category-slug'));
+                const on = (activeCategorySlug === '' && s === '') || (activeCategorySlug !== '' && s === activeCategorySlug);
+                btn.classList.toggle('browse-chip--active', on);
+            });
+        }
+
+        function applySortAll() {
+            const mode = sortEl.value;
+            const sorted = Array.from(grid.querySelectorAll('.product-card'));
+            if (mode === 'price_low') {
+                sorted.sort(function (a, b) {
+                    return parseFloat(a.dataset.effectivePrice || 0) - parseFloat(b.dataset.effectivePrice || 0);
+                });
+            } else if (mode === 'price_high') {
+                sorted.sort(function (a, b) {
+                    return parseFloat(b.dataset.effectivePrice || 0) - parseFloat(a.dataset.effectivePrice || 0);
+                });
+            } else if (mode === 'name') {
+                sorted.sort(function (a, b) {
+                    return norm(a.dataset.name).localeCompare(norm(b.dataset.name));
+                });
+            } else {
+                sorted.sort(function (a, b) {
+                    return (b.dataset.created || '').localeCompare(a.dataset.created || '');
+                });
+            }
+            sorted.forEach(function (el) { grid.appendChild(el); });
+        }
+
+        function applyFilters() {
+            const q = norm(searchEl.value.trim());
+            let any = false;
+            grid.querySelectorAll('.product-card').forEach(function (card) {
+                const slug = norm(card.getAttribute('data-category-slug'));
+                const hay = norm(card.getAttribute('data-search-hay') || '');
+                const catOk = !activeCategorySlug || slug === activeCategorySlug;
+                const qOk = !q || hay.indexOf(q) !== -1;
+                const show = catOk && qOk;
+                card.style.display = show ? '' : 'none';
+                if (show) any = true;
+            });
+            applySortAll();
+            if (emptyEl) emptyEl.style.display = any ? 'none' : 'block';
+        }
+
+        document.querySelectorAll('.browse-chip').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                activeCategorySlug = norm(btn.getAttribute('data-category-slug'));
+                setActiveChip();
+                applyFilters();
+            });
+        });
+
+        searchEl.addEventListener('input', applyFilters);
+        sortEl.addEventListener('change', applyFilters);
+
+        function bootBrowse() {
+            if (activeCategorySlug) {
+                var match = false;
+                document.querySelectorAll('.browse-chip').forEach(function (b) {
+                    if (norm(b.getAttribute('data-category-slug')) === activeCategorySlug) match = true;
+                });
+                if (!match) activeCategorySlug = '';
+            }
+            setActiveChip();
+            applyFilters();
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootBrowse);
+        } else {
+            bootBrowse();
+        }
+    })();
+</script>
+{% endblock %}

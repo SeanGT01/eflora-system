@@ -19,6 +19,7 @@ def session_check():
     Returns: { user_id: int, token: str } or error
     """
     user_id = session.get('user_id')
+    user_role = session.get('role')
     
     if not user_id:
         return jsonify({'error': 'Not logged in'}), 401
@@ -39,5 +40,6 @@ def session_check():
     
     return jsonify({
         'user_id': user_id,
-        'token': token
+        'token': token,
+        'role': user_role
     }), 200

@@ -1559,11 +1559,11 @@
     }
 
     // ===== CONFIRM PERMANENT DELETE =====
-    function confirmPermanentDelete(productId) {
+    async function confirmPermanentDelete(productId) {
         closeArchiveModal();
         
         // Double confirmation for permanent delete
-        if (!confirm('⚠️ FINAL WARNING: This will permanently delete the product AND ALL ASSOCIATED CLOUDINARY IMAGES.\n\nThis action CANNOT be undone. Are you ABSOLUTELY sure?')) {
+        if (!await window.openConfirmModal('⚠️ FINAL WARNING: This will permanently delete the product AND ALL ASSOCIATED CLOUDINARY IMAGES.\n\nThis action CANNOT be undone. Are you ABSOLUTELY sure?')) {
             return;
         }
         
@@ -1742,7 +1742,7 @@
     document.getElementById('bulkAvailableBtn')?.addEventListener('click', async function() {
         if (!selectedProducts.size) return;
         
-        if (confirm(`Mark ${selectedProducts.size} product(s) as available?`)) {
+        if (await window.openConfirmModal(`Mark ${selectedProducts.size} product(s) as available?`)) {
             showToast(`Updating ${selectedProducts.size} products...`, 'info');
             
             const csrfToken = getCsrfToken();
@@ -1773,7 +1773,7 @@
     document.getElementById('bulkUnavailableBtn')?.addEventListener('click', async function() {
         if (!selectedProducts.size) return;
         
-        if (confirm(`Mark ${selectedProducts.size} product(s) as unavailable?`)) {
+        if (await window.openConfirmModal(`Mark ${selectedProducts.size} product(s) as unavailable?`)) {
             showToast(`Updating ${selectedProducts.size} products...`, 'info');
             
             const csrfToken = getCsrfToken();
@@ -1816,10 +1816,10 @@
             ? `⚠️ WARNING: Delete ${selectedProducts.size} product(s) and ${totalImages} Cloudinary image(s)?\n\nThis will PERMANENTLY delete all products AND their Cloudinary images. This action CANNOT be undone!`
             : `⚠️ Delete ${selectedProducts.size} product(s)? This action CANNOT be undone!`;
         
-        if (!confirm(message)) return;
+        if (!await window.openConfirmModal(message)) return;
         
         // Double confirmation for safety
-        if (!confirm('ARE YOU ABSOLUTELY SURE? This is permanent and cannot be reversed.')) return;
+        if (!await window.openConfirmModal('ARE YOU ABSOLUTELY SURE? This is permanent and cannot be reversed.')) return;
         
         showToast(`🗑️ Deleting ${selectedProducts.size} products and ${totalImages} Cloudinary images...`, 'warning');
         

@@ -1032,7 +1032,7 @@
     }
 
     async function cancelOrder(orderId) {
-        if (!confirm('Cancel this order?')) return;
+        if (!await window.openConfirmModal('Cancel this order?')) return;
         try {
             const r = await fetch(`/api/account/orders/${orderId}/cancel`, { method: 'POST' });
             const d = await r.json();
@@ -1077,9 +1077,6 @@
                                 </div>`).join('')}
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-outline" onclick="closeModal('orderDetailsModal')">Close</button>
-                    </div>
                 </div>
             </div>`);
     }
@@ -1114,7 +1111,13 @@
 
     // ── Utilities ──
     function changeAvatar() { document.getElementById('avatarInput')?.click(); }
-    function resetForm() { if (confirm('Discard all changes?')) document.getElementById('profileForm')?.reset(); }
+    function resetForm() {
+        // Delegate to the modal-based handler defined in profile content when available.
+        if (typeof window.resetProfileFormWithModal === 'function') {
+            return window.resetProfileFormWithModal();
+        }
+        document.getElementById('profileForm')?.reset();
+    }
 
     function showNotification(message, type = 'info') { showToast(message); }
 

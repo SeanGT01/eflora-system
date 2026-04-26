@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}E-FLOWERS — Blooming with Technology{% endblock %}</title>
     
     <!-- Fonts -->
@@ -264,6 +265,10 @@
         .user-avatar:hover {
             border-color: var(--deep-rose);
             transform: scale(1.05);
+        }
+
+        .user-menu-trigger {
+            position: relative;
         }
 
         .user-menu {
@@ -662,11 +667,60 @@
             font-size: 15px;
         }
 
+        .cart-item-price-meta {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .cart-item-price-current {
+            font-weight: 600;
+            color: var(--charcoal);
+        }
+        .cart-item-price-original {
+            text-decoration: line-through;
+            color: #9b8f86;
+            font-weight: 500;
+        }
+        .cart-item-discount-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #b5445a, #d35d74);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 2px 8px;
+            line-height: 1.2;
+            letter-spacing: 0.02em;
+            box-shadow: 0 4px 10px rgba(181, 68, 90, 0.25);
+        }
+
         .cart-item-controls {
             display: flex;
             align-items: center;
             gap: 0.4rem;
             margin-top: 0.5rem;
+        }
+
+        .cart-sidebar .store-checkbox,
+        .cart-sidebar .item-checkbox {
+            accent-color: var(--deep-rose);
+        }
+
+        #chat-fab {
+            transition: opacity .28s ease, transform .28s ease, visibility .28s ease;
+        }
+
+        #chat-fab.cart-open-hidden {
+            opacity: 0;
+            transform: translateY(14px) scale(0.88);
+            visibility: hidden;
+            pointer-events: none;
         }
 
         .quantity-btn {
@@ -898,6 +952,140 @@
             border: 1px solid var(--border);
         }
 
+        .checkout-proof-wrap {
+            margin-bottom: 16px;
+        }
+
+        .checkout-proof-title {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .checkout-proof-upload-zone {
+            border: 1.5px dashed var(--border-strong);
+            border-radius: var(--radius-lg);
+            background: var(--cream);
+            padding: 1rem 1rem 0.9rem;
+            text-align: center;
+        }
+
+        .checkout-proof-preview {
+            display: none;
+            margin: 0 auto 10px;
+            max-width: 320px;
+        }
+
+        .checkout-proof-preview img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            display: block;
+        }
+
+        .checkout-proof-preview .checkout-proof-clear-btn {
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px;
+            background: #f4f2ef;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--charcoal);
+        }
+
+        .checkout-proof-choose-btn {
+            width: 100%;
+            max-width: 320px;
+            margin: 0 auto;
+            padding: 9px 12px;
+            background: var(--warm-white);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .checkout-proof-note {
+            display: block;
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .checkout-payment-card,
+        .checkout-delivery-card {
+            margin-bottom: 16px;
+            padding: 12px;
+            background: var(--cream);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+        }
+
+        .checkout-payment-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+            gap: 10px;
+        }
+
+        .checkout-payment-summary {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .checkout-items-list {
+            margin: 0;
+            padding: 8px 10px;
+            list-style: none;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+
+        .checkout-delivery-title {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--charcoal);
+        }
+
+        .checkout-delivery-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .checkout-delivery-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--muted);
+        }
+
+        .checkout-delivery-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            background: #fff;
+        }
+
+        .checkout-proof-status {
+            text-align: center;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
         /* Form Elements */
         .form-group { margin-bottom: 1.25rem; }
 
@@ -935,7 +1123,7 @@
         .main-footer {
             background: var(--charcoal);
             color: var(--cream);
-            margin-top: 5rem;
+            margin-top: 1rem;
         }
 
         .footer-inner {
@@ -2026,20 +2214,22 @@
                 </button>
 
                 {% if session.get('user_id') %}
-                    <button class="action-btn" onclick="toggleUserMenu(event)" id="userAvatarBtn" style="position:relative;">
-                        <i class="ri-user-3-line action-icon"></i>
-                    </button>
-                    <div class="user-menu" id="userMenu">
-                            <a href="#" class="menu-item" onclick="handleAccountNavigation('profile'); return false;">
-                                <i class="ri-user-line"></i> Profile
-                            </a>
-                            <a href="#" class="menu-item" onclick="handleAccountNavigation('orders'); return false;">
-                                <i class="ri-shopping-bag-line"></i> My Orders
-                            </a>
-                            <a href="{{ url_for('templates.logout') }}" class="menu-item" style="color:#b5445a;">
-                                <i class="ri-logout-box-r-line"></i> Sign Out
-                            </a>
-                        </div>
+                    <div class="user-menu-trigger">
+                        <button class="action-btn" onclick="toggleUserMenu(event)" id="userAvatarBtn">
+                            <i class="ri-user-3-line action-icon"></i>
+                        </button>
+                        <div class="user-menu" id="userMenu">
+                                <a href="#" class="menu-item" onclick="handleAccountNavigation('profile'); return false;">
+                                    <i class="ri-user-line"></i> Profile
+                                </a>
+                                <a href="#" class="menu-item" onclick="handleAccountNavigation('orders'); return false;">
+                                    <i class="ri-shopping-bag-line"></i> My Orders
+                                </a>
+                                <a href="{{ url_for('templates.logout') }}" class="menu-item" style="color:#b5445a;">
+                                    <i class="ri-logout-box-r-line"></i> Sign Out
+                                </a>
+                            </div>
+                    </div>
                 {% else %}
                 <a href="{{ url_for('templates.login') }}" class="action-btn">
                     <i class="ri-user-line action-icon"></i>
@@ -2083,7 +2273,7 @@
                     <h4>Shop</h4>
                     <ul class="footer-links">
                         <li><a href="{{ url_for('templates.index') }}">All Products</a></li>
-                        <li><a href="{{ url_for('templates.products') }}">New Arrivals</a></li>
+                        <li><a href="{{ url_for('templates.browse_products') }}">New Arrivals</a></li>
                         <li><a href="{{ url_for('templates.stores') }}">Browse Stores</a></li>
                     </ul>
                 </div>
@@ -2092,8 +2282,12 @@
                     <h4>Account</h4>
                     <ul class="footer-links">
                         {% if session.get('user_id') %}
+                        {% if session.get('role') == 'admin' %}
+                        <li><a href="{{ url_for('templates.admin_users') }}">Admin</a></li>
+                        {% else %}
                         <li><a href="{{ url_for('templates.my_account') }}?page=profile">My Profile</a></li>
                         <li><a href="{{ url_for('templates.my_account') }}?page=orders">My Orders</a></li>
+                        {% endif %}
                         {% else %}
                         <li><a href="{{ url_for('templates.login') }}">Sign In</a></li>
                         {% endif %}
@@ -2734,11 +2928,11 @@ function updateCartDisplay() {
                     </div>
                     <div class="cart-item-info" style="flex: 1;">
                         <div style="font-weight: 500; color: var(--charcoal); margin-bottom: 2px;">${item.name}</div>
-                        ${isVariant ? '<div style="font-size: 11px; color: var(--deep-rose); margin-bottom: 2px;">✨ Variant</div>' : ''}
-                        <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px; display:flex; align-items:center; gap:4px;">
-                            ₱${item.price.toFixed(2)} each
-                            ${item.original_price ? `<span style="text-decoration:line-through;opacity:0.55;">₱${item.original_price.toFixed(2)}</span>` : ''}
-                            ${item.discount_pct ? `<span style="background:#b5445a;color:#fff;font-size:9px;font-weight:700;border-radius:20px;padding:1px 5px;">${item.discount_pct}% off</span>` : ''}
+                        ${isVariant ? '<div style="font-size: 11px; color: var(--deep-rose); margin-bottom: 2px;">Variant</div>' : ''}
+                        <div class="cart-item-price-meta">
+                            <span class="cart-item-price-current">₱${item.price.toFixed(2)} each</span>
+                            ${item.original_price ? `<span class="cart-item-price-original">₱${item.original_price.toFixed(2)}</span>` : ''}
+                            ${item.discount_pct ? `<span class="cart-item-discount-chip">${item.discount_pct}% off</span>` : ''}
                         </div>
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <button class="quantity-btn" onclick="updateQuantity(${item.cartIndex},-1)" style="width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px;">−</button>
@@ -3013,8 +3207,8 @@ function removeFromCartLocal(index) {
     showToast(`Removed from basket — ${removedItem.name}`);
 }
 
-function clearCart() {
-    if (!confirm('Clear your entire basket?')) return;
+async function clearCart() {
+    if (!await window.openConfirmModal('Clear your entire basket?')) return;
     
     {% if session.get('user_id') %}
     fetch('/api/cart/clear', {
@@ -3046,8 +3240,12 @@ function clearCartLocal() {
 function toggleCart() {
     const sidebar = document.getElementById('cartSidebar');
     const overlay = document.getElementById('cartOverlay');
+    const chatFab = document.getElementById('chat-fab');
     sidebar.classList.toggle('active');
     overlay.classList.toggle('active');
+    if (chatFab) {
+        chatFab.classList.toggle('cart-open-hidden', sidebar.classList.contains('active'));
+    }
     if (sidebar.classList.contains('active')) updateCartDisplay();
 }
 
@@ -3125,9 +3323,9 @@ async function buyNowDirect(item) {
     if (checkoutModalCloseHandler) {
         document.getElementById('checkoutModal').removeEventListener('click', checkoutModalCloseHandler);
     }
-    checkoutModalCloseHandler = function(e) {
+    checkoutModalCloseHandler = async function(e) {
         if (e.target === document.getElementById('checkoutModal') && checkoutStep > 1) {
-            if (confirm('Are you sure you want to cancel? Unused uploads will be deleted.')) {
+            if (await window.openConfirmModal('Are you sure you want to cancel? Unused uploads will be deleted.')) {
                 cancelCheckout(true);
                 document.getElementById('checkoutModal').classList.remove('active');
                 isCreatingOrders = false;
@@ -3203,9 +3401,9 @@ async function checkout() {
     if (checkoutModalCloseHandler) {
         document.getElementById('checkoutModal').removeEventListener('click', checkoutModalCloseHandler);
     }
-    checkoutModalCloseHandler = function(e) {
+    checkoutModalCloseHandler = async function(e) {
         if (e.target === document.getElementById('checkoutModal') && checkoutStep > 1) {
-            if (confirm('You have uploaded payment proofs. Are you sure you want to cancel checkout? Unused uploads will be deleted.')) {
+            if (await window.openConfirmModal('You have uploaded payment proofs. Are you sure you want to cancel checkout? Unused uploads will be deleted.')) {
                 cancelCheckout(true);
                 document.getElementById('checkoutModal').classList.remove('active');
                 isCreatingOrders = false;  // Reset flag on cancel
@@ -3224,9 +3422,9 @@ async function checkout() {
     {% endif %}
 }
 
-function closeCheckout() {
+async function closeCheckout() {
     if (checkoutStep > 1) {
-        if (confirm('You have uploaded payment proofs. Are you sure you want to cancel checkout? Unused uploads will be deleted.')) {
+        if (await window.openConfirmModal('You have uploaded payment proofs. Are you sure you want to cancel checkout? Unused uploads will be deleted.')) {
             cancelCheckout(true);
             isCreatingOrders = false;
         } else {
@@ -3633,7 +3831,7 @@ async function completeCheckout() {
     // Clear checkout state without deleting the uploaded proofs that are now attached to orders
     finalizeCheckoutSession();
     
-    showToast('🎉 Orders submitted for verification!');
+    showToast('Orders submitted for verification!');
     
     // Remove any lingering modal handlers
     if (checkoutModalCloseHandler) {
@@ -3713,14 +3911,71 @@ function displayOrderSummary() {
 }
 
 function displayGCashPayment() {
-    const order = checkoutOrders[currentOrderIndex];
     const container = document.getElementById('gcashPaymentContainer');
+    if (!container) return;
+
+    if (!Array.isArray(checkoutOrders) || checkoutOrders.length === 0 || !checkoutOrders[currentOrderIndex]) {
+        container.innerHTML = `
+            <div style="padding:16px;background:#fff8f6;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--muted);text-align:center;">
+                <div style="font-weight:600;color:var(--charcoal);margin-bottom:6px;">Payment details are not ready yet</div>
+                <div style="font-size:13px;">Please go back to Review, then proceed to Payment again.</div>
+            </div>
+        `;
+        const nextBtn = document.getElementById('checkoutNextBtn');
+        if (nextBtn) {
+            nextBtn.disabled = false;
+            nextBtn.textContent = '→ Proceed to Payment';
+        }
+        return;
+    }
+
+    const order = checkoutOrders[currentOrderIndex];
     const proofState = getProofState(order.temp_id);
     const hasPreview = proofState.hasUploaded || proofState.hasPending;
     const previewSrc = proofState.previewSrc;
     const deliveryDate = getStoreDeliveryDate(order.temp_id);
     const deliveryTime = getStoreDeliveryTime(order.temp_id);
     const minDate = getTodayDateString();
+    const orderItems = Array.isArray(order.items) ? order.items : [];
+    const totalItemsCount = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const cartItemsSafe = (typeof cart !== 'undefined' && Array.isArray(cart)) ? cart : [];
+
+    const escHtml = (val) => {
+        if (val === null || val === undefined) return '';
+        return String(val)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+
+    const paymentItemsHtml = orderItems.length
+        ? orderItems.map(item => {
+            const productId = item.product_id || item.id;
+            const variantId = item.variant_id || null;
+            const cartMatch = cartItemsSafe.find(ci => ci.id === productId && (ci.variant_id || null) === variantId) || null;
+
+            const itemName = item.name || item.product_name || (cartMatch && cartMatch.name) || ('Product #' + (productId || ''));
+            const itemImage = item.image_url || item.product_image_url || (cartMatch && cartMatch.image_url) || '';
+            const qty = Number(item.quantity || 0);
+            const variantLabel = item.variant_name || (cartMatch && cartMatch.variant_name) || '';
+
+            return `<li style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(107,76,59,0.12);">
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+                    ${itemImage
+                        ? `<img src="${escHtml(itemImage)}" alt="${escHtml(itemName)}" style="width:32px;height:32px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;">`
+                        : `<div style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--cream);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0;"><i class="ri-flower-line"></i></div>`
+                    }
+                    <div style="min-width:0;">
+                        <div style="color:var(--charcoal);font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(itemName)}</div>
+                        ${variantLabel ? `<div style="font-size:11px;color:var(--muted);line-height:1.2;">${escHtml(variantLabel)}</div>` : ''}
+                    </div>
+                </div>
+                <strong style="white-space:nowrap;color:var(--deep-rose);">x${qty}</strong>
+            </li>`;
+        }).join('')
+        : '<li style="color:var(--muted);">No items found for this order.</li>';
 
     let html = `
         <div style="text-align: center; margin-bottom: 16px;">
@@ -3728,27 +3983,33 @@ function displayGCashPayment() {
             <div style="font-size: 18px; font-weight: 600;">${order.store_name || 'Store'}</div>
         </div>
 
-        <div style="padding: 12px; background: var(--cream); border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 16px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="color: var(--muted);">Order Reference: ${order.temp_id}</span>
-                <span style="font-weight: 600;">Amount: <span style="color: var(--deep-rose); font-size: 18px;">&#8369;${order.total || 0}</span></span>
+        <div class="checkout-payment-card">
+            <div class="checkout-payment-head">
+                <span style="color: var(--muted); font-size: 12px;">Payment Summary</span>
+                <span style="font-weight: 600;">Amount: <span style="color: var(--deep-rose); font-size: 18px;">&#8369;${Number(order.total || 0).toFixed(2)}</span></span>
             </div>
+            <div class="checkout-payment-summary">
+                Paying <strong style="color:var(--charcoal);">${order.store_name || 'Store'}</strong> • ${totalItemsCount} item${totalItemsCount !== 1 ? 's' : ''}
+            </div>
+            <ul class="checkout-items-list">
+                ${paymentItemsHtml}
+            </ul>
         </div>
 
         <!-- Phase 1: Per-store delivery date/time picker -->
-        <div style="margin-bottom: 16px; padding: 12px; background: #f9f5f3; border-radius: var(--radius-md); border: 1px solid var(--border);">
-            <h5 style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--charcoal);">Requested Delivery</h5>
+        <div class="checkout-delivery-card">
+            <h5 class="checkout-delivery-title">Requested Delivery</h5>
             <div id="storeClosedMsg_${order.temp_id}" style="display: none; padding: 10px; background: rgba(192,57,43,0.08); border: 1px solid rgba(192,57,43,0.2); border-radius: var(--radius-md); margin-bottom: 10px; color: #c0392b; font-size: 12px; font-weight: 600;">
                 <i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="checkout-delivery-grid">
                 <div>
-                    <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--muted);">Date</label>
-                    <input type="date" id="storeDeliveryDate_${order.temp_id}" value="${deliveryDate}" min="${minDate}" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12px;" required>
+                    <label class="checkout-delivery-label">Date</label>
+                    <input type="date" id="storeDeliveryDate_${order.temp_id}" value="${deliveryDate}" min="${minDate}" class="checkout-delivery-input" required>
                 </div>
                 <div>
-                    <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--muted);">Time Slot</label>
-                    <select id="storeDeliveryTime_${order.temp_id}" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12px;" required>
+                    <label class="checkout-delivery-label">Time Slot</label>
+                    <select id="storeDeliveryTime_${order.temp_id}" class="checkout-delivery-input" required>
                         <option value="">Loading...</option>
                     </select>
                 </div>
@@ -3785,22 +4046,24 @@ function displayGCashPayment() {
             </div>
         </div>
 
-        <div style="margin-bottom: 16px;">
-            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Upload Payment Receipt</div>
-            <div id="proofPreview_${order.temp_id}" style="display: ${hasPreview ? 'block' : 'none'}; margin-bottom: 12px;">
-                <img id="previewImg_${order.temp_id}" ${previewSrc ? `src="${previewSrc}"` : ''} style="max-width: 100%; height: 200px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                <button type="button" onclick="clearProof('${order.temp_id}')" style="width: 100%; margin-top: 8px; padding: 8px; background: #f0f0f0; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">
-                    ${proofState.hasUploaded ? 'Remove Image' : 'Clear Image'}
+        <div class="checkout-proof-wrap">
+            <div class="checkout-proof-title">Upload Payment Receipt</div>
+            <div class="checkout-proof-upload-zone">
+                <div id="proofPreview_${order.temp_id}" class="checkout-proof-preview" style="display: ${hasPreview ? 'block' : 'none'};">
+                    <img id="previewImg_${order.temp_id}" ${previewSrc ? `src="${previewSrc}"` : ''}>
+                    <button type="button" class="checkout-proof-clear-btn" onclick="clearProof('${order.temp_id}')">
+                        ${proofState.hasUploaded ? 'Remove Image' : 'Clear Image'}
+                    </button>
+                </div>
+                <input type="file" id="proofInput_${order.temp_id}" accept="image/*" onchange="handleProofSelect('${order.temp_id}', event)" style="display: none;">
+                <button type="button" class="checkout-proof-choose-btn" onclick="document.getElementById('proofInput_${order.temp_id}').click()">
+                    <i class="ri-image-add-line"></i> ${hasPreview ? 'Replace Image' : 'Choose Image'}
                 </button>
+                <small class="checkout-proof-note">Select screenshot or photo of your GCash payment</small>
             </div>
-            <input type="file" id="proofInput_${order.temp_id}" accept="image/*" onchange="handleProofSelect('${order.temp_id}', event)" style="display: none;">
-            <button type="button" onclick="document.getElementById('proofInput_${order.temp_id}').click()" style="width: 100%; padding: 8px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;">
-                <i class="ri-image-add-line"></i> ${hasPreview ? 'Replace Image' : 'Choose Image'}
-            </button>
-            <small style="display: block; margin-top: 8px; color: var(--muted);">Select screenshot or photo of your GCash payment</small>
         </div>
 
-        <div id="uploadStatus_${order.temp_id}" style="text-align: center; font-size: 13px; color: var(--muted);">
+        <div id="uploadStatus_${order.temp_id}" class="checkout-proof-status">
             ${proofState.hasUploaded ? '<span style="color: var(--sage);">Receipt uploaded</span>' : proofState.hasPending ? '<span style="color: var(--muted);">Image selected. Use the button below to upload.</span>' : ''}
         </div>
     `;
@@ -4054,6 +4317,131 @@ function showToast(message, type = 'success') {
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
+// Unified confirmation modal helper
+(function setupUnifiedConfirmModal() {
+    if (window.openConfirmModal) return;
+
+    const style = document.createElement('style');
+    style.textContent = `
+        .app-confirm-overlay{position:fixed;inset:0;background:rgba(15,18,22,.5);display:none;align-items:center;justify-content:center;padding:1rem;z-index:12000}
+        .app-confirm-overlay.show{display:flex}
+        .app-confirm-card{width:min(440px,100%);background:#fff;border-radius:16px;box-shadow:0 20px 45px rgba(0,0,0,.24);padding:1.1rem 1.1rem 1rem}
+        .app-confirm-title{font-size:1rem;font-weight:700;color:#1f2937;margin-bottom:.45rem}
+        .app-confirm-message{font-size:.93rem;color:#475569;line-height:1.55;margin-bottom:1rem;white-space:pre-line}
+        .app-confirm-actions{display:flex;justify-content:flex-end;gap:.55rem}
+        .app-confirm-btn{border:1px solid #e2e8f0;border-radius:10px;background:#fff;color:#334155;padding:.48rem .9rem;font-weight:600;cursor:pointer}
+        .app-confirm-btn:hover{background:#f8fafc}
+        .app-confirm-btn.primary{background:#b5445a;border-color:#b5445a;color:#fff}
+        .app-confirm-btn.primary:hover{background:#9f3a4f;border-color:#9f3a4f}
+    `;
+    document.head.appendChild(style);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'app-confirm-overlay';
+    overlay.innerHTML = `
+        <div class="app-confirm-card" role="dialog" aria-modal="true" aria-labelledby="appConfirmTitle">
+            <div class="app-confirm-title" id="appConfirmTitle">Please Confirm</div>
+            <div class="app-confirm-message" id="appConfirmMessage"></div>
+            <div class="app-confirm-actions">
+                <button type="button" class="app-confirm-btn" id="appConfirmCancel">Cancel</button>
+                <button type="button" class="app-confirm-btn primary" id="appConfirmOk">Confirm</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const msgEl = overlay.querySelector('#appConfirmMessage');
+    const titleEl = overlay.querySelector('#appConfirmTitle');
+    const cancelBtn = overlay.querySelector('#appConfirmCancel');
+    const okBtn = overlay.querySelector('#appConfirmOk');
+
+    window.openConfirmModal = function(message, opts) {
+        const options = opts || {};
+        titleEl.textContent = options.title || 'Please Confirm';
+        msgEl.textContent = message || 'Are you sure you want to continue?';
+        cancelBtn.textContent = options.cancelText || 'Cancel';
+        okBtn.textContent = options.confirmText || 'Confirm';
+        return new Promise(function(resolve) {
+            overlay.classList.add('show');
+            const close = function(result) {
+                overlay.classList.remove('show');
+                overlay.removeEventListener('click', handleOverlayClick);
+                cancelBtn.removeEventListener('click', onCancel);
+                okBtn.removeEventListener('click', onConfirm);
+                document.removeEventListener('keydown', onKey);
+                resolve(result);
+            };
+            const onCancel = function() { close(false); };
+            const onConfirm = function() { close(true); };
+            const handleOverlayClick = function(e) { if (e.target === overlay) close(false); };
+            const onKey = function(e) {
+                if (e.key === 'Escape') close(false);
+                if (e.key === 'Enter') close(true);
+            };
+            overlay.addEventListener('click', handleOverlayClick);
+            cancelBtn.addEventListener('click', onCancel);
+            okBtn.addEventListener('click', onConfirm);
+            document.addEventListener('keydown', onKey);
+        });
+    };
+})();
+
+// Global money formatting for UI text: ₱/Php/PHP + number
+(function setupMoneyFormatter() {
+    const moneyPattern = /(₱\s*|PHP\s*|Php\s*)(\d[\d,]*(?:\.\d+)?)/g;
+    const moneyCheckPattern = /(₱\s*|PHP\s*|Php\s*)(\d[\d,]*(?:\.\d+)?)/;
+
+    window.formatMoneyValue = function(value) {
+        const n = Number(String(value).replace(/,/g, ''));
+        if (!Number.isFinite(n)) return value;
+        return new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        }).format(n);
+    };
+
+    function formatNodeText(node) {
+        if (!node || !node.nodeValue || !moneyCheckPattern.test(node.nodeValue)) return;
+        node.nodeValue = node.nodeValue.replace(moneyPattern, function(_, prefix, amount) {
+            return prefix + window.formatMoneyValue(amount);
+        });
+    }
+
+    function formatMoneyIn(root) {
+        if (!root) return;
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode: function(textNode) {
+                const parent = textNode.parentElement;
+                if (!parent) return NodeFilter.FILTER_REJECT;
+                const tag = parent.tagName;
+                if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT') {
+                    return NodeFilter.FILTER_REJECT;
+                }
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+        let n;
+        while ((n = walker.nextNode())) formatNodeText(n);
+    }
+
+    // Initial pass
+    formatMoneyIn(document.body);
+
+    // Re-format dynamically injected content
+    const observer = new MutationObserver(function(mutations) {
+        for (const m of mutations) {
+            m.addedNodes.forEach(function(node) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    formatNodeText(node);
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    formatMoneyIn(node);
+                }
+            });
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+})();
+
 // Initialize cart display
 updateCartCount();
 updateCartDisplay();
@@ -4071,7 +4459,7 @@ updateCartDisplay();
             .then(res => res.json())
             .then(data => {
                 if (data.user_id) {
-                    chatWidget.init(data.token || '', data.user_id);
+                    chatWidget.init(data.token || '', data.user_id, data.role || '');
                 }
             })
             .catch(e => console.log('Chat: session check failed', e));

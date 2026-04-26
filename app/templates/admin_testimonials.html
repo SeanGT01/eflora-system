@@ -1,0 +1,314 @@
+{% extends "layout.html" %}
+
+{% block title %}Testimonials - Admin{% endblock %}
+
+{% block page_title %}Customer testimonials{% endblock %}
+
+{% block content %}
+<style>
+    .admin-testimonials-wrap .table {
+        table-layout: fixed;
+        width: 100%;
+    }
+    .admin-testimonials-wrap .table th,
+    .admin-testimonials-wrap .table td {
+        padding: 0.65rem 0.75rem;
+        vertical-align: middle;
+    }
+    .admin-testimonials-wrap .tt-col-id { width: 48px; text-align: center; }
+    .admin-testimonials-wrap .tt-col-name { width: 15%; min-width: 0; }
+    .admin-testimonials-wrap .tt-col-rating { width: 92px; white-space: nowrap; }
+    .admin-testimonials-wrap .tt-col-comment { min-width: 0; }
+    .admin-testimonials-wrap .tt-col-visible { width: 76px; text-align: center; }
+    .admin-testimonials-wrap .tt-col-submitted { width: 128px; white-space: nowrap; font-size: 12px; color: var(--muted); }
+    .admin-testimonials-wrap .tt-col-actions { width: 218px; text-align: right; }
+    .admin-testimonials-wrap .tt-comment-preview {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .admin-testimonials-wrap .tt-action-btns {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        max-width: 218px;
+        margin-left: auto;
+    }
+    .admin-testimonials-wrap .tt-action-btns .btn {
+        padding: 0.35rem 0.55rem;
+        font-size: 12px;
+        line-height: 1.2;
+    }
+</style>
+<div class="stat-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+    <div class="stat-card">
+        <div class="stat-card-stripe stripe-primary" style="background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));"></div>
+        <div class="stat-card-header">
+            <div class="stat-label">Total</div>
+            <div class="stat-card-icon icon-rose"><i class="ri-chat-quote-line"></i></div>
+        </div>
+        <div class="stat-number" id="statTotal">0</div>
+        <div class="stat-sub">Home page reviews</div>
+    </div>
+</div>
+
+<div class="card" style="padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+    <div style="position: relative; flex: 1; min-width: 240px;">
+        <i class="ri-search-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted);"></i>
+        <input type="text" id="filterInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Filter by name or comment…" oninput="filterRows()">
+    </div>
+    <button type="button" class="btn btn-outline btn-sm" onclick="loadTestimonials()" style="padding: 0.65rem 1.25rem;">
+        <i class="ri-refresh-line"></i> Refresh
+    </button>
+</div>
+
+<div class="table-wrap card admin-testimonials-wrap" style="overflow-x: auto;">
+    <table class="table" style="margin: 0;">
+        <colgroup>
+            <col class="tt-col-id">
+            <col class="tt-col-name">
+            <col class="tt-col-rating">
+            <col class="tt-col-comment">
+            <col class="tt-col-visible">
+            <col class="tt-col-submitted">
+            <col class="tt-col-actions">
+        </colgroup>
+        <thead>
+            <tr>
+                <th class="tt-col-id">ID</th>
+                <th class="tt-col-name">Name</th>
+                <th class="tt-col-rating">Rating</th>
+                <th class="tt-col-comment">Comment</th>
+                <th class="tt-col-visible">Visible</th>
+                <th class="tt-col-submitted">Submitted</th>
+                <th class="tt-col-actions">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="testimonialsBody">
+            <tr>
+                <td colspan="7" class="text-center py-4" style="color: var(--muted);">
+                    <div class="loading"><div class="spinner"></div> Loading…</div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- View modal -->
+<div id="viewModal" style="display:none; position:fixed; inset:0; z-index:400; align-items:center; justify-content:center; background: rgba(44,37,32,0.45); padding: 1rem;" onclick="if(event.target===this) closeViewModal()">
+    <div class="card" style="max-width: 560px; width: 100%; max-height: 85vh; overflow: auto; padding: 1.5rem; position: relative;" onclick="event.stopPropagation()">
+        <button type="button" onclick="closeViewModal()" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:22px; cursor:pointer; color:var(--muted); line-height:1;" aria-label="Close">&times;</button>
+        <h3 style="margin: 0 0 0.75rem; font-family: var(--font-display); font-size: 1.35rem;">Testimonial #<span id="viewId"></span></h3>
+        <p style="margin: 0 0 0.5rem; font-size: 14px; color: var(--muted);"><strong id="viewName"></strong></p>
+        <p style="margin: 0 0 0.75rem; font-size: 13px; color: var(--muted);">Submitted <span id="viewDate"></span> · Rating <span id="viewRating"></span>/5 · <span id="viewApproved"></span></p>
+        <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; background: var(--cream); font-size: 14px; line-height: 1.65; white-space: pre-wrap;" id="viewComment"></div>
+        <div style="margin-top: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <button type="button" class="btn btn-outline btn-sm" id="viewToggleVisibilityBtn">Hide from home page</button>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-sm" style="background:#c0392b;color:#fff;border:none;" id="viewDeleteBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const DELETE_HOME_TESTIMONIAL_TMPL = {{ url_for('templates.api_admin_home_testimonial_delete', tid=0)|tojson }};
+const VISIBILITY_HOME_TESTIMONIAL_TMPL = {{ url_for('templates.api_admin_home_testimonial_visibility', tid=0)|tojson }};
+let testimonialsCache = [];
+let viewCurrentId = null;
+
+function isApprovedFlag(t) {
+    return t.is_approved === true || t.is_approved === 1;
+}
+
+function escapeHtml(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function escapeAttr(s) {
+    if (!s) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;');
+}
+
+function truncate(s, n) {
+    if (!s) return '';
+    s = String(s);
+    return s.length <= n ? s : s.slice(0, n) + '…';
+}
+
+function formatWhen(iso) {
+    if (!iso) return '—';
+    try {
+        const d = new Date(iso);
+        return isNaN(d.getTime()) ? iso : d.toLocaleString();
+    } catch (e) { return iso; }
+}
+
+/** One-line date/time for table cells */
+function formatWhenShort(iso) {
+    if (!iso) return '—';
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso;
+        return d.toLocaleString(undefined, {
+            month: 'numeric',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit'
+        });
+    } catch (e) { return iso; }
+}
+
+function renderStars(n) {
+    n = Math.max(0, Math.min(5, parseInt(n, 10) || 0));
+    let h = '';
+    for (let i = 1; i <= 5; i++) {
+        h += '<i class="ri-star-' + (i <= n ? 'fill' : 'line') + '" style="color:#f0b429;font-size:14px;"></i>';
+    }
+    return h;
+}
+
+async function loadTestimonials() {
+    const tbody = document.getElementById('testimonialsBody');
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4" style="color:var(--muted);"><div class="loading"><div class="spinner"></div> Loading…</div></td></tr>';
+    try {
+        const res = await fetch('{{ url_for("templates.api_admin_home_testimonials_list") }}');
+        const data = await res.json();
+        if (!res.ok) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4" style="color:#c0392b;">' + escapeHtml(data.error || 'Failed to load') + '</td></tr>';
+            return;
+        }
+        testimonialsCache = data.testimonials || [];
+        document.getElementById('statTotal').textContent = String(testimonialsCache.length);
+        filterRows();
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4" style="color:#c0392b;">Network error</td></tr>';
+    }
+}
+
+function filterRows() {
+    const q = (document.getElementById('filterInput').value || '').trim().toLowerCase();
+    const tbody = document.getElementById('testimonialsBody');
+    const rows = testimonialsCache.filter(function (t) {
+        if (!q) return true;
+        const name = (t.customer_name || '').toLowerCase();
+        const com = (t.comment || '').toLowerCase();
+        return name.indexOf(q) !== -1 || com.indexOf(q) !== -1 || String(t.id).indexOf(q) !== -1;
+    });
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4" style="color:var(--muted);">No testimonials match.</td></tr>';
+        return;
+    }
+    let html = '';
+    rows.forEach(function (t) {
+        const appr = isApprovedFlag(t)
+            ? '<span style="color:var(--sage);font-weight:600;">Yes</span>'
+            : '<span style="color:var(--muted);">Hidden</span>';
+        const visBtn = isApprovedFlag(t)
+            ? '<button type="button" class="btn btn-outline btn-sm" onclick="setTestimonialVisibility(' + t.id + ', false)">Hide</button>'
+            : '<button type="button" class="btn btn-outline btn-sm" style="border-color:var(--sage);color:var(--deep-sage);" onclick="setTestimonialVisibility(' + t.id + ', true)">Show</button>';
+        html += '<tr data-id="' + t.id + '">';
+        html += '<td class="tt-col-id">' + t.id + '</td>';
+        html += '<td class="tt-col-name">' + escapeHtml(t.customer_name || '') + '</td>';
+        html += '<td class="tt-col-rating">' + renderStars(t.rating) + '</td>';
+        html += '<td class="tt-col-comment"><span class="tt-comment-preview" title="' + escapeAttr(t.comment || '') + '">' + escapeHtml(truncate(t.comment, 200)) + '</span></td>';
+        html += '<td class="tt-col-visible">' + appr + '</td>';
+        html += '<td class="tt-col-submitted">' + escapeHtml(formatWhenShort(t.created_at)) + '</td>';
+        html += '<td class="tt-col-actions"><div class="tt-action-btns">';
+        html += '<button type="button" class="btn btn-outline btn-sm" onclick="openViewModal(' + t.id + ')">View</button>';
+        html += visBtn;
+        html += '<button type="button" class="btn btn-sm" style="background:#c0392b;color:#fff;border:none;" onclick="deleteTestimonial(' + t.id + ')">Delete</button>';
+        html += '</div></td>';
+        html += '</tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+function openViewModal(id) {
+    const t = testimonialsCache.find(function (x) { return x.id === id; });
+    if (!t) return;
+    viewCurrentId = id;
+    document.getElementById('viewId').textContent = String(t.id);
+    document.getElementById('viewName').textContent = t.customer_name || '';
+    document.getElementById('viewDate').textContent = formatWhen(t.created_at);
+    document.getElementById('viewRating').textContent = String(t.rating != null ? t.rating : '—');
+    document.getElementById('viewApproved').textContent = isApprovedFlag(t) ? 'Visible on home page' : 'Hidden from home page';
+    document.getElementById('viewComment').textContent = t.comment || '';
+    const toggleBtn = document.getElementById('viewToggleVisibilityBtn');
+    if (isApprovedFlag(t)) {
+        toggleBtn.textContent = 'Hide from home page';
+        toggleBtn.onclick = function () { setTestimonialVisibility(id, false, true); };
+    } else {
+        toggleBtn.textContent = 'Show on home page';
+        toggleBtn.onclick = function () { setTestimonialVisibility(id, true, true); };
+    }
+    const m = document.getElementById('viewModal');
+    m.style.display = 'flex';
+    document.getElementById('viewDeleteBtn').onclick = function () {
+        closeViewModal();
+        deleteTestimonial(id);
+    };
+}
+
+function closeViewModal() {
+    document.getElementById('viewModal').style.display = 'none';
+    viewCurrentId = null;
+}
+
+async function setTestimonialVisibility(id, isApproved, fromModal) {
+    try {
+        const url = VISIBILITY_HOME_TESTIMONIAL_TMPL.replace('home-testimonials/0/', 'home-testimonials/' + id + '/');
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_approved: !!isApproved })
+        });
+        const data = await res.json().catch(function () { return {}; });
+        if (res.ok && data.success) {
+            if (typeof showToast === 'function') {
+                showToast(isApproved ? 'Testimonial is now visible on the home page.' : 'Testimonial hidden from the home page.');
+            }
+            if (fromModal) closeViewModal();
+            await loadTestimonials();
+            return;
+        }
+        alert(data.error || 'Update failed');
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+async function deleteTestimonial(id) {
+    if (!await window.openConfirmModal('Delete testimonial #' + id + '? This cannot be undone.')) return;
+    try {
+        const res = await fetch(DELETE_HOME_TESTIMONIAL_TMPL.replace(/\/0$/, '/' + id), { method: 'DELETE' });
+        const data = await res.json().catch(function () { return {}; });
+        if (res.ok && data.success) {
+            if (typeof showToast === 'function') showToast('Testimonial deleted.');
+            await loadTestimonials();
+            return;
+        }
+        alert(data.error || 'Delete failed');
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadTestimonials);
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeViewModal();
+});
+</script>
+{% endblock %}

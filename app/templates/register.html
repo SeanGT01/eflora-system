@@ -233,7 +233,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             padding: 3rem 2.5rem;
             overflow-y: auto;
         }
@@ -745,6 +745,7 @@
                 <div class="input-wrap">
                     <i class="ri-user-line input-icon"></i>
                     <input class="form-control" type="text" name="full_name"
+                           id="fullName"
                            placeholder="Maria Santos" required autofocus
                            value="{{ form_data.full_name if form_data else '' }}">
                 </div>
@@ -755,6 +756,7 @@
                 <div class="input-wrap">
                     <i class="ri-mail-line input-icon"></i>
                     <input class="form-control" type="email" name="email"
+                           id="emailInput"
                            placeholder="your@email.com" required
                            value="{{ form_data.email if form_data else '' }}">
                 </div>
@@ -906,10 +908,53 @@
 
     confirmInput.addEventListener('input', checkMatch);
 
+    /* ── Name + Email validation ── */
+    const fullNameInput = document.getElementById('fullName');
+    const emailInput = document.getElementById('emailInput');
+
+    function sanitizeName(value) {
+        return (value || '')
+            .replace(/[^A-Za-z\s]/g, '')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/^\s+/, '');
+    }
+
+    function isValidFullName(value) {
+        const trimmed = (value || '').trim();
+        return /^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmed);
+    }
+
+    fullNameInput.addEventListener('input', function () {
+        const cleaned = sanitizeName(fullNameInput.value);
+        if (cleaned !== fullNameInput.value) {
+            fullNameInput.value = cleaned;
+        }
+        fullNameInput.setCustomValidity('');
+    });
+
+    emailInput.addEventListener('input', function () {
+        emailInput.value = (emailInput.value || '').toLowerCase();
+        emailInput.setCustomValidity('');
+    });
+
     /* ── Form submission ── */
     document.getElementById('registerForm').addEventListener('submit', function(e) {
         const pw  = passwordInput.value;
         const cpw = confirmInput.value;
+        const cleanedName = sanitizeName(fullNameInput.value).trim();
+
+        fullNameInput.value = cleanedName;
+        emailInput.value = (emailInput.value || '').trim().toLowerCase();
+
+        if (!isValidFullName(cleanedName)) {
+            e.preventDefault();
+            fullNameInput.setCustomValidity('Name must contain letters only, with single spaces between words.');
+            fullNameInput.reportValidity();
+            fullNameInput.focus();
+            return false;
+        } else {
+            fullNameInput.setCustomValidity('');
+        }
 
         if (pw !== cpw) {
             e.preventDefault();

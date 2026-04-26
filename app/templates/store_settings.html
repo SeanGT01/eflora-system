@@ -820,6 +820,7 @@
     /* ─── Collapse/Expand Section Controls ─── */
     .section-content {
         display: block;
+        position: relative;
     }
     
     .section-content.collapsed {
@@ -832,6 +833,44 @@
     
     .section-summary.collapsed {
         display: block;
+    }
+    
+    .section-content .section-actions {
+        display: none;
+    }
+    
+    .section-content.editing .section-actions {
+        display: flex;
+    }
+    
+    /* Read-only visual state (when not editing) */
+    .section-content:not(.editing) .form-control,
+    .section-content:not(.editing) .input-group,
+    .section-content:not(.editing) .delivery-method-option,
+    .section-content:not(.editing) .day-chip,
+    .section-content:not(.editing) .schedule-entry {
+        background: #f5f3f0 !important;
+        border-color: rgba(107, 76, 59, 0.18) !important;
+        color: #6b6259;
+    }
+
+    .section-content:not(.editing) .form-control::placeholder {
+        color: #a09890;
+    }
+
+    .section-content:not(.editing) .logo-preview-compact,
+    .section-content:not(.editing) .qr-gallery,
+    .section-content:not(.editing) .mapboxgl-canvas-container {
+        filter: grayscale(0.2) brightness(0.92);
+    }
+
+    .section-content:not(.editing)::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(255, 255, 255, 0.2);
+        pointer-events: none;
+        border-radius: var(--radius-lg);
     }
     
     .summary-field {
@@ -1973,7 +2012,7 @@
                 </div>
                 <div class="card-body">
                     <!-- EDIT MODE -->
-                    <div class="section-content collapsed" id="basic-info-content">
+                    <div class="section-content" id="basic-info-content">
                         <form id="basic-info-form">
                             <div class="form-grid">
                                 <!-- Logo + Form Fields Layout -->
@@ -2162,7 +2201,7 @@
                     </div>
                     
                     <!-- VIEW MODE -->
-                    <div class="section-summary collapsed" id="basic-info-summary">
+                    <div class="section-summary" id="basic-info-summary">
                         <div class="summary-field">
                             <div class="summary-label">Store Name</div>
                             <div class="summary-value" id="sum-store-name">{{ store.name }}</div>
@@ -2231,7 +2270,7 @@
                 <div class="card-body">
                     
                     <!-- EDIT MODE -->
-                    <div class="section-content collapsed" id="delivery-settings-content">
+                    <div class="section-content" id="delivery-settings-content">
                     
                     <!-- DELIVERY METHOD TOGGLE - SMALLER VERTICAL BOXES -->
                     <div class="form-group form-group-full">
@@ -2511,7 +2550,7 @@
                     </div>
                     
                     <!-- VIEW MODE -->
-                    <div class="section-summary collapsed" id="delivery-settings-summary">
+                    <div class="section-summary" id="delivery-settings-summary">
                         <div class="summary-field">
                             <div class="summary-label">Delivery Method</div>
                             <div class="summary-value" id="sum-delivery-method">
@@ -2577,7 +2616,7 @@
                 <div class="card-body">
                     
                     <!-- EDIT MODE -->
-                    <div class="section-content collapsed" id="qr-settings-content">
+                    <div class="section-content" id="qr-settings-content">
                        
                 <div class="form-group">
                     <label class="form-label">GCash QR Codes <span class="form-hint" style="margin-left: 0.5rem;">(Up to 3 QR codes)</span></label>
@@ -2631,7 +2670,7 @@
                     </div>
                     
                     <!-- VIEW MODE -->
-                    <div class="section-summary collapsed" id="qr-settings-summary">
+                    <div class="section-summary" id="qr-settings-summary">
                         <div class="summary-field">
                             <div class="summary-label">QR Codes Uploaded</div>
                             <div class="summary-value" id="sum-qr-count">0</div>
@@ -3092,23 +3131,38 @@
     // ═══════ SECTION COLLAPSE/EXPAND & SAVE LOGIC ═══════════
     // ═════════════════════════════════════════════════════════
     
+    function setSectionEditing(contentId, editButtonId, editing) {
+        const content = document.getElementById(contentId);
+        const editBtn = document.getElementById(editButtonId);
+        if (!content) return;
+
+        content.classList.toggle('editing', !!editing);
+
+        const controls = content.querySelectorAll('input, select, textarea, button');
+        controls.forEach((el) => {
+            if (el.closest('.section-actions')) return;
+            el.disabled = !editing;
+        });
+
+        if (editBtn) {
+            editBtn.classList.toggle('active', !!editing);
+            editBtn.innerHTML = editing
+                ? '<i class="ri-pencil-line"></i> Editing'
+                : '<i class="ri-edit-line"></i> Edit';
+        }
+    }
+
     // ─── BASIC INFORMATION SECTION ───
     function toggleBasicInfoSection(expanded) {
-        const content = document.getElementById('basic-info-content');
-        const summary = document.getElementById('basic-info-summary');
-        
+        setSectionEditing('basic-info-content', 'edit-basic-info', expanded);
+
         if (expanded) {
-            content.classList.remove('collapsed');
-            summary.classList.remove('collapsed');
             // Resize map after the section becomes visible
             setTimeout(() => {
                 if (typeof map !== 'undefined' && map) {
                     map.resize();
                 }
             }, 200);
-        } else {
-            content.classList.add('collapsed');
-            summary.classList.add('collapsed');
         }
     }
     
@@ -3266,7 +3320,7 @@
     });
     
     async function removeLogo() {
-        if (!confirm('Are you sure you want to remove the store logo?')) return;
+        if (!await window.openConfirmModal('Are you sure you want to remove the store logo?')) return;
         
         const btn = document.getElementById('remove-logo-btn');
         const originalText = btn.innerHTML;
@@ -3717,16 +3771,7 @@
     
     // ─── DELIVERY SETTINGS SECTION TOGGLE ───
     function toggleDeliverySettingsSection(expanded) {
-        const content = document.getElementById('delivery-settings-content');
-        const summary = document.getElementById('delivery-settings-summary');
-        
-        if (expanded) {
-            content.classList.remove('collapsed');
-            summary.classList.remove('collapsed');
-        } else {
-            content.classList.add('collapsed');
-            summary.classList.add('collapsed');
-        }
+        setSectionEditing('delivery-settings-content', 'edit-delivery-settings', expanded);
     }
     
     // Edit button
@@ -3741,16 +3786,7 @@
     
     // ─── QR SETTINGS SECTION TOGGLE ───
     function toggleQRSettingsSection(expanded) {
-        const content = document.getElementById('qr-settings-content');
-        const summary = document.getElementById('qr-settings-summary');
-        
-        if (expanded) {
-            content.classList.remove('collapsed');
-            summary.classList.remove('collapsed');
-        } else {
-            content.classList.add('collapsed');
-            summary.classList.add('collapsed');
-        }
+        setSectionEditing('qr-settings-content', 'edit-qr-settings', expanded);
     }
     
     // Edit button
@@ -4074,13 +4110,13 @@ function createQRSlot(index, qrData = null) {
     };
 }
 
-function removeQR(index) {
+async function removeQR(index) {
     const slot = qrSlots[index];
     if (!slot) return;
     
     // Confirm if removing existing QR
     if (slot.hasImage && slot.qrId) {
-        if (!confirm('Remove this QR code?')) return;
+        if (!await window.openConfirmModal('Remove this QR code?')) return;
         
         // Mark for deletion in the slot object (not just dataset)
         slot.markedForDeletion = true;
@@ -4531,6 +4567,11 @@ async function handleQRFile(file, index) {
     // Main initialization when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
         debug.log('Page loaded, initializing...');
+
+        // Keep all cards open, but lock inputs until Edit is clicked.
+        toggleBasicInfoSection(false);
+        toggleDeliverySettingsSection(false);
+        toggleQRSettingsSection(false);
         
         // Update delivery method boxes styling
         if (window.updateDeliveryMethodBoxes) {

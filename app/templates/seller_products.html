@@ -915,7 +915,7 @@
 
     // Delete Product
     async function deleteProduct(productId, btn) {
-        if (!confirm('Move this product to archive? You can restore it later from Archive.')) return;
+        if (!await window.openConfirmModal('Move this product to archive? You can restore it later from Archive.')) return;
         
         const orig = btn.innerHTML;
         btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
@@ -1034,7 +1034,7 @@
     }
 
     document.getElementById('bulkAvailableBtn')?.addEventListener('click', async function() {
-        if (!selectedProducts.size || !confirm(`Mark ${selectedProducts.size} product(s) as available?`)) return;
+        if (!selectedProducts.size || !await window.openConfirmModal(`Mark ${selectedProducts.size} product(s) as available?`)) return;
         for (const id of selectedProducts) {
             await fetch(`/api/v1/seller/products/${id}/availability`, {
                 method: 'PUT',
@@ -1047,7 +1047,7 @@
     });
 
     document.getElementById('bulkUnavailableBtn')?.addEventListener('click', async function() {
-        if (!selectedProducts.size || !confirm(`Mark ${selectedProducts.size} product(s) as unavailable?`)) return;
+        if (!selectedProducts.size || !await window.openConfirmModal(`Mark ${selectedProducts.size} product(s) as unavailable?`)) return;
         for (const id of selectedProducts) {
             await fetch(`/api/v1/seller/products/${id}/availability`, {
                 method: 'PUT',
@@ -1060,7 +1060,7 @@
     });
 
     document.getElementById('bulkDeleteBtn')?.addEventListener('click', async function() {
-        if (!selectedProducts.size || !confirm(`Move ${selectedProducts.size} product(s) to archive? You can restore them later from Archive.`)) return;
+        if (!selectedProducts.size || !await window.openConfirmModal(`Move ${selectedProducts.size} product(s) to archive? You can restore them later from Archive.`)) return;
         for (const id of selectedProducts) {
             await fetch(`/api/v1/seller/products/${id}`, { method: 'DELETE' });
         }

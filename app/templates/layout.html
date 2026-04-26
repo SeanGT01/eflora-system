@@ -399,6 +399,7 @@
             border-radius: 50%;
             background: var(--deep-rose);
             border: 2px solid var(--warm-white);
+            display: none;
         }
 
         /* User Chip */
@@ -531,6 +532,7 @@
             gap: 0.875rem;
             align-items: flex-start;
             transition: var(--transition);
+            cursor: pointer;
         }
 
         .notif-item:last-child { border-bottom: none; }
@@ -1406,6 +1408,16 @@
                         <i class="ri-shopping-bag-3-line nav-icon"></i> All Orders
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a href="{{ url_for('templates.admin_testimonials') }}" class="nav-link {% if request.endpoint == 'templates.admin_testimonials' %}active{% endif %}">
+                        <i class="ri-chat-quote-line nav-icon"></i> Testimonials
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ url_for('templates.admin_support') }}" class="nav-link {% if request.endpoint == 'templates.admin_support' %}active{% endif %}">
+                        <i class="ri-customer-service-2-line nav-icon"></i> Support
+                    </a>
+                </li>
                 {% elif session.role == 'seller' %}
                 <li class="nav-item nav-item-with-submenu">
                     <a href="{{ url_for('templates.seller_products') }}" class="nav-link {% if request.endpoint == 'templates.seller_products' %}active{% endif %}">
@@ -1420,7 +1432,7 @@
                 <li class="nav-item">
                     <a href="{{ url_for('templates.seller_orders') }}" class="nav-link {% if request.endpoint == 'templates.seller_orders' %}active{% endif %}">
                         <i class="ri-shopping-bag-3-line nav-icon"></i> Orders
-                        <span class="nav-badge">5</span>
+                        <span class="nav-badge" id="sellerOrdersBadge" {% if seller_orders_badge_count <= 0 %}style="display:none;"{% endif %}>{{ seller_orders_badge_count }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -1434,7 +1446,7 @@
                         <i class="ri-arrow-down-s-line" style="font-size: 14px; margin-left: auto; opacity: 0.5;"></i>
                     </a>
                     <ul class="nav-submenu">
-                        <li><a href="{{ url_for('templates.seller_pos_orders') }}" class="nav-submenu-item {% if request.endpoint == 'templates.seller_pos_orders' %}active{% endif %}"><i class="ri-history-line" style="font-size: 14px; flex-shrink: 0;"></i> POS Orders <span class="nav-badge" id="posOrderCount" style="margin-left: auto; margin-right: 0;">0</span></a></li>
+                        <li><a href="{{ url_for('templates.seller_pos_orders') }}" class="nav-submenu-item {% if request.endpoint == 'templates.seller_pos_orders' %}active{% endif %}"><i class="ri-history-line" style="font-size: 14px; flex-shrink: 0;"></i> POS Orders <span class="nav-badge" id="posOrderCount" style="margin-left: auto; margin-right: 0;" {% if pos_orders_badge_count <= 0 %}hidden{% endif %}>{{ pos_orders_badge_count }}</span></a></li>
                     </ul>
                 </li>
                 {% endif %}
@@ -1459,6 +1471,7 @@
             </ul>
         </nav>
 
+        {% if session.get('role') != 'admin' %}
         <hr class="sidebar-divider">
 
         <nav class="nav-section">
@@ -1471,12 +1484,13 @@
                         </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.profile') }}" class="nav-link {% if request.endpoint == 'templates.profile' %}active{% endif %}">
+                    <a href="{{ url_for('templates.my_account') }}?page=profile" class="nav-link {% if request.endpoint == 'templates.my_account' and request.args.get('page') == 'profile' %}active{% endif %}">
                         <i class="ri-user-3-line nav-icon"></i> Profile
                     </a>
                 </li>
             </ul>
         </nav>
+        {% endif %}
 
         <div class="sidebar-spacer"></div>
 
@@ -1509,31 +1523,15 @@
                     <div class="notif-panel" id="notifPanel">
                         <div class="notif-panel-header">
                             <span class="notif-panel-title">Notifications</span>
-                            <button class="btn btn-outline btn-sm">Mark all read</button>
+                            <button class="btn btn-outline btn-sm" id="markAllReadBtn" onclick="markAllNotifsRead()">Mark all read</button>
                         </div>
-                        <div class="notif-item unread">
-                            <div class="notif-dot-indicator" style="background:var(--deep-rose);"></div>
-                            <div class="notif-body">
-                                <div class="notif-body-title">New Order Received</div>
-                                <div class="notif-body-sub">Customer #1234 just placed an order for roses</div>
-                                <div class="notif-time">2 minutes ago</div>
-                            </div>
+                        <div id="notifList"></div>
+                        <div id="notifEmpty" style="display:none; padding:1.5rem 1rem; text-align:center; color:var(--muted); font-size:13px;">
+                            <i class="ri-notification-off-line" style="font-size:24px; display:block; margin-bottom:6px;"></i>
+                            No notifications yet
                         </div>
-                        <div class="notif-item">
-                            <div class="notif-dot-indicator" style="background:var(--sage);"></div>
-                            <div class="notif-body">
-                                <div class="notif-body-title">Payment Verified</div>
-                                <div class="notif-body-sub">Order #5678 GCash payment confirmed</div>
-                                <div class="notif-time">1 hour ago</div>
-                            </div>
-                        </div>
-                        <div class="notif-item">
-                            <div class="notif-dot-indicator" style="background:var(--terracotta);"></div>
-                            <div class="notif-body">
-                                <div class="notif-body-title">Low Stock Alert</div>
-                                <div class="notif-body-sub">Red Roses — only 3 units remaining</div>
-                                <div class="notif-time">3 hours ago</div>
-                            </div>
+                        <div id="notifLoading" style="padding:1.5rem 1rem; text-align:center; color:var(--muted); font-size:13px;">
+                            <i class="ri-loader-4-line ri-spin"></i> Loading…
                         </div>
                     </div>
                 </div>
@@ -1554,12 +1552,14 @@
                         <i class="ri-arrow-down-s-line" style="font-size:16px;color:var(--muted);margin-left:2px;"></i>
                     </button>
                     <div class="user-dropdown" id="userDropdown">
-                        <a href="{{ url_for('templates.profile') }}" class="dropdown-item">
+                        {% if session.get('role') != 'admin' %}
+                        <a href="{{ url_for('templates.my_account') }}?page=profile" class="dropdown-item">
                             <i class="ri-user-3-line"></i> Profile
                         </a>
-                        <a href="{{ url_for('templates.settings') }}" class="dropdown-item">
+                        <a href="{{ url_for('templates.my_account', page='settings') }}" class="dropdown-item">
                             <i class="ri-settings-4-line"></i> Settings
                         </a>
+                        {% endif %}
                         <a href="{{ url_for('templates.logout') }}" class="dropdown-item dropdown-item-danger">
                             <i class="ri-logout-box-r-line"></i> Sign Out
                         </a>
@@ -1575,7 +1575,7 @@
 
         <!-- Footer -->
         <footer class="dashboard-footer">
-            <span>E-FLOWERS</span> Management System &nbsp;·&nbsp; Blooming with Technology &nbsp;·&nbsp; © 2025
+            <span>E-FLORA</span> Management System &nbsp;·&nbsp; {{ current_year }}
         </footer>
     </div>
 </div>
@@ -1594,10 +1594,122 @@
         document.getElementById('sidebarOverlay').style.display = 'none';
     }
 
-    // Notification Panel
+    // ── Notification Panel ──────────────────────────────────────────
+    const NOTIF_TYPE_COLOR = {
+        new_order: 'var(--deep-rose)',
+        payment_verified: 'var(--sage)',
+        low_stock: 'var(--terracotta)',
+        seller_app_approved: 'var(--sage)',
+        seller_app_rejected: 'var(--terracotta)',
+    };
+    const NOTIF_TYPE_ICON = {
+        new_order: 'ri-shopping-bag-3-line',
+        payment_verified: 'ri-check-double-line',
+        low_stock: 'ri-alert-line',
+        seller_app_approved: 'ri-store-2-line',
+        seller_app_rejected: 'ri-close-circle-line',
+    };
+
+    function timeAgo(isoStr) {
+        if (!isoStr) return '';
+        const diff = Math.floor((Date.now() - new Date(isoStr + 'Z')) / 1000);
+        if (diff < 60) return 'Just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+        if (diff < 604800) return `${Math.floor(diff / 86400)} day${Math.floor(diff / 86400) > 1 ? 's' : ''} ago`;
+        return new Date(isoStr).toLocaleDateString();
+    }
+
+    function getNotifTargetUrl(n) {
+        const sellerOrdersUrl = "{{ url_for('templates.seller_orders') }}";
+        if (!n) return '';
+        if (n.type === 'new_order' || n.type === 'payment_verified') {
+            return n.reference_id ? `${sellerOrdersUrl}?order_id=${n.reference_id}` : sellerOrdersUrl;
+        }
+        return '';
+    }
+
+    function renderNotifItem(n) {
+        const color = NOTIF_TYPE_COLOR[n.type] || 'var(--muted)';
+        const unreadClass = n.is_read ? '' : ' unread';
+        const targetUrl = getNotifTargetUrl(n);
+        return `<div class="notif-item${unreadClass}" data-notif-id="${n.id}" onclick="handleNotifClick(${n.id}, this, '${targetUrl}')">
+            <div class="notif-dot-indicator" style="background:${color};"></div>
+            <div class="notif-body">
+                <div class="notif-body-title">${escapeHtml(n.title)}</div>
+                <div class="notif-body-sub">${escapeHtml(n.message)}</div>
+                <div class="notif-time">${timeAgo(n.created_at)}</div>
+            </div>
+        </div>`;
+    }
+
+    function escapeHtml(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function loadNotifications() {
+        const list = document.getElementById('notifList');
+        const empty = document.getElementById('notifEmpty');
+        const loading = document.getElementById('notifLoading');
+        const dot = document.querySelector('.notif-dot');
+        const markBtn = document.getElementById('markAllReadBtn');
+        if (!list) return;
+        try {
+            const res = await fetch('/api/seller/notifications');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (loading) loading.style.display = 'none';
+            const notifs = data.notifications || [];
+            if (notifs.length === 0) {
+                if (empty) empty.style.display = 'block';
+                if (dot) dot.style.display = 'none';
+                if (markBtn) markBtn.style.display = 'none';
+            } else {
+                list.innerHTML = notifs.map(renderNotifItem).join('');
+                if (empty) empty.style.display = 'none';
+                const unread = data.unread_count || 0;
+                if (dot) dot.style.display = unread > 0 ? 'block' : 'none';
+                if (markBtn) markBtn.style.display = unread > 0 ? '' : 'none';
+            }
+        } catch (e) {
+            if (loading) loading.style.display = 'none';
+        }
+    }
+
+    async function markNotifRead(id, el) {
+        if (el && el.classList.contains('unread')) {
+            el.classList.remove('unread');
+            fetch(`/api/seller/notifications/${id}/read`, { method: 'POST' });
+            const remaining = document.querySelectorAll('.notif-item.unread').length;
+            const dot = document.querySelector('.notif-dot');
+            const markBtn = document.getElementById('markAllReadBtn');
+            if (dot) dot.style.display = remaining > 0 ? 'block' : 'none';
+            if (markBtn) markBtn.style.display = remaining > 0 ? '' : 'none';
+        }
+    }
+
+    async function handleNotifClick(id, el, targetUrl) {
+        await markNotifRead(id, el);
+        if (targetUrl) {
+            window.location.href = targetUrl;
+        }
+    }
+
+    async function markAllNotifsRead() {
+        await fetch('/api/seller/notifications/read-all', { method: 'POST' });
+        document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
+        const dot = document.querySelector('.notif-dot');
+        if (dot) dot.style.display = 'none';
+        const markBtn = document.getElementById('markAllReadBtn');
+        if (markBtn) markBtn.style.display = 'none';
+    }
+
     function toggleNotifPanel() {
-        document.getElementById('notifPanel').classList.toggle('show');
+        const panel = document.getElementById('notifPanel');
+        const isOpening = !panel.classList.contains('show');
+        panel.classList.toggle('show');
         document.getElementById('userDropdown').classList.remove('show');
+        if (isOpening) loadNotifications();
     }
 
     // User Dropdown
@@ -1641,7 +1753,160 @@
     const spinStyle = document.createElement('style');
     spinStyle.textContent = `.ri-spin { animation: spin .75s linear infinite; } @keyframes spin { to { transform:rotate(360deg); } }`;
     document.head.appendChild(spinStyle);
+
+    // Poll unread count every 60s to keep dot accurate without reloading
+    async function pollNotifDot() {
+        try {
+            const res = await fetch('/api/seller/notifications');
+            if (!res.ok) return;
+            const data = await res.json();
+            const dot = document.querySelector('.notif-dot');
+            if (dot) dot.style.display = (data.unread_count > 0) ? 'block' : 'none';
+        } catch (e) {}
+    }
+    pollNotifDot();
+    setInterval(pollNotifDot, 60000);
+
+    // If page is restored from browser back-forward cache, force a fresh request
+    // so server-side role guards can re-validate the current logged-in account.
+    window.addEventListener('pageshow', function(event) {
+        const navEntry = performance.getEntriesByType('navigation')[0];
+        const isBackForward = navEntry && navEntry.type === 'back_forward';
+        if (event.persisted || isBackForward) {
+            window.location.reload();
+        }
+    });
+
+    // Unified confirmation modal helper
+    (function setupUnifiedConfirmModal() {
+        if (window.openConfirmModal) return;
+
+        const style = document.createElement('style');
+        style.textContent = `
+            .app-confirm-overlay{position:fixed;inset:0;background:rgba(15,18,22,.5);display:none;align-items:center;justify-content:center;padding:1rem;z-index:12000}
+            .app-confirm-overlay.show{display:flex}
+            .app-confirm-card{width:min(440px,100%);background:#fff;border-radius:16px;box-shadow:0 20px 45px rgba(0,0,0,.24);padding:1.1rem 1.1rem 1rem}
+            .app-confirm-title{font-size:1rem;font-weight:700;color:#1f2937;margin-bottom:.45rem}
+            .app-confirm-message{font-size:.93rem;color:#475569;line-height:1.55;margin-bottom:1rem;white-space:pre-line}
+            .app-confirm-actions{display:flex;justify-content:flex-end;gap:.55rem}
+            .app-confirm-btn{border:1px solid #e2e8f0;border-radius:10px;background:#fff;color:#334155;padding:.48rem .9rem;font-weight:600;cursor:pointer}
+            .app-confirm-btn:hover{background:#f8fafc}
+            .app-confirm-btn.primary{background:#b5445a;border-color:#b5445a;color:#fff}
+            .app-confirm-btn.primary:hover{background:#9f3a4f;border-color:#9f3a4f}
+        `;
+        document.head.appendChild(style);
+
+        const overlay = document.createElement('div');
+        overlay.className = 'app-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="app-confirm-card" role="dialog" aria-modal="true" aria-labelledby="appConfirmTitle">
+                <div class="app-confirm-title" id="appConfirmTitle">Please Confirm</div>
+                <div class="app-confirm-message" id="appConfirmMessage"></div>
+                <div class="app-confirm-actions">
+                    <button type="button" class="app-confirm-btn" id="appConfirmCancel">Cancel</button>
+                    <button type="button" class="app-confirm-btn primary" id="appConfirmOk">Confirm</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const msgEl = overlay.querySelector('#appConfirmMessage');
+        const titleEl = overlay.querySelector('#appConfirmTitle');
+        const cancelBtn = overlay.querySelector('#appConfirmCancel');
+        const okBtn = overlay.querySelector('#appConfirmOk');
+
+        window.openConfirmModal = function(message, opts) {
+            const options = opts || {};
+            titleEl.textContent = options.title || 'Please Confirm';
+            msgEl.textContent = message || 'Are you sure you want to continue?';
+            cancelBtn.textContent = options.cancelText || 'Cancel';
+            okBtn.textContent = options.confirmText || 'Confirm';
+            return new Promise(function(resolve) {
+                overlay.classList.add('show');
+                const close = function(result) {
+                    overlay.classList.remove('show');
+                    overlay.removeEventListener('click', handleOverlayClick);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    okBtn.removeEventListener('click', onConfirm);
+                    document.removeEventListener('keydown', onKey);
+                    resolve(result);
+                };
+                const onCancel = function() { close(false); };
+                const onConfirm = function() { close(true); };
+                const handleOverlayClick = function(e) { if (e.target === overlay) close(false); };
+                const onKey = function(e) {
+                    if (e.key === 'Escape') close(false);
+                    if (e.key === 'Enter') close(true);
+                };
+                overlay.addEventListener('click', handleOverlayClick);
+                cancelBtn.addEventListener('click', onCancel);
+                okBtn.addEventListener('click', onConfirm);
+                document.addEventListener('keydown', onKey);
+            });
+        };
+    })();
+
+    // Global money formatting for UI text: ₱/Php/PHP + number
+    (function setupMoneyFormatter() {
+        const moneyPattern = /(₱\s*|PHP\s*|Php\s*)(\d[\d,]*(?:\.\d+)?)/g;
+        const moneyCheckPattern = /(₱\s*|PHP\s*|Php\s*)(\d[\d,]*(?:\.\d+)?)/;
+
+        window.formatMoneyValue = function(value) {
+            const n = Number(String(value).replace(/,/g, ''));
+            if (!Number.isFinite(n)) return value;
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            }).format(n);
+        };
+
+        function formatNodeText(node) {
+            if (!node || !node.nodeValue || !moneyCheckPattern.test(node.nodeValue)) return;
+            node.nodeValue = node.nodeValue.replace(moneyPattern, function(_, prefix, amount) {
+                return prefix + window.formatMoneyValue(amount);
+            });
+        }
+
+        function formatMoneyIn(root) {
+            if (!root) return;
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode: function(textNode) {
+                    const parent = textNode.parentElement;
+                    if (!parent) return NodeFilter.FILTER_REJECT;
+                    const tag = parent.tagName;
+                    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT') {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+            let n;
+            while ((n = walker.nextNode())) formatNodeText(n);
+        }
+
+        // Initial pass
+        formatMoneyIn(document.body);
+
+        // Re-format dynamically injected content
+        const observer = new MutationObserver(function(mutations) {
+            for (const m of mutations) {
+                m.addedNodes.forEach(function(node) {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        formatNodeText(node);
+                    } else if (node.nodeType === Node.ELEMENT_NODE) {
+                        formatMoneyIn(node);
+                    }
+                });
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    })();
 </script>
+
+{% if session.get('role') in ['seller', 'admin'] %}
+<!-- Seller/Admin Chat Widget -->
+{% include 'chat_widget.html' %}
+{% endif %}
 
 {% block extra_js %}{% endblock %}
 </body>
