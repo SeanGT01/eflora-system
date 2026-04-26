@@ -1087,13 +1087,14 @@ table.saved-table {
 {% endblock %}
 
 {% block content %}
+{% set admin_view = is_admin or (session.get('role') == 'admin') %}
 <div class="rpt">
 
   <!-- ─── Header ──────────────────────────────────────────── -->
   <div class="rpt-header">
     <div>
-      <div class="rpt-eyebrow">Data & Insights{% if store %} — {{ store.name }}{% endif %}</div>
-      <h1 class="rpt-title">Reports, <em>beautifully presented</em></h1>
+      <div class="rpt-eyebrow">{% if admin_view %}Platform Reports — All Stores{% else %}Data & Insights{% if store %} — {{ store.name }}{% endif %}{% endif %}</div>
+      <h1 class="rpt-title">{% if admin_view %}Platform Reports, <em>beautifully presented</em>{% else %}Reports, <em>beautifully presented</em>{% endif %}</h1>
     </div>
   </div>
 
@@ -1247,7 +1248,7 @@ table.saved-table {
         </thead>
         <tbody>
           {% for report in saved_reports %}
-          <tr>
+          <tr data-report-id="{{ report.id }}" data-report-types="{{ report.type or '' }}">
             <td>
               <div class="file-cell">
                 <div class="file-ico {% if report.format == 'pdf' %}fi-pdf{% elif report.format == 'excel' %}fi-excel{% else %}fi-html{% endif %}">
@@ -1271,10 +1272,10 @@ table.saved-table {
             <td style="font-size:13px;color:var(--muted);">{{ report.size }}</td>
             <td>
               <div class="row-actions">
-                <button class="row-btn" title="View" onclick="showToast('Opening report…')"><i class="ri-eye-line"></i></button>
-                <button class="row-btn" title="Download" onclick="showToast('Downloading…')"><i class="ri-download-line"></i></button>
-                <button class="row-btn" title="Schedule" onclick="openSchedule()"><i class="ri-time-line"></i></button>
-                <button class="row-btn danger" title="Delete" onclick="deleteRow(this)"><i class="ri-delete-bin-line"></i></button>
+                <button type="button" class="row-btn" title="View" onclick="viewSavedReport(this)"><i class="ri-eye-line"></i></button>
+                <button type="button" class="row-btn" title="Download PDF" onclick="downloadSavedReport(this, 'pdf')"><i class="ri-download-line"></i></button>
+                <button type="button" class="row-btn" title="Schedule" onclick="openSchedule()"><i class="ri-time-line"></i></button>
+                <button type="button" class="row-btn danger" title="Delete" onclick="deleteSavedReport(this)"><i class="ri-delete-bin-line"></i></button>
               </div>
             </td>
           </tr>
@@ -1440,6 +1441,7 @@ const PREVIEW_URL   = "{{ url_for('templates.reports_preview') }}";
 const GENERATE_URL  = "{{ url_for('templates.reports_generate') }}";
 const REPORT_TYPES  = {{ report_types|tojson }};
 const TYPE_LABELS   = {{ report_type_options|tojson }};
+const CSRF_TOKEN    = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
 /* ───────── Multi-select dropdown ─────────────────────── */
 function toggleMulti(e) {
@@ -1610,14 +1612,16 @@ async function generateReport() {
   }
 }
 
-function downloadReport(fmt) {
+function downloadReport(fmt, opts = {}) {
   const params = getReportParams();
   if (!params.types.length) {
     showToast('Pick at least one report type');
     return;
   }
   showToast(fmt === 'pdf' ? 'Generating PDF…' : 'Generating CSV…');
-  window.location.href = GENERATE_URL + '?' + buildSearchParams(params, fmt).toString();
+  const qs = buildSearchParams(params, fmt);
+  if (opts.skipSave) qs.set('skip_save', '1');
+  window.location.href = GENERATE_URL + '?' + qs.toString();
 }
 
 /* ───────── Render preview ────────────────────────────── */
@@ -1758,14 +1762,74 @@ function renderPreview(payload) {
   preview.innerHTML = html;
 }
 
-/* ───────── Saved Reports + Schedule (UI-only) ────────── */
-async function deleteRow(btn) {
-  if (!await window.openConfirmModal('Delete this saved report?')) return;
+/* ───────── Saved Reports actions ─────────────────────── */
+function _savedTypesFromRow(btn) {
   const tr = btn.closest('tr');
-  tr.style.transition = 'opacity .3s, transform .3s';
-  tr.style.opacity = '0';
-  tr.style.transform = 'translateX(20px)';
-  setTimeout(() => { tr.remove(); showToast('Report deleted'); }, 300);
+  const raw = (tr?.dataset?.reportTypes || '').trim();
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(s => s.trim().toLowerCase().replace(/\s+/g, '_'))
+    .filter(Boolean)
+    .filter(t => REPORT_TYPES.includes(t));
+}
+
+function _applySavedTypesToBuilder(types) {
+  const wanted = new Set((types && types.length) ? types : REPORT_TYPES);
+  document.querySelectorAll('input[name="types"]').forEach(cb => {
+    cb.checked = wanted.has(cb.value);
+  });
+  syncAllCheckbox();
+  syncTriggerLabel();
+}
+
+async function viewSavedReport(btn) {
+  const types = _savedTypesFromRow(btn);
+  _applySavedTypesToBuilder(types);
+  await generateReport();
+  showToast('Loaded saved report in preview');
+}
+
+async function downloadSavedReport(btn, format) {
+  const types = _savedTypesFromRow(btn);
+  _applySavedTypesToBuilder(types);
+  await downloadReport(format || 'pdf', { skipSave: true });
+}
+
+async function deleteSavedReport(btn) {
+  const confirmed = (typeof window.openConfirmModal === 'function')
+    ? await window.openConfirmModal('Delete this saved report?')
+    : window.confirm('Delete this saved report?');
+  if (!confirmed) return;
+
+  const tr = btn.closest('tr');
+  const id = tr?.dataset?.reportId;
+  if (!id) {
+    showToast('Missing report id');
+    return;
+  }
+  try {
+    const res = await fetch(`/reports/saved/${id}`, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: {
+        'X-CSRFToken': CSRF_TOKEN,
+        'Accept': 'application/json',
+      },
+    });
+    let payload = null;
+    try { payload = await res.json(); } catch (_) { payload = null; }
+    if (!res.ok) {
+      showToast(payload?.error || 'Failed to delete saved report');
+      return;
+    }
+    tr.style.transition = 'opacity .3s, transform .3s';
+    tr.style.opacity = '0';
+    tr.style.transform = 'translateX(20px)';
+    setTimeout(() => { tr.remove(); showToast('Report deleted'); }, 300);
+  } catch (_) {
+    showToast('Network error while deleting report');
+  }
 }
 
 function openSchedule()  { document.getElementById('schedModal').classList.add('open'); }

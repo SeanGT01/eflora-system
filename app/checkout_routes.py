@@ -17,9 +17,10 @@ from flask import Blueprint, jsonify, request, session
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
+from sqlalchemy import inspect
 
 from app.extensions import db
-from app.models import Cart, CartItem, Notification, Order, OrderItem, Product, ProductVariant, Store, User, UserAddress
+from app.models import Cart, CartItem, Notification, Order, OrderItem, Product, ProductVariant, Store, User, UserAddress, StorePaymentSetting
 
 # Create blueprint
 checkout_bp = Blueprint("checkout", __name__)
@@ -48,6 +49,23 @@ def test_checkout():
 
 print("✅ Test route added to checkout_bp")
 print("=" * 60)
+
+
+def _ensure_store_payment_settings_table():
+    try:
+        if inspect(db.engine).has_table("store_payment_settings"):
+            return True
+        StorePaymentSetting.__table__.create(db.engine, checkfirst=True)
+        return True
+    except Exception:
+        return False
+
+
+def _store_allows_cod(store_id):
+    if not _ensure_store_payment_settings_table():
+        return False
+    row = StorePaymentSetting.query.filter_by(store_id=store_id).first()
+    return bool(row.allow_cod) if row else False
 
 
 def _build_stock_lookup(cart_items):
@@ -319,7 +337,8 @@ def validate_checkout():
                     "total": float(subtotal + delivery_check["delivery_fee"]),
                     "items": order_items_data,
                     "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
-                    "gcash_instructions": store.gcash_instructions
+                    "gcash_instructions": store.gcash_instructions,
+                    "allow_cod": _store_allows_cod(store.id),
                 })
 
         if undeliverable_stores:
@@ -486,6 +505,12 @@ def create_orders():
                 print(f"⚠️ Store not found: {order_data.get('store_id')}")
                 continue
 
+            payment_method = str(order_data.get("payment_method") or "gcash").strip().lower()
+            if payment_method not in {"gcash", "cod"}:
+                return jsonify({"error": "Invalid payment method"}), 400
+            if payment_method == "cod" and not _store_allows_cod(store.id):
+                return jsonify({"error": f"Cash on Delivery is not enabled for {store.name}"}), 400
+
             # Phase 1: Extract and parse per-store delivery date/time
             order_delivery_date_str = order_data.get("requested_delivery_date")
             order_delivery_time = order_data.get("requested_delivery_time")
@@ -507,8 +532,8 @@ def create_orders():
                 delivery_fee=order_data.get("delivery_fee", 0),
                 distance_km=order_data.get("distance_km"),
                 total_amount=order_data.get("total", 0),
-                payment_method="gcash",
-                payment_status="pending_verification",
+                payment_method="cod" if payment_method == "cod" else "gcash",
+                payment_status="cod_pending" if payment_method == "cod" else "pending_verification",
                 delivery_location=delivery_point,
                 delivery_address=address.address_line,
                 delivery_notes=delivery_notes,
@@ -521,6 +546,11 @@ def create_orders():
 
             payment_proof_url = order_data.get("payment_proof_url")
             payment_proof_public_id = order_data.get("payment_proof_public_id")
+            if payment_method == "gcash" and not payment_proof_url:
+                return jsonify({"error": f"Payment proof is required for GCash on {store.name}"}), 400
+            if payment_method == "cod":
+                payment_proof_url = None
+                payment_proof_public_id = None
             if payment_proof_url:
                 order.payment_proof_url = payment_proof_url
                 order.payment_proof_public_id = payment_proof_public_id
@@ -545,7 +575,11 @@ def create_orders():
             db.session.add(Notification(
                 user_id=store.seller_id,
                 title='New Order Received',
-                message=f'Order #{order.id} — ₱{float(order.total_amount):,.2f} is awaiting payment verification.',
+                message=(
+                    f'Order #{order.id} — ₱{float(order.total_amount):,.2f} was placed via Cash on Delivery.'
+                    if payment_method == "cod"
+                    else f'Order #{order.id} — ₱{float(order.total_amount):,.2f} is awaiting payment verification.'
+                ),
                 type='new_order',
                 reference_id=order.id,
             ))
@@ -1163,6 +1197,7 @@ def buy_now_validate():
                 }],
                 "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
                 "gcash_instructions": store.gcash_instructions,
+                "allow_cod": _store_allows_cod(store.id),
             }],
             "address": address.to_dict(),
         }), 200
@@ -1192,6 +1227,7 @@ def buy_now_create_order():
         requested_delivery_time = data.get("requested_delivery_time")
         payment_proof_url = data.get("payment_proof_url")
         payment_proof_public_id = data.get("payment_proof_public_id")
+        payment_method = str(data.get("payment_method") or "gcash").strip().lower()
 
         if not product_id:
             return jsonify({"error": "product_id is required"}), 400
@@ -1199,6 +1235,8 @@ def buy_now_create_order():
             return jsonify({"error": "address_id is required"}), 400
         if quantity < 1:
             return jsonify({"error": "Quantity must be at least 1"}), 400
+        if payment_method not in {"gcash", "cod"}:
+            return jsonify({"error": "Invalid payment method"}), 400
 
         product = Product.query.get(product_id)
         if not product:
@@ -1228,6 +1266,13 @@ def buy_now_create_order():
         store = Store.query.get(product.store_id)
         if not store:
             return jsonify({"error": "Store not found"}), 404
+        if payment_method == "cod" and not _store_allows_cod(store.id):
+            return jsonify({"error": "Cash on Delivery is not enabled for this store"}), 400
+        if payment_method == "gcash" and not payment_proof_url:
+            return jsonify({"error": "Payment proof is required for GCash"}), 400
+        if payment_method == "cod":
+            payment_proof_url = None
+            payment_proof_public_id = None
 
         subtotal = item_price * quantity
         delivery_check = _check_store_delivery(store, address, subtotal)
@@ -1255,8 +1300,8 @@ def buy_now_create_order():
             delivery_fee=float(delivery_fee),
             distance_km=float(distance) if distance else None,
             total_amount=float(subtotal + delivery_fee),
-            payment_method="gcash",
-            payment_status="pending_verification",
+            payment_method="cod" if payment_method == "cod" else "gcash",
+            payment_status="cod_pending" if payment_method == "cod" else "pending_verification",
             delivery_location=delivery_point,
             payment_proof_url=payment_proof_url,
             payment_proof_public_id=payment_proof_public_id,
@@ -1294,7 +1339,11 @@ def buy_now_create_order():
         db.session.add(Notification(
             user_id=store.seller_id,
             title='New Order Received',
-            message=f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {_customer_name} is awaiting payment verification.',
+            message=(
+                f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {_customer_name} was placed via Cash on Delivery.'
+                if payment_method == "cod"
+                else f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {_customer_name} is awaiting payment verification.'
+            ),
             type='new_order',
             reference_id=order.id,
         ))
@@ -1306,6 +1355,7 @@ def buy_now_create_order():
         order_dict["items"] = [oi.to_dict() for oi in order.items]
         order_dict["gcash_qr_codes"] = [qr.to_dict() for qr in store.gcash_qr_images]
         order_dict["gcash_instructions"] = store.gcash_instructions
+        order_dict["allow_cod"] = _store_allows_cod(store.id)
         order_dict["distance_km"] = round(distance, 2) if distance is not None else None
         order_dict["selected_address"] = address.to_dict()
 

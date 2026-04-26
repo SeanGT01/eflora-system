@@ -30,6 +30,20 @@ auth_bp = Blueprint('auth', __name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 EMAIL_REGEX = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+PASSWORD_SPECIAL_REGEX = re.compile(r'[^A-Za-z0-9]')
+
+
+def _validate_password_strength(password):
+    pw = password or ''
+    if len(pw) < 8:
+        return 'Password must be at least 8 characters'
+    if not re.search(r'[a-z]', pw):
+        return 'Password must include at least one lowercase letter'
+    if not re.search(r'[A-Z]', pw):
+        return 'Password must include at least one uppercase letter'
+    if not PASSWORD_SPECIAL_REGEX.search(pw):
+        return 'Password must include at least one special character'
+    return None
 
 
 def _normalize_email(value):
@@ -50,8 +64,9 @@ def _validate_registration_payload(data, require_password=True):
     if require_password:
         if not password:
             return None, ('password is required', 400)
-        if len(password) < 6:
-            return None, ('Password must be at least 6 characters', 400)
+        pw_error = _validate_password_strength(password)
+        if pw_error:
+            return None, (pw_error, 400)
 
     return {
         'full_name': full_name,
@@ -441,8 +456,9 @@ def register():
     if not all(data.get(f) for f in required):
         return jsonify({'error': 'full_name, email and password are required'}), 400
 
-    if len(data['password']) < 6:
-        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    pw_error = _validate_password_strength(data['password'])
+    if pw_error:
+        return jsonify({'error': pw_error}), 400
 
     if User.query.filter_by(email=data['email'].lower()).first():
         return jsonify({'error': 'Email already registered'}), 409
@@ -671,8 +687,9 @@ def change_password():
             return jsonify({'error': 'All fields are required'}), 400
         if new_password != confirm_password:
             return jsonify({'error': 'New passwords do not match'}), 400
-        if len(new_password) < 6:
-            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        pw_error = _validate_password_strength(new_password)
+        if pw_error:
+            return jsonify({'error': pw_error}), 400
         if not user.check_password(current_password):
             return jsonify({'error': 'Current password is incorrect'}), 400
 

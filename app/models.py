@@ -183,6 +183,18 @@ class GCashQR(db.Model):
         }
 
 
+class StorePaymentSetting(db.Model):
+    __tablename__ = 'store_payment_settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id', ondelete='CASCADE'), nullable=False, unique=True, index=True)
+    allow_cod = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    store = db.relationship('Store', backref=db.backref('payment_setting', uselist=False, lazy=True))
+
+
 class Store(db.Model):
     __tablename__ = 'stores'
     
@@ -1510,6 +1522,37 @@ class SupportFAQ(db.Model):
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class SavedReport(db.Model):
+    """Persisted report generation history per user."""
+    __tablename__ = 'saved_reports'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.String(500), nullable=True)
+    report_type = db.Column(db.String(255), nullable=True)
+    report_format = db.Column(db.String(50), nullable=True)
+    last_generated = db.Column(db.String(120), nullable=True)
+    schedule = db.Column(db.String(120), nullable=True)
+    size = db.Column(db.String(50), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', backref=db.backref('saved_reports', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'type': self.report_type,
+            'format': self.report_format,
+            'last_generated': self.last_generated,
+            'schedule': self.schedule,
+            'size': self.size,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 

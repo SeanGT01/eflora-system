@@ -776,7 +776,7 @@
                     <div class="strength-track">
                         <div class="strength-bar" id="strengthBar"></div>
                     </div>
-                    <div class="strength-label" id="strengthLabel">At least 6 characters</div>
+                    <div class="strength-label" id="strengthLabel">Use 8+ chars with upper, lower, special</div>
                 </div>
             </div>
 
@@ -857,7 +857,7 @@
         const pw = this.value;
         let score = 0;
 
-        if (pw.length >= 6)  score++;
+        if (pw.length >= 8)  score++;
         if (pw.length >= 10) score++;
         if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
         if (/\d/.test(pw)) score++;
@@ -865,7 +865,7 @@
 
         if (pw.length === 0) {
             strengthBar.style.width = '0%';
-            strengthLabel.textContent = 'At least 6 characters';
+            strengthLabel.textContent = 'Use 8+ chars with upper, lower, special';
             strengthLabel.style.color = 'var(--muted)';
         } else {
             const level = strengthLevels[Math.min(score - 1, 4)];
@@ -963,10 +963,13 @@
             return false;
         }
 
-        if (pw.length < 6) {
+        const hasLower = /[a-z]/.test(pw);
+        const hasUpper = /[A-Z]/.test(pw);
+        const hasSpecial = /[^a-zA-Z\d]/.test(pw);
+        if (pw.length < 8 || !hasLower || !hasUpper || !hasSpecial) {
             e.preventDefault();
             passwordInput.focus();
-            strengthLabel.textContent = 'Password too short — min 6 characters';
+            strengthLabel.textContent = 'Need 8+ chars, lowercase, uppercase, and special character';
             strengthLabel.style.color = 'var(--deep-rose)';
             return false;
         }

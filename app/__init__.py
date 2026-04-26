@@ -185,7 +185,7 @@ def create_app(config_class='default'):
                     text("ALTER TABLE riders ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT FALSE")
                 )
                 db.session.commit()
-                app.logger.info("✅ Added riders.is_archived column with default false")
+                app.logger.info("Added riders.is_archived column with default false")
         except Exception as db_patch_error:
             db.session.rollback()
             app.logger.warning(f"⚠️ Could not apply riders.is_archived patch: {db_patch_error}")
@@ -204,10 +204,10 @@ def create_app(config_class='default'):
                     text("UPDATE pos_orders SET is_seen_by_seller = TRUE")
                 )
                 db.session.commit()
-                app.logger.info("✅ Added pos_orders.is_seen_by_seller column and marked existing rows as seen")
+                app.logger.info("Added pos_orders.is_seen_by_seller column and marked existing rows as seen")
         except Exception as db_patch_error:
             db.session.rollback()
-            app.logger.warning(f"⚠️ Could not apply pos_orders.is_seen_by_seller patch: {db_patch_error}")
+            app.logger.warning(f"Could not apply pos_orders.is_seen_by_seller patch: {db_patch_error}")
     
     # ====================================================
     # REGISTER BLUEPRINTS (INCLUDING CLOUDINARY)
@@ -236,9 +236,9 @@ def create_app(config_class='default'):
         from app.bg_removal import bg_removal_bp as bg_removal_bp_import
         bg_removal_bp = bg_removal_bp_import
         BG_REMOVAL_AVAILABLE = True
-        print("✅ Background removal module found (rembg installed)")
+        print("Background removal module found (rembg installed)")
     except ImportError as e:
-        print(f"⚠️ Background removal module not available: {e}")
+        print(f"Background removal module not available: {e}")
         print("   (rembg not installed - background removal features disabled)")
     
     # Register all blueprints
@@ -252,9 +252,9 @@ def create_app(config_class='default'):
     # Register bg_removal blueprint only if available
     if BG_REMOVAL_AVAILABLE and bg_removal_bp:
         app.register_blueprint(bg_removal_bp)
-        print("✅ Background removal blueprint registered")
+        print("Background removal blueprint registered")
     else:
-        print("⚠️ Background removal blueprint NOT registered (module unavailable)")
+        print("Background removal blueprint NOT registered (module unavailable)")
     
     app.register_blueprint(archive_bp)
     app.register_blueprint(cloudinary_bp, url_prefix='/api/v1/cloudinary')
@@ -403,7 +403,8 @@ def create_app(config_class='default'):
                 return redirect(url_for('rider.rider_dashboard'))
             return redirect(url_for('templates.index'))
 
-        seller_only_paths = ('/seller', '/analytics', '/reports')
+        seller_only_paths = ('/seller',)
+        seller_admin_shared_paths = ('/analytics', '/reports')
         admin_only_paths = ('/admin',)
         # Storefront-only paths. /my-account, /profile, /settings are intentionally
         # excluded so sellers/admins can view/edit their own user profile too;
@@ -413,6 +414,12 @@ def create_app(config_class='default'):
         if (
             any(normalized_path == p or normalized_path.startswith(f'{p}/') for p in seller_only_paths)
             and role != 'seller'
+        ):
+            return role_home_redirect()
+
+        if (
+            any(normalized_path == p or normalized_path.startswith(f'{p}/') for p in seller_admin_shared_paths)
+            and role not in ('seller', 'admin')
         ):
             return role_home_redirect()
 

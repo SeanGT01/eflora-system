@@ -1404,8 +1404,13 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.admin_orders') }}" class="nav-link {% if request.endpoint == 'templates.admin_orders' %}active{% endif %}">
-                        <i class="ri-shopping-bag-3-line nav-icon"></i> All Orders
+                    <a href="{{ url_for('templates.analytics') }}" class="nav-link {% if request.endpoint == 'templates.analytics' %}active{% endif %}">
+                        <i class="ri-bar-chart-grouped-line nav-icon"></i> Overview
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ url_for('templates.reports') }}" class="nav-link {% if request.endpoint == 'templates.reports' %}active{% endif %}">
+                        <i class="ri-file-chart-line nav-icon"></i> Reports
                     </a>
                 </li>
                 <li class="nav-item">
@@ -1453,6 +1458,7 @@
             </ul>
         </nav>
 
+        {% if session.role == 'seller' %}
         <hr class="sidebar-divider">
 
         <nav class="nav-section">
@@ -1470,6 +1476,7 @@
                 </li>
             </ul>
         </nav>
+        {% endif %}
 
         {% if session.get('role') != 'admin' %}
         <hr class="sidebar-divider">
@@ -1581,6 +1588,9 @@
 </div>
 
 <script>
+    const CURRENT_ROLE = {{ (session.get('role') or '')|tojson }};
+    const SELLER_NOTIF_API_BASE = '/api/seller/notifications';
+
     // Sidebar
     function toggleSidebar() {
         const sb = document.getElementById('sidebar');
@@ -1617,7 +1627,7 @@
         if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
         if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
         if (diff < 604800) return `${Math.floor(diff / 86400)} day${Math.floor(diff / 86400) > 1 ? 's' : ''} ago`;
-        return new Date(isoStr).toLocaleDateString();
+        return new Date(isoStr).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' });
     }
 
     function getNotifTargetUrl(n) {
@@ -1648,6 +1658,7 @@
     }
 
     async function loadNotifications() {
+        if (CURRENT_ROLE !== 'seller') return;
         const list = document.getElementById('notifList');
         const empty = document.getElementById('notifEmpty');
         const loading = document.getElementById('notifLoading');
@@ -1655,7 +1666,7 @@
         const markBtn = document.getElementById('markAllReadBtn');
         if (!list) return;
         try {
-            const res = await fetch('/api/seller/notifications');
+            const res = await fetch(SELLER_NOTIF_API_BASE);
             if (!res.ok) return;
             const data = await res.json();
             if (loading) loading.style.display = 'none';
@@ -1677,9 +1688,10 @@
     }
 
     async function markNotifRead(id, el) {
+        if (CURRENT_ROLE !== 'seller') return;
         if (el && el.classList.contains('unread')) {
             el.classList.remove('unread');
-            fetch(`/api/seller/notifications/${id}/read`, { method: 'POST' });
+            fetch(`${SELLER_NOTIF_API_BASE}/${id}/read`, { method: 'POST' });
             const remaining = document.querySelectorAll('.notif-item.unread').length;
             const dot = document.querySelector('.notif-dot');
             const markBtn = document.getElementById('markAllReadBtn');
@@ -1696,7 +1708,8 @@
     }
 
     async function markAllNotifsRead() {
-        await fetch('/api/seller/notifications/read-all', { method: 'POST' });
+        if (CURRENT_ROLE !== 'seller') return;
+        await fetch(`${SELLER_NOTIF_API_BASE}/read-all`, { method: 'POST' });
         document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
         const dot = document.querySelector('.notif-dot');
         if (dot) dot.style.display = 'none';
@@ -1756,16 +1769,19 @@
 
     // Poll unread count every 60s to keep dot accurate without reloading
     async function pollNotifDot() {
+        if (CURRENT_ROLE !== 'seller') return;
         try {
-            const res = await fetch('/api/seller/notifications');
+            const res = await fetch(SELLER_NOTIF_API_BASE);
             if (!res.ok) return;
             const data = await res.json();
             const dot = document.querySelector('.notif-dot');
             if (dot) dot.style.display = (data.unread_count > 0) ? 'block' : 'none';
         } catch (e) {}
     }
-    pollNotifDot();
-    setInterval(pollNotifDot, 60000);
+    if (CURRENT_ROLE === 'seller') {
+        pollNotifDot();
+        setInterval(pollNotifDot, 60000);
+    }
 
     // If page is restored from browser back-forward cache, force a fresh request
     // so server-side role guards can re-validate the current logged-in account.

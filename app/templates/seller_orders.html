@@ -1062,6 +1062,16 @@
                                     <span class="btn-label">Done</span>
                                 </button>
                                 {% endif %}
+                                {% if order.payment_status == 'cod_pending' and order.status in ['pending', 'accepted'] %}
+                                <button type="button"
+                                        class="orders-action-btn success seller-approve-cod"
+                                        data-order-id="{{ order.id }}"
+                                        title="Approve COD"
+                                        aria-label="Approve cash on delivery">
+                                    <i class="ri-check-double-line"></i>
+                                    <span class="btn-label">Approve COD</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -1589,6 +1599,15 @@
 
     document.getElementById('sellerVerifyPaymentBtn').addEventListener('click', () => {
         if (activePaymentOrderId) verifyPayment(activePaymentOrderId);
+    });
+
+    document.querySelectorAll('.seller-approve-cod').forEach(button => {
+        button.addEventListener('click', async () => {
+            const orderId = button.dataset.orderId;
+            if (!orderId) return;
+            if (!await window.openConfirmModal('Approve this COD order and move it to Preparing?')) return;
+            await verifyPayment(orderId);
+        });
     });
 
     const proofImage = document.getElementById('sellerPaymentProofImage');

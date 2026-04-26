@@ -865,13 +865,14 @@ table.ana-table {
 {% endblock %}
 
 {% block content %}
+{% set admin_view = is_admin or (session.get('role') == 'admin') %}
 <div class="ana">
 
   <!-- ─── Header ──────────────────────────────────────────── -->
   <div class="ana-header">
     <div>
-      <div class="ana-eyebrow">Store Insights{% if store %} — {{ store.name }}{% endif %}</div>
-      <h1 class="ana-title">Your Analytics, <em>in full bloom</em></h1>
+      <div class="ana-eyebrow">{% if admin_view %}Platform Overview — All Stores{% else %}Store Insights{% if store %} — {{ store.name }}{% endif %}{% endif %}</div>
+      <h1 class="ana-title">{% if admin_view %}Platform Analytics, <em>at a glance</em>{% else %}Your Analytics, <em>in full bloom</em>{% endif %}</h1>
       <div style="font-size:12px;color:var(--muted);margin-top:.4rem;">{{ period_label }}</div>
     </div>
 
@@ -1013,7 +1014,11 @@ table.ana-table {
     <div class="panel">
       <div class="panel-head">
         <span class="panel-title">Top Products</span>
-        <a href="{{ url_for('templates.seller_products') }}" class="panel-link">All <i class="ri-arrow-right-line"></i></a>
+        {% if admin_view %}
+          <a href="{{ url_for('templates.admin_stores') }}" class="panel-link">Stores <i class="ri-arrow-right-line"></i></a>
+        {% else %}
+          <a href="{{ url_for('templates.seller_products') }}" class="panel-link">All <i class="ri-arrow-right-line"></i></a>
+        {% endif %}
       </div>
 
       {% if top_products %}
@@ -1155,7 +1160,11 @@ table.ana-table {
   <div class="panel" style="margin-bottom:1.5rem;">
     <div class="panel-head">
       <span class="panel-title">Recent Orders</span>
-      <a href="{{ url_for('templates.seller_orders') }}" class="panel-link">View all <i class="ri-arrow-right-line"></i></a>
+      {% if admin_view %}
+        <a href="{{ url_for('templates.admin_stores') }}" class="panel-link">All stores <i class="ri-arrow-right-line"></i></a>
+      {% else %}
+        <a href="{{ url_for('templates.seller_orders') }}" class="panel-link">View all <i class="ri-arrow-right-line"></i></a>
+      {% endif %}
     </div>
     <div class="table-scroll">
       <table class="ana-table">
@@ -1197,7 +1206,7 @@ table.ana-table {
                 </td>
                 <td><span class="amt-cell">₱{{ '{:,.2f}'.format(o.amount) }}</span></td>
                 <td><span class="s-pill {{ pill_class }}">{{ st.replace('_',' ')|title }}</span></td>
-                <td style="color:var(--muted);font-size:12px;">{{ o.created_at.strftime('%b %d, %Y %H:%M') if o.created_at else '' }}</td>
+                <td style="color:var(--muted);font-size:12px;">{{ o.created_at_display if o.created_at_display is defined else (o.created_at.strftime('%b %d, %Y %I:%M %p') if o.created_at else '') }}</td>
               </tr>
             {% endfor %}
           {% else %}

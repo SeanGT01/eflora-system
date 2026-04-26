@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, ProductRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, AccountBan
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, AccountBan, StorePaymentSetting
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -14,6 +14,7 @@ import uuid
 import time
 import jwt
 import re
+import pytz
 #from PIL import Image
 import io
 from flask import send_file
@@ -30,6 +31,20 @@ from app import limiter
 templates_bp = Blueprint('templates', __name__)
 
 PH_MOBILE_REGEX = re.compile(r'^(?:\+63|0)9\d{9}$')
+PHT = pytz.timezone('Asia/Manila')
+
+
+def _password_strength_error(password):
+    pw = password or ''
+    if len(pw) < 8:
+        return 'Password must be at least 8 characters'
+    if not re.search(r'[a-z]', pw):
+        return 'Password must include at least one lowercase letter'
+    if not re.search(r'[A-Z]', pw):
+        return 'Password must include at least one uppercase letter'
+    if not re.search(r'[^A-Za-z0-9]', pw):
+        return 'Password must include at least one special character'
+    return None
 
 
 def _normalize_ph_mobile(phone_raw):
@@ -94,6 +109,19 @@ def _ensure_support_faqs_table():
         return False
 
 
+def _ensure_store_payment_settings_table():
+    """Create store_payment_settings from ORM if migration wasn't run yet."""
+    from sqlalchemy import inspect
+
+    try:
+        if inspect(db.engine).has_table('store_payment_settings'):
+            return True
+        StorePaymentSetting.__table__.create(db.engine, checkfirst=True)
+        return True
+    except Exception:
+        return False
+
+
 def _ensure_account_bans_table():
     """Create account_bans from ORM if migration wasn't run yet."""
     from sqlalchemy import inspect
@@ -110,6 +138,27 @@ def _ensure_account_bans_table():
     except Exception as exc:
         try:
             current_app.logger.warning('Could not ensure account_bans table: %s', exc)
+        except RuntimeError:
+            pass
+        return False
+
+
+def _ensure_saved_reports_table():
+    """Create saved_reports from ORM if migration wasn't run yet."""
+    from sqlalchemy import inspect
+
+    try:
+        if inspect(db.engine).has_table('saved_reports'):
+            return True
+        SavedReport.__table__.create(db.engine, checkfirst=True)
+        try:
+            current_app.logger.info('Created missing table saved_reports from model')
+        except RuntimeError:
+            pass
+        return True
+    except Exception as exc:
+        try:
+            current_app.logger.warning('Could not ensure saved_reports table: %s', exc)
         except RuntimeError:
             pass
         return False
@@ -1034,8 +1083,9 @@ def change_password():
         if new_password != confirm_password:
             return jsonify({'error': 'New passwords do not match'}), 400
         
-        if len(new_password) < 6:
-            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        pw_error = _password_strength_error(new_password)
+        if pw_error:
+            return jsonify({'error': pw_error}), 400
         
         # Verify current password
         if not user.check_password(current_password):
@@ -1224,9 +1274,10 @@ def register():
                                        error='Passwords do not match',
                                        form_data=request.form)
 
-            if len(password) < 6:
+            pw_error = _password_strength_error(password)
+            if pw_error:
                 return render_template('register.html',
-                                       error='Password must be at least 6 characters',
+                                       error=pw_error,
                                        form_data=request.form)
 
             if User.query.filter_by(email=email).first():
@@ -1971,7 +2022,185 @@ def dashboard():
         return redirect(url_for('templates.login'))
     if session.get('role') == 'seller':
         return redirect(url_for('templates.seller_dashboard'))
-    return render_template('dashboard.html')
+
+    if session.get('role') == 'admin':
+        return _render_admin_dashboard()
+
+    return render_template('dashboard.html', is_admin=False)
+
+
+def _render_admin_dashboard():
+    """Render the admin dashboard with platform-wide aggregates."""
+    from sqlalchemy import func, extract
+    from datetime import date, timedelta
+
+    today = date.today()
+    first_of_month = today.replace(day=1)
+    if first_of_month.month == 1:
+        first_of_prev_month = first_of_month.replace(year=first_of_month.year - 1, month=12)
+    else:
+        first_of_prev_month = first_of_month.replace(month=first_of_month.month - 1)
+
+    revenue_this_month = db.session.query(
+        func.coalesce(func.sum(Order.total_amount), 0)
+    ).filter(
+        Order.status == 'delivered',
+        Order.delivered_at >= first_of_month,
+    ).scalar() or 0
+
+    revenue_prev_month = db.session.query(
+        func.coalesce(func.sum(Order.total_amount), 0)
+    ).filter(
+        Order.status == 'delivered',
+        Order.delivered_at >= first_of_prev_month,
+        Order.delivered_at < first_of_month,
+    ).scalar() or 0
+
+    revenue_change = 0
+    if float(revenue_prev_month) > 0:
+        revenue_change = round(((float(revenue_this_month) - float(revenue_prev_month)) / float(revenue_prev_month)) * 100, 1)
+
+    orders_this_month = Order.query.filter(Order.created_at >= first_of_month).count()
+    orders_prev_month = Order.query.filter(
+        Order.created_at >= first_of_prev_month,
+        Order.created_at < first_of_month,
+    ).count()
+    orders_change = 0
+    if orders_prev_month > 0:
+        orders_change = round(((orders_this_month - orders_prev_month) / orders_prev_month) * 100, 1)
+
+    customers_this_month = db.session.query(func.count(User.id)).filter(
+        User.role == 'customer',
+        User.created_at >= first_of_month,
+    ).scalar() or 0
+    customers_prev_month = db.session.query(func.count(User.id)).filter(
+        User.role == 'customer',
+        User.created_at >= first_of_prev_month,
+        User.created_at < first_of_month,
+    ).scalar() or 0
+    customers_change = 0
+    if customers_prev_month > 0:
+        customers_change = round(((customers_this_month - customers_prev_month) / customers_prev_month) * 100, 1)
+
+    total_completed_statuses = Order.query.filter(
+        Order.status.in_(['delivered', 'cancelled']),
+        Order.created_at >= first_of_month,
+    ).count()
+    delivered_this_month = Order.query.filter(
+        Order.status == 'delivered',
+        Order.created_at >= first_of_month,
+    ).count()
+    delivery_rate = round((delivered_this_month / total_completed_statuses * 100), 1) if total_completed_statuses > 0 else 100.0
+
+    top_products_query = db.session.query(
+        Product.id,
+        Product.name,
+        Store.name.label('store_name'),
+        Category.name.label('category_name'),
+        func.coalesce(func.sum(OrderItem.quantity), 0).label('total_sold'),
+    ).join(OrderItem, OrderItem.product_id == Product.id) \
+     .join(Order, Order.id == OrderItem.order_id) \
+     .outerjoin(Store, Store.id == Product.store_id) \
+     .outerjoin(Category, Category.id == Product.main_category_id) \
+     .filter(Order.status == 'delivered') \
+     .group_by(Product.id, Product.name, Store.name, Category.name) \
+     .order_by(func.sum(OrderItem.quantity).desc()) \
+     .limit(5).all()
+
+    top_products = [{
+        'id': r.id,
+        'name': r.name,
+        'store_name': r.store_name or '—',
+        'category': r.category_name or 'General',
+        'total_sold': int(r.total_sold or 0),
+    } for r in top_products_query]
+
+    recent_orders_q = (Order.query
+                       .order_by(Order.created_at.desc())
+                       .limit(8)
+                       .all())
+    recent_orders_list = []
+    for o in recent_orders_q:
+        cust_name = o.customer.full_name if o.customer else 'Walk-in'
+        recent_orders_list.append({
+            'id': o.id,
+            'order_no': f"#{o.id:05d}",
+            'customer_name': cust_name,
+            'customer_initial': (cust_name[:1] or 'U').upper(),
+            'store_name': o.store.name if getattr(o, 'store', None) else '—',
+            'date': _fmt_pht(o.created_at) if o.created_at else '',
+            'total': float(o.total_amount or 0),
+            'status': o.status or 'pending',
+        })
+
+    chart_data = {}
+    for period_key, days in [('7d', 7), ('30d', 30), ('90d', 90)]:
+        start_date = today - timedelta(days=days)
+        daily_data = db.session.query(
+            func.date(Order.delivered_at).label('day'),
+            func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
+            func.count(Order.id).label('order_count'),
+        ).filter(
+            Order.status == 'delivered',
+            Order.delivered_at >= start_date,
+        ).group_by(func.date(Order.delivered_at)) \
+         .order_by(func.date(Order.delivered_at)).all()
+
+        labels = []
+        revenues = []
+        order_counts = []
+        for row in daily_data:
+            day_val = row.day
+            labels.append(day_val.strftime('%b %d') if hasattr(day_val, 'strftime') else str(day_val))
+            revenues.append(float(row.revenue))
+            order_counts.append(int(row.order_count))
+        chart_data[period_key] = {
+            'labels': labels,
+            'revenue': revenues,
+            'orders': order_counts,
+        }
+
+    total_stores = db.session.query(func.count(Store.id)).scalar() or 0
+    active_stores = db.session.query(func.count(Store.id)).filter(Store.status == 'active').scalar() or 0
+    pending_stores = db.session.query(func.count(Store.id)).filter(Store.status == 'pending').scalar() or 0
+
+    total_users = db.session.query(func.count(User.id)).scalar() or 0
+    total_riders = db.session.query(func.count(Rider.id)).scalar() or 0
+    active_riders = db.session.query(func.count(Rider.id)).filter(Rider.is_active.is_(True)).scalar() or 0
+    pending_orders = Order.query.filter(
+        Order.status.in_(['pending', 'preparing', 'accepted'])
+    ).count()
+
+    avg_rating_row = db.session.query(
+        func.coalesce(func.avg(ProductRating.rating), 0),
+        func.count(ProductRating.id),
+    ).first()
+    avg_rating = round(float(avg_rating_row[0]), 1) if avg_rating_row else 0
+    total_reviews = int(avg_rating_row[1]) if avg_rating_row else 0
+
+    return render_template(
+        'dashboard.html',
+        is_admin=True,
+        revenue_this_month=float(revenue_this_month),
+        revenue_change=revenue_change,
+        orders_this_month=orders_this_month,
+        orders_change=orders_change,
+        customers_this_month=customers_this_month,
+        customers_change=customers_change,
+        delivery_rate=delivery_rate,
+        top_products=top_products,
+        recent_orders=recent_orders_list,
+        chart_data=chart_data,
+        avg_rating=avg_rating,
+        total_reviews=total_reviews,
+        total_stores=total_stores,
+        active_stores=active_stores,
+        pending_stores=pending_stores,
+        total_users=total_users,
+        total_riders=total_riders,
+        active_riders=active_riders,
+        pending_orders=pending_orders,
+    )
 
 
 @templates_bp.route('/seller/dashboard')
@@ -2106,7 +2335,7 @@ def seller_dashboard():
             'id': o.id,
             'customer_name': o.customer.full_name if o.customer else 'Unknown',
             'customer_initial': (o.customer.full_name[0] if o.customer and o.customer.full_name else 'U'),
-            'date': o.created_at.strftime('%b %d, %Y %I:%M %p') if o.created_at else '',
+            'date': _fmt_pht(o.created_at) if o.created_at else '',
             'total': float(o.total_amount or 0),
             'status': o.status,
         })
@@ -2718,13 +2947,70 @@ def reject_seller_application(app_id):
 def admin_stores():
     if session.get('role') != 'admin':
         return redirect(url_for('templates.dashboard'))
-    return render_template('admin_stores.html')
 
-@templates_bp.route('/admin/orders')
-def admin_orders():
-    if session.get('role') != 'admin':
-        return redirect(url_for('templates.dashboard'))
-    return render_template('admin_orders.html')
+    from sqlalchemy import func
+    user_id = session.get('user_id')
+
+    stores = (Store.query
+              .filter(Store.status == 'active')
+              .order_by(Store.created_at.desc().nullslast(), Store.id.desc())
+              .all())
+
+    rows = []
+    counts = {
+        'total': Store.query.count(),
+        'active': Store.query.filter(Store.status == 'active').count(),
+        'pending': Store.query.filter(Store.status == 'pending').count(),
+        'suspended': Store.query.filter(Store.status == 'suspended').count(),
+    }
+    total_revenue = 0.0
+
+    for s in stores:
+        revenue = db.session.query(
+            func.coalesce(func.sum(Order.total_amount), 0)
+        ).filter(
+            Order.store_id == s.id,
+            Order.status == 'delivered'
+        ).scalar() or 0
+        revenue = float(revenue)
+
+        order_count = db.session.query(func.count(Order.id)).filter(
+            Order.store_id == s.id
+        ).scalar() or 0
+
+        product_count = db.session.query(func.count(Product.id)).filter(
+            Product.store_id == s.id,
+            Product.is_archived.is_(False)
+        ).scalar() or 0
+
+        owner_name = s.seller.full_name if s.seller else 'Unassigned'
+        owner_email = s.seller.email if s.seller else ''
+        status_key = (s.status or 'pending').lower()
+
+        rows.append({
+            'id': s.id,
+            'name': s.name,
+            'description': s.description or '',
+            'logo_url': s.logo_url,
+            'status': status_key,
+            'owner_name': owner_name,
+            'owner_email': owner_email,
+            'product_count': int(product_count),
+            'order_count': int(order_count),
+            'revenue': revenue,
+            'revenue_display': f"₱{revenue:,.2f}",
+            'created_at': _fmt_pht(s.created_at, '%b %d, %Y') if s.created_at else '—',
+        })
+
+        total_revenue += revenue
+
+    return render_template(
+        'admin_stores.html',
+        stores=rows,
+        store_counts=counts,
+        total_platform_revenue=total_revenue,
+        total_platform_revenue_display=f"₱{total_revenue:,.2f}",
+    )
 
 
 @templates_bp.route('/admin/testimonials')
@@ -2739,6 +3025,168 @@ def admin_support():
     if session.get('role') != 'admin':
         return redirect(url_for('templates.dashboard'))
     return render_template('admin_support.html')
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ADMIN STORES API
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _store_summary_dict(store: 'Store') -> dict:
+    """Serialize a Store row plus computed counters for the admin UI."""
+    from sqlalchemy import func as sa_func
+    revenue = db.session.query(
+        sa_func.coalesce(sa_func.sum(Order.total_amount), 0)
+    ).filter(
+        Order.store_id == store.id,
+        Order.status == 'delivered'
+    ).scalar() or 0
+    revenue = float(revenue)
+
+    order_count = db.session.query(sa_func.count(Order.id)).filter(
+        Order.store_id == store.id
+    ).scalar() or 0
+
+    product_count = db.session.query(sa_func.count(Product.id)).filter(
+        Product.store_id == store.id,
+        Product.is_archived.is_(False)
+    ).scalar() or 0
+
+    return {
+        'id': store.id,
+        'name': store.name,
+        'description': store.description or '',
+        'address': store.address or '',
+        'contact_number': store.contact_number or '',
+        'logo_url': store.logo_url,
+        'status': (store.status or 'pending').lower(),
+        'owner': {
+            'id': store.seller.id if store.seller else None,
+            'full_name': store.seller.full_name if store.seller else 'Unassigned',
+            'email': store.seller.email if store.seller else '',
+            'phone': getattr(store.seller, 'phone', None) if store.seller else None,
+        } if store.seller else {'id': None, 'full_name': 'Unassigned', 'email': '', 'phone': None},
+        'stats': {
+            'product_count': int(product_count),
+            'order_count': int(order_count),
+            'revenue': revenue,
+            'revenue_display': f"₱{revenue:,.2f}",
+        },
+        'created_at': _fmt_pht(store.created_at, '%Y-%m-%d %I:%M %p') if store.created_at else None,
+        'updated_at': _fmt_pht(store.updated_at, '%Y-%m-%d %I:%M %p') if store.updated_at else None,
+    }
+
+
+@templates_bp.route('/api/v1/admin/stores', methods=['GET'])
+def api_admin_stores_list():
+    """List all stores with summary stats (admin only)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        stores = (Store.query
+                  .filter(Store.status == 'active')
+                  .order_by(Store.created_at.desc().nullslast(), Store.id.desc())
+                  .all())
+        return jsonify({'stores': [_store_summary_dict(s) for s in stores]})
+    except Exception as ex:
+        current_app.logger.exception('api_admin_stores_list: %s', ex)
+        return jsonify({'stores': [], 'error': 'Could not load stores'}), 500
+
+
+@templates_bp.route('/api/v1/admin/stores/<int:store_id>', methods=['GET'])
+def api_admin_store_detail(store_id):
+    """Return full details for one store (admin only)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    store = Store.query.get_or_404(store_id)
+    return jsonify({'store': _store_summary_dict(store)})
+
+
+@templates_bp.route('/api/v1/admin/stores/<int:store_id>', methods=['PUT'])
+def api_admin_store_update(store_id):
+    """Update store details (name, description, address, contact, status)."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    store = Store.query.get_or_404(store_id)
+    data = request.get_json(silent=True) or {}
+
+    if 'name' in data:
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'error': 'Name cannot be empty'}), 400
+        store.name = name
+    if 'description' in data:
+        store.description = (data.get('description') or '').strip() or None
+    if 'address' in data:
+        store.address = (data.get('address') or '').strip() or store.address
+    if 'contact_number' in data:
+        store.contact_number = (data.get('contact_number') or '').strip() or None
+    if 'status' in data:
+        new_status = (data.get('status') or '').strip().lower()
+        if new_status in ('pending', 'active', 'suspended'):
+            store.status = new_status
+
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'store': _store_summary_dict(store)})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_store_update: %s', ex)
+        return jsonify({'error': 'Could not update store'}), 500
+
+
+@templates_bp.route('/api/v1/admin/stores/<int:store_id>/status', methods=['PUT'])
+def api_admin_store_status(store_id):
+    """Quick status toggle (active / suspended / pending)."""
+    user_id = session.get('user_id')
+    session_role = (session.get('role') or '').strip().lower()
+    user = User.query.get(user_id) if user_id else None
+    db_role = (user.role or '').strip().lower() if user else ''
+
+    if not user_id or (session_role != 'admin' and db_role != 'admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    # Self-heal stale/missing session role if DB confirms admin.
+    if db_role == 'admin' and session_role != 'admin':
+        session['role'] = 'admin'
+
+    store = Store.query.get_or_404(store_id)
+    data = request.get_json(silent=True) or {}
+    new_status = (data.get('status') or '').strip().lower()
+    if new_status not in ('pending', 'active', 'suspended'):
+        return jsonify({'error': 'Invalid status'}), 400
+    store.status = new_status
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'status': store.status})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_store_status: %s', ex)
+        return jsonify({'error': 'Could not update status'}), 500
+
+
+@templates_bp.route('/api/v1/admin/stores/<int:store_id>', methods=['DELETE'])
+def api_admin_store_delete(store_id):
+    """Delete a store. Refuses deletion if there are order references that
+    cannot be safely removed; admin should suspend instead in that case.
+    """
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    store = Store.query.get_or_404(store_id)
+
+    has_orders = db.session.query(Order.id).filter(Order.store_id == store.id).first()
+    if has_orders:
+        return jsonify({
+            'error': 'Cannot delete a store with existing orders. Suspend the store instead.'
+        }), 400
+
+    try:
+        db.session.delete(store)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.exception('api_admin_store_delete: %s', ex)
+        return jsonify({'error': 'Could not delete store'}), 500
 
 
 @templates_bp.route('/api/admin/support-faqs', methods=['GET'])
@@ -4122,24 +4570,11 @@ def seller_orders():
         order_dict['payment_proof'] = order.payment_proof
         order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
         
-        # ✅ FIX: Add formatted dates
+        # Always render seller order timestamps in Philippine Time.
         if order.created_at:
-            # Check if created_at is already a datetime object
-            if isinstance(order.created_at, datetime):
-                order_dict['date_formatted'] = order.created_at.strftime('%Y-%m-%d')
-                order_dict['time_formatted'] = order.created_at.strftime('%H:%M')
-                order_dict['datetime_formatted'] = order.created_at.strftime('%Y-%m-%d %H:%M')
-            else:
-                # If it's a string, try to parse it
-                try:
-                    dt = datetime.fromisoformat(order.created_at.replace('Z', '+00:00'))
-                    order_dict['date_formatted'] = dt.strftime('%Y-%m-%d')
-                    order_dict['time_formatted'] = dt.strftime('%H:%M')
-                    order_dict['datetime_formatted'] = dt.strftime('%Y-%m-%d %H:%M')
-                except:
-                    order_dict['date_formatted'] = str(order.created_at)
-                    order_dict['time_formatted'] = ''
-                    order_dict['datetime_formatted'] = str(order.created_at)
+            order_dict['date_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d')
+            order_dict['time_formatted'] = _fmt_pht(order.created_at, '%H:%M')
+            order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d %H:%M')
         else:
             order_dict['date_formatted'] = ''
             order_dict['time_formatted'] = ''
@@ -4147,10 +4582,14 @@ def seller_orders():
         
         orders_data.append(order_dict)
 
-    today = datetime.utcnow().date()
+    today = datetime.now(PHT).date()
     order_stats = {
         'total': len(orders),
-        'today': sum(1 for order in orders if order.created_at and order.created_at.date() == today),
+        'today': sum(
+            1
+            for order in orders
+            if order.created_at and _fmt_pht(order.created_at, '%Y-%m-%d') == today.strftime('%Y-%m-%d')
+        ),
         'pending': sum(1 for order in orders if order.status == 'pending'),
         'payment_review': sum(1 for order in orders if order.payment_status == 'pending_verification'),
         'preparing': sum(1 for order in orders if order.status in ['accepted', 'preparing']),
@@ -4185,6 +4624,14 @@ def _serialize_seller_order_for_template(order):
     order_dict['customer_phone'] = order.customer.phone if order.customer else None
     order_dict['payment_proof'] = order.payment_proof
     order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
+    if order.created_at:
+        order_dict['date_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d')
+        order_dict['time_formatted'] = _fmt_pht(order.created_at, '%H:%M')
+        order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d %H:%M')
+    else:
+        order_dict['date_formatted'] = ''
+        order_dict['time_formatted'] = ''
+        order_dict['datetime_formatted'] = ''
     return order_dict
 
 
@@ -4283,19 +4730,24 @@ def seller_order_verify_payment_api(order_id):
     if not order:
         return jsonify({'error': 'Order not found'}), 404
 
-    if not order.payment_proof_url:
-        return jsonify({'error': 'No payment proof uploaded'}), 400
-
-    # Verify payment and immediately set status to "preparing"
-    order.payment_status = 'verified'
-    order.set_status('preparing')  # Changed from 'accepted' to 'preparing'
+    payment_status = (order.payment_status or '').lower()
+    if payment_status == 'cod_pending':
+        # COD approval flow: no receipt required, seller confirms and moves to preparing.
+        order.payment_status = 'cod_approved'
+        order.set_status('preparing')
+    else:
+        if not order.payment_proof_url:
+            return jsonify({'error': 'No payment proof uploaded'}), 400
+        # GCash verification flow.
+        order.payment_status = 'verified'
+        order.set_status('preparing')
     db.session.commit()
 
-    current_app.logger.info(f"Order #{order_id} payment verified, status changed to preparing")
+    current_app.logger.info(f"Order #{order_id} payment/COD approved, status changed to preparing")
 
     return jsonify({
         'success': True,
-        'message': 'Payment verified. Order status changed to Preparing.',
+        'message': 'Order approved. Status changed to Preparing.',
         'order': _serialize_seller_order_for_template(order)
     }), 200
 
@@ -5364,26 +5816,86 @@ def _human_size(num_bytes: int) -> str:
     return f"{size:.1f} {units[idx]}"
 
 
+def _fmt_pht(dt: datetime, pattern: str = '%b %d, %Y %I:%M %p') -> str:
+    """Format UTC-naive/aware datetimes in Philippine Time."""
+    if not dt:
+        return ''
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(PHT).strftime(pattern)
+
+
 def _push_saved_report_entry(entry: dict) -> None:
-    """Store report metadata in session so it appears in Saved Reports UI."""
-    items = session.get('saved_reports') or []
-    items.insert(0, entry)
-    # Keep only latest 30 rows to prevent session bloat.
-    session['saved_reports'] = items[:30]
-    session.modified = True
+    """Persist report metadata so it survives logout/login."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return
+
+    if not _ensure_saved_reports_table():
+        return
+
+    row = SavedReport(
+        user_id=user_id,
+        name=entry.get('name') or 'Report',
+        description=entry.get('description'),
+        report_type=entry.get('type'),
+        report_format=entry.get('format'),
+        last_generated=entry.get('last_generated'),
+        schedule=entry.get('schedule'),
+        size=entry.get('size'),
+    )
+    db.session.add(row)
+    db.session.commit()
+
+    # Keep latest 30 entries per user.
+    stale_rows = (SavedReport.query
+                  .filter_by(user_id=user_id)
+                  .order_by(SavedReport.created_at.desc(), SavedReport.id.desc())
+                  .offset(30)
+                  .all())
+    if stale_rows:
+        for stale in stale_rows:
+            db.session.delete(stale)
+        db.session.commit()
+
+
+def _load_saved_reports_for_user(limit: int = 30):
+    user_id = session.get('user_id')
+    if not user_id:
+        return []
+    if not _ensure_saved_reports_table():
+        return []
+    rows = (SavedReport.query
+            .filter_by(user_id=user_id)
+            .order_by(SavedReport.created_at.desc(), SavedReport.id.desc())
+            .limit(limit)
+            .all())
+    return [r.to_dict() for r in rows]
 
 
 @templates_bp.route('/analytics')
 def analytics():
-    """Seller analytics dashboard — all numbers come from the database."""
+    """Analytics dashboard — auto-switches between seller (per-store) and
+    admin (platform-wide) modes based on session role.
+    """
     if 'user_id' not in session:
         return redirect(url_for('templates.login'))
+
+    period, fr, to = _request_period_args()
+
+    if session.get('role') == 'admin':
+        from app.utils.report_service import compute_admin_analytics
+        ctx = compute_admin_analytics(period=period, custom_from=fr, custom_to=to)
+        ctx['no_store'] = False
+        ctx['is_admin'] = True
+        return render_template('analytics.html', **ctx)
 
     store = _resolve_report_store()
     if not store:
         return render_template(
             'analytics.html',
             store=None,
+            is_admin=False,
             period='week',
             period_label='—',
             totals={'revenue': 0, 'revenue_display': '₱0.00', 'orders': 0,
@@ -5400,9 +5912,9 @@ def analytics():
         )
 
     from app.utils.report_service import compute_analytics
-    period, fr, to = _request_period_args()
     ctx = compute_analytics(store, period=period, custom_from=fr, custom_to=to)
     ctx['no_store'] = False
+    ctx['is_admin'] = False
     return render_template('analytics.html', **ctx)
 
 
@@ -5412,13 +5924,17 @@ def analytics_data():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
-    store = _resolve_report_store()
-    if not store:
-        return jsonify({'error': 'No store found for this seller'}), 404
-
-    from app.utils.report_service import compute_analytics
     period, fr, to = _request_period_args()
-    ctx = compute_analytics(store, period=period, custom_from=fr, custom_to=to)
+
+    if session.get('role') == 'admin':
+        from app.utils.report_service import compute_admin_analytics
+        ctx = compute_admin_analytics(period=period, custom_from=fr, custom_to=to)
+    else:
+        store = _resolve_report_store()
+        if not store:
+            return jsonify({'error': 'No store found for this seller'}), 404
+        from app.utils.report_service import compute_analytics
+        ctx = compute_analytics(store, period=period, custom_from=fr, custom_to=to)
 
     return jsonify({
         'period': ctx['period'],
@@ -5445,7 +5961,7 @@ def analytics_data():
         },
         'recent_orders': [{
             **o,
-            'created_at': o['created_at'].strftime('%b %d, %Y %H:%M') if o.get('created_at') else '',
+            'created_at': _fmt_pht(o.get('created_at')) if o.get('created_at') else '',
         } for o in ctx['recent_orders']],
         'rating': ctx['rating'],
     })
@@ -5466,22 +5982,49 @@ def settings():
 
 @templates_bp.route('/reports')
 def reports():
-    """Reports landing page — multi-select report builder."""
+    """Reports landing page — multi-select report builder.
+
+    Admins see the platform-wide catalogue (sales/orders/users/stores/etc.)
+    while sellers see the original per-store catalogue.
+    """
     if 'user_id' not in session:
         return redirect(url_for('templates.login'))
 
+    is_admin = session.get('role') == 'admin'
+
+    if is_admin:
+        from app.utils.report_service import (
+            ADMIN_REPORT_TYPES,
+            ADMIN_REPORT_TYPE_LABELS,
+            AdminScope,
+        )
+        store = AdminScope('All Stores')
+        report_type_options = [
+            {'value': key, 'label': ADMIN_REPORT_TYPE_LABELS[key]}
+            for key in ADMIN_REPORT_TYPES
+        ]
+        return render_template(
+            'reports.html',
+            store=store,
+            is_admin=True,
+            report_type_options=report_type_options,
+            report_types=ADMIN_REPORT_TYPES,
+            saved_reports=_load_saved_reports_for_user(),
+            report_templates=[],
+        )
+
     from app.utils.report_service import REPORT_TYPES, REPORT_TYPE_LABELS
     store = _resolve_report_store()
-
     report_type_options = [
         {'value': key, 'label': REPORT_TYPE_LABELS[key]} for key in REPORT_TYPES
     ]
     return render_template(
         'reports.html',
         store=store,
+        is_admin=False,
         report_type_options=report_type_options,
         report_types=REPORT_TYPES,
-        saved_reports=session.get('saved_reports', []),
+        saved_reports=_load_saved_reports_for_user(),
         report_templates=[],
     )
 
@@ -5492,12 +6035,6 @@ def reports_preview():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
 
-    store = _resolve_report_store()
-    if not store:
-        return jsonify({'error': 'No store found for this seller'}), 404
-
-    from app.utils.report_service import build_report_payload
-
     raw_types = (
         request.values.getlist('types[]')
         or request.values.getlist('types')
@@ -5505,7 +6042,42 @@ def reports_preview():
         or []
     )
     period, fr, to = _request_period_args()
-    payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
+
+    if session.get('role') == 'admin':
+        from app.utils.report_service import build_admin_report_payload
+        payload = build_admin_report_payload(raw_types, period=period, custom_from=fr, custom_to=to)
+    else:
+        store = _resolve_report_store()
+        if not store:
+            return jsonify({'error': 'No store found for this seller'}), 404
+        from app.utils.report_service import build_report_payload
+        payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
+
+    requester = User.query.get(session.get('user_id'))
+    payload['requested_by'] = requester.full_name if requester else 'System User'
+    payload['store_logo_url'] = getattr(payload.get('store'), 'logo_url', None)
+
+    # Prefer a real system logo file if available.
+    logo_candidates = [
+        os.path.join(current_app.root_path, 'static', 'images', 'eflora-flower-logo.png'),
+        os.path.join(current_app.root_path, 'static', 'images', 'app_logo.png'),
+        os.path.join(current_app.root_path, 'static', 'uploads', 'app_logo.png'),
+        os.path.abspath(os.path.join(current_app.root_path, '..', '..', 'eflowers_app', 'assets', 'images', 'app_logo.png')),
+    ]
+    payload['system_logo_path'] = next((p for p in logo_candidates if os.path.exists(p)), None)
+
+    requester = User.query.get(session.get('user_id'))
+    payload['requested_by'] = requester.full_name if requester else 'System User'
+    payload['store_logo_url'] = getattr(payload.get('store'), 'logo_url', None)
+
+    # Prefer a real system logo file if available.
+    logo_candidates = [
+        os.path.join(current_app.root_path, 'static', 'images', 'eflora-flower-logo.png'),
+        os.path.join(current_app.root_path, 'static', 'images', 'app_logo.png'),
+        os.path.join(current_app.root_path, 'static', 'uploads', 'app_logo.png'),
+        os.path.abspath(os.path.join(current_app.root_path, '..', '..', 'eflowers_app', 'assets', 'images', 'app_logo.png')),
+    ]
+    payload['system_logo_path'] = next((p for p in logo_candidates if os.path.exists(p)), None)
 
     return jsonify({
         'period': payload['period'],
@@ -5530,12 +6102,6 @@ def reports_generate():
     if 'user_id' not in session:
         return redirect(url_for('templates.login'))
 
-    store = _resolve_report_store()
-    if not store:
-        return jsonify({'error': 'No store found for this seller'}), 404
-
-    from app.utils.report_service import build_report_payload, render_pdf, render_csv_bundle
-
     raw_types = (
         request.values.getlist('types[]')
         or request.values.getlist('types')
@@ -5550,22 +6116,38 @@ def reports_generate():
               or 'month').lower()
     fr = request.values.get('from') or (request.get_json(silent=True) or {}).get('from')
     to = request.values.get('to') or (request.get_json(silent=True) or {}).get('to')
+    skip_save = str(
+        request.values.get('skip_save')
+        or (request.get_json(silent=True) or {}).get('skip_save')
+        or ''
+    ).strip().lower() in {'1', 'true', 'yes'}
 
-    payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
+    from app.utils.report_service import render_pdf, render_csv_bundle
+
+    if session.get('role') == 'admin':
+        from app.utils.report_service import build_admin_report_payload
+        payload = build_admin_report_payload(raw_types, period=period, custom_from=fr, custom_to=to)
+    else:
+        store = _resolve_report_store()
+        if not store:
+            return jsonify({'error': 'No store found for this seller'}), 404
+        from app.utils.report_service import build_report_payload
+        payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
 
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M')
     if fmt == 'pdf':
         pdf_bytes = render_pdf(payload)
         filename = f"eflora_report_{timestamp}.pdf"
-        _push_saved_report_entry({
-            'name': filename,
-            'description': f"{len(payload.get('sections', []))} section(s) · {payload.get('period_label', '')}",
-            'type': ', '.join(payload.get('types', [])) or 'all',
-            'format': 'pdf',
-            'last_generated': datetime.utcnow().strftime('%b %d, %Y %H:%M UTC'),
-            'schedule': None,
-            'size': _human_size(len(pdf_bytes)),
-        })
+        if not skip_save:
+            _push_saved_report_entry({
+                'name': filename,
+                'description': f"{len(payload.get('sections', []))} section(s) · {payload.get('period_label', '')}",
+                'type': ', '.join(payload.get('types', [])) or 'all',
+                'format': 'pdf',
+                'last_generated': datetime.now(PHT).strftime('%b %d, %Y %I:%M %p PHT'),
+                'schedule': None,
+                'size': _human_size(len(pdf_bytes)),
+            })
         response = make_response(pdf_bytes)
         response.headers['Content-Type'] = 'application/pdf'
         response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -5573,19 +6155,40 @@ def reports_generate():
 
     # csv / zip
     filename, data, mime = render_csv_bundle(payload)
-    _push_saved_report_entry({
-        'name': filename,
-        'description': f"{len(payload.get('sections', []))} section(s) · {payload.get('period_label', '')}",
-        'type': ', '.join(payload.get('types', [])) or 'all',
-        'format': 'excel' if mime == 'application/zip' else 'csv',
-        'last_generated': datetime.utcnow().strftime('%b %d, %Y %H:%M UTC'),
-        'schedule': None,
-        'size': _human_size(len(data)),
-    })
+    if not skip_save:
+        _push_saved_report_entry({
+            'name': filename,
+            'description': f"{len(payload.get('sections', []))} section(s) · {payload.get('period_label', '')}",
+            'type': ', '.join(payload.get('types', [])) or 'all',
+            'format': 'excel' if mime == 'application/zip' else 'csv',
+            'last_generated': datetime.now(PHT).strftime('%b %d, %Y %I:%M %p PHT'),
+            'schedule': None,
+            'size': _human_size(len(data)),
+        })
     response = make_response(data)
     response.headers['Content-Type'] = mime
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+@templates_bp.route('/reports/saved/<int:report_id>', methods=['DELETE'])
+def delete_saved_report(report_id):
+    """Delete one saved report row owned by the logged-in user."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if not _ensure_saved_reports_table():
+        return jsonify({'error': 'Storage not ready'}), 500
+
+    row = SavedReport.query.filter_by(id=report_id, user_id=session['user_id']).first()
+    if not row:
+        return jsonify({'error': 'Saved report not found'}), 404
+    try:
+        db.session.delete(row)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Could not delete saved report'}), 500
 
 @templates_bp.route('/logout')
 def logout():
@@ -6768,6 +7371,7 @@ def get_store_time_slots_web(store_id):
 @seller_required
 def store_settings():
     try:
+        _ensure_store_payment_settings_table()
         store = Store.query.filter_by(seller_id=session['user_id']).first()
         if not store:
             flash('Store not found.', 'error')
@@ -6809,11 +7413,15 @@ def store_settings():
             print(f"First QR URL: {gcash_qr_data[0]['url']}")
         print("="*60 + "\n")
         
+        payment_setting = StorePaymentSetting.query.filter_by(store_id=store.id).first()
+        allow_cod = bool(payment_setting.allow_cod) if payment_setting else False
+
         return render_template('store_settings.html', 
                              store=store,
                              municipalities=municipalities,
                              get_barangays=get_barangays,
-                             gcash_qr_data=gcash_qr_data)
+                             gcash_qr_data=gcash_qr_data,
+                             allow_cod=allow_cod)
     
     except Exception as e:
         print(f"❌ Error in store_settings: {str(e)}")
@@ -6833,6 +7441,7 @@ def update_store_settings():
     import json
     
     try:
+        _ensure_store_payment_settings_table()
         store = Store.query.filter_by(seller_id=session['user_id']).first()
         if not store:
             return jsonify({'error': 'Store not found'}), 404
@@ -7066,6 +7675,9 @@ def update_store_settings():
                 except:
                     qr_ids_to_delete = []
 
+        primary_qr_id = data.get('primary_qr_id')
+        primary_qr_public_id = data.get('primary_qr_public_id')
+
         # Import Cloudinary helper
         from app.utils.cloudinary_helper import delete_from_cloudinary
 
@@ -7094,7 +7706,7 @@ def update_store_settings():
             filename = data.get(f'gcash_qr_filename_{qr_index}')
             
             if public_id and url:
-                is_primary = (next_sort_order == 0)
+                is_primary = False
                 
                 new_qr = GCashQR(
                     store_id=store.id,
@@ -7124,11 +7736,42 @@ def update_store_settings():
             kept_qrs = GCashQR.query.filter(GCashQR.id.in_(qr_ids_to_keep)).all()
             for i, qr in enumerate(kept_qrs):
                 qr.sort_order = i
-                qr.is_primary = (i == 0)
+                qr.is_primary = False
+
+        # Persist explicit primary QR choice from UI.
+        all_store_qrs = GCashQR.query.filter_by(store_id=store.id).all()
+        for qr in all_store_qrs:
+            qr.is_primary = False
+
+        chosen_primary = None
+        if primary_qr_id:
+            try:
+                chosen_primary = GCashQR.query.filter_by(id=int(primary_qr_id), store_id=store.id).first()
+            except Exception:
+                chosen_primary = None
+
+        if not chosen_primary and primary_qr_public_id:
+            chosen_primary = GCashQR.query.filter_by(store_id=store.id, public_id=primary_qr_public_id).first()
+
+        if not chosen_primary and all_store_qrs:
+            chosen_primary = sorted(all_store_qrs, key=lambda q: (q.sort_order or 0, q.id or 0))[0]
+
+        if chosen_primary:
+            chosen_primary.is_primary = True
 
         # Update GCash instructions
         if 'gcash_instructions' in data:
             store.gcash_instructions = data['gcash_instructions']
+
+        # Store-level payment options
+        if 'allow_cod' in data:
+            allow_cod_raw = str(data.get('allow_cod', '')).strip().lower()
+            allow_cod = allow_cod_raw in {'1', 'true', 'yes', 'on'}
+            payment_setting = StorePaymentSetting.query.filter_by(store_id=store.id).first()
+            if not payment_setting:
+                payment_setting = StorePaymentSetting(store_id=store.id)
+                db.session.add(payment_setting)
+            payment_setting.allow_cod = allow_cod
         
         store.updated_at = datetime.utcnow()
         db.session.commit()
@@ -8146,10 +8789,14 @@ def get_store_gcash_qrs(store_id):
                         'is_primary': (i == 0)
                     })
         
+        _ensure_store_payment_settings_table()
+        payment_setting = StorePaymentSetting.query.filter_by(store_id=store.id).first()
+
         return jsonify({
             'success': True,
             'qr_codes': qr_codes,
-            'instructions': store.gcash_instructions
+            'instructions': store.gcash_instructions,
+            'allow_cod': bool(payment_setting.allow_cod) if payment_setting else False,
         })
         
     except Exception as e:
@@ -8546,13 +9193,12 @@ def pos_order_detail_api(order_id):
                 'subtotal': item_subtotal
             })
 
-        # created_at is stored as PH local time (naive datetime), NOT UTC.
-        # Just label it with +08:00 offset directly — no UTC conversion needed.
+        # created_at is stored as PH local time (naive datetime), so label with +08:00.
         created_at_iso = None
         created_at_date = None
         if order.created_at:
-            created_at_iso  = order.created_at.strftime('%Y-%m-%dT%H:%M:%S+00:00')
-            created_at_date = order.created_at.strftime('%Y-%m-%d')
+            created_at_iso  = order.created_at.strftime('%Y-%m-%dT%H:%M:%S+08:00')
+            created_at_date = _fmt_pht(order.created_at, '%Y-%m-%d')
 
         return jsonify({
             'id': order.id,
@@ -8657,8 +9303,8 @@ def pos_order_history_api():
         item_count = sum(item.quantity for item in o.items)
 
         if o.created_at:
-            created_at_iso  = o.created_at.strftime('%Y-%m-%dT%H:%M:%S+00:00')
-            created_at_date = o.created_at.strftime('%Y-%m-%d')
+            created_at_iso  = o.created_at.strftime('%Y-%m-%dT%H:%M:%S+08:00')
+            created_at_date = _fmt_pht(o.created_at, '%Y-%m-%d')
         else:
             created_at_iso  = None
             created_at_date = None

@@ -16,30 +16,7 @@
 <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css' />
 
 <style>
-    /* Ensure QR images are always visible */
-.qr-slot img {
-    display: block !important;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    background: white;
-}
-
-.qr-slot.has-image {
-    border: 2px solid var(--deep-rose) !important;
-}
-
-.qr-slot.has-image .slot-placeholder {
-    display: none !important;
-}
-
-.qr-slot.has-image img {
-    display: block !important;
-}
-
-.qr-slot.has-image .remove-image {
-    display: flex !important;
-}
+    /* QR visibility handled by JS + scoped QR slot styles below */
 
 .qr-slot .primary-badge {
     display: none;
@@ -872,6 +849,14 @@
         pointer-events: none;
         border-radius: var(--radius-lg);
     }
+
+/* Keep QR section clean in read-only mode: no top overlay strip */
+#qr-settings-content:not(.editing) .qr-gallery {
+    filter: none !important;
+}
+#qr-settings-content:not(.editing)::after {
+    display: none !important;
+}
     
     .summary-field {
         margin-bottom: 0.6rem;
@@ -1118,7 +1103,7 @@
     }
     
     .qr-slot.has-image .primary-selector {
-        display: flex !important;
+        display: none !important;
     }
     
     .primary-qr-radio {
@@ -1978,11 +1963,96 @@
         border-color: #c0392b;
         color: white;
     }
+.settings-wrapper{
+    max-width: 1360px;
+    margin: 0 auto;
+}
+.settings-page-grid{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:1rem;
+}
+@media (min-width: 1100px){
+    .settings-page-grid{
+        grid-template-columns: 1.08fr .92fr;
+        align-items:start;
+    }
+}
+.settings-card{
+    border:1px solid rgba(212,120,138,.24);
+    border-radius:18px;
+    box-shadow:0 12px 30px rgba(44,37,32,.08);
+    background:linear-gradient(180deg,#fffdfa 0%, #fff 100%);
+}
+.card-header{
+    padding:1rem 1.1rem;
+    border-bottom:1px solid rgba(212,120,138,.16);
+    background:linear-gradient(90deg,rgba(212,120,138,.1),rgba(255,255,255,.8));
+}
+.card-body{
+    padding:1rem 1.1rem 1.15rem;
+}
+.cod-toggle-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.9rem;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:.75rem .9rem;
+}
+.cod-toggle-copy{
+    display:flex;
+    flex-direction:column;
+    gap:.15rem;
+}
+.cod-toggle-copy small{
+    color:var(--muted);
+    font-size:12px;
+}
+.cod-toggle-switch{
+    position:relative;
+    width:52px;
+    height:30px;
+    flex-shrink:0;
+}
+.cod-toggle-switch input{
+    position:absolute;
+    opacity:0;
+    width:0;
+    height:0;
+}
+.cod-toggle-slider{
+    position:absolute;
+    inset:0;
+    border-radius:999px;
+    background:#d8d2cb;
+    transition:.2s ease;
+}
+.cod-toggle-slider::before{
+    content:'';
+    position:absolute;
+    width:24px;
+    height:24px;
+    left:3px;
+    top:3px;
+    border-radius:50%;
+    background:#fff;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);
+    transition:.2s ease;
+}
+.cod-toggle-switch input:checked + .cod-toggle-slider{
+    background:var(--deep-rose);
+}
+.cod-toggle-switch input:checked + .cod-toggle-slider::before{
+    transform:translateX(22px);
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="settings-container">
+<div class="settings-container settings-wrapper">
     <div class="settings-header">
         <div>
             <h1 class="settings-title">Store Settings</h1>
@@ -1993,7 +2063,7 @@
         </div>
     </div>
     
-    <div class="settings-grid">
+    <div class="settings-grid settings-page-grid">
         <!-- Left Column - Basic Info & Map -->
         <div>
             <!-- Basic Information Card -->
@@ -2605,8 +2675,8 @@
                     <div class="card-header-left">
                         <div class="card-header-icon"><i class="ri-smartphone-line"></i></div>
                         <div>
-                            <div class="card-header-title">GCash Payment</div>
-                            <div class="card-header-subtitle">Upload GCash QR codes for customer payments</div>
+                            <div class="card-header-title">Payment Options</div>
+                            <div class="card-header-subtitle">Manage GCash QR and Cash on Delivery availability</div>
                         </div>
                     </div>
                     <button type="button" class="btn-section-edit" id="edit-qr-settings" style="margin-left: auto;">
@@ -2619,7 +2689,6 @@
                     <div class="section-content" id="qr-settings-content">
                        
                 <div class="form-group">
-                    <label class="form-label">GCash QR Codes <span class="form-hint" style="margin-left: 0.5rem;">(Up to 3 QR codes)</span></label>
                     
                     <div class="qr-gallery" id="qrGallery">
                         <!-- QR slots will be generated here -->
@@ -2630,7 +2699,7 @@
                         <div class="qr-slot">
                             <input type="file" accept="image/png,image/jpeg,image/jpg" style="display: none;">
                             <input type="radio" name="primary-qr" class="primary-qr-radio" style="display: none;">
-                            <img src="" alt="GCash QR" style="display: none;">
+                            <img src="" alt="" style="display: none;">
                             <div class="slot-placeholder">
                                 <i class="ri-qr-code-line"></i>
                                 <span>Add QR</span>
@@ -2638,10 +2707,7 @@
                             <button class="remove-image" type="button">
                                 <i class="ri-close-line"></i>
                             </button>
-                            <div class="primary-badge" style="display: none; position: absolute; bottom: 8px; left: 8px; background: var(--deep-rose); color: white; font-size: 10px; padding: 4px 8px; border-radius: 12px; font-weight: 600; z-index: 2;">✓ Primary</div>
-                            <label class="primary-selector" style="display: none; position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.95); border: 2px solid var(--deep-rose); border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 3;">
-                                <input type="radio" name="primary-qr" class="primary-qr-radio" style="margin: 0; cursor: pointer;">
-                            </label>
+                            
                         </div>
                     </template>
                     
@@ -2651,6 +2717,20 @@
                     </div>
                 </div>
                     
+                    <div class="form-group">
+                        <label class="form-label">Cash on Delivery</label>
+                        <label class="cod-toggle-row" for="allowCodToggle">
+                            <span class="cod-toggle-copy">
+                                <strong>Enable COD</strong>
+                                <small>Let customers choose Cash on Delivery during checkout.</small>
+                            </span>
+                            <span class="cod-toggle-switch">
+                                <input type="checkbox" id="allowCodToggle" {% if allow_cod %}checked{% endif %}>
+                                <span class="cod-toggle-slider"></span>
+                            </span>
+                        </label>
+                    </div>
+
                     <!-- Payment Instructions -->
                     <div class="form-group">
                         <label class="form-label">Payment Instructions</label>
@@ -2674,6 +2754,10 @@
                         <div class="summary-field">
                             <div class="summary-label">QR Codes Uploaded</div>
                             <div class="summary-value" id="sum-qr-count">0</div>
+                        </div>
+                        <div class="summary-field">
+                            <div class="summary-label">Cash on Delivery</div>
+                            <div class="summary-value" id="sum-cod-enabled">{{ 'Enabled' if allow_cod else 'Disabled' }}</div>
                         </div>
                         <div class="summary-field">
                             <div class="summary-label">Payment Instructions</div>
@@ -2725,7 +2809,8 @@
     "municipality_geojson": {{ store.to_dict().municipality_geojson|tojson if store.to_dict().municipality_geojson else 'null' }},
     "current_delivery_geojson": {{ store.to_dict().current_delivery_geojson|tojson if store.to_dict().current_delivery_geojson else 'null' }},
     "gcash_qr_data": {{ gcash_qr_data|tojson if gcash_qr_data else '[]' }},
-    "gcash_instructions": {{ store.gcash_instructions|tojson if store.gcash_instructions else 'null' }}
+    "gcash_instructions": {{ store.gcash_instructions|tojson if store.gcash_instructions else 'null' }},
+    "allow_cod": {{ (allow_cod or false)|tojson }}
 }
 </script>
 
@@ -2741,6 +2826,165 @@
     @keyframes slideOut {
         from { transform: translateX(0); opacity: 1; }
         to { transform: translateX(100%); opacity: 0; }
+    }
+
+    /* QR slots: cleaner card-style upload UI + read-only lock state */
+    #qrGallery {
+        gap: 14px;
+        margin-top: 0.55rem;
+        margin-bottom: 0.65rem;
+    }
+    #qrGallery.readonly {
+        pointer-events: none;
+    }
+    #qrGallery.readonly .qr-slot {
+        cursor: not-allowed;
+    }
+    #qrGallery .primary-selector {
+        display: none !important;
+    }
+    #qrGallery.readonly .remove-image {
+        display: none !important;
+    }
+    #qrGallery:not(.readonly) .qr-slot.has-image .primary-selector {
+        display: flex !important;
+    }
+    .qr-slot {
+        min-height: 176px;
+        border: 1.5px dashed rgba(183, 64, 87, 0.38);
+        background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,247,248,0.88) 100%);
+        border-radius: 16px;
+        box-shadow: 0 10px 26px rgba(130, 42, 58, 0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        padding: 10px;
+    }
+    .qr-slot:hover {
+        transform: translateY(-2px);
+        border-color: rgba(183, 64, 87, 0.72);
+        box-shadow: 0 14px 28px rgba(130, 42, 58, 0.14);
+    }
+    .qr-slot.has-image {
+        border-style: solid;
+        border-color: rgba(183, 64, 87, 0.62);
+    }
+    .qr-slot .slot-placeholder {
+        color: #8f5462;
+        text-align: center;
+        gap: 6px;
+    }
+    .qr-slot .slot-placeholder i {
+        font-size: 30px;
+    }
+    .qr-slot .slot-placeholder span {
+        font-weight: 700;
+        font-size: 0.86rem;
+        letter-spacing: 0.2px;
+    }
+    .qr-slot img {
+        border-radius: 12px;
+        padding: 6px;
+        object-fit: contain;
+        background: #fff;
+    }
+    .qr-slot .remove-image {
+        top: 8px;
+        right: 8px;
+    }
+    .qr-slot .primary-badge {
+        bottom: 8px;
+        left: 8px;
+    }
+    .qr-slot .set-main-btn {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        border: 1px solid rgba(181, 68, 90, 0.35);
+        background: rgba(255, 255, 255, 0.94);
+        color: var(--deep-rose);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        display: none;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        z-index: 3;
+    }
+    #qr-settings-content.editing .qr-slot.has-image .set-main-btn {
+        display: inline-flex;
+    }
+    .qr-slot .set-main-btn.is-main {
+        background: var(--deep-rose);
+        color: #fff;
+        border-color: var(--deep-rose);
+    }
+    .primary-selector {
+        top: auto !important;
+        right: 8px !important;
+        bottom: 8px !important;
+        border-radius: 999px !important;
+    }
+    @media (max-width: 900px) {
+        #qrGallery {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+        }
+        .qr-slot {
+            min-height: 150px !important;
+            padding: 8px !important;
+        }
+        .qr-slot img {
+            padding: 4px !important;
+        }
+        .qr-slot .set-main-btn {
+            font-size: 10px !important;
+            padding: 3px 8px !important;
+            bottom: 6px !important;
+            left: 6px !important;
+        }
+        .qr-slot .remove-image {
+            width: 22px !important;
+            height: 22px !important;
+            top: 6px !important;
+            right: 6px !important;
+        }
+    }
+    @media (max-width: 1366px) and (min-width: 901px) {
+        .settings-page-grid {
+            grid-template-columns: 1fr !important;
+            gap: 14px !important;
+        }
+        #qrGallery {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 12px !important;
+        }
+        .qr-slot {
+            min-height: 166px !important;
+            padding: 9px !important;
+        }
+    }
+    @media (max-width: 560px) {
+        #qrGallery {
+            grid-template-columns: 1fr !important;
+            gap: 9px !important;
+        }
+        .qr-slot {
+            min-height: 138px !important;
+            border-radius: 14px !important;
+        }
+        .qr-slot .slot-placeholder i {
+            font-size: 24px !important;
+        }
+        .qr-slot .slot-placeholder span {
+            font-size: 0.78rem !important;
+        }
+        .qr-slot .set-main-btn {
+            max-width: calc(100% - 48px);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     }
 </style>
 {% endblock %}
@@ -2875,6 +3119,7 @@
 
     // ===== UPDATED GCASH QR CODE HANDLING WITH CLOUDINARY =====
     let qrSlots = [];
+    let selectedPrimarySlotIndex = 0;
     const MAX_QR = 3;
 
     // Initialize QR slots on page load
@@ -2922,7 +3167,7 @@
     
     // Image element
     const img = document.createElement('img');
-    img.alt = `GCash QR ${index + 1}`;
+    img.alt = '';
     
     // Placeholder
     const placeholder = document.createElement('div');
@@ -3149,6 +3394,11 @@
             editBtn.innerHTML = editing
                 ? '<i class="ri-pencil-line"></i> Editing'
                 : '<i class="ri-edit-line"></i> Edit';
+        }
+
+        if (contentId === 'qr-settings-content') {
+            const gallery = document.getElementById('qrGallery');
+            if (gallery) gallery.classList.toggle('readonly', !editing);
         }
     }
 
@@ -3862,12 +4112,49 @@
         
         try {
             const gcashInstructions = document.getElementById('gcashInstructions')?.value || '';
+            const allowCod = document.getElementById('allowCodToggle')?.checked ? '1' : '0';
             
             const formData = new FormData();
             formData.append('gcash_instructions', gcashInstructions);
-            
-            // Collect QR data if needed (will be handled by existing code)
-            // For now, just save the instructions
+            formData.append('allow_cod', allowCod);
+
+            // Collect QR changes so backend can persist updates.
+            const qrIdsToKeep = [];
+            const qrIdsToDelete = [];
+            let newQrIndex = 0;
+
+            qrSlots.forEach((slot) => {
+                if (!slot) return;
+
+                if (slot.markedForDeletion && slot.qrId) {
+                    qrIdsToDelete.push(slot.qrId);
+                }
+
+                if (slot.qrId && !slot.markedForDeletion && slot.hasImage) {
+                    qrIdsToKeep.push(slot.qrId);
+                }
+
+                if (slot.cloudinaryData && slot.hasImage) {
+                    formData.append(`gcash_qr_public_id_${newQrIndex}`, slot.cloudinaryData.public_id || '');
+                    formData.append(`gcash_qr_url_${newQrIndex}`, slot.cloudinaryData.url || '');
+                    formData.append(`gcash_qr_filename_${newQrIndex}`, `gcash_qr_${newQrIndex + 1}.jpg`);
+                    formData.append(`gcash_qr_slot_index_${newQrIndex}`, String(qrSlots.indexOf(slot)));
+                    newQrIndex += 1;
+                }
+            });
+
+            formData.append('gcash_qr_ids_to_keep', JSON.stringify(qrIdsToKeep));
+            formData.append('gcash_qr_ids_to_delete', JSON.stringify(qrIdsToDelete));
+            formData.append('primary_qr_slot_index', String(selectedPrimarySlotIndex));
+
+            const primarySlot = qrSlots[selectedPrimarySlotIndex];
+            if (primarySlot && primarySlot.hasImage) {
+                if (primarySlot.qrId && !primarySlot.markedForDeletion) {
+                    formData.append('primary_qr_id', String(primarySlot.qrId));
+                } else if (primarySlot.cloudinaryData?.public_id) {
+                    formData.append('primary_qr_public_id', primarySlot.cloudinaryData.public_id);
+                }
+            }
             
             const response = await fetch('/api/seller/store/settings', {
                 method: 'POST',
@@ -3887,9 +4174,12 @@
                 document.getElementById('sum-qr-count').textContent = qrCount;
                 document.getElementById('sum-gcash-instructions').textContent = gcashInstructions || 'No instructions provided';
                 document.getElementById('sum-gcash-instructions').classList.toggle('empty', !gcashInstructions);
+                const sumCod = document.getElementById('sum-cod-enabled');
+                if (sumCod) sumCod.textContent = allowCod === '1' ? 'Enabled' : 'Disabled';
                 
                 showToast('QR settings saved successfully!', 'success');
                 toggleQRSettingsSection(false);  // Collapse back to view mode
+                syncStoreDataQrFromSlots();
             }
             
         } catch (error) {
@@ -3935,6 +4225,7 @@ function initializeQRSlots() {
 
 function createQRSlot(index, qrData = null) {
     const gallery = document.getElementById('qrGallery');
+    const canEditQR = () => document.getElementById('qr-settings-content')?.classList.contains('editing');
     
     // Create slot container
     const slot = document.createElement('div');
@@ -3951,7 +4242,7 @@ function createQRSlot(index, qrData = null) {
     
     // Image element
     const img = document.createElement('img');
-    img.alt = `GCash QR ${index + 1}`;
+    img.alt = '';
     
     // Placeholder
     const placeholder = document.createElement('div');
@@ -3962,65 +4253,29 @@ function createQRSlot(index, qrData = null) {
     removeBtn.className = 'remove-image';
     removeBtn.innerHTML = '<i class="ri-close-line"></i>';
     
-    // Primary badge
     const primaryBadge = document.createElement('div');
     primaryBadge.className = 'primary-badge';
-    primaryBadge.innerHTML = '✓ Primary';
-    primaryBadge.style.position = 'absolute';
-    primaryBadge.style.bottom = '8px';
-    primaryBadge.style.left = '8px';
-    primaryBadge.style.background = 'var(--deep-rose)';
-    primaryBadge.style.color = 'white';
-    primaryBadge.style.fontSize = '10px';
-    primaryBadge.style.padding = '4px 8px';
-    primaryBadge.style.borderRadius = '12px';
-    primaryBadge.style.fontWeight = '600';
-    primaryBadge.style.zIndex = '2';
-    
-    // Primary selector radio button
-    const primarySelector = document.createElement('label');
+    primaryBadge.style.display = 'none';
+    const primarySelector = document.createElement('div');
     primarySelector.className = 'primary-selector';
-    primarySelector.style.position = 'absolute';
-    primarySelector.style.top = '8px';
-    primarySelector.style.right = '8px';
-    primarySelector.style.background = 'rgba(255,255,255,0.95)';
-    primarySelector.style.border = '2px solid var(--deep-rose)';
-    primarySelector.style.borderRadius = '50%';
-    primarySelector.style.width = '28px';
-    primarySelector.style.height = '28px';
-    primarySelector.style.display = 'flex';
-    primarySelector.style.alignItems = 'center';
-    primarySelector.style.justifyContent = 'center';
-    primarySelector.style.cursor = 'pointer';
-    primarySelector.style.zIndex = '3';
-    
+    primarySelector.style.display = 'none';
     const primaryRadio = document.createElement('input');
     primaryRadio.type = 'radio';
     primaryRadio.name = 'primary-qr';
     primaryRadio.className = 'primary-qr-radio';
-    primaryRadio.style.margin = '0';
-    primaryRadio.style.cursor = 'pointer';
-    primaryRadio.dataset.index = index;
-    
-    primarySelector.appendChild(primaryRadio);
-    
-    // Add primary radio change listener
-    primaryRadio.addEventListener('change', function() {
-        if (this.checked) {
-            // Uncheck all other primary radios
-            document.querySelectorAll('.primary-qr-radio').forEach(radio => {
-                if (radio !== this) radio.checked = false;
-            });
-            // Update display - show badge for this one, hide for others
-            document.querySelectorAll('.qr-slot').forEach((s, i) => {
-                const slotData = qrSlots[i];
-                if (slotData && slotData.primaryBadge && slotData.element.querySelector('img').style.display === 'block') {
-                    const isPrimary = (i === index);
-                    slotData.primaryBadge.style.display = isPrimary ? 'block' : 'none';
-                    slotData.element.querySelector('.primary-qr-radio').checked = isPrimary;
-                }
-            });
-        }
+    primaryRadio.style.display = 'none';
+
+    const setMainBtn = document.createElement('button');
+    setMainBtn.type = 'button';
+    setMainBtn.className = 'set-main-btn';
+    setMainBtn.innerHTML = '<i class="ri-check-line"></i><span>Set as Main</span>';
+    setMainBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!canEditQR()) return;
+        const slotData = qrSlots[index];
+        if (!slotData || !slotData.hasImage) return;
+        selectedPrimarySlotIndex = index;
+        updatePrimaryBadge();
     });
     
     // Assemble slot
@@ -4028,24 +4283,28 @@ function createQRSlot(index, qrData = null) {
     slot.appendChild(img);
     slot.appendChild(placeholder);
     slot.appendChild(removeBtn);
-    slot.appendChild(primaryBadge);
-    slot.appendChild(primarySelector);
+    slot.appendChild(setMainBtn);
+    // Do not append primary badge to avoid top/bottom overlay blocks.
+    // Do not attach primary selector UI to keep slots visually clean.
     
     // Add click handler
     slot.addEventListener('click', (e) => {
-        if (e.target !== removeBtn && !removeBtn.contains(e.target) && e.target !== primaryRadio && !primarySelector.contains(e.target)) {
+        if (!canEditQR()) return;
+        if (e.target !== removeBtn && !removeBtn.contains(e.target) && e.target !== setMainBtn && !setMainBtn.contains(e.target)) {
             fileInput.click();
         }
     });
     
     // Add remove handler
     removeBtn.addEventListener('click', (e) => {
+        if (!canEditQR()) return;
         e.stopPropagation();
         removeQR(index);
     });
     
     // Add file input handler
     fileInput.addEventListener('change', (e) => {
+        if (!canEditQR()) return;
         const file = e.target.files[0];
         if (file) handleQRFile(file, index);
     });
@@ -4064,13 +4323,7 @@ function createQRSlot(index, qrData = null) {
         // Show remove button
         removeBtn.style.display = 'flex';
         
-        // Mark primary radio if is_primary
-        if (qrData.is_primary) {
-            primaryRadio.checked = true;
-            primaryBadge.style.display = 'block';
-        } else {
-            primaryBadge.style.display = 'none';
-        }
+        if (qrData.is_primary) selectedPrimarySlotIndex = index;
         
         // Store QR data in slot
         slot.dataset.qrId = qrData.id;
@@ -4099,6 +4352,7 @@ function createQRSlot(index, qrData = null) {
         img,
         placeholder,
         removeBtn,
+        setMainBtn,
         primaryBadge,
         primarySelector,
         primaryRadio,
@@ -4108,9 +4362,12 @@ function createQRSlot(index, qrData = null) {
         hasImage: !!qrData,
         isPrimary: qrData ? qrData.is_primary : false
     };
+    updatePrimaryBadge();
 }
 
 async function removeQR(index) {
+    const isEditing = document.getElementById('qr-settings-content')?.classList.contains('editing');
+    if (!isEditing) return;
     const slot = qrSlots[index];
     if (!slot) return;
     
@@ -4145,13 +4402,22 @@ async function removeQR(index) {
 }
 
 function updatePrimaryBadge() {
-    // Find first slot with image
-    for (let i = 0; i < qrSlots.length; i++) {
-        if (qrSlots[i] && qrSlots[i].hasImage) {
-            qrSlots[i].primaryBadge.style.display = 'block';
-            break;
-        }
+    const hasSelected = qrSlots[selectedPrimarySlotIndex] && qrSlots[selectedPrimarySlotIndex].hasImage;
+    if (!hasSelected) {
+        const firstWithImage = qrSlots.findIndex(s => s && s.hasImage);
+        selectedPrimarySlotIndex = firstWithImage >= 0 ? firstWithImage : 0;
     }
+
+    qrSlots.forEach((slot, index) => {
+        if (!slot) return;
+        const isMain = slot.hasImage && index === selectedPrimarySlotIndex;
+        slot.isPrimary = isMain;
+        if (slot.setMainBtn) {
+            slot.setMainBtn.classList.toggle('is-main', isMain);
+            const txt = slot.setMainBtn.querySelector('span');
+            if (txt) txt.textContent = isMain ? 'Main QR' : 'Set as Main';
+        }
+    });
 }
 
 function updateQRPreview() {
@@ -4167,7 +4433,7 @@ function updateQRPreview() {
             const previewItem = document.createElement('div');
             previewItem.className = `qr-preview-item ${index === 0 ? 'primary' : ''}`;
             previewItem.innerHTML = `
-                <img src="${slot.img.src}" alt="GCash QR ${index + 1}">
+                <img src="${slot.img.src}" alt="">
                 ${index === 0 ? '<div class="qr-preview-badge">Primary</div>' : ''}
             `;
             preview.appendChild(previewItem);
@@ -4179,8 +4445,36 @@ function updateQRPreview() {
     }
 }
 
+function syncStoreDataQrFromSlots() {
+    const storeDataElement = document.getElementById('store-data');
+    if (!storeDataElement) return;
+    try {
+        const storeData = JSON.parse(storeDataElement.textContent || '{}');
+        const latestQrData = [];
+        qrSlots.forEach((slot, index) => {
+            if (!slot || !slot.hasImage || !slot.img || !slot.img.src) return;
+            latestQrData.push({
+                id: slot.qrId || null,
+                public_id: slot.publicId || slot.cloudinaryData?.public_id || null,
+                url: slot.img.src,
+                is_primary: index === selectedPrimarySlotIndex,
+                sort_order: index
+            });
+        });
+        storeData.gcash_qr_data = latestQrData;
+        storeDataElement.textContent = JSON.stringify(storeData, null, 4);
+    } catch (err) {
+        console.warn('Failed to sync QR slot data:', err);
+    }
+}
+
 // Handle new QR file upload
 async function handleQRFile(file, index) {
+    const isEditing = document.getElementById('qr-settings-content')?.classList.contains('editing');
+    if (!isEditing) {
+        showToast('Click Edit first to change QR images', 'info');
+        return;
+    }
     // Validate file
     if (!file.type.match('image.*')) {
         showToast('Please upload an image file', 'error');
@@ -4241,7 +4535,7 @@ async function handleQRFile(file, index) {
         slot.img.style.display = 'block';
         slot.placeholder.style.display = 'none';
         slot.removeBtn.style.display = 'flex';
-        if (slot.primarySelector) slot.primarySelector.style.display = 'flex';
+        if (slot.primarySelector) slot.primarySelector.style.display = 'none';
         slot.element.classList.add('has-image');
         slot.hasImage = true;
         slot.file = file;
@@ -4250,15 +4544,9 @@ async function handleQRFile(file, index) {
         // (we already set markedForDeletion above)
         
         // Update primary badge
-        if (index === 0) {
-            slot.primaryBadge.style.display = 'block';
-            slot.primaryRadio.checked = true;
-        } else {
-            // Check if this is the first image (if slot 0 is empty, this becomes primary)
-            if (!qrSlots[0] || !qrSlots[0].hasImage) {
-                updatePrimaryBadge();
-            }
-        }
+        const hasAnyPrimary = qrSlots.some((s, i) => s && s.hasImage && i === selectedPrimarySlotIndex);
+        if (!hasAnyPrimary) selectedPrimarySlotIndex = index;
+        updatePrimaryBadge();
         
         showToast('QR code uploaded to Cloudinary', 'success');
         
@@ -4289,7 +4577,7 @@ async function handleQRFile(file, index) {
                 const previewItem = document.createElement('div');
                 previewItem.className = `qr-preview-item ${index === 0 ? 'primary' : ''}`;
                 previewItem.innerHTML = `
-                    <img src="${slot.img.src}" alt="GCash QR ${index + 1}">
+                    <img src="${slot.img.src}" alt="">
                     ${index === 0 ? '<div class="qr-preview-badge">Primary</div>' : ''}
                 `;
                 preview.appendChild(previewItem);

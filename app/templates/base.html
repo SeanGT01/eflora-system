@@ -2382,6 +2382,7 @@ let checkoutStep = 1;
 let checkoutOrders = [];
 let uploadedProofs = {};
 let uploadedProofData = {};
+let selectedPaymentMethods = {};
 let currentOrderIndex = 0;
 let checkoutAddresses = [];
 let selectedCheckoutAddressId = null;
@@ -2716,10 +2717,30 @@ function getProofState(tempId) {
     };
 }
 
+function getOrderPaymentMethod(order) {
+    if (!order || !order.temp_id) return 'gcash';
+    const selected = selectedPaymentMethods[order.temp_id];
+    const codEnabled = order.allow_cod !== false;
+    if (selected === 'cod' && codEnabled) return 'cod';
+    return 'gcash';
+}
+
+function setOrderPaymentMethod(tempId, method) {
+    if (!tempId) return;
+    selectedPaymentMethods[tempId] = (method === 'cod') ? 'cod' : 'gcash';
+}
+
 function updateCheckoutPaymentAction() {
     const nextBtn = document.getElementById('checkoutNextBtn');
     const order = checkoutOrders[currentOrderIndex];
     if (!nextBtn || !order) return;
+
+    const paymentMethod = getOrderPaymentMethod(order);
+    if (paymentMethod === 'cod') {
+        nextBtn.textContent = currentOrderIndex < checkoutOrders.length - 1 ? 'Next Order' : 'Complete';
+        nextBtn.disabled = false;
+        return;
+    }
 
     const proofState = getProofState(order.temp_id);
 
@@ -3616,6 +3637,10 @@ async function proceedCheckout() {
                 checkoutOrders = result.orders;
                 uploadedProofs = {};
                 uploadedProofData = {};
+                selectedPaymentMethods = {};
+                checkoutOrders.forEach(order => {
+                    selectedPaymentMethods[order.temp_id] = 'gcash';
+                });
                 displayOrderSummary();
                 
                 checkoutStep = 2;
@@ -3654,6 +3679,7 @@ async function proceedCheckout() {
     else if (checkoutStep === 3) {
         const nextBtn = document.getElementById('checkoutNextBtn');
         const currentOrder = checkoutOrders[currentOrderIndex];
+        const paymentMethod = getOrderPaymentMethod(currentOrder);
         const proofState = getProofState(currentOrder.temp_id);
 
         // Validate delivery date/time
@@ -3668,7 +3694,7 @@ async function proceedCheckout() {
             return;
         }
 
-        if (!proofState.hasUploaded) {
+        if (paymentMethod === 'gcash' && !proofState.hasUploaded) {
             if (!proofState.hasPending) {
                 showToast('Please choose a payment proof for this order first', 'error');
                 return;
@@ -3733,6 +3759,7 @@ async function createOrders() {
                 temp_id: order.temp_id,
                 store_id: order.store_id,
                 store_name: order.store_name,
+                payment_method: getOrderPaymentMethod(order),
                 subtotal: order.subtotal,
                 delivery_fee: order.delivery_fee,
                 distance_km: order.distance_km,
@@ -3763,6 +3790,7 @@ async function createOrders() {
                 quantity: buyNowItem.quantity || 1,
                 address_id: addressId,
                 delivery_notes: deliveryNotes,
+                payment_method: getOrderPaymentMethod(order),
                 requested_delivery_date: getStoreDeliveryDate(order.temp_id),
                 requested_delivery_time: getStoreDeliveryTime(order.temp_id),
                 payment_proof_url: uploadedProofs[order.temp_id],
@@ -3930,6 +3958,7 @@ function displayGCashPayment() {
     }
 
     const order = checkoutOrders[currentOrderIndex];
+    const paymentMethod = getOrderPaymentMethod(order);
     const proofState = getProofState(order.temp_id);
     const hasPreview = proofState.hasUploaded || proofState.hasPending;
     const previewSrc = proofState.previewSrc;
@@ -4017,7 +4046,25 @@ function displayGCashPayment() {
         </div>
     `;
 
-    if (order.gcash_instructions) {
+    const codEnabled = order.allow_cod !== false;
+    const paymentSelector = `
+        <div style="margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff;">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Payment Method</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:999px; cursor:pointer; background:${paymentMethod === 'gcash' ? 'rgba(212,120,138,.12)' : '#fff'};">
+                    <input type="radio" name="checkoutPaymentMethod_${order.temp_id}" value="gcash" ${paymentMethod === 'gcash' ? 'checked' : ''} onchange="onCheckoutPaymentMethodChange('${order.temp_id}', this.value)" />
+                    <span style="font-size:13px;">GCash</span>
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:999px; cursor:${codEnabled ? 'pointer' : 'not-allowed'}; opacity:${codEnabled ? '1' : '.55'}; background:${paymentMethod === 'cod' ? 'rgba(212,120,138,.12)' : '#fff'};">
+                    <input type="radio" name="checkoutPaymentMethod_${order.temp_id}" value="cod" ${paymentMethod === 'cod' ? 'checked' : ''} ${codEnabled ? '' : 'disabled'} onchange="onCheckoutPaymentMethodChange('${order.temp_id}', this.value)" />
+                    <span style="font-size:13px;">Cash on Delivery</span>
+                </label>
+            </div>
+            ${codEnabled ? '' : '<div style="font-size:12px; color:var(--muted); margin-top:8px;">Cash on Delivery is currently disabled by this store.</div>'}
+        </div>`;
+    html += paymentSelector;
+
+    if (paymentMethod === 'gcash' && order.gcash_instructions) {
         html += `
             <div style="margin-bottom: 16px;">
                 <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Payment Instructions</div>
@@ -4028,6 +4075,7 @@ function displayGCashPayment() {
         `;
     }
 
+    if (paymentMethod === 'gcash') {
     html += `
         <div style="margin-bottom: 16px;">
             <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">GCash QR Code</div>
@@ -4067,6 +4115,14 @@ function displayGCashPayment() {
             ${proofState.hasUploaded ? '<span style="color: var(--sage);">Receipt uploaded</span>' : proofState.hasPending ? '<span style="color: var(--muted);">Image selected. Use the button below to upload.</span>' : ''}
         </div>
     `;
+    } else {
+    html += `
+        <div style="padding:12px; border:1px solid var(--border); border-radius:var(--radius-md); background:#fff8f6; color:var(--charcoal); margin-bottom:16px;">
+            <div style="font-weight:600; margin-bottom:4px;"><i class="ri-money-dollar-circle-line"></i> Cash on Delivery selected</div>
+            <div style="font-size:12px; color:var(--muted);">No payment receipt required. Please prepare the exact amount upon delivery.</div>
+        </div>
+    `;
+    }
 
     container.innerHTML = html;
     
@@ -4095,6 +4151,11 @@ function displayGCashPayment() {
 
     // Reset the creating orders flag when moving between orders
     isCreatingOrders = false;
+}
+
+function onCheckoutPaymentMethodChange(tempId, method) {
+    setOrderPaymentMethod(tempId, method);
+    displayGCashPayment();
 }
 
 function handleProofSelect(tempId, event) {
