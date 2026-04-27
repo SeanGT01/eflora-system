@@ -10,6 +10,7 @@ from decimal import Decimal
 import math
 from functools import wraps
 import json
+import re
 import uuid
 from datetime import datetime
 
@@ -208,16 +209,54 @@ def _validate_requested_delivery_slot(store, requested_delivery_date, requested_
     if requested_delivery_date > max_allowed:
         return "Selected delivery date must be within 14 days from today."
 
-    try:
-        datetime.strptime(requested_delivery_time, "%H:%M-%H:%M")
-    except Exception:
+    normalized_slot = _normalize_requested_delivery_time(requested_delivery_time)
+    if not normalized_slot:
         return "Invalid delivery time format."
 
     valid_slots = _generate_store_time_slots_for_date(store, requested_delivery_date)
     if not valid_slots:
         return f"{store.name} is closed on the selected date."
-    if requested_delivery_time not in valid_slots:
+    if normalized_slot not in valid_slots:
         return f"Selected delivery time is outside {store.name}'s available delivery window."
+    return None
+
+
+def _normalize_requested_delivery_time(value):
+    """
+    Normalize delivery time slot to canonical 24h format: HH:MM-HH:MM.
+    Accepts:
+      - HH:MM-HH:MM
+      - HH:MM - HH:MM
+      - h:mm AM - h:mm PM
+    """
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    m24 = re.match(r"^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$", raw)
+    if m24:
+        try:
+            start = datetime.strptime(m24.group(1), "%H:%M")
+            end = datetime.strptime(m24.group(2), "%H:%M")
+            return f"{start:%H:%M}-{end:%H:%M}"
+        except ValueError:
+            return None
+
+    m12 = re.match(
+        r"^(\d{1,2}:\d{2}\s*[AaPp][Mm])\s*-\s*(\d{1,2}:\d{2}\s*[AaPp][Mm])$",
+        raw,
+    )
+    if m12:
+        try:
+            start = datetime.strptime(re.sub(r"\s+", " ", m12.group(1)).upper(), "%I:%M %p")
+            end = datetime.strptime(re.sub(r"\s+", " ", m12.group(2)).upper(), "%I:%M %p")
+            return f"{start:%H:%M}-{end:%H:%M}"
+        except ValueError:
+            return None
+
     return None
 
 
@@ -601,7 +640,9 @@ def create_orders():
 
             # Phase 1: Extract and parse per-store delivery date/time
             order_delivery_date_str = order_data.get("requested_delivery_date")
-            order_delivery_time = order_data.get("requested_delivery_time")
+            order_delivery_time = _normalize_requested_delivery_time(
+                order_data.get("requested_delivery_time")
+            )
             order_delivery_date = None
             
             if order_delivery_date_str:
@@ -611,6 +652,9 @@ def create_orders():
                 except ValueError as e:
                     print(f"⚠️ Failed to parse delivery date '{order_delivery_date_str}': {e}")
                     return jsonify({"error": f"Invalid delivery date format for {store.name}. Use YYYY-MM-DD."}), 400
+
+            if order_data.get("requested_delivery_time") and not order_delivery_time:
+                return jsonify({"error": f"Invalid delivery time format for {store.name}."}), 400
 
             slot_error = _validate_requested_delivery_slot(
                 store,
@@ -910,13 +954,16 @@ def process_checkout():
         payment_proof_url = data.get("payment_proof_url")
         payment_proof_public_id = data.get("payment_proof_public_id")
         requested_delivery_date = data.get("requested_delivery_date")
-        requested_delivery_time = data.get("requested_delivery_time")
+        requested_delivery_time = _normalize_requested_delivery_time(data.get("requested_delivery_time"))
         requested_delivery_date_obj = None
         if requested_delivery_date:
             try:
                 requested_delivery_date_obj = datetime.strptime(requested_delivery_date, '%Y-%m-%d').date()
             except ValueError:
                 return jsonify({"error": "Invalid requested_delivery_date format. Use YYYY-MM-DD"}), 400
+
+        if data.get("requested_delivery_time") and not requested_delivery_time:
+            return jsonify({"error": "Invalid requested_delivery_time format. Use HH:MM-HH:MM"}), 400
 
         if not address_id:
             return jsonify({"error": "delivery_address_id is required"}), 400
@@ -1335,7 +1382,7 @@ def buy_now_create_order():
         address_id = data.get("address_id")
         delivery_notes = data.get("delivery_notes", "")
         requested_delivery_date_str = data.get("requested_delivery_date")
-        requested_delivery_time = data.get("requested_delivery_time")
+        requested_delivery_time = _normalize_requested_delivery_time(data.get("requested_delivery_time"))
         payment_proof_url = data.get("payment_proof_url")
         payment_proof_public_id = data.get("payment_proof_public_id")
         payment_method = str(data.get("payment_method") or "gcash").strip().lower()
@@ -1401,6 +1448,9 @@ def buy_now_create_order():
                 requested_delivery_date = datetime.strptime(requested_delivery_date_str, "%Y-%m-%d").date()
             except ValueError:
                 pass
+
+        if data.get("requested_delivery_time") and not requested_delivery_time:
+            return jsonify({"error": "Invalid requested_delivery_time format. Use HH:MM-HH:MM"}), 400
 
         slot_error = _validate_requested_delivery_slot(
             store,
