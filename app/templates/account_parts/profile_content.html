@@ -1500,13 +1500,15 @@
                 <div class="form-group">
                     <label class="form-label">New Password</label>
                     <input type="password" class="form-control" name="new_password"
-                           required placeholder="Min. 6 characters">
-                    <div class="form-hint">At least 6 characters</div>
+                           required minlength="8" placeholder="Min. 8 chars, Aa + special"
+                           autocomplete="new-password">
+                    <div class="form-hint">At least 8 characters with uppercase, lowercase, and special character</div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Confirm New Password</label>
                     <input type="password" class="form-control" name="confirm_password"
-                           required placeholder="Repeat new password">
+                           required minlength="8" placeholder="Repeat new password"
+                           autocomplete="new-password">
                 </div>
             </div>
             <div class="form-actions">
@@ -3164,15 +3166,37 @@ function setupPasswordForm() {
         el.addEventListener('input', function() { submitBtn.disabled = false; });
     });
 
+    function passwordStrengthError(password) {
+        const pw = (password || '').trim();
+        if (pw.length < 8) return 'Password must be at least 8 characters';
+        if (!/[a-z]/.test(pw)) return 'Password must include at least one lowercase letter';
+        if (!/[A-Z]/.test(pw)) return 'Password must include at least one uppercase letter';
+        if (!/[^A-Za-z0-9]/.test(pw)) return 'Password must include at least one special character';
+        return null;
+    }
+
     passwordForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         const fd = new FormData(this);
-        if (fd.get('new_password') !== fd.get('confirm_password')) { 
+        const currentPassword = (fd.get('current_password') || '').trim();
+        const newPassword = (fd.get('new_password') || '').trim();
+        const confirmPassword = (fd.get('confirm_password') || '').trim();
+
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            showToast('All password fields are required', 'error');
+            return;
+        }
+        if (newPassword !== confirmPassword) { 
             showToast('Passwords do not match', 'error'); 
             return; 
         }
-        if (fd.get('new_password').length < 6) { 
-            showToast('Password must be at least 6 characters', 'error'); 
+        const strengthError = passwordStrengthError(newPassword);
+        if (strengthError) {
+            showToast(strengthError, 'error');
+            return;
+        }
+        if (newPassword === currentPassword) {
+            showToast('New password must be different from current password', 'error');
             return; 
         }
         const btn = this.querySelector('button[type="submit"]');

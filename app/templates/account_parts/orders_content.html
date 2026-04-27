@@ -1628,6 +1628,7 @@ function renderOrderCard(order) {
     const storeName  = order.store_name || 'E-FLOWERS Store';
     const totalAmt   = formatPeso(order.total_amount ?? order.total ?? 0);
     const itemCount  = items.reduce((s, i) => s + (i.quantity || 1), 0);
+    const paymentMethodLabel = formatPaymentMethod(order.payment_method);
 
     const itemsHtml = showItems.map(item => {
         const img    = item.image_url || item.product_image_url;
@@ -1679,6 +1680,7 @@ function renderOrderCard(order) {
             <div class="order-meta-row">
                 <span><i class="ri-file-list-3-line"></i> ${esc(orderId)}</span>
                 <span><i class="ri-calendar-line"></i> ${dateStr}</span>
+                <span><i class="ri-wallet-3-line"></i> ${esc(paymentMethodLabel)}</span>
             </div>
 
             <!-- Items -->
@@ -1981,7 +1983,7 @@ function buildOrderDetailHTML(order) {
                 </div>
                 <div class="order-detail-item">
                     <div class="order-detail-item-label">Payment</div>
-                    <div class="order-detail-item-value">${capitalise(order.payment_method || 'GCash')}</div>
+                    <div class="order-detail-item-value">${formatPaymentMethod(order.payment_method)}</div>
                 </div>
                 <div class="order-detail-item">
                     <div class="order-detail-item-label">Payment Status</div>
@@ -2399,6 +2401,14 @@ function formatDeliveryTimeSlot(slot) {
 
 function capitalise(s) {
     return s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : '';
+}
+
+function formatPaymentMethod(method) {
+    const normalized = String(method || '').trim().toLowerCase();
+    if (!normalized || normalized === 'gcash') return 'GCash';
+    if (normalized === 'cod') return 'COD';
+    if (normalized === 'cash') return 'Cash';
+    return capitalise(normalized);
 }
 
 function getDisplayState(order) {
