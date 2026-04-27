@@ -63,29 +63,10 @@ def _current_user():
     return None
 
 
-def _rider_ids_for_user(user_id):
-    riders = Rider.query.filter_by(user_id=user_id, is_archived=False).all()
-    return [r.id for r in riders]
-
-
 def _can_access_conversation(user, convo):
     if not user or not convo:
         return False
-    if user.id in (convo.customer_id, convo.seller_id):
-        return True
-    if user.role != 'rider':
-        return False
-
-    rider_ids = _rider_ids_for_user(user.id)
-    if not rider_ids:
-        return False
-
-    linked_order = Order.query.filter(
-        Order.rider_id.in_(rider_ids),
-        Order.customer_id == convo.customer_id,
-        Order.store_id == convo.store_id
-    ).first()
-    return linked_order is not None
+    return user.id in (convo.customer_id, convo.seller_id)
 
 
 def _support_store_for_chat(customer_id, admin_user_id=None):
@@ -136,37 +117,18 @@ def list_conversations():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    if user.role == 'rider':
-        rider_ids = _rider_ids_for_user(user.id)
-        if not rider_ids:
-            return jsonify({'conversations': []}), 200
-
-        assigned_orders = Order.query.filter(Order.rider_id.in_(rider_ids)).all()
-        if not assigned_orders:
-            return jsonify({'conversations': []}), 200
-
-        pair_filters = [
+    convos = Conversation.query.filter(
+        db.or_(
             db.and_(
-                Conversation.customer_id == o.customer_id,
-                Conversation.store_id == o.store_id
-            ) for o in assigned_orders
-        ]
-        convos = Conversation.query.filter(
-            db.or_(*pair_filters)
-        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
-    else:
-        convos = Conversation.query.filter(
-            db.or_(
-                db.and_(
-                    Conversation.customer_id == user.id,
-                    Conversation.customer_deleted_at.is_(None)
-                ),
-                db.and_(
-                    Conversation.seller_id == user.id,
-                    Conversation.seller_deleted_at.is_(None)
-                )
+                Conversation.customer_id == user.id,
+                Conversation.customer_deleted_at.is_(None)
+            ),
+            db.and_(
+                Conversation.seller_id == user.id,
+                Conversation.seller_deleted_at.is_(None)
             )
-        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
+        )
+    ).order_by(Conversation.last_message_at.desc().nullslast()).all()
 
     return jsonify({
         'conversations': [c.to_dict(current_user_id=user.id) for c in convos]
@@ -208,14 +170,15 @@ def create_or_get_rider_conversation():
 
     convo = Conversation.query.filter_by(
         customer_id=order.customer_id,
-        store_id=order.store_id
+        store_id=order.store_id,
+        seller_id=user.id
     ).first()
     if convo:
         return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
 
     convo = Conversation(
         customer_id=order.customer_id,
-        seller_id=store.seller_id,
+        seller_id=user.id,  # private rider-customer thread
         store_id=order.store_id,
     )
     db.session.add(convo)
@@ -250,7 +213,11 @@ def create_or_get_conversation():
         return jsonify({'error': 'Cannot message your own store'}), 400
 
     # Find existing or create new
-    convo = Conversation.query.filter_by(customer_id=user.id, store_id=store.id).first()
+    convo = Conversation.query.filter_by(
+        customer_id=user.id,
+        store_id=store.id,
+        seller_id=store.seller_id
+    ).first()
     if convo:
         # Un-delete for the customer if they previously deleted it
         if convo.customer_deleted_at:
@@ -618,30 +585,13 @@ def total_unread_count():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    if user.role == 'rider':
-        rider_ids = _rider_ids_for_user(user.id)
-        if not rider_ids:
-            return jsonify({'unread_count': 0}), 200
-        assigned_orders = Order.query.filter(Order.rider_id.in_(rider_ids)).all()
-        # Deduplicate by (customer_id, store_id) so one conversation
-        # is only counted once even if rider has multiple matching orders.
-        pair_keys = {(o.customer_id, o.store_id) for o in assigned_orders}
-        total = 0
-        for customer_id, store_id in pair_keys:
-            convo = Conversation.query.filter_by(
-                customer_id=customer_id,
-                store_id=store_id
-            ).first()
-            if convo:
-                total += int(convo.seller_unread or 0)
-    else:
-        seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
-            .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
-            .scalar()
-        customer_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)) \
-            .filter(Conversation.customer_id == user.id, Conversation.customer_deleted_at.is_(None)) \
-            .scalar()
-        total = int(seller_total or 0) + int(customer_total or 0)
+    seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
+        .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
+        .scalar()
+    customer_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)) \
+        .filter(Conversation.customer_id == user.id, Conversation.customer_deleted_at.is_(None)) \
+        .scalar()
+    total = int(seller_total or 0) + int(customer_total or 0)
 
     return jsonify({'unread_count': total}), 200
 

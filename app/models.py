@@ -2014,7 +2014,9 @@ class Conversation(db.Model):
                                cascade='all, delete-orphan', order_by='ChatMessage.created_at')
 
     __table_args__ = (
-        db.UniqueConstraint('customer_id', 'store_id', name='unique_customer_store_conversation'),
+        # Allows separate threads per counterpart (seller account or rider account)
+        # while still being scoped to customer + store.
+        db.UniqueConstraint('customer_id', 'store_id', 'seller_id', name='unique_customer_store_seller_conversation'),
     )
 
     def unread_for(self, user_id):
