@@ -385,6 +385,31 @@
 .msg-row.sent .bubble { background: #dcf8c5; color: var(--charcoal); border-bottom-right-radius: 4px; }
 .msg-row.received .bubble { background: #f1f3f5; color: var(--charcoal); border-bottom-left-radius: 4px; }
 .msg-row .bubble img.chat-img { max-width: 120px; border-radius: 10px; display: block; margin-top: 4px; cursor: pointer; }
+.msg-sender-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.1;
+}
+.msg-sender-name {
+    font-weight: 700;
+    color: var(--charcoal);
+}
+.msg-role-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(181, 68, 90, 0.25);
+    background: rgba(181, 68, 90, 0.08);
+    color: var(--deep-rose);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: capitalize;
+}
 
 /* Image grid for consecutive images */
 .img-grid {
@@ -427,6 +452,19 @@
 .chat-lightbox .lb-close:hover { background: rgba(255,255,255,.3); }
 .msg-row .bubble .caption { margin-top: 4px; font-size: 13px; }
 .msg-row .sender-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.msg-row .sender-avatar-placeholder {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, var(--dusty-rose), var(--deep-rose));
+}
 .msg-timestamp { font-size: 10px; color: #999; text-align: center; margin: 6px 0; }
 .msg-seen { font-size: 10.5px; color: #888; text-align: right; margin-top: 2px; }
 
@@ -1228,6 +1266,24 @@ const chatWidget = (() => {
             return `<div class="msg-reply-quote"><div class="reply-name">${rName}</div><div class="reply-text">${rText}</div></div>`;
         }
 
+        function senderMetaHtml(m, isSent) {
+            if (isSent) return '';
+            const senderName = _esc(m.sender_name || 'Unknown');
+            const role = String(m.sender_role || '').toLowerCase();
+            const roleChip = role
+                ? `<span class="msg-role-chip">${_esc(role)}</span>`
+                : '';
+            return `<div class="msg-sender-meta"><span class="msg-sender-name">${senderName}</span>${roleChip}</div>`;
+        }
+
+        function senderAvatarHtml(m, isSent) {
+            if (isSent) return '';
+            if (m.sender_avatar) return `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
+            const name = (m.sender_name || '?').trim();
+            const initial = _esc((name[0] || '?').toUpperCase());
+            return `<div class="sender-avatar-placeholder">${initial}</div>`;
+        }
+
         // Helper: build 3-dot menu
         function menuHtml(m) {
             if (m.is_deleted) return '';
@@ -1257,8 +1313,8 @@ const chatWidget = (() => {
             // Deleted message
             if (m.is_deleted || m.message_type === 'deleted') {
                 html += `<div class="msg-row ${cls}">`;
-                if (!isSent && m.sender_avatar) html += `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
-                html += `<div class="bubble"><div class="msg-deleted-content"><i class="ri-forbid-line"></i> Message has been deleted</div><div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
+                html += senderAvatarHtml(m, isSent);
+                html += `<div class="bubble">${senderMetaHtml(m, isSent)}<div class="msg-deleted-content"><i class="ri-forbid-line"></i> Message has been deleted</div><div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
                 html += `</div>`;
                 i++; continue;
             }
@@ -1275,20 +1331,18 @@ const chatWidget = (() => {
                 }
 
                 html += `<div class="msg-row ${cls}">`;
-                if (!isSent && m.sender_avatar) {
-                    html += `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
-                }
+                html += senderAvatarHtml(m, isSent);
 
                 if (imgs.length === 1) {
                     let content = replyHtml(m);
                     content += `<img class="chat-img" src="${m.image_url}" alt="Image" onclick="chatWidget.openLightbox('${m.image_url}')">`;
-                    html += `<div class="bubble">${content}<div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
+                    html += `<div class="bubble">${senderMetaHtml(m, isSent)}${content}<div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
                 } else {
                     const gCls = 'g' + imgs.length;
                     const gridHtml = imgs.map(img =>
                         `<img class="grid-thumb" src="${img.image_url}" alt="Image" onclick="chatWidget.openLightbox('${img.image_url}')">`
                     ).join('');
-                    html += `<div class="bubble"><div class="img-grid ${gCls}">${gridHtml}</div><div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
+                    html += `<div class="bubble">${senderMetaHtml(m, isSent)}<div class="img-grid ${gCls}">${gridHtml}</div><div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
                 }
                 html += menuHtml(m);
                 html += `</div>`;
@@ -1309,10 +1363,8 @@ const chatWidget = (() => {
                 }
 
                 html += `<div class="msg-row ${cls}">`;
-                if (!isSent && m.sender_avatar) {
-                    html += `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
-                }
-                html += `<div class="bubble">${content}<div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
+                html += senderAvatarHtml(m, isSent);
+                html += `<div class="bubble">${senderMetaHtml(m, isSent)}${content}<div style="font-size:10px;color:#999;margin-top:3px;text-align:${isSent?'right':'left'}">${time}</div></div>`;
                 html += menuHtml(m);
                 html += `</div>`;
 
