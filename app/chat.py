@@ -623,11 +623,14 @@ def total_unread_count():
         if not rider_ids:
             return jsonify({'unread_count': 0}), 200
         assigned_orders = Order.query.filter(Order.rider_id.in_(rider_ids)).all()
+        # Deduplicate by (customer_id, store_id) so one conversation
+        # is only counted once even if rider has multiple matching orders.
+        pair_keys = {(o.customer_id, o.store_id) for o in assigned_orders}
         total = 0
-        for o in assigned_orders:
+        for customer_id, store_id in pair_keys:
             convo = Conversation.query.filter_by(
-                customer_id=o.customer_id,
-                store_id=o.store_id
+                customer_id=customer_id,
+                store_id=store_id
             ).first()
             if convo:
                 total += int(convo.seller_unread or 0)

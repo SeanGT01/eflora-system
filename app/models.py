@@ -2023,10 +2023,16 @@ class Conversation(db.Model):
         return self.seller_unread
 
     def to_dict(self, current_user_id=None):
-        # Determine the "other" participant relative to current user
+        # Determine the "other" participant relative to current user.
+        # Rider messages can exist in this conversation, so for customers
+        # prefer showing the latest rider sender when applicable.
         if current_user_id == self.customer_id:
             other = self.seller
             unread = self.customer_unread
+            if self.last_sender_id and self.last_sender_id not in (self.customer_id, self.seller_id):
+                rider_sender = User.query.get(self.last_sender_id)
+                if rider_sender:
+                    other = rider_sender
         else:
             other = self.customer
             unread = self.seller_unread
@@ -2093,6 +2099,7 @@ class ChatMessage(db.Model):
             'sender_id': self.sender_id,
             'sender_name': self.sender.full_name if self.sender else None,
             'sender_avatar': self.sender.avatar_url if self.sender else None,
+            'sender_role': self.sender.role if self.sender else None,
             'message_type': self.message_type,
             'is_deleted': self.is_deleted or False,
             'is_read': self.is_read,
@@ -2101,6 +2108,7 @@ class ChatMessage(db.Model):
             'reply_to_id': self.reply_to_id,
             'reply_to_text': None,
             'reply_to_sender_name': None,
+            'reply_to_sender_role': None,
         }
         if self.is_deleted:
             d['text'] = None
@@ -2113,4 +2121,5 @@ class ChatMessage(db.Model):
         if self.reply_to_id and self.reply_to:
             d['reply_to_text'] = self.reply_to.text if not self.reply_to.is_deleted else None
             d['reply_to_sender_name'] = self.reply_to.sender.full_name if self.reply_to.sender else None
+            d['reply_to_sender_role'] = self.reply_to.sender.role if self.reply_to.sender else None
         return d
