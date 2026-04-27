@@ -95,54 +95,64 @@ def period_range(
     ``end`` is exclusive (i.e. start of the next day) so that range filters
     can use ``column >= start AND column < end`` without timezone surprises.
     """
-    now = datetime.utcnow()
-    today = now.date()
+    now_pht = datetime.now(PHT)
+    today = now_pht.date()
     period = (period or 'month').lower().strip()
 
+    def _pht_midnight_to_utc_naive(d: date) -> datetime:
+        """Convert a Philippine calendar day start to naive UTC datetime."""
+        local_start = PHT.localize(datetime.combine(d, dt_time.min))
+        return local_start.astimezone(pytz.utc).replace(tzinfo=None)
+
     if period == 'today':
-        start = datetime.combine(today, dt_time.min)
-        end = start + timedelta(days=1)
+        start = _pht_midnight_to_utc_naive(today)
+        end = _pht_midnight_to_utc_naive(today + timedelta(days=1))
         label = f"Today ({today.strftime('%b %d, %Y')})"
     elif period == 'yesterday':
         y = today - timedelta(days=1)
-        start = datetime.combine(y, dt_time.min)
-        end = start + timedelta(days=1)
+        start = _pht_midnight_to_utc_naive(y)
+        end = _pht_midnight_to_utc_naive(y + timedelta(days=1))
         label = f"Yesterday ({y.strftime('%b %d, %Y')})"
     elif period == 'week':
         start_date = today - timedelta(days=today.weekday())  # Monday
-        start = datetime.combine(start_date, dt_time.min)
-        end = start + timedelta(days=7)
+        start = _pht_midnight_to_utc_naive(start_date)
+        end = _pht_midnight_to_utc_naive(start_date + timedelta(days=7))
         label = f"This Week ({start_date.strftime('%b %d')} – {(start_date+timedelta(days=6)).strftime('%b %d, %Y')})"
     elif period == 'month':
-        start = datetime(today.year, today.month, 1)
-        next_month = (start + timedelta(days=32)).replace(day=1)
-        end = next_month
-        label = f"This Month ({start.strftime('%B %Y')})"
+        month_start = date(today.year, today.month, 1)
+        next_month_start = (month_start + timedelta(days=32)).replace(day=1)
+        start = _pht_midnight_to_utc_naive(month_start)
+        end = _pht_midnight_to_utc_naive(next_month_start)
+        label = f"This Month ({month_start.strftime('%B %Y')})"
     elif period == 'quarter':
         q = (today.month - 1) // 3
-        start = datetime(today.year, q * 3 + 1, 1)
+        quarter_start = date(today.year, q * 3 + 1, 1)
         end_month = q * 3 + 4
         end_year = today.year
         if end_month > 12:
             end_month -= 12
             end_year += 1
-        end = datetime(end_year, end_month, 1)
+        quarter_end = date(end_year, end_month, 1)
+        start = _pht_midnight_to_utc_naive(quarter_start)
+        end = _pht_midnight_to_utc_naive(quarter_end)
         label = f"Q{q+1} {today.year}"
     elif period == 'year':
-        start = datetime(today.year, 1, 1)
-        end = datetime(today.year + 1, 1, 1)
+        year_start = date(today.year, 1, 1)
+        next_year_start = date(today.year + 1, 1, 1)
+        start = _pht_midnight_to_utc_naive(year_start)
+        end = _pht_midnight_to_utc_naive(next_year_start)
         label = f"This Year ({today.year})"
     elif period == 'all':
         start = datetime(2000, 1, 1)
-        end = now + timedelta(days=1)
+        end = datetime.utcnow() + timedelta(days=1)
         label = "All Time"
     elif period == 'custom':
         f = _parse_iso_date(custom_from) or today.replace(day=1)
         t = _parse_iso_date(custom_to) or today
         if t < f:
             f, t = t, f
-        start = datetime.combine(f, dt_time.min)
-        end = datetime.combine(t, dt_time.min) + timedelta(days=1)
+        start = _pht_midnight_to_utc_naive(f)
+        end = _pht_midnight_to_utc_naive(t + timedelta(days=1))
         label = f"{f.strftime('%b %d, %Y')} – {t.strftime('%b %d, %Y')}"
     else:
         return period_range('month')
@@ -300,8 +310,9 @@ def _order_status_breakdown(store_id, start, end):
 
 
 def _sales_by_category(store_id, start, end):
-    rows = db.session.query(
+    online_rows = db.session.query(
         Category.name,
+        func.coalesce(func.sum(OrderItem.quantity), 0).label('qty'),
         func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('revenue'),
     ).join(Product, Product.main_category_id == Category.id) \
      .join(OrderItem, OrderItem.product_id == Product.id) \
@@ -312,9 +323,55 @@ def _sales_by_category(store_id, start, end):
         Order.created_at >= start,
         Order.created_at < end,
      ).group_by(Category.name) \
-      .order_by(func.sum(OrderItem.quantity * OrderItem.price).desc()) \
       .all()
-    return [{'name': r[0] or 'Uncategorized', 'revenue': _to_float(r[1])} for r in rows]
+
+    pos_rows = db.session.query(
+        Category.name,
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('qty'),
+        func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('revenue'),
+    ).join(Product, POSOrderItem.product_id == Product.id) \
+     .outerjoin(Category, Category.id == Product.main_category_id) \
+     .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .filter(
+        POSOrder.store_id == store_id,
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+     ).group_by(Category.name) \
+      .all()
+
+    merged = {}
+    for row in online_rows:
+        key = row[0] or 'Uncategorized'
+        merged.setdefault(key, {
+            'name': key,
+            'online_qty': 0,
+            'online_revenue': 0.0,
+            'pos_qty': 0,
+            'pos_revenue': 0.0,
+            'revenue': 0.0,
+        })
+        merged[key]['online_qty'] += int(row[1] or 0)
+        merged[key]['online_revenue'] += _to_float(row[2])
+
+    for row in pos_rows:
+        key = row[0] or 'Uncategorized'
+        merged.setdefault(key, {
+            'name': key,
+            'online_qty': 0,
+            'online_revenue': 0.0,
+            'pos_qty': 0,
+            'pos_revenue': 0.0,
+            'revenue': 0.0,
+        })
+        merged[key]['pos_qty'] += int(row[1] or 0)
+        merged[key]['pos_revenue'] += _to_float(row[2])
+
+    out = []
+    for entry in merged.values():
+        entry['revenue'] = entry['online_revenue'] + entry['pos_revenue']
+        out.append(entry)
+    out.sort(key=lambda x: x['revenue'], reverse=True)
+    return out
 
 
 def _peak_hours(store_id, start, end):
@@ -346,7 +403,7 @@ def _peak_hours(store_id, start, end):
 
 def _revenue_series(store_id, start, end):
     """Daily revenue + order count series across ``[start, end)``."""
-    rows = db.session.query(
+    online_rows = db.session.query(
         func.date(Order.created_at).label('d'),
         func.coalesce(func.sum(Order.total_amount), 0).label('rev'),
         func.count(Order.id).label('orders'),
@@ -357,7 +414,22 @@ def _revenue_series(store_id, start, end):
         Order.created_at < end,
     ).group_by('d').order_by('d').all()
 
-    by_day = {r.d: (_to_float(r.rev), int(r.orders or 0)) for r in rows}
+    pos_rows = db.session.query(
+        func.date(POSOrder.created_at).label('d'),
+        func.coalesce(func.sum(POSOrder.total_amount), 0).label('rev'),
+        func.count(POSOrder.id).label('orders'),
+    ).filter(
+        POSOrder.store_id == store_id,
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).group_by('d').order_by('d').all()
+
+    # Normalize key because func.date type differs across engines.
+    def _k(day_value):
+        return day_value.isoformat() if hasattr(day_value, 'isoformat') else str(day_value)
+
+    online_by_day = {_k(r.d): (_to_float(r.rev), int(r.orders or 0)) for r in online_rows}
+    pos_by_day = {_k(r.d): (_to_float(r.rev), int(r.orders or 0)) for r in pos_rows}
 
     days = (end - start).days or 1
     # For long ranges, downsample to ~12 buckets
@@ -365,25 +437,50 @@ def _revenue_series(store_id, start, end):
         return _bucketed_revenue(store_id, start, end, buckets=12)
 
     labels, revenues, order_counts = [], [], []
+    online_revenues, pos_revenues = [], []
+    online_orders, pos_orders = [], []
     cur = start.date()
     end_d = end.date()
     while cur < end_d:
-        rev, oc = by_day.get(cur, (0.0, 0))
+        k = _k(cur)
+        o_rev, o_cnt = online_by_day.get(k, (0.0, 0))
+        p_rev, p_cnt = pos_by_day.get(k, (0.0, 0))
+        rev, oc = (o_rev + p_rev), (o_cnt + p_cnt)
         labels.append(cur.strftime('%b %d'))
         revenues.append(rev)
         order_counts.append(oc)
+        online_revenues.append(o_rev)
+        pos_revenues.append(p_rev)
+        online_orders.append(o_cnt)
+        pos_orders.append(p_cnt)
         cur += timedelta(days=1)
-    return {'labels': labels, 'revenue': revenues, 'orders': order_counts}
+    return {
+        'labels': labels,
+        'revenue': revenues,
+        'orders': order_counts,
+        'online_revenue': online_revenues,
+        'pos_revenue': pos_revenues,
+        'online_orders': online_orders,
+        'pos_orders': pos_orders,
+    }
 
 
 def _bucketed_revenue(store_id, start, end, buckets=12):
     span = (end - start).total_seconds()
     if span <= 0:
-        return {'labels': [], 'revenue': [], 'orders': []}
+        return {
+            'labels': [],
+            'revenue': [],
+            'orders': [],
+            'online_revenue': [],
+            'pos_revenue': [],
+            'online_orders': [],
+            'pos_orders': [],
+        }
     step = span / buckets
     edges = [start + timedelta(seconds=step * i) for i in range(buckets + 1)]
 
-    rows = db.session.query(
+    online_rows = db.session.query(
         Order.created_at,
         Order.total_amount,
     ).filter(
@@ -393,16 +490,46 @@ def _bucketed_revenue(store_id, start, end, buckets=12):
         Order.created_at < end,
     ).all()
 
-    rev = [0.0] * buckets
-    cnt = [0] * buckets
-    for ts, amt in rows:
+    pos_rows = db.session.query(
+        POSOrder.created_at,
+        POSOrder.total_amount,
+    ).filter(
+        POSOrder.store_id == store_id,
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).all()
+
+    online_rev = [0.0] * buckets
+    online_cnt = [0] * buckets
+    pos_rev = [0.0] * buckets
+    pos_cnt = [0] * buckets
+
+    for ts, amt in online_rows:
         for i in range(buckets):
             if edges[i] <= ts < edges[i + 1]:
-                rev[i] += _to_float(amt)
-                cnt[i] += 1
+                online_rev[i] += _to_float(amt)
+                online_cnt[i] += 1
                 break
+
+    for ts, amt in pos_rows:
+        for i in range(buckets):
+            if edges[i] <= ts < edges[i + 1]:
+                pos_rev[i] += _to_float(amt)
+                pos_cnt[i] += 1
+                break
+
+    rev = [online_rev[i] + pos_rev[i] for i in range(buckets)]
+    cnt = [online_cnt[i] + pos_cnt[i] for i in range(buckets)]
     labels = [edges[i].strftime('%b %d') for i in range(buckets)]
-    return {'labels': labels, 'revenue': rev, 'orders': cnt}
+    return {
+        'labels': labels,
+        'revenue': rev,
+        'orders': cnt,
+        'online_revenue': online_rev,
+        'pos_revenue': pos_rev,
+        'online_orders': online_cnt,
+        'pos_orders': pos_cnt,
+    }
 
 
 def _delivery_performance(store_id, start, end):
@@ -1518,8 +1645,9 @@ def _platform_order_status_breakdown(start, end):
 
 
 def _platform_sales_by_category(start, end):
-    rows = db.session.query(
+    online_rows = db.session.query(
         Category.name,
+        func.coalesce(func.sum(OrderItem.quantity), 0).label('qty'),
         func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('revenue'),
     ).join(Product, Product.main_category_id == Category.id) \
      .join(OrderItem, OrderItem.product_id == Product.id) \
@@ -1529,9 +1657,54 @@ def _platform_sales_by_category(start, end):
         Order.created_at >= start,
         Order.created_at < end,
      ).group_by(Category.name) \
-      .order_by(func.sum(OrderItem.quantity * OrderItem.price).desc()) \
       .all()
-    return [{'name': r[0] or 'Uncategorized', 'revenue': _to_float(r[1])} for r in rows]
+
+    pos_rows = db.session.query(
+        Category.name,
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('qty'),
+        func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('revenue'),
+    ).join(Product, POSOrderItem.product_id == Product.id) \
+     .outerjoin(Category, Category.id == Product.main_category_id) \
+     .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+     ).group_by(Category.name) \
+      .all()
+
+    merged = {}
+    for row in online_rows:
+        key = row[0] or 'Uncategorized'
+        merged.setdefault(key, {
+            'name': key,
+            'online_qty': 0,
+            'online_revenue': 0.0,
+            'pos_qty': 0,
+            'pos_revenue': 0.0,
+            'revenue': 0.0,
+        })
+        merged[key]['online_qty'] += int(row[1] or 0)
+        merged[key]['online_revenue'] += _to_float(row[2])
+
+    for row in pos_rows:
+        key = row[0] or 'Uncategorized'
+        merged.setdefault(key, {
+            'name': key,
+            'online_qty': 0,
+            'online_revenue': 0.0,
+            'pos_qty': 0,
+            'pos_revenue': 0.0,
+            'revenue': 0.0,
+        })
+        merged[key]['pos_qty'] += int(row[1] or 0)
+        merged[key]['pos_revenue'] += _to_float(row[2])
+
+    out = []
+    for entry in merged.values():
+        entry['revenue'] = entry['online_revenue'] + entry['pos_revenue']
+        out.append(entry)
+    out.sort(key=lambda x: x['revenue'], reverse=True)
+    return out
 
 
 def _platform_peak_hours(start, end):
@@ -1560,7 +1733,7 @@ def _platform_peak_hours(start, end):
 
 
 def _platform_revenue_series(start, end):
-    rows = db.session.query(
+    online_rows = db.session.query(
         func.date(Order.created_at).label('d'),
         func.coalesce(func.sum(Order.total_amount), 0).label('rev'),
         func.count(Order.id).label('orders'),
@@ -1570,32 +1743,70 @@ def _platform_revenue_series(start, end):
         Order.created_at < end,
     ).group_by('d').order_by('d').all()
 
-    by_day = {r.d: (_to_float(r.rev), int(r.orders or 0)) for r in rows}
+    pos_rows = db.session.query(
+        func.date(POSOrder.created_at).label('d'),
+        func.coalesce(func.sum(POSOrder.total_amount), 0).label('rev'),
+        func.count(POSOrder.id).label('orders'),
+    ).filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).group_by('d').order_by('d').all()
+
+    def _k(day_value):
+        return day_value.isoformat() if hasattr(day_value, 'isoformat') else str(day_value)
+
+    online_by_day = {_k(r.d): (_to_float(r.rev), int(r.orders or 0)) for r in online_rows}
+    pos_by_day = {_k(r.d): (_to_float(r.rev), int(r.orders or 0)) for r in pos_rows}
 
     days = (end - start).days or 1
     if days > 31:
         return _platform_bucketed_revenue(start, end, buckets=12)
 
     labels, revenues, order_counts = [], [], []
+    online_revenues, pos_revenues = [], []
+    online_orders, pos_orders = [], []
     cur = start.date()
     end_d = end.date()
     while cur < end_d:
-        rev, oc = by_day.get(cur, (0.0, 0))
+        k = _k(cur)
+        o_rev, o_cnt = online_by_day.get(k, (0.0, 0))
+        p_rev, p_cnt = pos_by_day.get(k, (0.0, 0))
+        rev, oc = (o_rev + p_rev), (o_cnt + p_cnt)
         labels.append(cur.strftime('%b %d'))
         revenues.append(rev)
         order_counts.append(oc)
+        online_revenues.append(o_rev)
+        pos_revenues.append(p_rev)
+        online_orders.append(o_cnt)
+        pos_orders.append(p_cnt)
         cur += timedelta(days=1)
-    return {'labels': labels, 'revenue': revenues, 'orders': order_counts}
+    return {
+        'labels': labels,
+        'revenue': revenues,
+        'orders': order_counts,
+        'online_revenue': online_revenues,
+        'pos_revenue': pos_revenues,
+        'online_orders': online_orders,
+        'pos_orders': pos_orders,
+    }
 
 
 def _platform_bucketed_revenue(start, end, buckets=12):
     span = (end - start).total_seconds()
     if span <= 0:
-        return {'labels': [], 'revenue': [], 'orders': []}
+        return {
+            'labels': [],
+            'revenue': [],
+            'orders': [],
+            'online_revenue': [],
+            'pos_revenue': [],
+            'online_orders': [],
+            'pos_orders': [],
+        }
     step = span / buckets
     edges = [start + timedelta(seconds=step * i) for i in range(buckets + 1)]
 
-    rows = db.session.query(
+    online_rows = db.session.query(
         Order.created_at,
         Order.total_amount,
     ).filter(
@@ -1604,16 +1815,45 @@ def _platform_bucketed_revenue(start, end, buckets=12):
         Order.created_at < end,
     ).all()
 
-    rev = [0.0] * buckets
-    cnt = [0] * buckets
-    for ts, amt in rows:
+    pos_rows = db.session.query(
+        POSOrder.created_at,
+        POSOrder.total_amount,
+    ).filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).all()
+
+    online_rev = [0.0] * buckets
+    online_cnt = [0] * buckets
+    pos_rev = [0.0] * buckets
+    pos_cnt = [0] * buckets
+
+    for ts, amt in online_rows:
         for i in range(buckets):
             if edges[i] <= ts < edges[i + 1]:
-                rev[i] += _to_float(amt)
-                cnt[i] += 1
+                online_rev[i] += _to_float(amt)
+                online_cnt[i] += 1
                 break
+
+    for ts, amt in pos_rows:
+        for i in range(buckets):
+            if edges[i] <= ts < edges[i + 1]:
+                pos_rev[i] += _to_float(amt)
+                pos_cnt[i] += 1
+                break
+
+    rev = [online_rev[i] + pos_rev[i] for i in range(buckets)]
+    cnt = [online_cnt[i] + pos_cnt[i] for i in range(buckets)]
     labels = [edges[i].strftime('%b %d') for i in range(buckets)]
-    return {'labels': labels, 'revenue': rev, 'orders': cnt}
+    return {
+        'labels': labels,
+        'revenue': rev,
+        'orders': cnt,
+        'online_revenue': online_rev,
+        'pos_revenue': pos_rev,
+        'online_orders': online_cnt,
+        'pos_orders': pos_cnt,
+    }
 
 
 def _platform_delivery_performance(start, end):

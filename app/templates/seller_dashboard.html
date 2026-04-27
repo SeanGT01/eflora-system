@@ -99,6 +99,155 @@
 
 .dash-date i { color: var(--dusty-rose); font-size: 15px; }
 
+.period-wrap {
+  margin: -1.2rem 0 1.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .55rem;
+}
+
+.period-bar {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: .35rem .5rem;
+  flex-wrap: wrap;
+}
+
+.period-btn {
+  padding: .45rem 1.1rem;
+  border-radius: 100px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.period-btn:hover { color: var(--charcoal); }
+
+.period-btn.active {
+  background: var(--charcoal);
+  color: var(--cream);
+  box-shadow: 0 2px 8px rgba(44,37,32,.25);
+}
+
+.period-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.custom-btn {
+  padding: .45rem 1rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.custom-btn:hover { border-color: var(--deep-rose); color: var(--deep-rose); }
+
+.custom-btn.active {
+  border-color: var(--deep-rose);
+  color: var(--deep-rose);
+  background: rgba(181,68,90,.06);
+}
+
+.period-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: .25rem;
+}
+
+.custom-drawer {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.75rem;
+  display: none;
+  margin-bottom: 1.5rem;
+  align-items: flex-end;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  animation: slideDown .25s ease;
+}
+
+.custom-drawer.open { display: flex; }
+
+.drawer-field {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.drawer-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.drawer-input {
+  padding: .65rem 1rem;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--charcoal);
+  background: #fffdfa;
+  min-width: 165px;
+}
+
+.drawer-input:focus {
+  outline: none;
+  border-color: var(--deep-rose);
+  box-shadow: 0 0 0 2px rgba(181,68,90,.12);
+}
+
+.apply-btn {
+  border: 0;
+  background: var(--deep-rose);
+  color: var(--cream);
+  border-radius: 100px;
+  padding: .68rem 1.2rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.apply-btn:hover {
+  background: #9f3d50;
+  transform: translateY(-1px);
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ─── KPI Strip ─────────────────────────────────────────── */
 .kpi-row {
   display: grid;
@@ -1113,6 +1262,33 @@ table.dash-table {
     </div>
   </div>
 
+  <div class="period-wrap">
+    <div class="period-bar">
+      <button class="period-btn {% if period == 'today' %}active{% endif %}" data-period="today" onclick="setPeriod('today',this)">Today</button>
+      <button class="period-btn {% if period == 'week' %}active{% endif %}" data-period="week" onclick="setPeriod('week',this)">This Week</button>
+      <button class="period-btn {% if period == 'month' %}active{% endif %}" data-period="month" onclick="setPeriod('month',this)">Month</button>
+      <button class="period-btn {% if period == 'year' %}active{% endif %}" data-period="year" onclick="setPeriod('year',this)">Year</button>
+      <div class="period-divider"></div>
+      <button class="custom-btn {% if period == 'custom' %}active{% endif %}" id="customToggle" onclick="toggleCustom()">
+        <i class="ri-calendar-2-line"></i> Custom
+      </button>
+    </div>
+    <div class="period-label">{{ period_label or 'This month' }}</div>
+    <div class="custom-drawer" id="customDrawer">
+      <div class="drawer-field">
+        <span class="drawer-label">From</span>
+        <input id="fromDate" type="date" class="drawer-input" value="{{ custom_from or '' }}">
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-label">To</span>
+        <input id="toDate" type="date" class="drawer-input" value="{{ custom_to or '' }}">
+      </div>
+      <button type="button" class="apply-btn" onclick="applyCustomRange()">
+        <i class="ri-check-line"></i> Apply Range
+      </button>
+    </div>
+  </div>
+
   <!-- ─── KPI Strip ───────────────────────────────────────── -->
   <div class="kpi-row">
     <!-- Revenue -->
@@ -1122,7 +1298,7 @@ table.dash-table {
         <div class="kpi-icon"><i class="ri-money-dollar-circle-line"></i></div>
       </div>
       <div class="kpi-value">₱{{ '{:,.0f}'.format(revenue_this_month) }}</div>
-      <div class="kpi-sub">This month</div>
+      <div class="kpi-sub">{{ period_label or 'Selected period' }}</div>
       {% if revenue_change > 0 %}
         <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> {{ revenue_change }}%</span>
       {% elif revenue_change < 0 %}
@@ -1139,7 +1315,7 @@ table.dash-table {
         <div class="kpi-icon"><i class="ri-shopping-bag-line"></i></div>
       </div>
       <div class="kpi-value">{{ orders_this_month }}</div>
-      <div class="kpi-sub">Orders this month</div>
+      <div class="kpi-sub">Orders in {{ period_label or 'selected period' }}</div>
       {% if orders_change > 0 %}
         <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> {{ orders_change }}%</span>
       {% elif orders_change < 0 %}
@@ -1156,7 +1332,7 @@ table.dash-table {
         <div class="kpi-icon"><i class="ri-user-heart-line"></i></div>
       </div>
       <div class="kpi-value">{{ customers_this_month }}</div>
-      <div class="kpi-sub">Unique this month</div>
+      <div class="kpi-sub">Unique in {{ period_label or 'selected period' }}</div>
       {% if customers_change > 0 %}
         <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> {{ customers_change }}%</span>
       {% elif customers_change < 0 %}
@@ -1199,6 +1375,34 @@ table.dash-table {
       </div>
       <div class="chart-wrap">
         <canvas id="revenueChart"></canvas>
+      </div>
+      <div class="table-scroll" style="margin-top:.9rem;">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>Channel</th>
+              <th>Revenue</th>
+              <th>Orders</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Online</td>
+              <td id="revOnlineCell">₱0</td>
+              <td id="ordOnlineCell">0</td>
+            </tr>
+            <tr>
+              <td>POS</td>
+              <td id="revPosCell">₱0</td>
+              <td id="ordPosCell">0</td>
+            </tr>
+            <tr>
+              <td><strong>Total</strong></td>
+              <td id="revTotalCell"><strong>₱0</strong></td>
+              <td id="ordTotalCell"><strong>0</strong></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -1559,26 +1763,33 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">By Category</div>
-          <div class="chart-panel-subtitle">Top selling categories</div>
+          <div class="chart-panel-subtitle">Online + POS breakdown</div>
         </div>
       </div>
       <div class="chart-panel-body">
         {% if sales_by_category %}
-        {% set cat_colors = ['#b5445a','#7a9e7e','#c4714b','#6b4c3b','#d4788a','#4a6b4e','#e8906a','#9a8d85'] %}
-        <ul class="category-list">
-          {% for cat in sales_by_category %}
-          <li class="category-item">
-            <div class="category-left">
-              <div class="category-dot" style="background:{{ cat_colors[loop.index0 % 8] }}"></div>
-              <span class="category-name">{{ cat.name }}</span>
-            </div>
-            <div class="category-meta">
-              <div class="category-rev">₱{{ '{:,.0f}'.format(cat.revenue) }}</div>
-              <div class="category-qty">{{ cat.qty }} sold</div>
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
+        <div class="table-scroll">
+          <table class="dash-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Online</th>
+                <th>POS</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for cat in sales_by_category %}
+              <tr>
+                <td>{{ cat.name }}</td>
+                <td>₱{{ '{:,.0f}'.format(cat.online_revenue) }} <span style="color:var(--muted);">({{ cat.online_qty }})</span></td>
+                <td>₱{{ '{:,.0f}'.format(cat.pos_revenue) }} <span style="color:var(--muted);">({{ cat.pos_qty }})</span></td>
+                <td><strong>₱{{ '{:,.0f}'.format(cat.revenue) }}</strong> <span style="color:var(--muted);">({{ cat.qty }})</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
         {% else %}
           <div class="empty-panel"><i class="ri-pie-chart-line"></i>No category data yet</div>
         {% endif %}
@@ -1687,8 +1898,63 @@ table.dash-table {
   document.getElementById('dateStr').textContent = d.toLocaleDateString('en-PH', opts);
 })();
 
+function setPeriod(period, btn) {
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const url = new URL(window.location.href);
+  url.searchParams.set('period', period);
+  url.searchParams.delete('from');
+  url.searchParams.delete('to');
+  window.location.href = url.toString();
+}
+
+function toggleCustom() {
+  const drawer = document.getElementById('customDrawer');
+  if (!drawer) return;
+  drawer.classList.toggle('open');
+}
+
+function applyCustomRange() {
+  const from = document.getElementById('fromDate')?.value;
+  const to = document.getElementById('toDate')?.value;
+  if (!from || !to) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('period', 'custom');
+  url.searchParams.set('from', from);
+  url.searchParams.set('to', to);
+  window.location.href = url.toString();
+}
+
 /* ── Chart data from backend ──────────────────────────── */
 const datasets = {{ chart_data|tojson }};
+
+function sumArray(values) {
+  return (values || []).reduce((acc, v) => acc + (Number(v) || 0), 0);
+}
+
+function fmtInt(v) {
+  return (Number(v) || 0).toLocaleString();
+}
+
+function fmtPeso(v) {
+  return '₱' + (Number(v) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function updateRevenueBreakdownTable(periodData) {
+  const onlineRev = sumArray(periodData.online_revenue || []);
+  const posRev = sumArray(periodData.pos_revenue || []);
+  const onlineOrd = sumArray(periodData.online_orders || []);
+  const posOrd = sumArray(periodData.pos_orders || []);
+  const totalRev = onlineRev + posRev;
+  const totalOrd = onlineOrd + posOrd;
+
+  document.getElementById('revOnlineCell').textContent = fmtPeso(onlineRev);
+  document.getElementById('revPosCell').textContent = fmtPeso(posRev);
+  document.getElementById('revTotalCell').textContent = fmtPeso(totalRev);
+  document.getElementById('ordOnlineCell').textContent = fmtInt(onlineOrd);
+  document.getElementById('ordPosCell').textContent = fmtInt(posOrd);
+  document.getElementById('ordTotalCell').textContent = fmtInt(totalOrd);
+}
 
 /* ── Build Chart ──────────────────────────────────────── */
 const ctx = document.getElementById('revenueChart').getContext('2d');
@@ -1702,6 +1968,7 @@ sageGrad.addColorStop(0,   'rgba(122,158,126,.18)');
 sageGrad.addColorStop(1,   'rgba(122,158,126,.02)');
 
 const initialPeriod = datasets['30d'] && datasets['30d'].labels.length > 0 ? '30d' : '7d';
+updateRevenueBreakdownTable(datasets[initialPeriod] || {});
 
 let chart = new Chart(ctx, {
   type: 'line',
@@ -1799,10 +2066,11 @@ let chart = new Chart(ctx, {
 function switchPeriod(period, btn) {
   document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
-  const d = datasets[period] || {labels:[], revenue:[], orders:[]};
+  const d = datasets[period] || {labels:[], revenue:[], orders:[], online_revenue:[], pos_revenue:[], online_orders:[], pos_orders:[]};
   chart.data.labels = d.labels;
   chart.data.datasets[0].data = d.revenue;
   chart.data.datasets[1].data = d.orders;
+  updateRevenueBreakdownTable(d);
   chart.update('active');
 }
 
@@ -1981,7 +2249,7 @@ const tooltipStyle = {
   const values = [];
   let maxVal = 0;
   for (let h = 0; h < 24; h++) {
-    const ampm = h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h-12) + 'p';
+    const ampm = h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h-12}pm`;
     labels.push(ampm);
     const v = hourlyData[h] || 0;
     values.push(v);

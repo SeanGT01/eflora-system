@@ -1,12 +1,71 @@
 # app/archive_routes.py
-from flask import Blueprint, request, jsonify, session, render_template
-from app.models import Product, Store, User, CartItem
+from flask import Blueprint, request, jsonify, session, render_template, has_request_context
+from app.models import Product, Store, User, CartItem, OrderItem, POSOrderItem, ProductRating
 from app.extensions import db
 from datetime import datetime
 from functools import wraps
 from app.utils.cloudinary_helper import delete_from_cloudinary
 
 archive_bp = Blueprint('archive', __name__, url_prefix='/api/v1/seller/archive')
+SNAPSHOT_PREFIX = '[Deleted Snapshot]'
+
+
+def _product_reference_counts(product_id):
+    """Return counts of dependent rows that block hard delete."""
+    return {
+        'carts': CartItem.query.filter_by(product_id=product_id).count(),
+        'order_items': OrderItem.query.filter_by(product_id=product_id).count(),
+        'pos_order_items': POSOrderItem.query.filter_by(product_id=product_id).count(),
+        'ratings': ProductRating.query.filter_by(product_id=product_id).count(),
+    }
+
+
+def _build_delete_block_reason(refs):
+    parts = []
+    if refs.get('carts'):
+        parts.append(f"{refs['carts']} cart item(s)")
+    if refs.get('order_items'):
+        parts.append(f"{refs['order_items']} online order item(s)")
+    if refs.get('pos_order_items'):
+        parts.append(f"{refs['pos_order_items']} POS order item(s)")
+    if refs.get('ratings'):
+        parts.append(f"{refs['ratings']} rating(s)")
+    return ', '.join(parts)
+
+
+def _get_or_create_pos_snapshot_product(store, source_product):
+    """Create/reuse a hidden placeholder product used by POS history rows."""
+    base_name = (source_product.name or 'Product').strip()
+    if base_name.startswith(SNAPSHOT_PREFIX):
+        base_name = base_name[len(SNAPSHOT_PREFIX):].strip(' -') or 'Product'
+    snapshot_name = f"{SNAPSHOT_PREFIX} {base_name}"
+    snapshot = Product.query.filter_by(
+        store_id=store.id,
+        name=snapshot_name,
+        is_archived=True,
+    ).first()
+    if snapshot:
+        return snapshot
+
+    archived_by_user = session.get('user_id') if has_request_context() else None
+
+    snapshot = Product(
+        store_id=store.id,
+        name=snapshot_name,
+        description=(
+            f"POS snapshot placeholder for deleted product #{source_product.id}. "
+            f"Original name: {source_product.name}"
+        ),
+        price=source_product.price,
+        stock_quantity=0,
+        is_available=False,
+        is_archived=True,
+        archived_by=archived_by_user,
+        archived_at=datetime.utcnow(),
+    )
+    db.session.add(snapshot)
+    db.session.flush()
+    return snapshot
 
 def seller_required(f):
     """Require user to be logged in as a seller."""
@@ -36,6 +95,8 @@ def get_archived_products():
         products = Product.query.filter_by(
             store_id=store.id,
             is_archived=True
+        ).filter(
+            ~Product.name.ilike(f'{SNAPSHOT_PREFIX}%')
         ).order_by(Product.archived_at.desc()).all()
         
         return jsonify({
@@ -137,11 +198,31 @@ def permanent_delete_product(product_id):
                 'error': 'Product must be archived first. Use archive endpoint.'
             }), 400
         
-        # Double-check if product is in any carts (safety)
-        carts_with_product = CartItem.query.filter_by(product_id=product_id).count()
-        if carts_with_product > 0:
+        # Block hard delete when there are dependent records.
+        refs = _product_reference_counts(product_id)
+        # POS history can be preserved by re-pointing line items to a snapshot product.
+        is_snapshot = (product.name or '').startswith(SNAPSHOT_PREFIX)
+        if refs.get('pos_order_items') and is_snapshot:
             return jsonify({
-                'error': f'Cannot permanently delete. Product is in {carts_with_product} carts.'
+                'error': 'Cannot delete this snapshot product while it is referenced by POS history.',
+                'references': refs,
+            }), 400
+
+        if refs.get('pos_order_items'):
+            snapshot = _get_or_create_pos_snapshot_product(store, product)
+            POSOrderItem.query.filter_by(product_id=product_id).update(
+                {
+                    POSOrderItem.product_id: snapshot.id,
+                    POSOrderItem.variant_id: None,
+                },
+                synchronize_session=False,
+            )
+            refs['pos_order_items'] = 0
+
+        if any(refs.values()):
+            return jsonify({
+                'error': f'Cannot permanently delete. Product is still referenced by {_build_delete_block_reason(refs)}.',
+                'references': refs,
             }), 400
         
         # Delete associated media from Cloudinary (best effort per asset)
@@ -272,13 +353,35 @@ def bulk_permanent_delete():
         for product_id in product_ids:
             product = Product.query.filter_by(id=product_id, store_id=store.id).first()
             if product and product.is_archived:
-                # Check if in any carts
-                carts_count = CartItem.query.filter_by(product_id=product_id).count()
-                if carts_count > 0:
+                # Block hard delete when there are dependent records.
+                refs = _product_reference_counts(product_id)
+                is_snapshot = (product.name or '').startswith(SNAPSHOT_PREFIX)
+                if refs.get('pos_order_items') and is_snapshot:
                     failed_products.append({
                         'id': product.id,
                         'name': product.name,
-                        'reason': f'In {carts_count} carts'
+                        'reason': 'Snapshot product is still referenced by POS history',
+                        'references': refs,
+                    })
+                    continue
+
+                if refs.get('pos_order_items'):
+                    snapshot = _get_or_create_pos_snapshot_product(store, product)
+                    POSOrderItem.query.filter_by(product_id=product_id).update(
+                        {
+                            POSOrderItem.product_id: snapshot.id,
+                            POSOrderItem.variant_id: None,
+                        },
+                        synchronize_session=False,
+                    )
+                    refs['pos_order_items'] = 0
+
+                if any(refs.values()):
+                    failed_products.append({
+                        'id': product.id,
+                        'name': product.name,
+                        'reason': f'Referenced by {_build_delete_block_reason(refs)}',
+                        'references': refs,
                     })
                     continue
                 
@@ -325,12 +428,16 @@ def archive_stats():
         total_archived = Product.query.filter_by(
             store_id=store.id,
             is_archived=True
+        ).filter(
+            ~Product.name.ilike(f'{SNAPSHOT_PREFIX}%')
         ).count()
         
         # Get archive history (last 10 archived products)
         recent_archives = Product.query.filter_by(
             store_id=store.id,
             is_archived=True
+        ).filter(
+            ~Product.name.ilike(f'{SNAPSHOT_PREFIX}%')
         ).order_by(Product.archived_at.desc()).limit(10).all()
         
         # Count products in carts that are archived

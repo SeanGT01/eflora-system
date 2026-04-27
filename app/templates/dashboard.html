@@ -99,6 +99,49 @@
 
 .dash-date i { color: var(--dusty-rose); font-size: 15px; }
 
+/* ─── Period Controls ───────────────────────────────────── */
+.period-wrap { display:flex; flex-direction:column; align-items:flex-end; gap:.55rem; }
+.period-bar {
+  display:flex; align-items:center; gap:.35rem; flex-wrap:wrap;
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: .3rem .45rem;
+}
+.period-btn {
+  padding:.4rem .9rem; border-radius:100px; border:none; background:transparent;
+  font-family: var(--font-sans); font-size:12px; font-weight:600; color:var(--muted);
+  cursor:pointer; transition:var(--transition);
+}
+.period-btn:hover { color:var(--charcoal); }
+.period-btn.active { background:var(--charcoal); color:var(--cream); }
+.period-divider { width:1px; height:18px; background:var(--border); }
+.custom-btn {
+  padding:.38rem .85rem; border-radius:100px; border:1.5px solid var(--border-md);
+  background:transparent; font-family:var(--font-sans); font-size:11.5px; font-weight:600;
+  color:var(--muted); cursor:pointer; transition:var(--transition);
+}
+.custom-btn:hover { border-color:var(--deep-rose); color:var(--deep-rose); }
+.custom-drawer {
+  background: var(--warm-white);
+  border:1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding:.8rem 1rem;
+  display:none;
+  align-items:flex-end; gap:.75rem; flex-wrap:wrap;
+}
+.custom-drawer.open { display:flex; }
+.drawer-field { display:flex; flex-direction:column; gap:.35rem; }
+.drawer-label { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); }
+.drawer-input {
+  padding:.5rem .75rem; border:1.5px solid var(--border-md); border-radius:10px;
+  font-family:var(--font-sans); font-size:12px; background:var(--cream);
+}
+.apply-btn {
+  padding:.52rem 1rem; border:none; border-radius:100px; background:var(--deep-rose); color:#fff;
+  font-family:var(--font-sans); font-size:12px; font-weight:600; cursor:pointer;
+}
+
 /* ─── KPI Strip ─────────────────────────────────────────── */
 .kpi-row {
   display: grid;
@@ -883,6 +926,7 @@ table.dash-table {
 {% set orders_change    = orders_change|default(0) %}
 {% set customers_change = customers_change|default(0) %}
 {% set delivery_rate    = delivery_rate|default(0) %}
+{% set period = period|default('month') %}
 <div class="dash">
 
   <!-- ─── Header ─────────────────────────────────────────── -->
@@ -890,10 +934,34 @@ table.dash-table {
     <div>
       <div class="dash-greeting-label">{% if is_admin %}Platform overview{% else %}Welcome back{% endif %}</div>
       <h1 class="dash-title">{% if is_admin %}eFlowers, <em>at a glance</em>{% else %}Your Store, <em>in bloom</em>{% endif %}</h1>
+      {% if period_label %}
+      <div style="font-size:12px;color:var(--muted);margin-top:.4rem;">{{ period_label }}</div>
+      {% endif %}
     </div>
-    <div class="dash-date" id="dashDate">
-      <i class="ri-calendar-line"></i>
-      <span id="dateStr">Loading…</span>
+    <div class="period-wrap">
+      <div class="period-bar">
+        <button class="period-btn {% if period == 'today' %}active{% endif %}" onclick="setPeriod('today')">Today</button>
+        <button class="period-btn {% if period == 'week' %}active{% endif %}" onclick="setPeriod('week')">This Week</button>
+        <button class="period-btn {% if period == 'month' %}active{% endif %}" onclick="setPeriod('month')">Month</button>
+        <button class="period-btn {% if period == 'year' %}active{% endif %}" onclick="setPeriod('year')">Year</button>
+        <div class="period-divider"></div>
+        <button class="custom-btn" onclick="toggleCustom()">Custom</button>
+      </div>
+      <div class="custom-drawer" id="customDrawer">
+        <div class="drawer-field">
+          <span class="drawer-label">From</span>
+          <input type="date" id="fromDate" class="drawer-input" value="{{ custom_from|default('') }}">
+        </div>
+        <div class="drawer-field">
+          <span class="drawer-label">To</span>
+          <input type="date" id="toDate" class="drawer-input" value="{{ custom_to|default('') }}">
+        </div>
+        <button class="apply-btn" onclick="applyCustomRange()">Apply</button>
+      </div>
+      <div class="dash-date" id="dashDate">
+        <i class="ri-calendar-line"></i>
+        <span id="dateStr">Loading…</span>
+      </div>
     </div>
   </div>
 
@@ -1395,5 +1463,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+
+/* ── Dashboard range filters ───────────────────────────── */
+function setPeriod(period) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('period', period);
+  url.searchParams.delete('from');
+  url.searchParams.delete('to');
+  window.location.href = url.toString();
+}
+
+function toggleCustom() {
+  document.getElementById('customDrawer').classList.toggle('open');
+}
+
+function applyCustomRange() {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  if (!from || !to) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('period', 'custom');
+  url.searchParams.set('from', from);
+  url.searchParams.set('to', to);
+  window.location.href = url.toString();
+}
 </script>
 {% endblock %}

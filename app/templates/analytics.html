@@ -1009,6 +1009,38 @@ table.ana-table {
       <div class="chart-pad">
         <canvas id="revenueChart" height="115"></canvas>
       </div>
+      <div class="table-scroll" style="padding:0 1.75rem 1.35rem;">
+        {% set online_rev_total = (revenue_series.online_revenue|sum) if revenue_series.online_revenue is defined else 0 %}
+        {% set pos_rev_total = (revenue_series.pos_revenue|sum) if revenue_series.pos_revenue is defined else 0 %}
+        {% set online_ord_total = (revenue_series.online_orders|sum) if revenue_series.online_orders is defined else 0 %}
+        {% set pos_ord_total = (revenue_series.pos_orders|sum) if revenue_series.pos_orders is defined else 0 %}
+        <table class="ana-table">
+          <thead>
+            <tr>
+              <th>Channel</th>
+              <th>Revenue</th>
+              <th>Orders</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Online</td>
+              <td>₱{{ '{:,.2f}'.format(online_rev_total) }}</td>
+              <td>{{ '{:,}'.format(online_ord_total|int) }}</td>
+            </tr>
+            <tr>
+              <td>POS</td>
+              <td>₱{{ '{:,.2f}'.format(pos_rev_total) }}</td>
+              <td>{{ '{:,}'.format(pos_ord_total|int) }}</td>
+            </tr>
+            <tr>
+              <td><strong>Total</strong></td>
+              <td><strong>₱{{ '{:,.2f}'.format(online_rev_total + pos_rev_total) }}</strong></td>
+              <td><strong>{{ '{:,}'.format((online_ord_total + pos_ord_total)|int) }}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="panel">
@@ -1054,7 +1086,35 @@ table.ana-table {
 
     <div class="panel">
       <div class="panel-head"><span class="panel-title">Sales by Category</span></div>
-      <div class="chart-pad"><canvas id="categoryChart" height="220"></canvas></div>
+      <div class="chart-pad"><canvas id="categoryChart" height="180"></canvas></div>
+      <div class="table-scroll" style="padding:0 1.75rem 1.35rem;">
+        <table class="ana-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Online</th>
+              <th>POS</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if sales_by_category %}
+              {% for cat in sales_by_category %}
+              <tr>
+                <td>{{ cat.name }}</td>
+                <td>₱{{ '{:,.2f}'.format(cat.online_revenue|default(0)) }} <span style="color:var(--muted);">({{ cat.online_qty|default(0) }})</span></td>
+                <td>₱{{ '{:,.2f}'.format(cat.pos_revenue|default(0)) }} <span style="color:var(--muted);">({{ cat.pos_qty|default(0) }})</span></td>
+                <td><strong>₱{{ '{:,.2f}'.format(cat.revenue|default(0)) }}</strong> <span style="color:var(--muted);">({{ cat.qty|default((cat.online_qty|default(0)) + (cat.pos_qty|default(0))) }})</span></td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="4" style="text-align:center;color:var(--muted);padding:1rem;">No category data yet.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="panel">
