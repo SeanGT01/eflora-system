@@ -492,6 +492,79 @@
     font-size: clamp(16px, 4vw, 18px); 
 }
 
+.order-detail-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.order-detail-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: linear-gradient(180deg, rgba(181,68,90,0.07), rgba(181,68,90,0.02));
+    border: 1px solid rgba(181,68,90,0.18);
+    border-radius: var(--radius-md);
+    padding: 0.7rem 0.85rem;
+}
+
+.order-detail-status-meta {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.order-detail-panel {
+    background: var(--warm-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.9rem 1rem;
+}
+
+.order-detail-summary {
+    background: linear-gradient(180deg, #fffdfb 0%, #fff8f3 100%);
+    border: 1px solid rgba(181,68,90,0.16);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.order-detail-summary-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.order-detail-summary-row strong {
+    color: var(--charcoal);
+}
+
+.order-detail-summary-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 0.45rem;
+    border-top: 1px dashed var(--border-strong);
+}
+
+.order-detail-summary-total-label {
+    font-family: var(--font-display);
+    font-size: 15px;
+    color: var(--charcoal);
+}
+
+.order-detail-summary-total-value {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--deep-rose);
+}
+
 /* Progress tracker */
 .order-progress {
     display: flex;
@@ -1822,10 +1895,11 @@ function buildOrderDetailHTML(order) {
 
     // Status badge (matching the card badge)
     const statusBadge = `
-        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;">
+        <div class="order-detail-status-row">
             <span class="order-status-badge ${cfg.badge}">
                 <i class="${cfg.icon}" style="margin-right:4px;"></i>${display.label}
             </span>
+            <span class="order-detail-status-meta">${formatDateTimePH(order.created_at)}</span>
         </div>`;
 
     // Progress tracker (skip for cancelled)
@@ -1881,13 +1955,14 @@ function buildOrderDetailHTML(order) {
     const total    = order.total_amount ?? order.total ?? 0;
 
     return `
+        <div class="order-detail-shell">
         ${statusBadge}
         ${progressHtml}
 
         <!-- Items -->
         <div class="order-detail-section">
             <div class="order-detail-section-title">Items Ordered</div>
-            <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-md);padding:0 1rem;">
+            <div class="order-detail-panel" style="padding:0 1rem;">
                 ${itemsHtml}
             </div>
         </div>
@@ -1902,7 +1977,7 @@ function buildOrderDetailHTML(order) {
                 </div>
                 <div class="order-detail-item">
                     <div class="order-detail-item-label">Date Placed</div>
-                    <div class="order-detail-item-value">${formatDateWithTime(order.date || order.created_at)}</div>
+                    <div class="order-detail-item-value">${formatDateTimePH(order.created_at || order.date)}</div>
                 </div>
                 <div class="order-detail-item">
                     <div class="order-detail-item-label">Payment</div>
@@ -1912,6 +1987,16 @@ function buildOrderDetailHTML(order) {
                     <div class="order-detail-item-label">Payment Status</div>
                     <div class="order-detail-item-value">${capitalise(order.payment_status || 'Pending')}</div>
                 </div>
+                ${order.requested_delivery_date ? `
+                <div class="order-detail-item">
+                    <div class="order-detail-item-label">Requested Date</div>
+                    <div class="order-detail-item-value">${formatDatePH(order.requested_delivery_date)}</div>
+                </div>` : ''}
+                ${order.requested_delivery_time ? `
+                <div class="order-detail-item">
+                    <div class="order-detail-item-label">Requested Time</div>
+                    <div class="order-detail-item-value">${formatDeliveryTimeSlot(order.requested_delivery_time)}</div>
+                </div>` : ''}
                 ${order.delivery_address ? `
                 <div class="order-detail-item" style="grid-column:1/-1;">
                     <div class="order-detail-item-label">Delivery Address</div>
@@ -1928,19 +2013,19 @@ function buildOrderDetailHTML(order) {
         <!-- Summary -->
         <div class="order-detail-section">
             <div class="order-detail-section-title">Order Summary</div>
-            <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem 1.25rem;display:flex;flex-direction:column;gap:.625rem;">
-                <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);">
-                    <span>Subtotal</span><span style="font-weight:600;color:var(--charcoal);">${formatPeso(sub)}</span>
+            <div class="order-detail-summary">
+                <div class="order-detail-summary-row">
+                    <span>Subtotal</span><strong>${formatPeso(sub)}</strong>
                 </div>
-                <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);">
-                    <span>Delivery Fee</span><span style="font-weight:600;color:var(--charcoal);">${formatPeso(delivery)}</span>
+                <div class="order-detail-summary-row">
+                    <span>Delivery Fee</span><strong>${formatPeso(delivery)}</strong>
                 </div>
-                <div style="height:1px;background:var(--border);"></div>
-                <div style="display:flex;justify-content:space-between;align-items:baseline;">
-                    <span style="font-family:var(--font-display);font-size:15px;color:var(--charcoal);">Total</span>
-                    <span style="font-family:var(--font-display);font-size:24px;font-weight:600;color:var(--deep-rose);">${formatPeso(total)}</span>
+                <div class="order-detail-summary-total">
+                    <span class="order-detail-summary-total-label">Total</span>
+                    <span class="order-detail-summary-total-value">${formatPeso(total)}</span>
                 </div>
             </div>
+        </div>
         </div>`;
 }
 
@@ -2245,29 +2330,71 @@ function formatPeso(v) {
     return '₱' + parseFloat(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function formatDate(dt) {
+function parseApiDateTime(value) {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    // Backend often sends UTC without suffix; treat as UTC for consistent PH conversion.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date(`${raw}T00:00:00Z`);
+    if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(raw)) return new Date(raw);
+    return new Date(`${raw}Z`);
+}
+
+function formatDatePH(dt) {
     if (!dt) return '—';
     try {
-        return new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(dt));
-    } catch { return dt; }
+        const parsed = parseApiDateTime(dt);
+        if (!parsed || Number.isNaN(parsed.getTime())) return String(dt);
+        return new Intl.DateTimeFormat('en-PH', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            timeZone: 'Asia/Manila'
+        }).format(parsed);
+    } catch {
+        return String(dt);
+    }
+}
+
+function formatDateTimePH(dt) {
+    if (!dt) return '—';
+    try {
+        const parsed = parseApiDateTime(dt);
+        if (!parsed || Number.isNaN(parsed.getTime())) return String(dt);
+        return new Intl.DateTimeFormat('en-PH', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'Asia/Manila'
+        }).format(parsed);
+    } catch {
+        return String(dt);
+    }
+}
+
+function formatDate(dt) {
+    return formatDatePH(dt);
 }
 
 function formatDateWithTime(dt) {
-    if (!dt) return '—';
-    try {
-        // Append 'Z' to ensure JavaScript treats it as UTC (backend sends UTC without Z suffix)
-        const dateString = dt.includes('Z') ? dt : dt + 'Z';
-        return new Intl.DateTimeFormat('en-PH', { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true,
-            timeZone: 'Asia/Manila'
-        }).format(new Date(dateString));
-    } catch { return dt; }
+    return formatDateTimePH(dt);
+}
+
+function formatDeliveryTimeSlot(slot) {
+    if (!slot) return 'Not specified';
+    const raw = String(slot).trim();
+    const m = raw.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/);
+    if (!m) return raw.toUpperCase().includes('AM') || raw.toUpperCase().includes('PM') ? raw : raw;
+    const to12 = (h, min) => {
+        const hr = Number(h);
+        const suffix = hr >= 12 ? 'PM' : 'AM';
+        const outH = (hr % 12) || 12;
+        return `${outH}:${String(min).padStart(2, '0')} ${suffix}`;
+    };
+    return `${to12(m[1], m[2])} - ${to12(m[3], m[4])}`;
 }
 
 function capitalise(s) {

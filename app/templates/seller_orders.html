@@ -486,6 +486,30 @@
         grid-column: 1 / -1;
     }
 
+    .details-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+    }
+
+    .details-status-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        border: 1px solid rgba(181, 68, 90, 0.22);
+        background: linear-gradient(180deg, rgba(181,68,90,0.08), rgba(181,68,90,0.02));
+        border-radius: var(--radius-lg);
+        padding: 0.65rem 0.8rem;
+    }
+
+    .details-status-time {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+    }
+
     .details-card h6 {
         margin: 0 0 0.55rem;
         font-size: 10px;
@@ -1235,16 +1259,29 @@
         });
     }
 
+    function parseApiDateTime(value) {
+        if (!value) return null;
+        const raw = String(value).trim();
+        if (!raw) return null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date(`${raw}T00:00:00Z`);
+        if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(raw)) return new Date(raw);
+        return new Date(`${raw}Z`);
+    }
+
     function formatDateTime(value) {
         if (!value) return 'N/A';
         try {
+            const parsed = parseApiDateTime(value);
+            if (!parsed || Number.isNaN(parsed.getTime())) return value;
             return new Intl.DateTimeFormat('en-PH', {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
                 hour: 'numeric',
-                minute: '2-digit'
-            }).format(new Date(value));
+                minute: '2-digit',
+                hour12: true,
+                timeZone: 'Asia/Manila'
+            }).format(parsed);
         } catch (error) {
             return value;
         }
@@ -1253,16 +1290,32 @@
     function formatDate(value) {
         if (!value) return 'N/A';
         try {
-            // Handle both date strings (YYYY-MM-DD) and full ISO strings
+            const parsed = parseApiDateTime(value);
+            if (!parsed || Number.isNaN(parsed.getTime())) return value;
             return new Intl.DateTimeFormat('en-PH', {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
-                weekday: 'short'
-            }).format(new Date(value + 'T00:00:00'));
+                weekday: 'short',
+                timeZone: 'Asia/Manila'
+            }).format(parsed);
         } catch (error) {
             return value;
         }
+    }
+
+    function formatDeliveryTimeSlot(value) {
+        if (!value) return 'Not specified';
+        const raw = String(value).trim();
+        const m = raw.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/);
+        if (!m) return raw;
+        const to12h = (h, min) => {
+            const hour = Number(h);
+            const suffix = hour >= 12 ? 'PM' : 'AM';
+            const twelveHour = (hour % 12) || 12;
+            return `${twelveHour}:${String(min).padStart(2, '0')} ${suffix}`;
+        };
+        return `${to12h(m[1], m[2])} - ${to12h(m[3], m[4])}`;
     }
 
     function getFilteredSellerRows() {
@@ -1422,12 +1475,14 @@
     document.querySelectorAll('.seller-view-order').forEach(button => {
         button.addEventListener('click', async () => {
             const body = document.getElementById('sellerOrderDetailsBody');
+            let loadedOrder = null;
             body.innerHTML = '<div class="text-center py-4 text-muted">Loading...</div>';
             openModal(sellerOrderDetailsModal);
             try {
                 const response = await sellerFetch(`/api/seller/orders/${button.dataset.orderId}`);
                 const order = await response.json();
                 if (!response.ok) throw new Error(order.error || 'Failed to load order');
+                loadedOrder = order;
 
                 const itemsHtml = (order.items || []).map(item => `
                     <tr>
@@ -1439,6 +1494,13 @@
                 `).join('');
 
                 body.innerHTML = `
+                    <div class="details-shell">
+                        <div class="details-status-strip">
+                            <span class="status-pill status-${order.status}">
+                                ${titleCaseStatus(order.status)}
+                            </span>
+                            <span class="details-status-time">${formatDateTime(order.created_at)}</span>
+                        </div>
                     <div class="details-grid">
                         <div class="details-card">
                             <h6>Order</h6>
@@ -1475,7 +1537,7 @@
                                 <tr><td>Notes</td><td>${order.delivery_notes || 'None'}</td></tr>
                                 <tr><td>Distance</td><td>${order.distance_km ? `${Number(order.distance_km).toFixed(2)} km` : 'N/A'}</td></tr>
                                 <tr><td>Requested Date</td><td>${order.requested_delivery_date ? formatDate(order.requested_delivery_date) : 'Not specified'}</td></tr>
-                                <tr><td>Requested Time</td><td>${order.requested_delivery_time || 'Not specified'}</td></tr>
+                                <tr><td>Requested Time</td><td>${formatDeliveryTimeSlot(order.requested_delivery_time)}</td></tr>
                             </table>
                         </div>
                         <div class="details-card full">
@@ -1495,6 +1557,7 @@
                             </div>
                         </div>
                     </div>
+                    </div>
                 `;
             } catch (error) {
                 body.innerHTML = `<div class="text-danger">${error.message || 'Failed to load order.'}</div>`;
@@ -1503,11 +1566,11 @@
             // Update footer with action button
             const footer = document.getElementById('sellerOrderDetailsFooter');
             if (footer) {
-                if (order && order.status === 'preparing') {
+                if (loadedOrder && loadedOrder.status === 'preparing') {
                     footer.innerHTML = `
                         <button type="button" class="btn btn-success" id="markDonePreparingBtn"><i class="ri-checkbox-line"></i> Mark as Done Preparing</button>
                     `;
-                    document.getElementById('markDonePreparingBtn').addEventListener('click', () => markOrderDonePreparing(order.id));
+                    document.getElementById('markDonePreparingBtn').addEventListener('click', () => markOrderDonePreparing(loadedOrder.id));
                 } else {
                     footer.innerHTML = '';
                 }
