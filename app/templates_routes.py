@@ -3376,6 +3376,24 @@ def seller_products():
     
     return render_template('products.html', products=product_list, categories=categories)
 
+
+@templates_bp.route('/seller/inventory')
+def seller_inventory():
+    if session.get('role') != 'seller':
+        return redirect(url_for('templates.dashboard'))
+
+    store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+    if not store:
+        return render_template('seller_inventory.html', products=[])
+
+    products = Product.query.filter_by(
+        store_id=store.id,
+        is_archived=False
+    ).order_by(Product.name.asc()).all()
+
+    product_list = [product.to_dict() for product in products]
+    return render_template('seller_inventory.html', products=product_list)
+
 def generate_short_filename(original_filename, product_id, index):
     """Generate a short, safe filename for images"""
     # Get file extension
@@ -7285,8 +7303,10 @@ def get_store_time_slots_web(store_id):
     if not store:
         return jsonify({'error': 'Store not found'}), 404
     
-    schedule = store.store_schedule
-    if not schedule or not schedule.get('schedules'):
+    schedule = store.store_schedule or {}
+    delivery_start = schedule.get('delivery_start')
+    delivery_cutoff = schedule.get('delivery_cutoff')
+    if not schedule.get('schedules'):
         return jsonify({
             'success': True,
             'time_slots': [
@@ -7328,6 +7348,21 @@ def get_store_time_slots_web(store_id):
     for r in active_ranges:
         open_h, open_m = map(int, r['open'].split(':'))
         close_h, close_m = map(int, r['close'].split(':'))
+
+        # Apply optional delivery window (start/cutoff) on top of store hours.
+        if delivery_start:
+            ds_h, ds_m = map(int, delivery_start.split(':'))
+            if (ds_h, ds_m) > (open_h, open_m):
+                open_h, open_m = ds_h, ds_m
+        if delivery_cutoff:
+            dc_h, dc_m = map(int, delivery_cutoff.split(':'))
+            if (dc_h, dc_m) < (close_h, close_m):
+                close_h, close_m = dc_h, dc_m
+
+        # Skip invalid ranges after applying delivery window.
+        if (open_h, open_m) >= (close_h, close_m):
+            continue
+
         current_h, current_m = open_h, open_m
         
         while True:
@@ -7357,13 +7392,27 @@ def get_store_time_slots_web(store_id):
             if current_h >= close_h and current_m >= close_m:
                 break
     
+    if not time_slots:
+        return jsonify({
+            'success': True,
+            'time_slots': [],
+            'is_open': False,
+            'has_schedule': True,
+            'day': day_name,
+            'slot_duration': slot_duration,
+            'delivery_start': delivery_start,
+            'delivery_cutoff': delivery_cutoff,
+        })
+
     return jsonify({
         'success': True,
         'time_slots': time_slots,
         'is_open': True,
         'has_schedule': True,
         'day': day_name,
-        'slot_duration': slot_duration
+        'slot_duration': slot_duration,
+        'delivery_start': delivery_start,
+        'delivery_cutoff': delivery_cutoff,
     })
 
 

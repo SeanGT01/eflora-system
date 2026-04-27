@@ -1,0 +1,454 @@
+{% extends "layout.html" %}
+{% from "_price_display.html" import price_tag %}
+
+{% block title %}Inventory — E-FLOWERS Seller{% endblock %}
+{% block page_title %}Inventory{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+        <div>
+            <div class="section-eyebrow">Stock overview</div>
+            <h2 class="section-title" style="font-size: 28px;">Product Inventory</h2>
+        </div>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button type="button" class="btn btn-outline btn-sm" id="variantToggleBtn" onclick="toggleVariantRows()">
+                <i class="ri-eye-off-line"></i> Hide Variants
+            </button>
+            <a href="{{ url_for('templates.seller_products') }}" class="btn btn-outline btn-sm">
+                <i class="ri-edit-line"></i> Manage Products
+            </a>
+        </div>
+    </div>
+
+    {% if products %}
+    <div class="table-wrap" style="border: 0; border-radius: 0;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Stock Qty</th>
+                    <th>Stock Status</th>
+                    <th>Sale Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td>
+                        <div style="font-weight: 600;">{{ product.name }}</div>
+                        <div style="font-size:12px;color:var(--muted);">ID #{{ product.id }}</div>
+                    </td>
+                    <td>{{ product.category_display or 'Uncategorized' }}</td>
+                    <td>{{ price_tag(product, 'sm') }}</td>
+                    <td>{{ product.stock_quantity }}</td>
+                    <td>
+                        {% if product.stock_quantity > 10 %}
+                            <span class="status-badge badge-available">In Stock</span>
+                        {% elif product.stock_quantity > 0 %}
+                            <span class="status-badge badge-low">Low Stock</span>
+                        {% else %}
+                            <span class="status-badge badge-out">Out of Stock</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if product.is_available %}
+                            <span class="status-badge badge-active">Active</span>
+                        {% else %}
+                            <span class="status-badge badge-cancelled">Unavailable</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                            <button class="btn btn-outline btn-sm" onclick='openStockAdditionModal({{ product.id }}, null)'>
+                                <i class="ri-add-line"></i> Add
+                            </button>
+                            <button class="btn btn-danger-outline btn-sm" onclick='openStockReductionModal({{ product.id }}, null)'>
+                                <i class="ri-subtract-line"></i> Reduce
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% if product.variants %}
+                    {% for variant in product.variants %}
+                    <tr class="variant-row" style="background: rgba(181, 68, 90, 0.03);">
+                        <td style="padding-left: 2.25rem;">
+                            <div style="display:flex; align-items:center; gap:0.5rem;">
+                                <i class="ri-corner-down-right-line" style="color: var(--muted);"></i>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--bark);">{{ variant.name }}</div>
+                                    <div style="font-size:12px;color:var(--muted);">Variant of {{ product.name }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span style="font-size:12px;color:var(--muted);">Variant</span></td>
+                        <td>{{ price_tag(variant, 'sm') if variant.price is not none else price_tag(product, 'sm') }}</td>
+                        <td>{{ variant.stock_quantity }}</td>
+                        <td>
+                            {% if variant.stock_quantity > 10 %}
+                                <span class="status-badge badge-available">In Stock</span>
+                            {% elif variant.stock_quantity > 0 %}
+                                <span class="status-badge badge-low">Low Stock</span>
+                            {% else %}
+                                <span class="status-badge badge-out">Out of Stock</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="status-badge {% if product.is_available %}badge-active{% else %}badge-cancelled{% endif %}">
+                                {{ 'Active' if product.is_available else 'Unavailable' }}
+                            </span>
+                        </td>
+                        <td>
+                            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                                <button class="btn btn-outline btn-sm" onclick='openStockAdditionModal({{ product.id }}, {{ variant.id }})'>
+                                    <i class="ri-add-line"></i> Add
+                                </button>
+                                <button class="btn btn-danger-outline btn-sm" onclick='openStockReductionModal({{ product.id }}, {{ variant.id }})'>
+                                    <i class="ri-subtract-line"></i> Reduce
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="ri-stack-line empty-state-icon"></i>
+        <div class="empty-state-title">No inventory yet</div>
+        <p class="empty-state-sub">Add products first, then inventory will appear here.</p>
+        <a href="{{ url_for('templates.seller_products') }}" class="btn btn-rose">
+            <i class="ri-add-line"></i> Add Product
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="modal-overlay" id="stockReductionModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h3 class="modal-title">Reduce Stock</h3>
+            <button class="modal-close" onclick="closeStockReductionModal()"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="stockReductionForm">
+                <div class="form-group">
+                    <label class="form-label">Select Product/Variant <span style="color: var(--deep-rose);">*</span></label>
+                    <select class="form-select" id="reductionSelector" onchange="updateReductionSelection()"></select>
+                    <div class="form-hint">Select the product or variant to reduce stock for.</div>
+                </div>
+                <div class="form-group">
+                    <div style="padding:0.75rem 0.9rem; border:1px solid var(--border); border-left:3px solid var(--deep-rose); border-radius: var(--radius-md); background: var(--cream);">
+                        <div style="font-size:13px;"><strong>Selected:</strong> <span id="reductionSelectedName">Select a product</span></div>
+                        <div style="font-size:13px; margin-top:0.35rem;"><strong>Current Stock:</strong> <span id="reductionCurrentStock">0</span> units</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quantity <span style="color: var(--deep-rose);">*</span></label>
+                    <input type="number" class="form-control" id="reductionAmount" min="1" step="1" required placeholder="How many units to reduce?">
+                    <div class="form-hint" id="reductionAmountHint">Select a product first</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Reason for Reduction <span style="color: var(--deep-rose);">*</span></label>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <label style="display:flex; align-items:center; gap:0.35rem; font-size:12px;"><input type="radio" name="reductionReason" value="spoilage" checked> Spoilage</label>
+                        <label style="display:flex; align-items:center; gap:0.35rem; font-size:12px;"><input type="radio" name="reductionReason" value="damage"> Damage</label>
+                        <label style="display:flex; align-items:center; gap:0.35rem; font-size:12px;"><input type="radio" name="reductionReason" value="defect"> Defect</label>
+                        <label style="display:flex; align-items:center; gap:0.35rem; font-size:12px;"><input type="radio" name="reductionReason" value="other"> Other</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes (optional)</label>
+                    <textarea class="form-control" id="reductionNotes" rows="3" placeholder="Add details..."></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeStockReductionModal()">Cancel</button>
+            <button class="btn btn-danger-outline" id="submitReductionBtn" onclick="submitStockReduction()">
+                <i class="ri-subtract-line"></i> Reduce Stock
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="stockAdditionModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h3 class="modal-title">Add Stock</h3>
+            <button class="modal-close" onclick="closeStockAdditionModal()"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <form id="stockAdditionForm">
+                <div class="form-group">
+                    <label class="form-label">Select Product/Variant <span style="color: var(--deep-rose);">*</span></label>
+                    <select class="form-select" id="additionSelector" onchange="updateAdditionSelection()"></select>
+                    <div class="form-hint">Select the product or variant to add stock for.</div>
+                </div>
+                <div class="form-group">
+                    <div style="padding:0.75rem 0.9rem; border:1px solid var(--border); border-left:3px solid var(--sage); border-radius: var(--radius-md); background: var(--cream);">
+                        <div style="font-size:13px;"><strong>Selected:</strong> <span id="additionSelectedName">Select a product</span></div>
+                        <div style="font-size:13px; margin-top:0.35rem;"><strong>Current Stock:</strong> <span id="additionCurrentStock">0</span> units</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quantity <span style="color: var(--deep-rose);">*</span></label>
+                    <input type="number" class="form-control" id="additionAmount" min="1" step="1" required placeholder="How many units to add?">
+                    <div class="form-hint" id="additionAmountHint">Select a product first</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Reason for Addition <span style="color: var(--deep-rose);">*</span></label>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <label style="display:flex; align-items:center; gap:0.35rem; font-size:12px;"><input type="radio" name="additionReason" value="restock" checked> Restock</label>
+                        <label style="display:flex; align-items:center; gap:0.35rem; font-size:12px;"><input type="radio" name="additionReason" value="found_stock"> Found Stock</label>
+                        <label style="display:flex; align-items:center; gap:0.35rem; font-size:12px;"><input type="radio" name="additionReason" value="receiving_error"> Receiving Error</label>
+                        <label style="display:flex; align-items:center; gap:0.35rem; font-size:12px;"><input type="radio" name="additionReason" value="other"> Other</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes (optional)</label>
+                    <textarea class="form-control" id="additionNotes" rows="3" placeholder="Add details..."></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeStockAdditionModal()">Cancel</button>
+            <button class="btn btn-rose" id="submitAdditionBtn" onclick="submitStockAddition()">
+                <i class="ri-add-line"></i> Add Stock
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const inventoryProducts = {{ products|tojson }};
+    let reductionMainProductId = null;
+    let reductionVariantId = null;
+    let additionMainProductId = null;
+    let additionVariantId = null;
+
+    function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    }
+
+    function populateSelector(selectorEl, mainProductId, selectedVariantId) {
+        const product = inventoryProducts.find(p => p.id === mainProductId);
+        selectorEl.innerHTML = '';
+        if (!product) {
+            const fallback = document.createElement('option');
+            fallback.value = '';
+            fallback.text = '-- Product not found --';
+            selectorEl.appendChild(fallback);
+            return;
+        }
+
+        const mainOption = document.createElement('option');
+        mainOption.value = `${product.id}|main`;
+        mainOption.text = `${product.name} (Main - ${product.stock_quantity} units)`;
+        selectorEl.appendChild(mainOption);
+
+        (product.variants || []).forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = `${product.id}|${v.id}`;
+            opt.text = `${product.name} → ${v.name} (Variant - ${v.stock_quantity} units)`;
+            selectorEl.appendChild(opt);
+        });
+
+        if (selectedVariantId) {
+            selectorEl.value = `${mainProductId}|${selectedVariantId}`;
+        } else {
+            selectorEl.value = `${mainProductId}|main`;
+        }
+    }
+
+    function parseSelection(value) {
+        const [main, variant] = String(value || '').split('|');
+        return {
+            mainProductId: main ? parseInt(main, 10) : null,
+            variantId: variant && variant !== 'main' ? parseInt(variant, 10) : null
+        };
+    }
+
+    function getSelectedStock(mainId, variantId) {
+        const product = inventoryProducts.find(p => p.id === mainId);
+        if (!product) return { name: 'Select a product', stock: 0 };
+        if (!variantId) return { name: product.name, stock: product.stock_quantity || 0 };
+        const variant = (product.variants || []).find(v => v.id === variantId);
+        return {
+            name: variant ? `${product.name} → ${variant.name}` : product.name,
+            stock: variant ? (variant.stock_quantity || 0) : (product.stock_quantity || 0)
+        };
+    }
+
+    function openStockReductionModal(productId, variantId) {
+        const selector = document.getElementById('reductionSelector');
+        populateSelector(selector, productId, variantId);
+        updateReductionSelection();
+        document.getElementById('reductionAmount').value = '';
+        document.getElementById('reductionNotes').value = '';
+        document.querySelector('input[name="reductionReason"][value="spoilage"]').checked = true;
+        document.getElementById('submitReductionBtn').disabled = false;
+        document.getElementById('stockReductionModal').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeStockReductionModal() {
+        document.getElementById('stockReductionModal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function openStockAdditionModal(productId, variantId) {
+        const selector = document.getElementById('additionSelector');
+        populateSelector(selector, productId, variantId);
+        updateAdditionSelection();
+        document.getElementById('additionAmount').value = '';
+        document.getElementById('additionNotes').value = '';
+        document.querySelector('input[name="additionReason"][value="restock"]').checked = true;
+        document.getElementById('submitAdditionBtn').disabled = false;
+        document.getElementById('stockAdditionModal').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeStockAdditionModal() {
+        document.getElementById('stockAdditionModal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function updateReductionSelection() {
+        const parsed = parseSelection(document.getElementById('reductionSelector').value);
+        reductionMainProductId = parsed.mainProductId;
+        reductionVariantId = parsed.variantId;
+        const data = getSelectedStock(reductionMainProductId, reductionVariantId);
+        document.getElementById('reductionSelectedName').textContent = data.name;
+        document.getElementById('reductionCurrentStock').textContent = data.stock;
+        document.getElementById('reductionAmountHint').textContent = `Available: ${data.stock} units`;
+    }
+
+    function updateAdditionSelection() {
+        const parsed = parseSelection(document.getElementById('additionSelector').value);
+        additionMainProductId = parsed.mainProductId;
+        additionVariantId = parsed.variantId;
+        const data = getSelectedStock(additionMainProductId, additionVariantId);
+        document.getElementById('additionSelectedName').textContent = data.name;
+        document.getElementById('additionCurrentStock').textContent = data.stock;
+        document.getElementById('additionAmountHint').textContent = `Current: ${data.stock} units`;
+    }
+
+    function toggleVariantRows() {
+        const variantRows = document.querySelectorAll('.variant-row');
+        const toggleBtn = document.getElementById('variantToggleBtn');
+        if (!toggleBtn || variantRows.length === 0) return;
+
+        const variantsAreVisible = Array.from(variantRows).some(row => row.style.display !== 'none');
+        if (variantsAreVisible) {
+            variantRows.forEach(row => { row.style.display = 'none'; });
+            toggleBtn.innerHTML = '<i class="ri-eye-line"></i> Show Variants';
+        } else {
+            variantRows.forEach(row => { row.style.display = ''; });
+            toggleBtn.innerHTML = '<i class="ri-eye-off-line"></i> Hide Variants';
+        }
+    }
+
+    async function applyStockUpdate(url, payload, submitBtn, successMessage) {
+        const originalHtml = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Updating...';
+
+        if (!payload.amount || payload.amount < 1) {
+            window.showToast('Enter a valid quantity greater than 0', 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHtml;
+            return false;
+        }
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                window.showToast(successMessage, 'success');
+                setTimeout(() => window.location.reload(), 700);
+                return true;
+            } else {
+                window.showToast(data.error || 'Failed to update stock', 'error');
+                return false;
+            }
+        } catch (err) {
+            window.showToast('Network error. Please try again.', 'error');
+            return false;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHtml;
+        }
+    }
+
+    async function submitStockReduction() {
+        const amount = parseInt(document.getElementById('reductionAmount').value, 10);
+        const reason = document.querySelector('input[name="reductionReason"]:checked')?.value || 'other';
+        const reasonNotes = document.getElementById('reductionNotes').value.trim();
+        const btn = document.getElementById('submitReductionBtn');
+        if (!reductionMainProductId) {
+            window.showToast('Please select a product or variant', 'error');
+            return;
+        }
+        const payload = { amount, reason, reason_notes: reasonNotes };
+        if (reductionVariantId) payload.variant_id = reductionVariantId;
+        const success = await applyStockUpdate(
+            `/seller/products/${reductionMainProductId}/reduce-stock`,
+            payload,
+            btn,
+            'Stock reduced successfully'
+        );
+        if (success) closeStockReductionModal();
+    }
+
+    async function submitStockAddition() {
+        const amount = parseInt(document.getElementById('additionAmount').value, 10);
+        const reason = document.querySelector('input[name="additionReason"]:checked')?.value || 'restock';
+        const reasonNotes = document.getElementById('additionNotes').value.trim();
+        const btn = document.getElementById('submitAdditionBtn');
+        if (!additionMainProductId) {
+            window.showToast('Please select a product or variant', 'error');
+            return;
+        }
+        const payload = { amount, reason, reason_notes: reasonNotes };
+        if (additionVariantId) payload.variant_id = additionVariantId;
+        const success = await applyStockUpdate(
+            `/seller/products/${additionMainProductId}/add-stock`,
+            payload,
+            btn,
+            'Stock added successfully'
+        );
+        if (success) closeStockAdditionModal();
+    }
+
+    document.getElementById('stockReductionModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeStockReductionModal();
+    });
+
+    document.getElementById('stockAdditionModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeStockAdditionModal();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        if (document.getElementById('stockReductionModal')?.classList.contains('active')) closeStockReductionModal();
+        if (document.getElementById('stockAdditionModal')?.classList.contains('active')) closeStockAdditionModal();
+    });
+</script>
+{% endblock %}

@@ -11,7 +11,7 @@ from functools import wraps
 import pytz
 
 from app.extensions import db
-from app.models import User, Store, Conversation, ChatMessage
+from app.models import User, Store, Conversation, ChatMessage, Rider, Order
 
 import cloudinary
 import cloudinary.uploader
@@ -63,6 +63,31 @@ def _current_user():
     return None
 
 
+def _rider_ids_for_user(user_id):
+    riders = Rider.query.filter_by(user_id=user_id, is_archived=False).all()
+    return [r.id for r in riders]
+
+
+def _can_access_conversation(user, convo):
+    if not user or not convo:
+        return False
+    if user.id in (convo.customer_id, convo.seller_id):
+        return True
+    if user.role != 'rider':
+        return False
+
+    rider_ids = _rider_ids_for_user(user.id)
+    if not rider_ids:
+        return False
+
+    linked_order = Order.query.filter(
+        Order.rider_id.in_(rider_ids),
+        Order.customer_id == convo.customer_id,
+        Order.store_id == convo.store_id
+    ).first()
+    return linked_order is not None
+
+
 def _support_store_for_chat(customer_id, admin_user_id=None):
     """
     Pick a store context for support that does NOT collide with an existing
@@ -111,22 +136,91 @@ def list_conversations():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    convos = Conversation.query.filter(
-        db.or_(
+    if user.role == 'rider':
+        rider_ids = _rider_ids_for_user(user.id)
+        if not rider_ids:
+            return jsonify({'conversations': []}), 200
+
+        assigned_orders = Order.query.filter(Order.rider_id.in_(rider_ids)).all()
+        if not assigned_orders:
+            return jsonify({'conversations': []}), 200
+
+        pair_filters = [
             db.and_(
-                Conversation.customer_id == user.id,
-                Conversation.customer_deleted_at.is_(None)
-            ),
-            db.and_(
-                Conversation.seller_id == user.id,
-                Conversation.seller_deleted_at.is_(None)
+                Conversation.customer_id == o.customer_id,
+                Conversation.store_id == o.store_id
+            ) for o in assigned_orders
+        ]
+        convos = Conversation.query.filter(
+            db.or_(*pair_filters)
+        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
+    else:
+        convos = Conversation.query.filter(
+            db.or_(
+                db.and_(
+                    Conversation.customer_id == user.id,
+                    Conversation.customer_deleted_at.is_(None)
+                ),
+                db.and_(
+                    Conversation.seller_id == user.id,
+                    Conversation.seller_deleted_at.is_(None)
+                )
             )
-        )
-    ).order_by(Conversation.last_message_at.desc().nullslast()).all()
+        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
 
     return jsonify({
         'conversations': [c.to_dict(current_user_id=user.id) for c in convos]
     }), 200
+
+
+@chat_bp.route('/conversations/rider-order', methods=['POST'])
+@chat_auth_required
+def create_or_get_rider_conversation():
+    """
+    POST /api/v1/chat/conversations/rider-order
+    Body: { "order_id": <int> }
+    Opens chat for rider's assigned order/customer.
+    """
+    user = _current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    if user.role != 'rider':
+        return jsonify({'error': 'Rider access required'}), 403
+
+    data = request.get_json(silent=True) or {}
+    order_id = data.get('order_id')
+    if not order_id:
+        return jsonify({'error': 'order_id is required'}), 400
+
+    rider = Rider.query.filter_by(user_id=user.id, is_archived=False).first()
+    if not rider:
+        return jsonify({'error': 'Rider profile not found'}), 404
+
+    order = Order.query.get(order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+    if order.rider_id != rider.id:
+        return jsonify({'error': 'Order is not assigned to this rider'}), 403
+
+    store = Store.query.get(order.store_id)
+    if not store:
+        return jsonify({'error': 'Store not found'}), 404
+
+    convo = Conversation.query.filter_by(
+        customer_id=order.customer_id,
+        store_id=order.store_id
+    ).first()
+    if convo:
+        return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
+
+    convo = Conversation(
+        customer_id=order.customer_id,
+        seller_id=store.seller_id,
+        store_id=order.store_id,
+    )
+    db.session.add(convo)
+    db.session.commit()
+    return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 201
 
 
 @chat_bp.route('/conversations', methods=['POST'])
@@ -236,7 +330,7 @@ def get_conversation(convo_id):
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
@@ -252,7 +346,7 @@ def delete_conversation(convo_id):
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     now = pht_now()
@@ -279,7 +373,7 @@ def get_messages(convo_id):
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     page = request.args.get('page', 1, type=int)
@@ -310,7 +404,7 @@ def send_message(convo_id):
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     data = request.get_json(silent=True) or {}
@@ -371,7 +465,7 @@ def send_image_message(convo_id):
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     if 'file' not in request.files:
@@ -447,7 +541,7 @@ def delete_message(convo_id, msg_id):
     if msg.conversation_id != convo_id:
         return jsonify({'error': 'Message not in this conversation'}), 400
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     if msg.sender_id != user.id:
@@ -486,7 +580,7 @@ def mark_as_read(convo_id):
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     now = pht_now()
@@ -524,13 +618,27 @@ def total_unread_count():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
-        .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
-        .scalar()
-    customer_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)) \
-        .filter(Conversation.customer_id == user.id, Conversation.customer_deleted_at.is_(None)) \
-        .scalar()
-    total = int(seller_total or 0) + int(customer_total or 0)
+    if user.role == 'rider':
+        rider_ids = _rider_ids_for_user(user.id)
+        if not rider_ids:
+            return jsonify({'unread_count': 0}), 200
+        assigned_orders = Order.query.filter(Order.rider_id.in_(rider_ids)).all()
+        total = 0
+        for o in assigned_orders:
+            convo = Conversation.query.filter_by(
+                customer_id=o.customer_id,
+                store_id=o.store_id
+            ).first()
+            if convo:
+                total += int(convo.seller_unread or 0)
+    else:
+        seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
+            .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
+            .scalar()
+        customer_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)) \
+            .filter(Conversation.customer_id == user.id, Conversation.customer_deleted_at.is_(None)) \
+            .scalar()
+        total = int(seller_total or 0) + int(customer_total or 0)
 
     return jsonify({'unread_count': total}), 200
 
@@ -577,7 +685,7 @@ def set_typing(convo_id):
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     if convo_id not in _typing_state:
@@ -597,7 +705,7 @@ def get_typing(convo_id):
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
 
-    if user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
     from datetime import timedelta

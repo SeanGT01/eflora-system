@@ -133,6 +133,94 @@ def _reduce_stock_lookup(stock_lookup, user_id, reason_notes):
         )
 
 
+def _generate_store_time_slots_for_date(store, target_date):
+    """Generate available time slots for a store/date using schedule + delivery window."""
+    schedule = store.store_schedule or {}
+    if not schedule.get("schedules"):
+        return []
+
+    day_name = target_date.strftime("%A").lower()
+    slot_duration = int(schedule.get("slot_duration") or 2)
+    delivery_start = schedule.get("delivery_start")
+    delivery_cutoff = schedule.get("delivery_cutoff")
+
+    active_ranges = []
+    for entry in schedule["schedules"]:
+        if day_name in [d.lower() for d in entry.get("days", [])]:
+            active_ranges.append({"open": entry["open"], "close": entry["close"]})
+
+    if not active_ranges:
+        return []
+
+    slots = []
+    for r in active_ranges:
+        open_h, open_m = map(int, r["open"].split(":"))
+        close_h, close_m = map(int, r["close"].split(":"))
+
+        # Apply optional delivery window over store operating hours.
+        if delivery_start:
+            ds_h, ds_m = map(int, delivery_start.split(":"))
+            if (ds_h, ds_m) > (open_h, open_m):
+                open_h, open_m = ds_h, ds_m
+        if delivery_cutoff:
+            dc_h, dc_m = map(int, delivery_cutoff.split(":"))
+            if (dc_h, dc_m) < (close_h, close_m):
+                close_h, close_m = dc_h, dc_m
+
+        if (open_h, open_m) >= (close_h, close_m):
+            continue
+
+        current_h, current_m = open_h, open_m
+        while True:
+            end_h = current_h + slot_duration
+            end_m = current_m
+            if end_h > close_h or (end_h == close_h and end_m > close_m):
+                remaining = (close_h - current_h) + (close_m - current_m) / 60
+                if remaining > 0:
+                    end_h, end_m = close_h, close_m
+                else:
+                    break
+
+            start_str = f"{current_h:02d}:{current_m:02d}"
+            end_str = f"{end_h:02d}:{end_m:02d}"
+            slots.append(f"{start_str}-{end_str}")
+
+            current_h, current_m = end_h, end_m
+            if current_h >= close_h and current_m >= close_m:
+                break
+
+    return slots
+
+
+def _validate_requested_delivery_slot(store, requested_delivery_date, requested_delivery_time):
+    """
+    Validate requested slot against store schedule + delivery window.
+    Returns None if valid/skip; otherwise returns error message.
+    """
+    if not requested_delivery_date or not requested_delivery_time:
+        return None
+
+    from datetime import timedelta
+    today = datetime.now().date()
+    max_allowed = today + timedelta(days=14)
+    if requested_delivery_date < today:
+        return "Selected delivery date has already passed."
+    if requested_delivery_date > max_allowed:
+        return "Selected delivery date must be within 14 days from today."
+
+    try:
+        datetime.strptime(requested_delivery_time, "%H:%M-%H:%M")
+    except Exception:
+        return "Invalid delivery time format."
+
+    valid_slots = _generate_store_time_slots_for_date(store, requested_delivery_date)
+    if not valid_slots:
+        return f"{store.name} is closed on the selected date."
+    if requested_delivery_time not in valid_slots:
+        return f"Selected delivery time is outside {store.name}'s available delivery window."
+    return None
+
+
 def customer_only(f):
     """Decorator: Session or JWT required + must be customer role."""
     @wraps(f)
@@ -522,6 +610,15 @@ def create_orders():
                     print(f"✅ Parsed delivery date for {store.name}: {order_delivery_date}")
                 except ValueError as e:
                     print(f"⚠️ Failed to parse delivery date '{order_delivery_date_str}': {e}")
+                    return jsonify({"error": f"Invalid delivery date format for {store.name}. Use YYYY-MM-DD."}), 400
+
+            slot_error = _validate_requested_delivery_slot(
+                store,
+                order_delivery_date,
+                order_delivery_time,
+            )
+            if slot_error:
+                return jsonify({"error": slot_error}), 400
 
             order = Order(
                 customer_id=user_id,
@@ -814,6 +911,12 @@ def process_checkout():
         payment_proof_public_id = data.get("payment_proof_public_id")
         requested_delivery_date = data.get("requested_delivery_date")
         requested_delivery_time = data.get("requested_delivery_time")
+        requested_delivery_date_obj = None
+        if requested_delivery_date:
+            try:
+                requested_delivery_date_obj = datetime.strptime(requested_delivery_date, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({"error": "Invalid requested_delivery_date format. Use YYYY-MM-DD"}), 400
 
         if not address_id:
             return jsonify({"error": "delivery_address_id is required"}), 400
@@ -886,6 +989,14 @@ def process_checkout():
                 "delivery_check": _check_store_delivery(store, address, subtotal),
             }
 
+            slot_error = _validate_requested_delivery_slot(
+                store,
+                requested_delivery_date_obj,
+                requested_delivery_time,
+            )
+            if slot_error:
+                return jsonify({"error": slot_error}), 400
+
         undeliverable_stores = []
         for checkout_data in store_checkout_data.values():
             delivery_check = checkout_data["delivery_check"]
@@ -933,7 +1044,7 @@ def process_checkout():
                 payment_proof_public_id=payment_proof_public_id,
                 delivery_address=address.address_line,
                 delivery_notes=delivery_notes,
-                requested_delivery_date=datetime.strptime(requested_delivery_date, '%Y-%m-%d').date() if requested_delivery_date else None,
+                requested_delivery_date=requested_delivery_date_obj,
                 requested_delivery_time=requested_delivery_time,
                 customer_latitude=address.latitude,
                 customer_longitude=address.longitude,
@@ -1290,6 +1401,14 @@ def buy_now_create_order():
                 requested_delivery_date = datetime.strptime(requested_delivery_date_str, "%Y-%m-%d").date()
             except ValueError:
                 pass
+
+        slot_error = _validate_requested_delivery_slot(
+            store,
+            requested_delivery_date,
+            requested_delivery_time,
+        )
+        if slot_error:
+            return jsonify({"error": slot_error}), 400
 
         order = Order(
             customer_id=int(user_id),
