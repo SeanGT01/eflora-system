@@ -327,7 +327,7 @@ def _check_store_delivery(store, address, subtotal):
     if max_distance and distance > max_distance:
         return {
             "can_deliver": False,
-            "reason": f"Address is outside the maximum delivery distance of {max_distance:.1f} km.",
+            "reason": f"Address can't deliver to your location. Distance of {distance:.1f} km exceeds the maximum delivery distance of {max_distance:.1f} km for this store.",
             "distance_km": distance,
             "delivery_fee": None,
         }
