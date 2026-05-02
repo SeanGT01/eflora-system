@@ -124,7 +124,8 @@ def get_products():
         d['store_name'] = p.store.name if p.store else None
         if address and p.store:
             unit_price = float(p.effective_price or p.price or 0)
-            subtotal_for_coverage = max(unit_price, float(p.store.minimum_delivery_order or 0))
+            # Positive baseline for fee helper inside _check_store_delivery (coverage is geo-based).
+            subtotal_for_coverage = max(unit_price, 1.0)
             delivery_check = _check_store_delivery(p.store, address, subtotal_for_coverage)
             d['can_deliver_to_customer'] = bool(delivery_check.get('can_deliver'))
             d['delivery_reason'] = delivery_check.get('reason')
@@ -190,8 +191,9 @@ def get_stores():
     for s in stores:
         sd = s.to_dict()
         if address:
-            # Use 1 item subtotal baseline to validate coverage and thresholds.
-            delivery_check = _check_store_delivery(s, address, float(s.minimum_delivery_order or 1))
+            # Baseline subtotal for coverage checks (distance / area only; fee calc is incidental).
+            baseline = max(1.0, float(s.free_delivery_minimum or 0))
+            delivery_check = _check_store_delivery(s, address, baseline)
             sd['can_deliver_to_customer'] = bool(delivery_check.get('can_deliver'))
             sd['delivery_reason'] = delivery_check.get('reason')
         else:
