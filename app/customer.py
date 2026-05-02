@@ -3,11 +3,12 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from collections import defaultdict
 
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, ProductRating, StoreRating
+from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating
 from app.extensions import db
 from sqlalchemy.orm import joinedload
 from functools import wraps
 from datetime import datetime
+from app.checkout_routes import _check_store_delivery
 import jwt
 import os
 
@@ -56,6 +57,27 @@ def customer_only(f):
             return jsonify({'error': 'Authentication failed', 'detail': str(e)}), 401
     return wrapper
 
+
+def _get_default_address(user_id):
+    return (
+        UserAddress.query.filter_by(user_id=user_id, is_default=True).first()
+        or UserAddress.query.filter_by(user_id=user_id).order_by(UserAddress.created_at.desc()).first()
+    )
+
+
+def _resolve_optional_customer_address():
+    """Resolve customer + default address if a valid customer JWT is present."""
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt() or {}
+        user_id = get_jwt_identity()
+        if not user_id or claims.get('role') != 'customer':
+            return None, None
+        uid = int(user_id)
+        return uid, _get_default_address(uid)
+    except Exception:
+        return None, None
+
 # ══════════════════════════════════════════════════════════════════════════
 # PRODUCTS — public
 # ══════════════════════════════════════════════════════════════════════════
@@ -68,6 +90,7 @@ def get_products():
     search   = request.args.get('q', '')
     page     = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 20, type=int), 100)
+    include_outside = request.args.get('include_outside_location', '1') in ('1', 'true', 'True', 'yes')
 
     # NOTE: We used to filter by stock_quantity > 0, but now we return all available products.
     # The frontend (web/mobile) handles visibility logic:
@@ -94,11 +117,22 @@ def get_products():
 
     paged = q.paginate(page=page, per_page=per_page, error_out=False)
 
+    _, address = _resolve_optional_customer_address()
     products = []
     for p in paged.items:
         d = p.to_dict()
         d['store_name'] = p.store.name if p.store else None
-        products.append(d)
+        if address and p.store:
+            unit_price = float(p.effective_price or p.price or 0)
+            subtotal_for_coverage = max(unit_price, float(p.store.minimum_delivery_order or 0))
+            delivery_check = _check_store_delivery(p.store, address, subtotal_for_coverage)
+            d['can_deliver_to_customer'] = bool(delivery_check.get('can_deliver'))
+            d['delivery_reason'] = delivery_check.get('reason')
+        else:
+            d['can_deliver_to_customer'] = True
+            d['delivery_reason'] = None
+        if include_outside or d['can_deliver_to_customer']:
+            products.append(d)
 
     return jsonify({
         'products': products,
@@ -149,8 +183,23 @@ def get_categories():
 @customer_bp.route('/stores', methods=['GET'])
 def get_stores():
     """Public store listing."""
+    include_outside = request.args.get('include_outside_location', '1') in ('1', 'true', 'True', 'yes')
+    _, address = _resolve_optional_customer_address()
     stores = Store.query.filter_by(status='active').all()
-    return jsonify([s.to_dict() for s in stores])
+    result = []
+    for s in stores:
+        sd = s.to_dict()
+        if address:
+            # Use 1 item subtotal baseline to validate coverage and thresholds.
+            delivery_check = _check_store_delivery(s, address, float(s.minimum_delivery_order or 1))
+            sd['can_deliver_to_customer'] = bool(delivery_check.get('can_deliver'))
+            sd['delivery_reason'] = delivery_check.get('reason')
+        else:
+            sd['can_deliver_to_customer'] = True
+            sd['delivery_reason'] = None
+        if include_outside or sd['can_deliver_to_customer']:
+            result.append(sd)
+    return jsonify(result)
 
 
 @customer_bp.route('/stores/<int:store_id>', methods=['GET'])
@@ -273,6 +322,27 @@ def add_to_cart():
                 return jsonify({'error': f'Only {product.stock_quantity} available'}), 400
 
         print(f"📦 Product: {product.name}, Available: {product.is_available}")
+
+        # Delivery-area guard: browsing outside location is allowed, but adding to cart is blocked
+        # when the selected/default address cannot be served by the product's store.
+        address = _get_default_address(user_id)
+        if address and product.store:
+            unit_price = None
+            if variant and hasattr(variant, 'effective_price') and variant.effective_price is not None:
+                unit_price = float(variant.effective_price)
+            elif hasattr(product, 'effective_price') and product.effective_price is not None:
+                unit_price = float(product.effective_price)
+            else:
+                unit_price = float(product.price or 0)
+            subtotal = unit_price * quantity
+            delivery_check = _check_store_delivery(product.store, address, subtotal)
+            if not delivery_check.get('can_deliver'):
+                return jsonify({
+                    'error': delivery_check.get('reason') or 'This store cannot deliver to your selected address.',
+                    'delivery_blocked': True,
+                    'store_id': product.store_id,
+                    'store_name': product.store.name if product.store else None,
+                }), 400
 
         cart = Cart.query.filter_by(user_id=user_id).first()
         if not cart:
@@ -558,6 +628,26 @@ def get_order(order_id):
     except Exception as e:
         print(f"❌ Error in get_order: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@customer_bp.route('/orders/<int:order_id>/complete', methods=['POST'])
+@customer_only
+def complete_order(order_id):
+    """Allow customer to mark delivered orders as completed."""
+    try:
+        user_id = int(get_jwt_identity())
+        order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
+        if not order:
+            return jsonify({'success': False, 'message': 'Order not found'}), 404
+        if order.status != 'delivered':
+            return jsonify({'success': False, 'message': 'Only delivered orders can be marked as completed.'}), 400
+
+        order.set_status('completed')
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Order marked as completed.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════
