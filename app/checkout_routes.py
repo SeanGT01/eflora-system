@@ -699,7 +699,12 @@ def create_orders():
 
             db.session.add(order)
             db.session.flush()
-            print(f"  ✅ Created order #{order.id} for store {store.name}")
+            
+            # Ensure total_amount is always calculated correctly
+            if not order.total_amount or order.total_amount == 0:
+                order.compute_total()
+            
+            print(f"  ✅ Created order #{order.id} for store {store.name} - Total: ₱{float(order.total_amount):,.2f}")
 
             for item_data in order_data.get("items", []):
                 db.session.add(OrderItem(
@@ -1484,6 +1489,10 @@ def buy_now_create_order():
         )
         db.session.add(order)
         db.session.flush()
+        
+        # Ensure total_amount is always calculated correctly
+        if not order.total_amount or order.total_amount == 0:
+            order.compute_total()
 
         db.session.add(OrderItem(
             order_id=order.id,
