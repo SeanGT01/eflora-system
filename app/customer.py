@@ -69,12 +69,18 @@ def _resolve_optional_customer_address():
     """Resolve customer + default address if a valid customer JWT is present."""
     try:
         verify_jwt_in_request(optional=True)
-        claims = get_jwt() or {}
         user_id = get_jwt_identity()
-        if not user_id or claims.get('role') != 'customer':
+        if user_id is None or user_id == '':
             return None, None
-        uid = int(user_id)
-        return uid, _get_default_address(uid)
+        uid = int(str(user_id).strip())
+        claims = get_jwt() or {}
+        # Prefer JWT role; fall back to DB (login tokens may not surface all claims in get_jwt()).
+        if claims.get('role') == 'customer':
+            return uid, _get_default_address(uid)
+        user = User.query.get(uid)
+        if user and user.role == 'customer':
+            return uid, _get_default_address(uid)
+        return None, None
     except Exception:
         return None, None
 
@@ -152,6 +158,23 @@ def get_product(product_id):
     data['store_name'] = p.store.name if p.store else None
     if p.store:
         data['store'] = p.store.to_dict()
+        _, address = _resolve_optional_customer_address()
+        if address:
+            unit_price = float(p.effective_price or p.price or 0)
+            subtotal_for_coverage = max(unit_price, 1.0)
+            delivery_check = _check_store_delivery(p.store, address, subtotal_for_coverage)
+            data['can_deliver_to_customer'] = bool(delivery_check.get('can_deliver'))
+            data['delivery_reason'] = delivery_check.get('reason')
+            store_dict = data.get('store')
+            if isinstance(store_dict, dict):
+                store_dict['can_deliver_to_customer'] = data['can_deliver_to_customer']
+                store_dict['delivery_reason'] = data['delivery_reason']
+        else:
+            data['can_deliver_to_customer'] = True
+            data['delivery_reason'] = None
+    else:
+        data['can_deliver_to_customer'] = True
+        data['delivery_reason'] = None
     return jsonify(data)
 
 
