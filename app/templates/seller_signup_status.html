@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application status — E-FLORA Seller</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        :root { --cream:#faf6f0; --rose:#b5445a; --charcoal:#2c2520; --muted:#9a8d85; }
+        body { font-family:'DM Sans',sans-serif; background:var(--cream); color:var(--charcoal); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1.5rem; }
+        .card { max-width:440px; background:#fffdf9; border:1px solid rgba(107,76,59,0.12); border-radius:20px; padding:2rem; text-align:center; }
+        h1 { font-family:'Cormorant Garamond',serif; font-size:1.6rem; margin-bottom:0.5rem; }
+        p { color:var(--muted); font-size:14px; line-height:1.6; margin-bottom:1.25rem; }
+        .badge { display:inline-block; padding:0.35rem 0.85rem; border-radius:100px; font-size:12px; font-weight:600; margin-bottom:1rem; }
+        .badge.pending { background:rgba(240,180,41,0.15); color:#8a5e00; }
+        .badge.resubmitted { background:rgba(39,103,73,0.14); color:#1f5f41; }
+        .badge.rejected { background:rgba(192,57,43,0.12); color:#8a1f1f; }
+        .badge.approved { background:rgba(39,103,73,0.12); color:#1f5f41; }
+        a.btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.65rem 1.25rem; background:var(--charcoal); color:#faf6f0; text-decoration:none; border-radius:100px; font-size:14px; font-weight:500; }
+        a.link { color:var(--rose); font-size:13px; display:block; margin-top:1rem; }
+        .issues { text-align:left; margin:1rem 0; padding:0.85rem; border:1px solid rgba(192,57,43,0.15); border-radius:12px; background:rgba(192,57,43,0.04); }
+        .issues h3 { font-size:13px; margin:0 0 0.5rem 0; color:#8a1f1f; }
+        .issues ul { margin:0; padding-left:1.1rem; color:#7a4a45; font-size:13px; }
+        .issues li { margin-bottom:0.35rem; }
+        .success-note {
+            margin: 0.8rem 0 1rem;
+            padding: 0.75rem 0.9rem;
+            border-radius: 12px;
+            border: 1px solid rgba(39,103,73,0.22);
+            background: rgba(39,103,73,0.08);
+            color: #1f5f41;
+            font-size: 13px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    {% set st = application.status if application else 'pending' %}
+    {% if st == 'rejected' %}
+    <span class="badge rejected"><i class="ri-close-circle-line"></i> Revisions requested</span>
+    <h1>Your application needs updates</h1>
+    {% elif st == 'approved' %}
+    <span class="badge approved"><i class="ri-checkbox-circle-line"></i> Approved</span>
+    <h1>Your seller application is approved</h1>
+    {% elif st == 'resubmitted' %}
+    <span class="badge resubmitted"><i class="ri-refresh-line"></i> Resubmitted</span>
+    <h1>Your updates were resubmitted</h1>
+    {% else %}
+    <span class="badge pending"><i class="ri-time-line"></i> Under review</span>
+    <h1>We received your application</h1>
+    {% endif %}
+    {% if application %}
+    <p>Store: <strong>{{ application.store_name }}</strong>.</p>
+    {% if st == 'rejected' %}
+    <p>Our admin requested specific corrections. Update only the flagged fields and resubmit.</p>
+        {% if application.admin_notes or application.rejection_details %}
+        <div class="issues">
+            <h3>Requested changes</h3>
+            <ul>
+                {% if application.admin_notes %}
+                <li>{{ application.admin_notes }}</li>
+                {% endif %}
+                {% if application.rejection_details %}
+                    {% for field, detail in application.rejection_details.items() %}
+                        {% if detail and detail.get('rejected') %}
+                        <li><strong>{{ field.replace('_', ' ').title() }}</strong>{% if detail.get('reason') %}: {{ detail.get('reason') }}{% endif %}</li>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            </ul>
+        </div>
+        {% endif %}
+    {% elif st == 'approved' %}
+    <p>You can now continue to your seller dashboard.</p>
+    {% elif st == 'resubmitted' %}
+    <p>Your corrected fields were sent back to admin. We will review your updates soon.</p>
+    <div class="success-note"><i class="ri-checkbox-circle-line"></i> Your changes were added successfully. Please wait while admin reviews the updated application.</div>
+    {% else %}
+    <p>An administrator will approve or request changes soon. You will see a notification when the decision is made.</p>
+    {% endif %}
+    {% else %}
+    <p>Your application is being processed.</p>
+    {% endif %}
+    {% if st == 'rejected' %}
+    <a class="btn" href="{{ url_for('templates.seller_signup_complete') }}"><i class="ri-edit-line"></i> Update application</a>
+    {% elif st == 'approved' %}
+    <a class="btn" href="{{ url_for('templates.seller_products') }}"><i class="ri-store-2-line"></i> Open seller dashboard</a>
+    {% else %}
+    <a class="btn" href="{{ url_for('templates.index') }}"><i class="ri-home-line"></i> Back to E-Flora shop</a>
+    {% endif %}
+    <a class="link" href="{{ url_for('templates.logout') }}">Sign out</a>
+</div>
+</body>
+</html>

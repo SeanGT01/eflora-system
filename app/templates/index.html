@@ -376,6 +376,116 @@
         line-height: 1.15;
     }
 
+    .location-filter-panel {
+        margin-top: 0.65rem;
+        padding: 0.6rem;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: linear-gradient(180deg, #fffdfb 0%, #f9f2ea 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .location-filter-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        font-size: 12px;
+        color: #6f655e;
+    }
+
+    .location-filter-text {
+        font-size: 12px;
+        color: #6f655e;
+        flex-grow: 1;
+    }
+
+    .location-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        border-radius: 999px;
+        padding: 0.25rem 0.65rem;
+        font-size: 11px;
+        font-weight: 600;
+        color: #48634b;
+        background: rgba(122, 158, 126, 0.15);
+        border: 1px solid rgba(122, 158, 126, 0.35);
+        white-space: nowrap;
+    }
+
+    .location-checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        cursor: pointer;
+        user-select: none;
+        flex-shrink: 0;
+    }
+
+    .location-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: var(--deep-rose);
+    }
+
+    .checkbox-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--deep-rose);
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .location-warning {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.35rem;
+        font-size: 11px;
+        color: #a23951;
+        line-height: 1.3;
+    }
+
+    @media (max-width: 640px) {
+        .location-filter-panel {
+            padding: 0.5rem;
+            gap: 0.4rem;
+        }
+
+        .location-filter-row {
+            gap: 0.4rem;
+            font-size: 11px;
+        }
+
+        .location-filter-text {
+            font-size: 11px;
+            flex-grow: 0;
+        }
+
+        .location-chip {
+            padding: 0.2rem 0.5rem;
+            font-size: 10px;
+        }
+
+        .location-checkbox-wrapper {
+            gap: 0.3rem;
+        }
+
+        .location-checkbox {
+            width: 16px;
+            height: 16px;
+        }
+
+        .checkbox-label {
+            font-size: 11px;
+        }
+    }
+
     /* ─── Categories ─── */
     .categories-grid {
         display: grid;
@@ -578,6 +688,7 @@
     .badge-low { background: var(--terracotta); color: white; }
     .badge-new { background: var(--deep-rose); color: white; }
     .badge-out { background: rgba(107,76,59,0.15); color: var(--muted); }
+    .badge-delivery-block { background: #b5445a; color: #fff; }
 
     .product-image {
         height: 190px;
@@ -791,6 +902,14 @@
         transform: scale(0.95);
     }
 
+    .stores-arrow.is-disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        pointer-events: none;
+        transform: none !important;
+        box-shadow: none;
+    }
+
     .store-card {
         background: var(--warm-white);
         border-radius: var(--radius-lg);
@@ -867,6 +986,33 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .store-delivery-warning {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 11px;
+        color: #b5445a;
+        margin-bottom: 0.35rem;
+        line-height: 1.3;
+    }
+
+    /* Alert icon only — no pill/circle around the triangle */
+    .mini-warning-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        padding: 0;
+        margin: 0;
+        font-size: 15px;
+        line-height: 1;
+        color: #b5445a;
+        background: none;
+        border: none;
+        border-radius: 0;
+        font-weight: 700;
     }
 
     .store-meta {
@@ -1965,6 +2111,31 @@
         <div>
             <div class="section-label">Handpicked for you</div>
             <h2 class="section-title">Featured Products</h2>
+            {% if session.get('role') == 'customer' %}
+            <div class="location-filter-panel">
+                <div class="location-filter-row">
+                    {% if customer_has_default_address and customer_location_label %}
+                    <span class="location-chip"><i class="ri-map-pin-line"></i> {{ customer_location_label }}</span>
+                    {% elif customer_has_default_address %}
+                    <span class="location-filter-text">Delivery filter ready</span>
+                    {% else %}
+                    <span class="location-filter-text">Set a default address for filtering</span>
+                    {% endif %}
+                    {% if customer_has_default_address %}
+                    <label class="location-checkbox-wrapper">
+                        <input type="checkbox" id="browseAllMode" {{ 'checked' if browse_all_mode else '' }} onclick="toggleBrowseMode()" class="location-checkbox">
+                        <span class="checkbox-label">Browse outside area</span>
+                    </label>
+                    {% endif %}
+                </div>
+                {% if browse_all_mode %}
+                <div class="location-warning">
+                    <i class="ri-error-warning-line"></i>
+                    Browsing outside your area. Checkout limited to deliverable items.
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
         <a href="{{ url_for('templates.browse_products') }}" class="btn btn-outline" style="flex-shrink:0;">
             View All <i class="ri-arrow-right-line"></i>
@@ -1977,8 +2148,12 @@
         <div class="product-card" onclick="viewProduct({{ product.id }})" data-product-id="{{ product.id }}">
             {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
             {% set has_sellable_stock = product.is_available and (product.stock_quantity > 0 or has_variant_stock) %}
+            {% set can_deliver = product.can_deliver_to_customer if product.can_deliver_to_customer is defined else True %}
             {% if product.stock_quantity < 10 and not has_variant_stock %}
             <div class="product-badge badge-low">Low Stock</div>
+            {% endif %}
+            {% if session.get('role') == 'customer' and browse_all_mode and not can_deliver %}
+            <div class="product-badge badge-delivery-block">Outside Delivery Area</div>
             {% endif %}
 
             <div class="product-image">
@@ -1992,7 +2167,7 @@
                     <button class="overlay-btn" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="View Details">
                         <i class="ri-eye-line"></i>
                     </button>
-                    {% if product.stock_quantity > 0 and product.is_available %}
+                    {% if product.stock_quantity > 0 and product.is_available and session.get('role') not in ['seller', 'admin'] and can_deliver %}
                     <button class="overlay-btn" onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.effective_price }}, '')" title="Quick Add">
                         <i class="ri-shopping-bag-line"></i>
                     </button>
@@ -2006,9 +2181,9 @@
                 <div class="product-footer">
                     <div class="product-price">{{ price_tag(product, 'md') }}</div>
                     <button class="add-btn"
-                        {% if not product.is_available or product.stock_quantity == 0 %}disabled{% endif %}
+                        {% if not product.is_available or product.stock_quantity == 0 or session.get('role') in ['seller', 'admin'] or not can_deliver %}disabled{% endif %}
                         onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.effective_price }}, '')"
-                        title="{{ 'Add to cart' if product.is_available and product.stock_quantity > 0 else 'Out of stock' }}">
+                        title="{% if not can_deliver %}{{ product.delivery_block_reason or 'This store cannot deliver to your default address.' }}{% elif product.is_available and product.stock_quantity > 0 %}Add to cart{% else %}Out of stock{% endif %}">
                         <i class="ri-add-line"></i>
                     </button>
                 </div>
@@ -2054,6 +2229,12 @@
             </div>
             <div class="store-info">
                 <div class="store-name">{{ store.name }}</div>
+                {% if session.get('role') == 'customer' and browse_all_mode and not store.can_deliver_to_customer %}
+                <div class="store-delivery-warning">
+                    <div class="mini-warning-badge"><i class="ri-alert-line"></i></div>
+                    Outside delivery distance
+                </div>
+                {% endif %}
                 <div class="store-address">
                     {% if store.barangay and store.municipality %}
                         {{ store.barangay }}, {{ store.municipality }}
@@ -2078,6 +2259,50 @@
             </a>
         </div>
         {% endfor %}
+        {% if stores|length > 1 %}
+        <!-- Duplicate row for seamless carousel loop (not needed when only one store) -->
+        {% for store in stores %}
+        <div class="store-card {% if store.approved_at and (now - store.approved_at).days < 7 %}newly-approved{% endif %}">
+            <div class="store-avatar">
+                {% if store.logo_url %}
+                    <img src="{{ store.logo_url }}" alt="{{ store.name }}" onerror="this.style.display='none'; this.parentElement.innerHTML='{{ store.name[0] if store.name else 'S' }}'">
+                {% else %}
+                    {{ store.name[0] if store.name else 'S' }}
+                {% endif %}
+            </div>
+            <div class="store-info">
+                <div class="store-name">{{ store.name }}</div>
+                {% if session.get('role') == 'customer' and browse_all_mode and not store.can_deliver_to_customer %}
+                <div class="store-delivery-warning">
+                    <div class="mini-warning-badge"><i class="ri-alert-line"></i></div>
+                    Outside delivery distance
+                </div>
+                {% endif %}
+                <div class="store-address">
+                    {% if store.barangay and store.municipality %}
+                        {{ store.barangay }}, {{ store.municipality }}
+                    {% elif store.municipality %}
+                        {{ store.municipality }}
+                    {% elif store.barangay %}
+                        {{ store.barangay }}
+                    {% elif store.address %}
+                        {{ store.address[:55] }}{% if store.address|length > 55 %}…{% endif %}
+                    {% else %}
+                        <em style="font-style:italic;">Location not available</em>
+                    {% endif %}
+                </div>
+                <div class="store-meta">
+                    <span title="Overall store performance based on ratings and fulfilled orders">
+                        <i class="ri-star-fill"></i> {{ '%.1f'|format(store.performance_score or 0) }}
+                    </span>
+                </div>
+            </div>
+            <a href="{{ url_for('templates.store_detail', store_id=store.id) }}" class="btn btn-outline" style="flex-shrink:0;padding:0.6rem 1rem;font-size:13px;">
+                Visit
+            </a>
+        </div>
+        {% endfor %}
+        {% endif %}
         </div>
         <button class="stores-arrow stores-arrow-right" onclick="scrollStores('right')" aria-label="Next stores">
             <span class="stores-arrow-glyph" aria-hidden="true">&#8250;</span>
@@ -2208,6 +2433,12 @@
 <script>
     function viewProduct(productId) {
         window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
+    }
+
+    function toggleBrowseMode() {
+        const checkbox = document.getElementById('browseAllMode');
+        const newMode = checkbox.checked ? '1' : '0';
+        window.location.href = "{{ url_for('templates.index', browse_all=0) }}".replace('0', newMode);
     }
 
     function syncHomeTestimonialStars(rating) {
@@ -2364,7 +2595,11 @@ window.addEventListener('load', function() {
     setupStoresCarousel();
 });
 
+// Also try to setup on DOMContentLoaded as backup
 document.addEventListener('DOMContentLoaded', function() {
+    // Delay slightly to ensure DOM is fully ready
+    setTimeout(setupStoresCarousel, 100);
+    
     document.addEventListener('click', function(event) {
         const card = event.target.closest('.store-card');
         if (!card) return;
@@ -2551,68 +2786,189 @@ document.addEventListener('DOMContentLoaded', function() {
 let storesAutoScrollInterval = null;
 let storesAutoScrollPaused = false;
 let storesAutoScrollReady = false;
+let storesStepPx = 252;
+let storesManualAnimating = false;
+let storesRafId = null;
+let storesLastTs = 0;
 
 function setupStoresCarousel() {
     const container = document.getElementById('storesContainer');
     if (!container || storesAutoScrollReady) return;
 
-    const originalCards = Array.from(container.children);
-    if (originalCards.length <= 1) return;
+    const allCards = Array.from(container.children);
+    // Calculate actual number of original stores (half of all cards due to duplication)
+    const originalStoreCount = Math.ceil(allCards.length / 2);
+    
+    if (originalStoreCount <= 1) return;
+    const arrows = Array.from(document.querySelectorAll('.stores-arrow'));
 
-    originalCards.forEach(card => {
-        const clone = card.cloneNode(true);
-        clone.setAttribute('aria-hidden', 'true');
-        container.appendChild(clone);
-    });
+    function stopAutoScroll() {
+        if (storesAutoScrollInterval) {
+            window.clearInterval(storesAutoScrollInterval);
+            storesAutoScrollInterval = null;
+        }
+        if (storesRafId) {
+            window.cancelAnimationFrame(storesRafId);
+            storesRafId = null;
+        }
+        storesLastTs = 0;
+    }
+
+    function hasOverflow() {
+        return container.scrollWidth > (container.clientWidth + 2);
+    }
+
+    function computeStepPx() {
+        const firstCard = container.querySelector('.store-card');
+        const styles = window.getComputedStyle(container);
+        const gap = parseFloat(styles.columnGap || styles.gap || '12') || 12;
+        storesStepPx = firstCard
+            ? Math.round(firstCard.getBoundingClientRect().width + gap)
+            : Math.max(180, Math.round(container.clientWidth * 0.75));
+    }
+
+    function getStepPx() {
+        computeStepPx();
+        return Math.max(1, storesStepPx || 1);
+    }
+
+    function updateArrowState() {
+        const disable = !hasOverflow();
+        arrows.forEach((btn) => btn.classList.toggle('is-disabled', disable));
+    }
 
     const pause = () => { storesAutoScrollPaused = true; };
-    const resume = () => { storesAutoScrollPaused = false; };
+    const resume = () => {
+        storesAutoScrollPaused = false;
+        storesManualAnimating = false;
+    };
 
     container.addEventListener('mouseenter', pause);
     container.addEventListener('mouseleave', resume);
-    container.addEventListener('focusin', pause);
-    container.addEventListener('focusout', resume);
 
-    document.querySelectorAll('.stores-arrow').forEach(button => {
+    arrows.forEach(button => {
         button.addEventListener('mouseenter', pause);
         button.addEventListener('mouseleave', resume);
     });
 
-    container.scrollLeft = 1;
-    storesAutoScrollReady = true;
-    storesAutoScrollInterval = window.setInterval(() => {
-        if (storesAutoScrollPaused) return;
+    // Resume carousel after user interaction timeout
+    let resumeTimeout = null;
+    const scheduleResume = () => {
+        clearTimeout(resumeTimeout);
+        resumeTimeout = setTimeout(() => {
+            if (!storesAutoScrollPaused) {
+                storesManualAnimating = false;
+            }
+        }, 2500);
+    };
+    
+    container.addEventListener('mousedown', scheduleResume);
+    container.addEventListener('touchstart', scheduleResume);
 
+    container.scrollLeft = 0;
+    // Avoid browser smooth interpolation conflicts during scripted looping.
+    container.style.scrollBehavior = 'auto';
+    storesAutoScrollPaused = false;
+    storesManualAnimating = false;
+    storesAutoScrollReady = true;
+    computeStepPx();
+    updateArrowState();
+
+    // Re-evaluate when viewport changes (small screens, 2 cards, etc.)
+    window.addEventListener('resize', () => {
+        computeStepPx();
+        updateArrowState();
+        if (!hasOverflow()) {
+            container.scrollLeft = 0;
+            stopAutoScroll();
+        } else if (!storesRafId) {
+            storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
+        }
+    });
+
+    function autoScrollTick() {
+        if (storesAutoScrollPaused || storesManualAnimating) return;
+        if (!hasOverflow()) return;
         container.scrollLeft += 1;
 
-        if (container.scrollLeft >= container.scrollWidth / 2) {
-            container.scrollLeft = 1;
+        const stepPx = getStepPx();
+        const scrollDistance = stepPx * originalStoreCount;
+        if (container.scrollLeft >= scrollDistance - 1) {
+            // Reset to beginning for infinite loop
+            container.scrollLeft = 0;
         }
-    }, 24);
+    }
+
+    function autoScrollTickRaf(ts) {
+        if (!storesLastTs) storesLastTs = ts;
+        const delta = ts - storesLastTs;
+        storesLastTs = ts;
+
+        if (!storesAutoScrollPaused && !storesManualAnimating && hasOverflow()) {
+            // Smooth constant speed: ~50 px/sec (adjust multiplier to change speed)
+            // 0.08 = fast (~80px/sec), 0.05 = moderate (~50px/sec), 0.03 = slow (~30px/sec)
+            const px = Math.max(0.5, delta * 0.02);
+            container.scrollLeft += px;
+            
+            // Portal loop: when a card exits left, it reappears on the right
+            const stepPx = getStepPx();
+            
+            // Check if we've scrolled past one card width
+            if (container.scrollLeft >= stepPx) {
+                const firstCard = container.firstElementChild;
+                if (firstCard) {
+                    // Move the first card to the end (portal effect)
+                    container.appendChild(firstCard);
+                    // Adjust scroll to maintain continuous motion
+                    container.scrollLeft -= stepPx;
+                }
+            }
+        }
+        storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
+    }
+
+    // Always start one RAF loop; movement is conditionally gated inside.
+    if (!storesRafId) {
+        storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
+    }
+    
+    // Fallback: If no scroll happens after 2 seconds, ensure animation starts
+    setTimeout(() => {
+        if (container && hasOverflow() && container.scrollLeft === 0) {
+            storesAutoScrollPaused = false;
+            storesManualAnimating = false;
+        }
+    }, 2000);
+    
+    // Health check: ensure carousel is always running
+    setInterval(() => {
+        if (container && hasOverflow() && !storesRafId) {
+            storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
+        }
+    }, 5000);
 }
 
 function scrollStores(direction) {
     const container = document.getElementById('storesContainer');
     if (!container) return;
-    
-    const scrollAmount = 245; // Width of one store card (240px) + gap (12px)
+    const hasOverflow = container.scrollWidth > (container.clientWidth + 2);
+    if (!hasOverflow) return;
+
     storesAutoScrollPaused = true;
+    storesManualAnimating = true;
+    const stepPx = Math.max(1, storesStepPx || 1);
     
     if (direction === 'left') {
-        container.scrollBy({
-            left: -scrollAmount,
-            behavior: 'smooth'
-        });
+        container.scrollLeft = Math.max(0, container.scrollLeft - stepPx);
     } else if (direction === 'right') {
-        container.scrollBy({
-            left: scrollAmount,
-            behavior: 'smooth'
-        });
+        const maxScroll = container.scrollWidth - container.clientWidth;
+        container.scrollLeft = Math.min(maxScroll, container.scrollLeft + stepPx);
     }
 
     window.clearTimeout(window._storesResumeTimer);
     window._storesResumeTimer = window.setTimeout(() => {
         storesAutoScrollPaused = false;
+        storesManualAnimating = false;
     }, 1400);
 }
 
@@ -2687,3 +3043,4 @@ async function quickAdd(productId, productName, productPrice, productCategory) {
 }
 </script>
 {% endblock %}
+

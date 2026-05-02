@@ -1,5 +1,6 @@
 <!-- account_parts/orders_content.html -->
 <style>
+{% include 'partials/order_detail_sdm_styles.html' %}
 /* ── Orders Page ── */
 .orders-page { 
     padding: clamp(0.75rem, 1.5vw, 1rem); 
@@ -173,6 +174,7 @@
 .badge-done_preparing { background: #e8f5e9; color: #2e7d32; border-color: #bde2bf; }
 .badge-on_delivery  { background: #e8f8f5; color: #00796b; border-color: #b5e0d8; }
 .badge-delivered    { background: #e8f5e9; color: #2e7d32; border-color: #bde2bf; }
+.badge-completed    { background: #e3f2fd; color: #1565c0; border-color: #bbdefb; }
 .badge-cancelled    { background: #ffebee; color: #c62828; border-color: #f2b2b2; }
 
 /* Items list */
@@ -435,135 +437,6 @@
 .skeleton-line.medium { width: 65%; }
 .skeleton-line.long   { width: 90%; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-
-/* ── Order Detail Modal ── */
-.order-detail-modal {
-    max-width: 640px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-    border-radius: var(--radius-lg);
-    max-height: 95vh;
-    display: flex;
-    flex-direction: column;
-}
-
-.order-detail-section {
-    margin-bottom: 1.5rem;
-}
-.order-detail-section-title {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 0.75rem;
-}
-.order-detail-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-}
-.order-detail-item {
-    background: var(--cream);
-    border-radius: var(--radius-md);
-    padding: clamp(0.75rem, 2vw, 1rem);
-    transition: var(--transition);
-}
-.order-detail-item:hover {
-    background: rgba(200, 100, 120, 0.05);
-}
-.order-detail-item-label {
-    font-size: clamp(10px, 1.5vw, 11px);
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 3px;
-}
-.order-detail-item-value {
-    font-size: clamp(13px, 2.5vw, 14px);
-    font-weight: 600;
-    color: var(--charcoal);
-    word-break: break-word;
-    line-height: 1.4;
-}
-.order-detail-item-value.highlight { 
-    color: var(--deep-rose); 
-    font-family: var(--font-display); 
-    font-size: clamp(16px, 4vw, 18px); 
-}
-
-.order-detail-shell {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.order-detail-status-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-    background: linear-gradient(180deg, rgba(181,68,90,0.07), rgba(181,68,90,0.02));
-    border: 1px solid rgba(181,68,90,0.18);
-    border-radius: var(--radius-md);
-    padding: 0.7rem 0.85rem;
-}
-
-.order-detail-status-meta {
-    font-size: 12px;
-    color: var(--muted);
-    font-weight: 600;
-}
-
-.order-detail-panel {
-    background: var(--warm-white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 0.9rem 1rem;
-}
-
-.order-detail-summary {
-    background: linear-gradient(180deg, #fffdfb 0%, #fff8f3 100%);
-    border: 1px solid rgba(181,68,90,0.16);
-    border-radius: var(--radius-md);
-    padding: 1rem 1.1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-}
-
-.order-detail-summary-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 13px;
-    color: var(--muted);
-}
-
-.order-detail-summary-row strong {
-    color: var(--charcoal);
-}
-
-.order-detail-summary-total {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    padding-top: 0.45rem;
-    border-top: 1px dashed var(--border-strong);
-}
-
-.order-detail-summary-total-label {
-    font-family: var(--font-display);
-    font-size: 15px;
-    color: var(--charcoal);
-}
-
-.order-detail-summary-total-value {
-    font-family: var(--font-display);
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--deep-rose);
-}
 
 /* Progress tracker */
 .order-progress {
@@ -850,67 +723,6 @@
         padding: 1rem;
     }
     
-    /* Modal Responsive */
-    .order-detail-modal { 
-        max-width: 95vw;
-        max-height: 95vh;
-        border-radius: var(--radius-lg);
-    }
-    
-    .modal-header {
-        padding: 1rem 1.5rem;
-    }
-    
-    .modal-body {
-        max-height: calc(95vh - 180px);
-        overflow-y: auto;
-        padding: 1.25rem 1.5rem;
-        font-size: 14px;
-    }
-    
-    .modal-footer {
-        padding: 1rem 1.5rem;
-    }
-    
-    #orderDetailTitle {
-        font-size: 18px !important;
-    }
-    
-    .order-detail-section { 
-        margin-bottom: 1.25rem;
-    }
-    
-    .order-detail-section-title { 
-        font-size: 10px;
-        margin-bottom: 0.75rem;
-    }
-    
-    .order-detail-grid { 
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
-    }
-    
-    .order-detail-item { 
-        padding: 0.75rem 1rem;
-        background: var(--cream);
-        border-radius: var(--radius-md);
-    }
-    
-    .order-detail-item-label { 
-        font-size: 10px;
-        margin-bottom: 4px;
-    }
-    
-    .order-detail-item-value { 
-        font-size: 13px;
-        font-weight: 600;
-        word-break: break-word;
-    }
-    
-    .order-detail-item-value.highlight { 
-        font-size: 16px;
-    }
-    
     .order-progress {
         gap: 0;
         margin: 1rem 0;
@@ -1067,29 +879,6 @@
         font-size: 13px;
     }
     
-    .order-detail-modal { 
-        max-width: 90vw;
-        max-height: 90vh;
-    }
-    
-    .modal-body {
-        max-height: calc(90vh - 180px);
-        padding: 1.5rem 1.75rem;
-    }
-    
-    #orderDetailTitle {
-        font-size: 20px !important;
-    }
-    
-    .order-detail-grid { 
-        grid-template-columns: 1fr;
-        gap: 0.875rem;
-    }
-    
-    .order-detail-item { 
-        padding: 0.875rem 1.125rem;
-    }
-    
     .order-progress {
         margin: 1.25rem 0;
     }
@@ -1144,13 +933,6 @@
         padding: 1rem 1.35rem;
     }
     
-    .order-detail-modal { 
-        max-width: 85%;
-    }
-    
-    .order-detail-grid { 
-        grid-template-columns: repeat(2, 1fr);
-    }
 }
 
 @media (min-width: 1024px) {
@@ -1163,13 +945,6 @@
         margin-bottom: 2rem;
     }
     
-    .order-detail-grid { 
-        grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .order-detail-modal {
-        max-width: 640px;
-    }
 }
 
 /* ── Rating Modal ── */
@@ -1322,7 +1097,10 @@
             To Receive <span class="tab-count" id="count-on_delivery" style="display:none;"></span>
         </button>
         <button class="order-tab" data-status="delivered" onclick="filterOrdersByStatus('delivered', this)">
-            Completed
+            Delivered <span class="tab-count" id="count-delivered" style="display:none;"></span>
+        </button>
+        <button class="order-tab" data-status="completed" onclick="filterOrdersByStatus('completed', this)">
+            Completed <span class="tab-count" id="count-completed" style="display:none;"></span>
         </button>
         <button class="order-tab" data-status="cancelled" onclick="filterOrdersByStatus('cancelled', this)">
             Cancelled
@@ -1368,13 +1146,12 @@
 
 <!-- Order Detail Modal -->
 <div class="modal-overlay" id="orderDetailModal" style="display:none;">
-    <div class="modal order-detail-modal">
+    <div class="modal order-detail-modal order-details-modal-surface">
         <div class="modal-header">
-            <h3 id="orderDetailTitle" style="font-family:var(--font-display);font-size:clamp(18px, 5vw, 20px);font-weight:500;margin:0;">Order Details</h3>
-            <button class="cart-close" onclick="closeOrderDetail()" style="font-size:clamp(20px, 5vw, 24px);"><i class="ri-close-line"></i></button>
+            <h3 id="orderDetailTitle">Order Details</h3>
+            <button type="button" class="cart-close" onclick="closeOrderDetail()" aria-label="Close"><i class="ri-close-line"></i></button>
         </div>
-        <div class="modal-body" id="orderDetailBody" style="padding:clamp(1rem, 3vw, 1.5rem) clamp(1rem, 3vw, 2rem);max-height:calc(95vh - 180px);overflow-y:auto;">
-        </div>
+        <div class="modal-body" id="orderDetailBody"></div>
     </div>
 </div>
 
@@ -1382,13 +1159,14 @@
 <div class="modal-overlay" id="ratingModal" style="display:none;">
     <div class="modal rating-modal">
         <div class="modal-header">
-            <h3 id="ratingModalTitle" style="font-family:var(--font-display);font-size:clamp(18px, 5vw, 20px);font-weight:500;margin:0;">Rate Products</h3>
+            <h3 id="ratingModalTitle" style="font-family:var(--font-display);font-size:clamp(18px, 5vw, 20px);font-weight:500;margin:0;">Rate your order</h3>
             <button class="cart-close" onclick="closeRatingModal()" style="font-size:clamp(20px, 5vw, 24px);"><i class="ri-close-line"></i></button>
         </div>
         <div class="modal-body" id="ratingModalBody" style="padding:clamp(1rem, 3vw, 1.5rem) clamp(1rem, 3vw, 2rem);max-height:calc(90vh - 180px);overflow-y:auto;">
         </div>
-        <div class="modal-footer" style="padding:clamp(1rem, 2vw, 1.5rem) clamp(1rem, 3vw, 2rem);border-top:1px solid var(--border);background:var(--cream);">
-            <button class="rating-submit-btn" id="ratingSubmitBtn" onclick="submitRatings()" disabled>Submit Rating</button>
+        <div class="modal-footer" id="ratingModalFooter" style="padding:clamp(1rem, 2vw, 1.5rem) clamp(1rem, 3vw, 2rem);border-top:1px solid var(--border);background:var(--cream);display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center;">
+            <button type="button" class="btn-order-action" id="ratingSkipStoreBtn" style="display:none;margin-right:auto;" onclick="skipStoreRatingStep()">Skip, rate products only</button>
+            <button class="rating-submit-btn" id="ratingSubmitBtn" onclick="ratingPrimaryAction()" disabled>Continue</button>
         </div>
     </div>
 </div>
@@ -1411,6 +1189,7 @@ const STATUS_CONFIG = {
     processing:  { label: 'Preparing',  badge: 'badge-processing',  icon: 'ri-box-1-line',          progress: 1 },
     on_delivery: { label: 'In Transit',  badge: 'badge-on_delivery', icon: 'ri-e-bike-line',         progress: 3 },
     delivered:   { label: 'Delivered',  badge: 'badge-delivered',   icon: 'ri-checkbox-circle-line',progress: 4 },
+    completed:   { label: 'Completed',  badge: 'badge-completed',   icon: 'ri-award-line',          progress: 4 },
     cancelled:   { label: 'Cancelled',  badge: 'badge-cancelled',   icon: 'ri-close-circle-line',   progress: -1 },
 };
 
@@ -1428,6 +1207,7 @@ const PROGRESS_STEPS = [
 (async function init() {
     await Promise.all([loadOrders(), loadCartGroups()]);
     refreshOrdersView();
+    queueMicrotask(() => maybeAutoOpenRatingModal());
 })();
 
 /* ═══════════════════════════════════════
@@ -1567,7 +1347,7 @@ function updateTabCounts() {
     const el    = document.getElementById('count-all');
     if (el) el.textContent = total;
 
-    ['pending','processing','on_delivery'].forEach(s => {
+    ['pending','processing','on_delivery','delivered','completed'].forEach(s => {
         const n = s === 'pending'
             ? _cartGroups.length
             : _allOrders.filter(o => getDisplayState(o).key === s).length;
@@ -1599,7 +1379,8 @@ function renderEmpty(msg) {
         pending:     'No orders waiting for payment.',
         processing:  'No orders being prepared.',
         on_delivery: 'No orders on the way.',
-        delivered:   'No completed orders yet.',
+        delivered:   'No delivered orders yet.',
+        completed:   'No completed orders yet.',
         cancelled:   'No cancelled orders.',
     };
     return `
@@ -1611,6 +1392,21 @@ function renderEmpty(msg) {
                 <i class="ri-store-line"></i> Start Shopping
             </a>
         </div>`;
+}
+
+/** Subtotal, delivery, and grand total for customer orders (API total can omit delivery). */
+function customerOrderAmounts(order) {
+    const sub = Number(order.subtotal_amount ?? order.subtotal ?? 0) || 0;
+    const delivery = Number(order.delivery_fee ?? 0) || 0;
+    const computedTotal = sub + delivery;
+    const apiTotal = Number(order.total_amount ?? order.total);
+    const total =
+        Number.isFinite(apiTotal) &&
+        apiTotal > 0 &&
+        !(delivery > 0 && Math.abs(apiTotal - sub) <= 0.01 && computedTotal > apiTotal + 0.01)
+            ? apiTotal
+            : computedTotal;
+    return { sub, delivery, total };
 }
 
 function renderOrderCard(order) {
@@ -1626,7 +1422,7 @@ function renderOrderCard(order) {
     const orderId    = order.order_number || `ORD-${String(order.id).padStart(4,'0')}`;
     const dateStr    = formatDate(order.date || order.created_at);
     const storeName  = order.store_name || 'E-FLOWERS Store';
-    const totalAmt   = formatPeso(order.total_amount ?? order.total ?? 0);
+    const totalAmt   = formatPeso(customerOrderAmounts(order).total);
     const itemCount  = items.reduce((s, i) => s + (i.quantity || 1), 0);
     const paymentMethodLabel = formatPaymentMethod(order.payment_method);
 
@@ -1787,6 +1583,9 @@ function buildCTAButtons(order) {
         btns += `<button class="btn-order-action danger" onclick="cancelOrderFromCard(${id})">Cancel</button>`;
     }
     if (display.key === 'delivered') {
+        btns += `<button class="btn-order-action primary" onclick="completeOrder(${id})"><i class="ri-check-double-line"></i> Complete</button>`;
+    }
+    if (display.key === 'delivered' || display.key === 'completed') {
         if (!order.all_rated) {
             btns += `<button class="btn-order-action primary" onclick="rateOrder(${id})"><i class="ri-star-line"></i> Rate</button>`;
         }
@@ -1842,12 +1641,12 @@ function buildCartDetailHTML(group) {
         const img = item.image_url || item.product_image_url;
         const name = item.name || item.product_name || 'Product';
         const imgHtml = img
-            ? `<img class="order-item-img" src="${img}" alt="${esc(name)}" style="width:60px;height:60px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-               <div class="order-item-img-ph" style="width:60px;height:60px;display:none;"><i class="ri-flower-line"></i></div>`
-            : `<div class="order-item-img-ph" style="width:60px;height:60px;"><i class="ri-flower-line"></i></div>`;
+            ? `<img class="order-item-img" src="${esc(img)}" alt="${esc(name)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+               <div class="order-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
+            : `<div class="order-item-img-ph"><i class="ri-flower-line"></i></div>`;
 
         return `
-            <div class="order-item-row" style="padding:.625rem 0;">
+            <div class="order-item-row" style="padding:.625rem .75rem;">
                 ${imgHtml}
                 <div class="order-item-info">
                     <div class="order-item-name" style="font-size:13px;">${esc(name)}</div>
@@ -1859,31 +1658,29 @@ function buildCartDetailHTML(group) {
     }).join('');
 
     return `
-        <div class="order-detail-section">
-            <div class="order-detail-section-title">Items Ready for Checkout</div>
-            <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-md);padding:0 1rem;">
-                ${itemsHtml}
-            </div>
-        </div>
-
-        <div class="order-detail-section">
-            <div class="order-detail-section-title">Checkout Summary</div>
-            <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem 1.25rem;display:flex;flex-direction:column;gap:.625rem;">
-                <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);">
-                    <span>Store</span><span style="font-weight:600;color:var(--charcoal);">${esc(group.store_name || 'Store')}</span>
+        <div class="sdm">
+            <header class="sdm-topbar">
+                <div class="sdm-topbar-left">
+                    <span class="sdm-oid">${esc(group.store_name || 'Store')}</span>
+                    <span class="order-status-badge badge-pending">${group.item_count || 0} items</span>
                 </div>
-                <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);">
-                    <span>Items</span><span style="font-weight:600;color:var(--charcoal);">${group.item_count}</span>
+                <span class="sdm-when">Ready for checkout</span>
+            </header>
+            <section class="sdm-block sdm-block--full">
+                <h4>Basket</h4>
+                <div class="sdm-item-rows">${itemsHtml}</div>
+            </section>
+            <section class="sdm-block sdm-block--full">
+                <h4>Checkout</h4>
+                <div class="sdm-rows">
+                    <div class="sdm-row"><span class="sdm-k">Store</span><span class="sdm-v">${esc(group.store_name || 'Store')}</span></div>
+                    <div class="sdm-row"><span class="sdm-k">Line items</span><span class="sdm-v">${group.item_count}</span></div>
+                    <div class="sdm-row sdm-row--total"><span class="sdm-k">Subtotal</span><span class="sdm-v">${formatPeso(group.total_amount || 0)}</span></div>
                 </div>
-                <div style="height:1px;background:var(--border);"></div>
-                <div style="display:flex;justify-content:space-between;align-items:baseline;">
-                    <span style="font-family:var(--font-display);font-size:15px;color:var(--charcoal);">Subtotal</span>
-                    <span style="font-family:var(--font-display);font-size:24px;font-weight:600;color:var(--deep-rose);">${formatPeso(group.total_amount || 0)}</span>
-                </div>
-                <button class="btn-order-action primary" style="margin-top:.5rem;align-self:flex-end;" onclick="payCartStore(${group.store_id})">
-                    <i class="ri-bank-card-line"></i> Pay This Basket
+                <button type="button" class="btn-order-action primary" style="margin-top:1rem;" onclick="payCartStore(${group.store_id})">
+                    <i class="ri-bank-card-line"></i> Pay this basket
                 </button>
-            </div>
+            </section>
         </div>`;
 }
 
@@ -1892,25 +1689,14 @@ function buildOrderDetailHTML(order) {
     const progressState = display.progressKey || display.key;
     const cfg      = STATUS_CONFIG[progressState] || STATUS_CONFIG.pending;
     const items    = order.items || [];
-    const dateStr  = formatDate(order.date || order.created_at);
     const orderId  = order.order_number || `ORD-${String(order.id).padStart(4,'0')}`;
 
-    // Status badge (matching the card badge)
-    const statusBadge = `
-        <div class="order-detail-status-row">
-            <span class="order-status-badge ${cfg.badge}">
-                <i class="${cfg.icon}" style="margin-right:4px;"></i>${display.label}
-            </span>
-            <span class="order-detail-status-meta">${formatDateTimePH(order.created_at)}</span>
-        </div>`;
-
-    // Progress tracker (skip for cancelled)
     let progressHtml = '';
     if (display.key !== 'cancelled') {
         const currentStep = cfg.progress;
         progressHtml = `
-            <div class="order-detail-section">
-                <div class="order-detail-section-title">Order Progress</div>
+            <section class="sdm-block sdm-block--full">
+                <h4>Progress</h4>
                 <div class="order-progress">
                     ${PROGRESS_STEPS.map((step, idx) => {
                         const isDone   = currentStep > idx;
@@ -1927,20 +1713,19 @@ function buildOrderDetailHTML(order) {
                             ${connector}`;
                     }).join('')}
                 </div>
-            </div>`;
+            </section>`;
     }
 
-    // Items
     const itemsHtml = items.map(item => {
         const img    = item.image_url || item.product_image_url;
         const name   = item.name || item.product_name || 'Product';
         const imgHtml = img
-            ? `<img class="order-item-img" src="${img}" alt="${esc(name)}" style="width:60px;height:60px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-               <div class="order-item-img-ph" style="width:60px;height:60px;display:none;"><i class="ri-flower-line"></i></div>`
-            : `<div class="order-item-img-ph" style="width:60px;height:60px;"><i class="ri-flower-line"></i></div>`;
+            ? `<img class="order-item-img" src="${esc(img)}" alt="${esc(name)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+               <div class="order-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
+            : `<div class="order-item-img-ph"><i class="ri-flower-line"></i></div>`;
         const variantHtml = item.variant_name ? `<div class="order-item-variant" style="font-size:11px;">${esc(item.variant_name)}</div>` : '';
         return `
-            <div class="order-item-row" style="padding:.625rem 0;">
+            <div class="order-item-row" style="padding:.625rem .75rem;">
                 ${imgHtml}
                 <div class="order-item-info">
                     <div class="order-item-name" style="font-size:13px;">${esc(name)}</div>
@@ -1951,83 +1736,86 @@ function buildOrderDetailHTML(order) {
             </div>`;
     }).join('');
 
-    // Summary totals
-    const sub      = order.subtotal_amount ?? order.subtotal ?? order.total ?? 0;
-    const delivery = order.delivery_fee ?? 0;
-    const total    = order.total_amount ?? order.total ?? 0;
+    const { sub, delivery, total } = customerOrderAmounts(order);
+
+    const proofPieces = [
+        order.done_preparing_proof_url ? `
+            <figure class="sdm-proof-fig">
+                <img src="${order.done_preparing_proof_url}" alt="Finished product" loading="lazy">
+                <figcaption class="sdm-proof-cap">Finished product (seller)</figcaption>
+            </figure>` : '',
+        order.delivery_proof_url ? `
+            <figure class="sdm-proof-fig">
+                <img src="${order.delivery_proof_url}" alt="Delivery proof 1" loading="lazy">
+                <figcaption class="sdm-proof-cap">Delivery proof 1 (rider)</figcaption>
+            </figure>` : '',
+        order.delivery_proof_2_url ? `
+            <figure class="sdm-proof-fig">
+                <img src="${order.delivery_proof_2_url}" alt="Delivery proof 2" loading="lazy">
+                <figcaption class="sdm-proof-cap">Delivery proof 2 (rider)</figcaption>
+            </figure>` : ''
+    ].filter(Boolean).join('');
+
+    const proofSection = proofPieces ? `
+        <section class="sdm-block sdm-block--full">
+            <h4>Fulfillment photos</h4>
+            <div class="sdm-proofs">${proofPieces}</div>
+        </section>` : '';
+
+    const scheduleRows = `
+        <div class="sdm-row"><span class="sdm-k">Date</span><span class="sdm-v">${order.requested_delivery_date ? formatDatePH(order.requested_delivery_date) : '—'}</span></div>
+        <div class="sdm-row"><span class="sdm-k">Time</span><span class="sdm-v">${order.requested_delivery_time ? formatDeliveryTimeSlot(order.requested_delivery_time) : '—'}</span></div>`;
+
+    const deliverySection = (order.delivery_address || order.delivery_notes) ? `
+        <section class="sdm-block sdm-block--full">
+            <h4>Delivery</h4>
+            <div class="sdm-rows">
+                ${order.delivery_address ? `<div class="sdm-row"><span class="sdm-k">Address</span><span class="sdm-v">${esc(order.delivery_address)}</span></div>` : ''}
+                ${order.delivery_notes ? `<div class="sdm-row"><span class="sdm-k">Notes</span><span class="sdm-v">${esc(order.delivery_notes)}</span></div>` : ''}
+            </div>
+        </section>` : '';
 
     return `
-        <div class="order-detail-shell">
-        ${statusBadge}
-        ${progressHtml}
-
-        <!-- Items -->
-        <div class="order-detail-section">
-            <div class="order-detail-section-title">Items Ordered</div>
-            <div class="order-detail-panel" style="padding:0 1rem;">
-                ${itemsHtml}
+        <div class="sdm">
+            <header class="sdm-topbar">
+                <div class="sdm-topbar-left">
+                    <span class="sdm-oid">#${esc(orderId)}</span>
+                    <span class="order-status-badge ${cfg.badge}">
+                        <i class="${cfg.icon}" style="margin-right:4px;"></i>${display.label}
+                    </span>
+                </div>
+                <span class="sdm-when">${formatDateTimePH(order.created_at)}</span>
+            </header>
+            ${progressHtml}
+            <section class="sdm-block sdm-block--full">
+                <h4>Items</h4>
+                <div class="sdm-item-rows">${itemsHtml}</div>
+            </section>
+            <div class="sdm-grid">
+                <section class="sdm-block">
+                    <h4>Order</h4>
+                    <div class="sdm-rows">
+                        <div class="sdm-row"><span class="sdm-k">Order ID</span><span class="sdm-v">${esc(orderId)}</span></div>
+                        <div class="sdm-row"><span class="sdm-k">Placed</span><span class="sdm-v">${formatDateTimePH(order.created_at || order.date)}</span></div>
+                        <div class="sdm-row"><span class="sdm-k">Payment</span><span class="sdm-v">${formatPaymentMethod(order.payment_method)}</span></div>
+                        <div class="sdm-row"><span class="sdm-k">Payment status</span><span class="sdm-v">${capitalise(order.payment_status || 'Pending')}</span></div>
+                    </div>
+                </section>
+                <section class="sdm-block">
+                    <h4>Schedule</h4>
+                    <div class="sdm-rows">${scheduleRows}</div>
+                </section>
             </div>
-        </div>
-
-        <!-- Info grid -->
-        <div class="order-detail-section">
-            <div class="order-detail-section-title">Order Information</div>
-            <div class="order-detail-grid">
-                <div class="order-detail-item">
-                    <div class="order-detail-item-label">Order ID</div>
-                    <div class="order-detail-item-value">${esc(orderId)}</div>
+            ${deliverySection}
+            ${proofSection}
+            <section class="sdm-block sdm-block--full">
+                <h4>Summary</h4>
+                <div class="sdm-rows">
+                    <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">${formatPeso(sub)}</span></div>
+                    <div class="sdm-row"><span class="sdm-k">Delivery fee</span><span class="sdm-v">${formatPeso(delivery)}</span></div>
+                    <div class="sdm-row sdm-row--total"><span class="sdm-k">Total</span><span class="sdm-v">${formatPeso(total)}</span></div>
                 </div>
-                <div class="order-detail-item">
-                    <div class="order-detail-item-label">Date Placed</div>
-                    <div class="order-detail-item-value">${formatDateTimePH(order.created_at || order.date)}</div>
-                </div>
-                <div class="order-detail-item">
-                    <div class="order-detail-item-label">Payment</div>
-                    <div class="order-detail-item-value">${formatPaymentMethod(order.payment_method)}</div>
-                </div>
-                <div class="order-detail-item">
-                    <div class="order-detail-item-label">Payment Status</div>
-                    <div class="order-detail-item-value">${capitalise(order.payment_status || 'Pending')}</div>
-                </div>
-                ${order.requested_delivery_date ? `
-                <div class="order-detail-item">
-                    <div class="order-detail-item-label">Requested Date</div>
-                    <div class="order-detail-item-value">${formatDatePH(order.requested_delivery_date)}</div>
-                </div>` : ''}
-                ${order.requested_delivery_time ? `
-                <div class="order-detail-item">
-                    <div class="order-detail-item-label">Requested Time</div>
-                    <div class="order-detail-item-value">${formatDeliveryTimeSlot(order.requested_delivery_time)}</div>
-                </div>` : ''}
-                ${order.delivery_address ? `
-                <div class="order-detail-item" style="grid-column:1/-1;">
-                    <div class="order-detail-item-label">Delivery Address</div>
-                    <div class="order-detail-item-value" style="font-size:13px;font-weight:500;">${esc(order.delivery_address)}</div>
-                </div>` : ''}
-                ${order.delivery_notes ? `
-                <div class="order-detail-item" style="grid-column:1/-1;">
-                    <div class="order-detail-item-label">Delivery Notes</div>
-                    <div class="order-detail-item-value" style="font-size:13px;font-weight:500;">${esc(order.delivery_notes)}</div>
-                </div>` : ''}
-            </div>
-        </div>
-
-        <!-- Summary -->
-        <div class="order-detail-section">
-            <div class="order-detail-section-title">Order Summary</div>
-            <div class="order-detail-summary">
-                <div class="order-detail-summary-row">
-                    <span>Subtotal</span><strong>${formatPeso(sub)}</strong>
-                </div>
-                <div class="order-detail-summary-row">
-                    <span>Delivery Fee</span><strong>${formatPeso(delivery)}</strong>
-                </div>
-                <div class="order-detail-summary-total">
-                    <span class="order-detail-summary-total-label">Total</span>
-                    <span class="order-detail-summary-total-value">${formatPeso(total)}</span>
-                </div>
-            </div>
-        </div>
+            </section>
         </div>`;
 }
 
@@ -2052,6 +1840,25 @@ async function cancelOrderFromCard(orderId) {
             showOrderToast(d.message || 'Could not cancel order.');
         }
     } catch { showOrderToast('Error cancelling order.'); }
+}
+
+async function completeOrder(orderId) {
+    if (!await window.openConfirmModal('Mark this order as completed?')) return;
+    try {
+        const res = await fetch(`/api/account/orders/${orderId}/complete`, { method: 'POST' });
+        const d = await res.json();
+        if (d.success) {
+            showOrderToast('Order marked as completed.');
+            try { sessionStorage.removeItem('ratingPromptDismissed_' + orderId); } catch (e) {}
+            await loadOrders();
+            refreshOrdersView();
+            rateOrder(orderId, false);
+        } else {
+            showOrderToast(d.message || 'Could not complete order.');
+        }
+    } catch {
+        showOrderToast('Error completing order.');
+    }
 }
 
 function payOrder(orderId) {
@@ -2106,14 +1913,140 @@ async function payCartStore(storeId) {
 }
 
 /* ═══════════════════════════════════════
-   RATING MODAL
+   RATING MODAL (store first, then products)
 ═══════════════════════════════════════ */
 let _ratingOrderId = null;
 let _ratingState = {}; // { [order_item_id]: { rating: 0, comment: '' } }
+let _ratingPhase = 'store'; // 'store' | 'products'
+let _ratingOrderSnapshot = null;
+let _ratingExistingRatings = {};
+let _ratingExistingStore = null;
+let _ratingUnratedItems = [];
+let _storeRatingState = { rating: 0, comment: '' };
+let _ratingAutoOpened = false;
 
-async function rateOrder(orderId) {
+function eligibleForRatingPrompt(order) {
+    const st = order.status;
+    if (st !== 'delivered' && st !== 'completed') return false;
+    if (order.all_rated) return false;
+    try {
+        if (sessionStorage.getItem('ratingPromptDismissed_' + order.id)) return false;
+    } catch (e) {}
+    return true;
+}
+
+function maybeAutoOpenRatingModal() {
+    const candidates = _allOrders.filter(eligibleForRatingPrompt);
+    if (!candidates.length) return;
+    candidates.sort((a, b) => {
+        const da = new Date(a.created_at || 0).getTime();
+        const db = new Date(b.created_at || 0).getTime();
+        return da - db;
+    });
+    const pick = candidates[0];
+    setTimeout(() => rateOrder(pick.id, true), 450);
+}
+
+function _itemHasProductRating(itemId) {
+    const r = _ratingExistingRatings;
+    return !!(r && (r[itemId] || r[String(itemId)]));
+}
+
+function updateRatingFooterChrome() {
+    const skipBtn = document.getElementById('ratingSkipStoreBtn');
+    const submitBtn = document.getElementById('ratingSubmitBtn');
+    const title = document.getElementById('ratingModalTitle');
+    if (!submitBtn) return;
+    if (_ratingPhase === 'store') {
+        if (skipBtn) skipBtn.style.display = 'inline-flex';
+        submitBtn.textContent = 'Continue';
+        if (title) title.textContent = 'Rate your experience';
+    } else {
+        if (skipBtn) skipBtn.style.display = 'none';
+        submitBtn.textContent = 'Submit ratings';
+        if (title) title.textContent = 'Rate your products';
+    }
+}
+
+function renderStoreRatingStep(orderRes) {
+    const body = document.getElementById('ratingModalBody');
+    const storeName = esc(orderRes.store_name || 'Store');
+    const logo = orderRes.store_logo
+        ? `<img src="${esc(orderRes.store_logo)}" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:1px solid var(--border);" onerror="this.style.display='none'">`
+        : `<div class="rating-item-img-ph" style="width:56px;height:56px;border-radius:50%;"><i class="ri-store-2-line"></i></div>`;
+    body.innerHTML = `
+        <p style="margin:0 0 1rem;font-size:14px;color:var(--muted);line-height:1.45;">How was your overall experience with this shop? Stars are required to continue; you can add an optional comment.</p>
+        <div class="rating-item-card" style="margin-bottom:0;">
+            <div class="rating-item-header">
+                ${logo}
+                <div class="rating-item-info">
+                    <div class="rating-item-name">${storeName}</div>
+                    <div class="rating-item-variant">Order ${esc(orderRes.order_number || '#' + _ratingOrderId)}</div>
+                </div>
+            </div>
+            <div class="rating-stars-row" id="ratingStoreStars" data-store-stars="1">
+                ${[1,2,3,4,5].map(star => `<i class="ri-star-line rating-star" data-star="${star}" onclick="setStoreRating(${star})" onmouseenter="hoverStoreStars(${star})" onmouseleave="unhoverStoreStars()"></i>`).join('')}
+            </div>
+            <textarea class="rating-comment" id="ratingStoreComment" placeholder="Optional feedback about packaging, communication, or service" maxlength="500" oninput="_storeRatingState.comment = this.value">${esc(_storeRatingState.comment || '')}</textarea>
+        </div>`;
+    if (_storeRatingState.rating > 0) setStoreRating(_storeRatingState.rating);
+    updateRatingFooterChrome();
+    updateSubmitBtnState();
+}
+
+function renderProductRatingStep() {
+    const body = document.getElementById('ratingModalBody');
+    const unratedItems = _ratingUnratedItems || [];
+    if (!unratedItems.length) {
+        body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">No products left to rate.</div>`;
+        updateRatingFooterChrome();
+        updateSubmitBtnState();
+        return;
+    }
+    _ratingState = {};
+    unratedItems.forEach(item => {
+        _ratingState[item.id] = { rating: 0, comment: '' };
+    });
+    body.innerHTML = `
+        <div class="rating-items-list">
+            ${unratedItems.map(item => {
+                const name = item.name || item.product_name || 'Product';
+                const variant = item.variant_name ? `<div class="rating-item-variant">${esc(item.variant_name)}</div>` : '';
+                const img = item.image_url || item.product_image_url;
+                const imgHtml = img
+                    ? `<img class="rating-item-img" src="${img}" alt="${esc(name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                       <div class="rating-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
+                    : `<div class="rating-item-img-ph"><i class="ri-flower-line"></i></div>`;
+                return `
+                    <div class="rating-item-card" data-item-id="${item.id}">
+                        <div class="rating-item-header">
+                            ${imgHtml}
+                            <div class="rating-item-info">
+                                <div class="rating-item-name">${esc(name)}</div>
+                                ${variant}
+                            </div>
+                        </div>
+                        <div class="rating-stars-row" data-item-id="${item.id}">
+                            ${[1,2,3,4,5].map(star => `<i class="ri-star-line rating-star" data-star="${star}" data-item-id="${item.id}" onclick="setRating(${item.id}, ${star})" onmouseenter="hoverStars(${item.id}, ${star})" onmouseleave="unhoverStars(${item.id})"></i>`).join('')}
+                        </div>
+                        <textarea class="rating-comment" data-item-id="${item.id}" placeholder="Share your thoughts about this product (optional)" maxlength="500" oninput="_ratingState[${item.id}].comment = this.value"></textarea>
+                    </div>`;
+            }).join('')}
+        </div>`;
+    updateRatingFooterChrome();
+    updateSubmitBtnState();
+}
+
+async function rateOrder(orderId, fromAuto) {
+    _ratingAutoOpened = !!fromAuto;
     _ratingOrderId = orderId;
     _ratingState = {};
+    _ratingPhase = 'store';
+    _ratingOrderSnapshot = null;
+    _ratingExistingRatings = {};
+    _ratingExistingStore = null;
+    _ratingUnratedItems = [];
+    _storeRatingState = { rating: 0, comment: '' };
 
     const modal = document.getElementById('ratingModal');
     const body = document.getElementById('ratingModalBody');
@@ -2125,63 +2058,131 @@ async function rateOrder(orderId) {
     body.innerHTML = `<div style="text-align:center;padding:2rem;"><div class="loading-spinner" style="margin:0 auto;"></div></div>`;
 
     try {
-        // Fetch order detail and existing ratings in parallel
         const [orderRes, ratingsRes] = await Promise.all([
             fetch(`/api/account/orders/${orderId}`).then(r => r.json()),
             fetch(`/api/account/orders/${orderId}/ratings`).then(r => r.json()),
         ]);
 
         const items = orderRes.items || [];
-        const existingRatings = ratingsRes.ratings || {};
-
         if (!items.length) {
             body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">No items to rate.</div>`;
             return;
         }
 
-        // Initialize rating state — only for unrated items
-        const unratedItems = items.filter(item => !existingRatings[String(item.id)]);
+        _ratingOrderSnapshot = orderRes;
+        _ratingExistingRatings = ratingsRes.ratings || {};
+        _ratingExistingStore = ratingsRes.store_rating || null;
 
-        if (unratedItems.length === 0) {
+        _ratingUnratedItems = items.filter(item => !_itemHasProductRating(item.id));
+
+        const st = orderRes.status;
+        const rateable = st === 'delivered' || st === 'completed';
+        const needStore = rateable && !_ratingExistingStore;
+        const needProducts = _ratingUnratedItems.length > 0;
+
+        if (!needStore && !needProducts) {
             closeRatingModal();
             return;
         }
 
-        unratedItems.forEach(item => {
-            _ratingState[item.id] = { rating: 0, comment: '' };
-        });
-
-        body.innerHTML = `
-            <div class="rating-items-list">
-                ${unratedItems.map(item => {
-                    const name = item.name || item.product_name || 'Product';
-                    const variant = item.variant_name ? `<div class="rating-item-variant">${esc(item.variant_name)}</div>` : '';
-                    const img = item.image_url || item.product_image_url;
-                    const imgHtml = img
-                        ? `<img class="rating-item-img" src="${img}" alt="${esc(name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                           <div class="rating-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
-                        : `<div class="rating-item-img-ph"><i class="ri-flower-line"></i></div>`;
-                    return `
-                        <div class="rating-item-card" data-item-id="${item.id}">
-                            <div class="rating-item-header">
-                                ${imgHtml}
-                                <div class="rating-item-info">
-                                    <div class="rating-item-name">${esc(name)}</div>
-                                    ${variant}
-                                </div>
-                            </div>
-                            <div class="rating-stars-row" data-item-id="${item.id}">
-                                ${[1,2,3,4,5].map(star => `<i class="ri-star-line rating-star" data-star="${star}" data-item-id="${item.id}" onclick="setRating(${item.id}, ${star})" onmouseenter="hoverStars(${item.id}, ${star})" onmouseleave="unhoverStars(${item.id})"></i>`).join('')}
-                            </div>
-                            <textarea class="rating-comment" data-item-id="${item.id}" placeholder="Share your thoughts about this product (optional)" maxlength="500" oninput="_ratingState[${item.id}].comment = this.value"></textarea>
-                        </div>`;
-                }).join('')}
-            </div>`;
-
-        updateSubmitBtnState();
+        if (needStore) {
+            _ratingPhase = 'store';
+            renderStoreRatingStep(orderRes);
+        } else {
+            _ratingPhase = 'products';
+            renderProductRatingStep();
+        }
     } catch (err) {
         body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">Failed to load order details.</div>`;
     }
+}
+
+function setStoreRating(star) {
+    _storeRatingState.rating = star;
+    const row = document.getElementById('ratingStoreStars');
+    if (row) {
+        row.querySelectorAll('.rating-star').forEach(el => {
+            const s = parseInt(el.dataset.star, 10);
+            el.classList.toggle('active', s <= star);
+            el.className = el.className.replace(/ri-star-(fill|line)/, s <= star ? 'ri-star-fill' : 'ri-star-line');
+        });
+    }
+    updateSubmitBtnState();
+}
+
+function hoverStoreStars(star) {
+    const row = document.getElementById('ratingStoreStars');
+    if (row) {
+        row.querySelectorAll('.rating-star').forEach(el => {
+            const s = parseInt(el.dataset.star, 10);
+            el.classList.toggle('hovered', s <= star);
+        });
+    }
+}
+
+function unhoverStoreStars() {
+    const row = document.getElementById('ratingStoreStars');
+    if (row) {
+        row.querySelectorAll('.rating-star').forEach(el => el.classList.remove('hovered'));
+    }
+}
+
+function skipStoreRatingStep() {
+    if (_ratingPhase !== 'store') return;
+    _ratingPhase = 'products';
+    if (!_ratingUnratedItems.length) {
+        closeRatingModal();
+        showOrderToast('You can rate the store later from this order.');
+        return;
+    }
+    renderProductRatingStep();
+}
+
+async function submitStoreAndAdvance() {
+    if (_storeRatingState.rating < 1) return;
+    const btn = document.getElementById('ratingSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    const comment = (_storeRatingState.comment || '').trim();
+    try {
+        const res = await fetch(`/api/account/orders/${_ratingOrderId}/rate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                store_rating: {
+                    rating: _storeRatingState.rating,
+                    comment: comment || null,
+                },
+            }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+            showOrderToast(data.error || 'Could not save store rating.');
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+            return;
+        }
+        _ratingExistingStore = { rating: _storeRatingState.rating };
+        if (!_ratingUnratedItems.length) {
+            showOrderToast('Thank you for rating this shop!');
+            await loadOrders();
+            refreshOrdersView();
+            closeRatingModal();
+            return;
+        }
+        _ratingPhase = 'products';
+        btn.textContent = 'Submit ratings';
+        renderProductRatingStep();
+    } catch {
+        showOrderToast('Error saving store rating.');
+        btn.disabled = false;
+        btn.textContent = 'Continue';
+    }
+}
+
+function ratingPrimaryAction() {
+    if (_ratingPhase === 'store') submitStoreAndAdvance();
+    else submitRatings();
 }
 
 function setRating(itemId, star) {
@@ -2218,8 +2219,13 @@ function unhoverStars(itemId) {
 
 function updateSubmitBtnState() {
     const btn = document.getElementById('ratingSubmitBtn');
-    const hasAtLeastOne = Object.values(_ratingState).some(r => r.rating > 0);
-    btn.disabled = !hasAtLeastOne;
+    if (!btn) return;
+    if (_ratingPhase === 'store') {
+        btn.disabled = _storeRatingState.rating < 1;
+    } else {
+        const hasAtLeastOne = Object.values(_ratingState).some(r => r.rating > 0);
+        btn.disabled = !hasAtLeastOne;
+    }
 }
 
 async function submitRatings() {
@@ -2230,12 +2236,13 @@ async function submitRatings() {
     const ratings = Object.entries(_ratingState)
         .filter(([_, r]) => r.rating > 0)
         .map(([itemId, r]) => ({
-            order_item_id: parseInt(itemId),
+            order_item_id: parseInt(itemId, 10),
             rating: r.rating,
-            comment: r.comment || null,
+            comment: (r.comment && String(r.comment).trim()) ? String(r.comment).trim() : null,
         }));
 
     try {
+        const ratedOrderId = _ratingOrderId;
         const res = await fetch(`/api/account/orders/${_ratingOrderId}/rate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2245,31 +2252,42 @@ async function submitRatings() {
 
         if (data.success) {
             showOrderToast('Thank you for your rating!');
+            await loadOrders();
+            refreshOrdersView();
             closeRatingModal();
-            
-            // Hide the Rate button from the order card without reloading
-            const rateBtn = document.querySelector(`#order-card-${_ratingOrderId} button[onclick*="rateOrder"]`);
-            if (rateBtn) {
-                rateBtn.style.display = 'none';
-            }
+            const rateBtn = document.querySelector(`#order-card-${ratedOrderId} button[onclick*="rateOrder"]`);
+            if (rateBtn) rateBtn.style.display = 'none';
+            queueMicrotask(() => maybeAutoOpenRatingModal());
         } else {
             showOrderToast(data.error || 'Failed to submit rating.');
             btn.disabled = false;
-            btn.textContent = 'Submit Rating';
+            btn.textContent = 'Submit ratings';
         }
     } catch {
         showOrderToast('Error submitting rating.');
         btn.disabled = false;
-        btn.textContent = 'Submit Rating';
+        btn.textContent = 'Submit ratings';
     }
 }
 
 function closeRatingModal() {
     const modal = document.getElementById('ratingModal');
+    if (_ratingAutoOpened && _ratingOrderId) {
+        try {
+            sessionStorage.setItem('ratingPromptDismissed_' + _ratingOrderId, '1');
+        } catch (e) {}
+    }
     modal.classList.remove('active');
     setTimeout(() => { modal.style.display = 'none'; }, 300);
     _ratingOrderId = null;
     _ratingState = {};
+    _ratingPhase = 'store';
+    _ratingOrderSnapshot = null;
+    _ratingExistingRatings = {};
+    _ratingExistingStore = null;
+    _ratingUnratedItems = [];
+    _storeRatingState = { rating: 0, comment: '' };
+    _ratingAutoOpened = false;
 }
 
 async function reorderItems(orderId) {
@@ -2421,8 +2439,11 @@ function getDisplayState(order) {
     if (status === 'delivered') {
         return { key: 'delivered', label: 'Delivered', progressKey: 'delivered' };
     }
+    if (status === 'completed') {
+        return { key: 'completed', label: 'Completed', progressKey: 'delivered' };
+    }
     if (status === 'on_delivery') {
-        return { key: 'on_delivery', label: 'On the Way', progressKey: 'on_delivery' };
+        return { key: 'on_delivery', label: 'In Transit', progressKey: 'on_delivery' };
     }
     if (status === 'done_preparing') {
         return { key: 'processing', label: 'Ready', progressKey: 'done_preparing' };
@@ -2430,11 +2451,11 @@ function getDisplayState(order) {
 
     // Receipt uploaded but still waiting for seller/admin review.
     if (paymentStatus === 'pending_verification') {
-        return { key: 'processing', label: 'Payment Review', progressKey: 'pending' };
+        return { key: 'processing', label: 'Under Review', progressKey: 'pending' };
     }
 
     if (status === 'accepted' || status === 'preparing' || paymentStatus === 'verified') {
-        return { key: 'processing', label: 'Processing', progressKey: 'processing' };
+        return { key: 'processing', label: 'Preparing', progressKey: 'processing' };
     }
 
     return { key: 'pending', label: 'To Pay', progressKey: 'pending' };

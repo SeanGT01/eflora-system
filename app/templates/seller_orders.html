@@ -6,6 +6,7 @@
 
 {% block content %}
 <style>
+{% include 'partials/order_detail_sdm_styles.html' %}
     .orders-page {
         display: flex;
         flex-direction: column;
@@ -186,15 +187,15 @@
     }
 
     .orders-toolbar {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: minmax(280px, 1.6fr) repeat(2, minmax(150px, 0.7fr));
         gap: 0.75rem;
-        align-items: stretch;
+        align-items: end;
     }
 
     .orders-search {
         position: relative;
-        flex: 1 1 100%;
+        min-width: 0;
     }
 
     .orders-search i {
@@ -221,8 +222,64 @@
     }
 
     .orders-toolbar select {
-        flex: 1 1 calc(50% - 0.375rem);
         padding: 0.65rem 0.8rem;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .orders-date-filter {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(145px, 1fr)) auto;
+        align-items: flex-end;
+        gap: 0.55rem;
+        grid-column: 1 / -1;
+    }
+
+    .orders-date-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-width: 150px;
+        flex: 1 1 150px;
+    }
+
+    .orders-date-field label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+        color: var(--muted);
+    }
+
+    .orders-date-field input[type="date"] {
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: #fff;
+        color: var(--charcoal);
+        min-height: 42px;
+        font-size: 13px;
+        padding: 0.6rem 0.75rem;
+    }
+
+    .orders-date-reset {
+        min-height: 42px;
+        padding: 0.6rem 0.85rem;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: #fff;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        white-space: nowrap;
+        align-self: end;
+    }
+
+    .orders-date-reset:hover {
+        border-color: var(--deep-rose);
+        color: var(--deep-rose);
+        background: rgba(181, 68, 90, 0.05);
     }
 
     .orders-table-wrap {
@@ -313,7 +370,36 @@
     .status-done_preparing { background: rgba(34, 197, 94, 0.13); color: #15803d; border-color: rgba(34, 197, 94, 0.3); }
     .status-on_delivery { background: rgba(122, 158, 126, 0.16); color: var(--deep-sage); border-color: rgba(122, 158, 126, 0.32); }
     .status-delivered { background: rgba(16, 185, 129, 0.16); color: #047857; border-color: rgba(16, 185, 129, 0.28); }
+    .status-completed { background: rgba(59, 130, 246, 0.14); color: #1d4ed8; border-color: rgba(59, 130, 246, 0.28); }
     .status-cancelled { background: rgba(225, 29, 72, 0.14); color: #be123c; border-color: rgba(225, 29, 72, 0.28); }
+
+    .proof-gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .proof-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 0.55rem;
+        background: #fff;
+    }
+
+    .proof-card-label {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 0.45rem;
+        font-weight: 600;
+    }
+
+    .proof-card img {
+        width: 100%;
+        height: 170px;
+        object-fit: cover;
+        border-radius: 10px;
+        background: var(--cream);
+    }
 
     .payment-pending { background: rgba(148, 163, 184, 0.14); color: #475569; }
     .payment-pending_verification { background: rgba(245, 158, 11, 0.14); color: #9a6700; }
@@ -412,41 +498,33 @@
 
     .orders-pagination {
         display: flex;
-        justify-content: space-between;
+        justify-content: center;
         align-items: center;
-        gap: 1rem;
+        gap: 0.5rem;
+        margin-top: var(--spacing-xl, 1.5rem);
         flex-wrap: wrap;
-        padding: 1rem 1.5rem 1.25rem;
-        border-top: 1px solid var(--border);
+        padding: 0;
     }
 
     .orders-pagination-info {
         font-size: 13px;
         color: var(--muted);
-    }
-
-    .orders-pagination-controls {
-        display: flex;
-        align-items: center;
-        gap: 0.45rem;
-        flex-wrap: wrap;
-        justify-content: flex-end;
+        min-width: 120px;
+        text-align: center;
     }
 
     .orders-page-btn {
-        min-width: 38px;
-        height: 38px;
-        padding: 0 0.8rem;
-        border-radius: 999px;
-        border: 1px solid var(--border-strong);
-        background: #fff;
+        min-width: 36px;
+        height: 36px;
+        padding: 0 0.5rem;
+        border-radius: var(--radius-md);
+        border: 1.5px solid var(--border-strong);
+        background: var(--warm-white);
         color: var(--charcoal);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 0.35rem;
         font-size: 13px;
-        font-weight: 600;
         cursor: pointer;
         transition: var(--transition);
     }
@@ -454,83 +532,18 @@
     .orders-page-btn:hover:not(:disabled) {
         border-color: var(--deep-rose);
         color: var(--deep-rose);
-        background: rgba(181, 68, 90, 0.05);
+        background: rgba(181, 68, 90, 0.02);
     }
 
     .orders-page-btn.active {
         background: var(--deep-rose);
         border-color: var(--deep-rose);
-        color: #fff;
-        box-shadow: var(--shadow-sm);
+        color: white;
     }
 
     .orders-page-btn:disabled {
-        opacity: 0.45;
+        opacity: 0.4;
         cursor: not-allowed;
-    }
-
-    .details-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.7rem;
-    }
-
-    .details-card {
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 0.75rem 0.85rem;
-        background: rgba(250, 246, 240, 0.45);
-    }
-
-    .details-card.full {
-        grid-column: 1 / -1;
-    }
-
-    .details-shell {
-        display: flex;
-        flex-direction: column;
-        gap: 0.85rem;
-    }
-
-    .details-status-strip {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        border: 1px solid rgba(181, 68, 90, 0.22);
-        background: linear-gradient(180deg, rgba(181,68,90,0.08), rgba(181,68,90,0.02));
-        border-radius: var(--radius-lg);
-        padding: 0.65rem 0.8rem;
-    }
-
-    .details-status-time {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--muted);
-    }
-
-    .details-card h6 {
-        margin: 0 0 0.55rem;
-        font-size: 10px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--muted);
-    }
-
-    .details-table {
-        width: 100%;
-        font-size: 12.5px;
-    }
-
-    .details-table td {
-        padding: 0.22rem 0;
-        vertical-align: top;
-    }
-
-    .details-table td:first-child {
-        width: 40%;
-        color: var(--muted);
     }
 
     .custom-modal-body .orders-table th,
@@ -729,15 +742,22 @@
         opacity: 0.95;
     }
 
-    @media (max-width: 900px) {
-        .details-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-
     @media (max-width: 700px) {
-        .orders-toolbar select {
-            flex: 1 1 calc(50% - 0.375rem);
+        .orders-toolbar {
+            grid-template-columns: 1fr 1fr;
+            align-items: stretch;
+        }
+
+        .orders-search {
+            grid-column: 1 / -1;
+        }
+
+        .orders-date-filter {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .orders-date-reset {
+            grid-column: 1 / -1;
         }
     }
 
@@ -839,7 +859,7 @@
 
         .orders-toolbar {
             gap: 0.5rem;
-            flex-wrap: wrap;
+            grid-template-columns: 1fr;
         }
 
         .orders-search input,
@@ -862,8 +882,11 @@
         }
 
         .orders-toolbar select {
-            flex: 1 1 calc(50% - 0.25rem);
             min-width: 0;
+        }
+
+        .orders-date-filter {
+            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -922,13 +945,21 @@
             <div class="orders-stat-value">{{ order_stats.delivered }}</div>
             <div class="orders-stat-sub">Completed orders</div>
         </div>
-        <div class="orders-stat rose" data-filter-type="status" data-filter-value="delivered">
+        <div class="orders-stat rose" data-filter-type="status" data-filter-value="completed">
+            <div class="orders-stat-head">
+                <div class="orders-stat-label">Completed</div>
+                <div class="orders-stat-icon"><i class="ri-award-line"></i></div>
+            </div>
+            <div class="orders-stat-value">{{ order_stats.completed }}</div>
+            <div class="orders-stat-sub">Customer confirmed</div>
+        </div>
+        <div class="orders-stat rose" data-filter-type="status-group" data-filter-value="delivered,completed">
             <div class="orders-stat-head">
                 <div class="orders-stat-label">Revenue</div>
                 <div class="orders-stat-icon"><i class="ri-money-dollar-circle-line"></i></div>
             </div>
             <div class="orders-stat-value">Php {{ "%.0f"|format(order_stats.revenue) }}</div>
-            <div class="orders-stat-sub">Delivered revenue</div>
+            <div class="orders-stat-sub">Delivered/completed revenue</div>
         </div>
     </div>
 
@@ -946,6 +977,7 @@
                 <option value="done_preparing">Done Preparing</option>
                 <option value="on_delivery">On Delivery</option>
                 <option value="delivered">Delivered</option>
+                <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
             </select>
             <select id="sellerPaymentSelect">
@@ -954,6 +986,19 @@
                 <option value="pending_verification">Pending Verification</option>
                 <option value="verified">Verified</option>
             </select>
+            <div class="orders-date-filter">
+                <div class="orders-date-field">
+                    <label for="sellerStartDate">Start date</label>
+                    <input type="date" id="sellerStartDate">
+                </div>
+                <div class="orders-date-field">
+                    <label for="sellerEndDate">End date</label>
+                    <input type="date" id="sellerEndDate">
+                </div>
+                <button type="button" class="orders-date-reset" id="sellerDateResetBtn">
+                    <i class="ri-close-circle-line"></i> Clear dates
+                </button>
+            </div>
         </div>
     </div>
 
@@ -1006,6 +1051,7 @@
                         data-order-id="{{ order.id }}"
                         data-status="{{ order.status }}"
                         data-payment-status="{{ order.payment_status }}"
+                        data-order-date="{{ order.date_formatted }}"
                         data-is-today="{{ 'true' if order.date_formatted == today_str else 'false' }}"
                         data-search="{{ (
                             '#' ~ order.id ~ ' ' ~
@@ -1100,18 +1146,14 @@
                         </td>
                     </tr>
                     {% endfor %}
+                    <tr id="sellerNoRecordsRow" style="display:none;">
+                        <td colspan="7" style="text-align:center;color:var(--muted);padding:1.2rem 0.9rem;font-size:13px;">
+                            No records available
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>
-
-        {% if orders %}
-        <div class="orders-pagination" id="sellerOrdersPagination">
-            <div class="orders-pagination-info" id="sellerOrdersPaginationInfo">
-                Showing 0 orders
-            </div>
-            <div class="orders-pagination-controls" id="sellerOrdersPaginationControls"></div>
-        </div>
-        {% endif %}
 
         {% if not orders %}
         <div class="orders-empty">
@@ -1120,12 +1162,24 @@
         </div>
         {% endif %}
     </div>
+
+    {% if orders %}
+    <div class="orders-pagination" id="sellerOrdersPagination">
+        <button type="button" class="orders-page-btn" id="sellerOrdersPrevBtn">
+            <i class="ri-arrow-left-line"></i>
+        </button>
+        <div class="orders-pagination-info" id="sellerOrdersPaginationInfo">Page 1 of 1</div>
+        <button type="button" class="orders-page-btn" id="sellerOrdersNextBtn">
+            <i class="ri-arrow-right-line"></i>
+        </button>
+    </div>
+    {% endif %}
 </div>
 
-<div class="custom-modal" id="sellerOrderDetailsModal" aria-hidden="true">
-    <div class="custom-modal-dialog">
+<div class="custom-modal order-details-modal" id="sellerOrderDetailsModal" aria-hidden="true">
+    <div class="custom-modal-dialog order-details-modal-surface">
         <div class="custom-modal-head">
-            <h5 class="modal-title" style="margin:0;">Order Details</h5>
+            <h5 class="modal-title" id="sellerOrderDetailsModalTitle" style="margin:0;">Order</h5>
             <button type="button" class="custom-close" data-close-modal="sellerOrderDetailsModal">
                 <i class="ri-close-line"></i>
             </button>
@@ -1189,10 +1243,12 @@
     const sellerConfirmCancelBtn = document.getElementById('sellerConfirmCancelBtn');
     const sellerConfirmOkBtn = document.getElementById('sellerConfirmOkBtn');
     const sellerPaginationInfo = document.getElementById('sellerOrdersPaginationInfo');
-    const sellerPaginationControls = document.getElementById('sellerOrdersPaginationControls');
     const sellerPaginationWrap = document.getElementById('sellerOrdersPagination');
+    const sellerOrdersPrevBtn = document.getElementById('sellerOrdersPrevBtn');
+    const sellerOrdersNextBtn = document.getElementById('sellerOrdersNextBtn');
     const sellerPanelSub = document.getElementById('sellerOrdersPanelSub');
     const sellerStatCards = Array.from(document.querySelectorAll('.orders-stat[data-filter-type]'));
+    const sellerNoRecordsRow = document.getElementById('sellerNoRecordsRow');
     let activePaymentOrderId = null;
     let sellerCurrentPage = 1;
     const sellerRowsPerPage = 10;
@@ -1259,6 +1315,19 @@
         });
     }
 
+    function escapeAttr(s) {
+        if (s == null) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function lineItemThumb(url) {
+        const u = (url && String(url).trim()) ? String(url).trim() : '';
+        if (!u) {
+            return '<span class="sdm-line-thumb-ph" aria-hidden="true"><i class="ri-flower-line"></i></span>';
+        }
+        return `<img class="sdm-line-thumb" src="${escapeAttr(u)}" alt="" width="24" height="24" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';"><span class="sdm-line-thumb-ph" style="display:none;" aria-hidden="true"><i class="ri-flower-line"></i></span>`;
+    }
+
     function parseApiDateTime(value) {
         if (!value) return null;
         const raw = String(value).trim();
@@ -1322,11 +1391,16 @@
         const search = (document.getElementById('sellerOrderSearch').value || '').trim().toLowerCase();
         const status = document.getElementById('sellerStatusSelect').value;
         const payment = document.getElementById('sellerPaymentSelect').value;
+        const startDate = document.getElementById('sellerStartDate').value || '';
+        const endDate = document.getElementById('sellerEndDate').value || '';
 
         return sellerRows.filter(row => {
             const matchesSearch = !search || (row.dataset.search || '').includes(search);
             const matchesStatus = status === 'all' || row.dataset.status === status;
             const matchesPayment = payment === 'all' || row.dataset.paymentStatus === payment;
+            const rowDate = row.dataset.orderDate || '';
+            const matchesDateStart = !startDate || (rowDate && rowDate >= startDate);
+            const matchesDateEnd = !endDate || (rowDate && rowDate <= endDate);
             let matchesCard = true;
 
             if (sellerCardFilter?.type === 'status') {
@@ -1339,7 +1413,7 @@
                 matchesCard = (row.dataset.isToday || '') === 'true';
             }
 
-            return matchesSearch && matchesStatus && matchesPayment && matchesCard;
+            return matchesSearch && matchesStatus && matchesPayment && matchesDateStart && matchesDateEnd && matchesCard;
         });
     }
 
@@ -1364,49 +1438,6 @@
         });
     }
 
-    function renderSellerPagination(totalPages) {
-        if (!sellerPaginationControls) return;
-        sellerPaginationControls.innerHTML = '';
-
-        const prevBtn = document.createElement('button');
-        prevBtn.type = 'button';
-        prevBtn.className = 'orders-page-btn';
-        prevBtn.innerHTML = '<i class="ri-arrow-left-s-line"></i>';
-        prevBtn.disabled = sellerCurrentPage <= 1;
-        prevBtn.addEventListener('click', () => {
-            if (sellerCurrentPage > 1) {
-                sellerCurrentPage -= 1;
-                applySellerFilters();
-            }
-        });
-        sellerPaginationControls.appendChild(prevBtn);
-
-        for (let page = 1; page <= totalPages; page += 1) {
-            const pageBtn = document.createElement('button');
-            pageBtn.type = 'button';
-            pageBtn.className = `orders-page-btn${page === sellerCurrentPage ? ' active' : ''}`;
-            pageBtn.textContent = page;
-            pageBtn.addEventListener('click', () => {
-                sellerCurrentPage = page;
-                applySellerFilters();
-            });
-            sellerPaginationControls.appendChild(pageBtn);
-        }
-
-        const nextBtn = document.createElement('button');
-        nextBtn.type = 'button';
-        nextBtn.className = 'orders-page-btn';
-        nextBtn.innerHTML = '<i class="ri-arrow-right-s-line"></i>';
-        nextBtn.disabled = sellerCurrentPage >= totalPages;
-        nextBtn.addEventListener('click', () => {
-            if (sellerCurrentPage < totalPages) {
-                sellerCurrentPage += 1;
-                applySellerFilters();
-            }
-        });
-        sellerPaginationControls.appendChild(nextBtn);
-    }
-
     function applySellerFilters(resetPage = false) {
         if (resetPage) sellerCurrentPage = 1;
 
@@ -1423,29 +1454,59 @@
             row.style.display = visibleRows.has(row) ? '' : 'none';
         });
 
+        if (sellerNoRecordsRow) {
+            sellerNoRecordsRow.style.display = totalRows === 0 ? '' : 'none';
+        }
+
         if (sellerPaginationWrap) {
             sellerPaginationWrap.style.display = totalRows > 0 ? 'flex' : 'none';
         }
 
         if (sellerPaginationInfo) {
             if (totalRows === 0) {
-                sellerPaginationInfo.textContent = 'No matching orders';
+                sellerPaginationInfo.textContent = 'Page 1 of 1';
             } else {
-                sellerPaginationInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalRows} orders`;
+                sellerPaginationInfo.textContent = `Page ${sellerCurrentPage} of ${totalPages}`;
             }
+        }
+
+        if (sellerOrdersPrevBtn) {
+            sellerOrdersPrevBtn.disabled = sellerCurrentPage <= 1 || totalRows === 0;
+        }
+        if (sellerOrdersNextBtn) {
+            sellerOrdersNextBtn.disabled = sellerCurrentPage >= totalPages || totalRows === 0;
         }
 
         updateSellerPanelSubtitle(totalRows);
         updateActiveSellerCard();
-
-        if (sellerPaginationControls) {
-            renderSellerPagination(totalPages);
-        }
     }
 
     document.getElementById('sellerOrderSearch').addEventListener('input', () => applySellerFilters(true));
     document.getElementById('sellerStatusSelect').addEventListener('change', () => applySellerFilters(true));
     document.getElementById('sellerPaymentSelect').addEventListener('change', () => applySellerFilters(true));
+    document.getElementById('sellerStartDate').addEventListener('change', () => applySellerFilters(true));
+    document.getElementById('sellerEndDate').addEventListener('change', () => applySellerFilters(true));
+    document.getElementById('sellerDateResetBtn').addEventListener('click', () => {
+        const start = document.getElementById('sellerStartDate');
+        const end = document.getElementById('sellerEndDate');
+        start.value = '';
+        end.value = '';
+        applySellerFilters(true);
+    });
+    sellerOrdersPrevBtn?.addEventListener('click', () => {
+        if (sellerCurrentPage > 1) {
+            sellerCurrentPage -= 1;
+            applySellerFilters();
+        }
+    });
+    sellerOrdersNextBtn?.addEventListener('click', () => {
+        const totalRows = getFilteredSellerRows().length;
+        const totalPages = Math.max(1, Math.ceil(totalRows / sellerRowsPerPage));
+        if (sellerCurrentPage < totalPages) {
+            sellerCurrentPage += 1;
+            applySellerFilters();
+        }
+    });
     document.getElementById('refreshOrdersBtn').addEventListener('click', () => window.location.reload());
 
     sellerStatCards.forEach(card => {
@@ -1475,7 +1536,9 @@
     document.querySelectorAll('.seller-view-order').forEach(button => {
         button.addEventListener('click', async () => {
             const body = document.getElementById('sellerOrderDetailsBody');
+            const titleEl = document.getElementById('sellerOrderDetailsModalTitle');
             let loadedOrder = null;
+            if (titleEl) titleEl.textContent = 'Order';
             body.innerHTML = '<div class="text-center py-4 text-muted">Loading...</div>';
             openModal(sellerOrderDetailsModal);
             try {
@@ -1486,66 +1549,87 @@
 
                 const itemsHtml = (order.items || []).map(item => `
                     <tr>
+                        <td class="sdm-line-thumb-cell">${lineItemThumb(item.product_image_url)}</td>
                         <td>${item.product_name || 'Product'}${item.variant_name ? ` <span style="color:var(--deep-rose)">(${item.variant_name})</span>` : ''}</td>
                         <td>${item.quantity || 0}</td>
                         <td>Php ${formatAmount(item.price || 0)}</td>
                         <td>Php ${formatAmount((item.quantity || 0) * (item.price || 0))}</td>
                     </tr>
                 `).join('');
+                const proofHtml = [
+                    { label: 'Finished product', url: order.done_preparing_proof_url },
+                    { label: 'Rider proof 1', url: order.delivery_proof_url },
+                    { label: 'Rider proof 2', url: order.delivery_proof_2_url }
+                ].filter(p => !!p.url).map(p => `
+                    <figure class="sdm-proof-fig">
+                        <img src="${p.url}" alt="${p.label}" loading="lazy">
+                        <figcaption class="sdm-proof-cap">${p.label}</figcaption>
+                    </figure>
+                `).join('');
+
+                const mt = document.getElementById('sellerOrderDetailsModalTitle');
+                if (mt) mt.textContent = `Order #${order.id}`;
 
                 body.innerHTML = `
-                    <div class="details-shell">
-                        <div class="details-status-strip">
-                            <span class="status-pill status-${order.status}">
-                                ${titleCaseStatus(order.status)}
-                            </span>
-                            <span class="details-status-time">${formatDateTime(order.created_at)}</span>
+                    <div class="sdm">
+                        <header class="sdm-topbar">
+                            <div class="sdm-topbar-left">
+                                <span class="sdm-oid">#${order.id}</span>
+                                <span class="status-pill status-${order.status}">${titleCaseStatus(order.status)}</span>
+                            </div>
+                            <span class="sdm-when">${formatDateTime(order.created_at)} · ${titleCaseStatus(order.order_type)}</span>
+                        </header>
+
+                        <div class="sdm-grid">
+                            <section class="sdm-block">
+                                <h4>Customer</h4>
+                                <div class="sdm-rows">
+                                    <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${order.customer_name || '—'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Phone</span><span class="sdm-v">${order.customer_phone || '—'}</span></div>
+                                </div>
+                            </section>
+                            <section class="sdm-block">
+                                <h4>Payment</h4>
+                                <div class="sdm-rows">
+                                    <div class="sdm-row"><span class="sdm-k">Method</span><span class="sdm-v">${titleCaseStatus(order.payment_method)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Status</span><span class="sdm-v">${titleCaseStatus(order.payment_status)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">₱${formatAmount(order.subtotal_amount || 0)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Delivery</span><span class="sdm-v">₱${formatAmount(order.delivery_fee || 0)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Total</span><span class="sdm-v" style="font-weight:600;color:var(--charcoal);">₱${formatAmount(order.total_amount || 0)}</span></div>
+                                </div>
+                            </section>
+                            <section class="sdm-block">
+                                <h4>Rider</h4>
+                                <div class="sdm-rows">
+                                    <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${order.rider_name || 'Not assigned'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Vehicle</span><span class="sdm-v">${order.rider_vehicle || '—'}</span></div>
+                                </div>
+                            </section>
+                            <section class="sdm-block">
+                                <h4>Schedule</h4>
+                                <div class="sdm-rows">
+                                    <div class="sdm-row"><span class="sdm-k">Distance</span><span class="sdm-v">${order.distance_km ? `${Number(order.distance_km).toFixed(2)} km` : '—'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Date</span><span class="sdm-v">${order.requested_delivery_date ? formatDate(order.requested_delivery_date) : '—'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Time</span><span class="sdm-v">${formatDeliveryTimeSlot(order.requested_delivery_time)}</span></div>
+                                </div>
+                            </section>
                         </div>
-                    <div class="details-grid">
-                        <div class="details-card">
-                            <h6>Order</h6>
-                            <table class="details-table">
-                                <tr><td>Order ID</td><td>#${order.id}</td></tr>
-                                <tr><td>Status</td><td>${titleCaseStatus(order.status)}</td></tr>
-                                <tr><td>Type</td><td>${titleCaseStatus(order.order_type)}</td></tr>
-                                <tr><td>Created</td><td>${formatDateTime(order.created_at)}</td></tr>
-                            </table>
-                        </div>
-                        <div class="details-card">
-                            <h6>Customer</h6>
-                            <table class="details-table">
-                                <tr><td>Name</td><td>${order.customer_name || 'Customer'}</td></tr>
-                                <tr><td>Phone</td><td>${order.customer_phone || 'N/A'}</td></tr>
-                                <tr><td>Rider</td><td>${order.rider_name || 'Not assigned'}</td></tr>
-                                <tr><td>Vehicle</td><td>${order.rider_vehicle || 'N/A'}</td></tr>
-                            </table>
-                        </div>
-                        <div class="details-card">
-                            <h6>Payment</h6>
-                            <table class="details-table">
-                                <tr><td>Method</td><td>${titleCaseStatus(order.payment_method)}</td></tr>
-                                <tr><td>Status</td><td>${titleCaseStatus(order.payment_status)}</td></tr>
-                                <tr><td>Subtotal</td><td>Php ${formatAmount(order.subtotal_amount || 0)}</td></tr>
-                                <tr><td>Delivery</td><td>Php ${formatAmount(order.delivery_fee || 0)}</td></tr>
-                                <tr><td>Total</td><td>Php ${formatAmount(order.total_amount || 0)}</td></tr>
-                            </table>
-                        </div>
-                        <div class="details-card">
-                            <h6>Delivery</h6>
-                            <table class="details-table">
-                                <tr><td>Address</td><td>${order.delivery_address || 'N/A'}</td></tr>
-                                <tr><td>Notes</td><td>${order.delivery_notes || 'None'}</td></tr>
-                                <tr><td>Distance</td><td>${order.distance_km ? `${Number(order.distance_km).toFixed(2)} km` : 'N/A'}</td></tr>
-                                <tr><td>Requested Date</td><td>${order.requested_delivery_date ? formatDate(order.requested_delivery_date) : 'Not specified'}</td></tr>
-                                <tr><td>Requested Time</td><td>${formatDeliveryTimeSlot(order.requested_delivery_time)}</td></tr>
-                            </table>
-                        </div>
-                        <div class="details-card full">
-                            <h6>Items</h6>
-                            <div class="table-responsive">
-                                <table class="orders-table">
+
+                        <section class="sdm-block sdm-block--full">
+                            <h4>Delivery</h4>
+                            <div class="sdm-rows">
+                                <div class="sdm-row"><span class="sdm-k">Address</span><span class="sdm-v">${order.delivery_address || '—'}</span></div>
+                                <div class="sdm-row"><span class="sdm-k">Notes</span><span class="sdm-v">${order.delivery_notes || '—'}</span></div>
+                            </div>
+                        </section>
+
+                        <section class="sdm-block sdm-block--full">
+                            <h4>Line items</h4>
+                            <div class="sdm-table-wrap">
+                                <table class="sdm-table">
                                     <thead>
                                         <tr>
+                                            <th class="sdm-line-thumb-cell" aria-label="Preview"></th>
                                             <th>Product</th>
                                             <th>Qty</th>
                                             <th>Price</th>
@@ -1555,11 +1639,16 @@
                                     <tbody>${itemsHtml}</tbody>
                                 </table>
                             </div>
-                        </div>
-                    </div>
+                        </section>
+                        ${proofHtml ? `
+                        <section class="sdm-block sdm-block--full">
+                            <h4>Proof</h4>
+                            <div class="sdm-proofs">${proofHtml}</div>
+                        </section>` : ''}
                     </div>
                 `;
             } catch (error) {
+                if (titleEl) titleEl.textContent = 'Order';
                 body.innerHTML = `<div class="text-danger">${error.message || 'Failed to load order.'}</div>`;
             }
 
@@ -1578,9 +1667,30 @@
         });
     });
 
-    async function markOrderDonePreparing(orderId) {
+    async function markDonePreparingWithProof(orderId) {
+        const selectedFile = await pickFinishedProductImage();
+        if (!selectedFile) {
+            throw new Error('Finished product image is required.');
+        }
+        const uploadFile = await prepareFinishedProductImage(selectedFile);
         const confirmed = await openConfirmModal('Mark this order as Done Preparing?');
-        if (!confirmed) return;
+        if (!confirmed) return null;
+
+        const formData = new FormData();
+        formData.append('status', 'done_preparing');
+        formData.append('finished_product_image', uploadFile, uploadFile.name || 'finished-product.jpg');
+        return formData;
+    }
+
+    async function markOrderDonePreparing(orderId) {
+        let formData;
+        try {
+            formData = await markDonePreparingWithProof(orderId);
+            if (!formData) return;
+        } catch (error) {
+            showSellerAlert('danger', error.message || 'Please upload the finished product image first.');
+            return;
+        }
 
         const btn = document.getElementById('markDonePreparingBtn');
         btn.disabled = true;
@@ -1588,10 +1698,7 @@
         try {
             const response = await sellerFetch(`/api/seller/orders/${orderId}/status`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ status: 'done_preparing' })
+                body: formData
             });
             const data = await response.json();
             if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update status');
@@ -1607,8 +1714,14 @@
 
     document.querySelectorAll('.seller-mark-done').forEach(button => {
         button.addEventListener('click', async () => {
-            const confirmed = await openConfirmModal('Mark this order as Done Preparing?');
-            if (!confirmed) return;
+            let formData;
+            try {
+                formData = await markDonePreparingWithProof(button.dataset.orderId);
+                if (!formData) return;
+            } catch (error) {
+                showSellerAlert('danger', error.message || 'Please upload the finished product image first.');
+                return;
+            }
 
             const orderId = button.dataset.orderId;
             button.disabled = true;
@@ -1616,10 +1729,7 @@
             try {
                 const response = await sellerFetch(`/api/seller/orders/${orderId}/status`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ status: 'done_preparing' })
+                    body: formData
                 });
                 const data = await response.json();
                 if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update status');
@@ -1632,6 +1742,78 @@
             }
         });
     });
+
+    async function pickFinishedProductImage() {
+        return new Promise(resolve => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = () => resolve(input.files && input.files[0] ? input.files[0] : null);
+            input.click();
+        });
+    }
+
+    async function prepareFinishedProductImage(file) {
+        const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB Cloudinary unsigned limit
+        if (file.size <= MAX_UPLOAD_SIZE) return file;
+
+        if (!file.type.startsWith('image/')) {
+            throw new Error('Please select an image file under 10MB.');
+        }
+
+        showSellerAlert('info', 'Selected image is large. Compressing before upload...');
+        const compressed = await compressImageToMaxSize(file, MAX_UPLOAD_SIZE);
+        if (!compressed || compressed.size > MAX_UPLOAD_SIZE) {
+            throw new Error('Image is too large. Please choose a smaller file (max 10MB).');
+        }
+        return compressed;
+    }
+
+    async function compressImageToMaxSize(file, maxBytes) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = async () => {
+                    let width = img.width;
+                    let height = img.height;
+                    const maxDim = 2400;
+                    if (width > maxDim || height > maxDim) {
+                        const ratio = Math.min(maxDim / width, maxDim / height);
+                        width = Math.round(width * ratio);
+                        height = Math.round(height * ratio);
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const baseName = (file.name || 'finished-product').replace(/\.[^.]+$/, '');
+                    let quality = 0.9;
+                    let blob = null;
+
+                    while (quality >= 0.45) {
+                        blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+                        if (blob && blob.size <= maxBytes) break;
+                        quality -= 0.1;
+                    }
+
+                    if (!blob) {
+                        resolve(null);
+                        return;
+                    }
+
+                    resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }));
+                };
+                img.onerror = () => resolve(null);
+                img.src = reader.result;
+            };
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(file);
+        });
+    }
 
     document.querySelectorAll('.seller-view-payment').forEach(button => {
         button.addEventListener('click', () => {
@@ -1786,6 +1968,8 @@
     // Handle batch mark done
     batchMarkDoneBtn.addEventListener('click', async function() {
         if (selectedOrderIds.size === 0 || batchMarkDoneBtn.disabled) return;
+        showSellerAlert('danger', 'Batch Done Preparing is disabled because each order now requires a finished-product image upload.');
+        return;
 
         const orderIds = Array.from(selectedOrderIds);
         const confirmMsg = `Mark ${orderIds.length} order(s) as Done Preparing?`;

@@ -2197,6 +2197,7 @@
 
             <!-- Actions -->
             <div class="user-actions">
+                {% set hide_shop_icons = session.get('role') in ['seller', 'admin'] %}
                 {% if session.get('role') == 'seller' %}
                 <a href="{{ url_for('templates.dashboard') }}" class="action-btn">
                     <i class="ri-store-2-line action-icon"></i>
@@ -2204,6 +2205,7 @@
                 </a>
                 {% endif %}
 
+                {% if not hide_shop_icons %}
                 <a href="{{ url_for('templates.index') }}" class="action-btn">
                     <i class="ri-home-5-line action-icon"></i>
                 </a>
@@ -2212,8 +2214,10 @@
                     <i class="ri-shopping-bag-line action-icon bag"></i>
                     <span class="cart-count" id="cartCount">0</span>
                 </button>
+                {% endif %}
 
                 {% if session.get('user_id') %}
+                    {% if not hide_shop_icons %}
                     <div class="user-menu-trigger">
                         <button class="action-btn" onclick="toggleUserMenu(event)" id="userAvatarBtn">
                             <i class="ri-user-3-line action-icon"></i>
@@ -2225,12 +2229,20 @@
                                 <a href="#" class="menu-item" onclick="handleAccountNavigation('orders'); return false;">
                                     <i class="ri-shopping-bag-line"></i> My Orders
                                 </a>
+                                <a href="{{ url_for('templates.seller_signup_landing') }}" class="menu-item" onclick="return goToSellerSignup(event, this.href);">
+                                    <i class="ri-store-2-line"></i> Become a Seller
+                                </a>
                                 <a href="{{ url_for('templates.logout') }}" class="menu-item" style="color:#b5445a;">
                                     <i class="ri-logout-box-r-line"></i> Sign Out
                                 </a>
                             </div>
                     </div>
+                    {% endif %}
                 {% else %}
+                <a href="{{ url_for('templates.seller_signup_landing') }}" class="action-btn" title="Sell on E-Flora" onclick="return goToSellerSignup(event, this.href);">
+                    <i class="ri-store-2-line action-icon"></i>
+                    <span class="action-text">Sell</span>
+                </a>
                 <a href="{{ url_for('templates.login') }}" class="action-btn">
                     <i class="ri-user-line action-icon"></i>
                     <span class="action-text">Sign In</span>
@@ -2287,9 +2299,11 @@
                         {% else %}
                         <li><a href="{{ url_for('templates.my_account') }}?page=profile">My Profile</a></li>
                         <li><a href="{{ url_for('templates.my_account') }}?page=orders">My Orders</a></li>
+                        <li><a href="{{ url_for('templates.seller_signup_landing') }}" onclick="return goToSellerSignup(event, this.href);">Become a Seller</a></li>
                         {% endif %}
                         {% else %}
                         <li><a href="{{ url_for('templates.login') }}">Sign In</a></li>
+                        <li><a href="{{ url_for('templates.seller_signup_landing') }}" onclick="return goToSellerSignup(event, this.href);">Become a Seller</a></li>
                         {% endif %}
                     </ul>
                 </div>
@@ -2316,6 +2330,7 @@
     <div class="toast" id="toast"></div>
 
     <script>
+const SHOPPING_DISABLED = {{ 'true' if session.get('role') in ['seller', 'admin'] else 'false' }};
 const DEBUG = {
     enabled: true,
     log: function(step, data) {
@@ -3053,6 +3068,10 @@ function inspectCart() {
 window.inspectCart = inspectCart;
 
 function addToCart(product) {
+    if (SHOPPING_DISABLED) {
+        showToast('Cart and checkout are disabled for seller/admin accounts', 'error');
+        return false;
+    }
     if (!product || !product.id) {
         showToast('Error: Invalid product', 'error');
         return false;
@@ -3259,6 +3278,10 @@ function clearCartLocal() {
 }
 
 function toggleCart() {
+    if (SHOPPING_DISABLED) {
+        showToast('Cart is disabled for seller/admin accounts', 'error');
+        return;
+    }
     const sidebar = document.getElementById('cartSidebar');
     const overlay = document.getElementById('cartOverlay');
     const chatFab = document.getElementById('chat-fab');
@@ -3277,6 +3300,56 @@ function toggleUserMenu(event) {
     const userMenu = document.getElementById('userMenu');
     userMenu.classList.toggle('show');
 }
+
+const SELLER_NAV_DEBUG = (() => {
+    try {
+        const q = new URLSearchParams(window.location.search).get('seller_nav_debug');
+        if (q === '1') localStorage.setItem('seller_nav_debug', '1');
+        if (q === '0') localStorage.removeItem('seller_nav_debug');
+        return q === '1' || localStorage.getItem('seller_nav_debug') === '1';
+    } catch (_) {
+        return false;
+    }
+})();
+
+function sellerNavDebug(step, data) {
+    if (!SELLER_NAV_DEBUG) return;
+    try {
+        console.log(`🧭 SELLER NAV DEBUG: ${step}`, data || {});
+    } catch (_) {
+        console.log(`🧭 SELLER NAV DEBUG: ${step}`);
+    }
+}
+
+function goToSellerSignup(event, href) {
+    sellerNavDebug('goToSellerSignup invoked', {
+        href,
+        currentPath: window.location.pathname + window.location.search,
+        role: '{{ session.get("role") or "guest" }}',
+        defaultPrevented: !!event?.defaultPrevented,
+    });
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (!href) {
+        sellerNavDebug('missing href; abort');
+        return false;
+    }
+    sellerNavDebug('navigating with location.assign', { href });
+    window.location.assign(href);
+    return false;
+}
+
+document.addEventListener('click', function(event) {
+    const a = event.target && event.target.closest ? event.target.closest('a[href*="/seller/signup"]') : null;
+    if (!a) return;
+    sellerNavDebug('anchor click captured', {
+        href: a.href,
+        text: (a.textContent || '').trim(),
+        defaultPrevented: event.defaultPrevented,
+    });
+}, true);
 
 // Close user menu when clicking outside
 document.addEventListener('click', function(event) {
@@ -3299,6 +3372,10 @@ async function fetchCheckoutAddresses() {
 }
 
 async function buyNowDirect(item) {
+    if (SHOPPING_DISABLED) {
+        showToast('Checkout is disabled for seller/admin accounts', 'error');
+        return;
+    }
     // item = { product_id, variant_id, quantity, price, name, store_name, image_url }
     {% if session.get('user_id') %}
     buyNowMode = true;
@@ -3367,6 +3444,10 @@ async function buyNowDirect(item) {
 }
 
 async function checkout() {
+    if (SHOPPING_DISABLED) {
+        showToast('Checkout is disabled for seller/admin accounts', 'error');
+        return;
+    }
     const selectedItems = cart.filter(item => item.is_selected);
     if (!selectedItems.length) { 
         showToast('Please select at least one item to checkout'); 
@@ -4528,3 +4609,4 @@ updateCartDisplay();
     </script>
 </body>
 </html>
+

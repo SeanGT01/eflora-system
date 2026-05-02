@@ -272,7 +272,7 @@ def approve_seller_application(app_id):
     application = SellerApplication.query.get(app_id)
     if not application:
         return jsonify({'error': 'Application not found'}), 404
-    if application.status != 'pending':
+    if application.status not in ('pending', 'resubmitted'):
         return jsonify({'error': f'Application is already {application.status}'}), 400
 
     admin_id = get_jwt_identity()
@@ -323,7 +323,7 @@ def reject_seller_application(app_id):
     application = SellerApplication.query.get(app_id)
     if not application:
         return jsonify({'error': 'Application not found'}), 404
-    if application.status != 'pending':
+    if application.status not in ('pending', 'resubmitted'):
         return jsonify({'error': f'Application is already {application.status}'}), 400
 
     admin_id = get_jwt_identity()
@@ -361,6 +361,15 @@ def reject_seller_application(app_id):
         reference_id=application.id,
     )
     db.session.add(notification)
+
+    user = User.query.get(application.user_id)
+    if user:
+        src = application.application_source or 'customer_account'
+        if src != 'seller_portal':
+            user.role = 'customer'
+        st = Store.query.filter_by(seller_id=user.id).first()
+        if st:
+            st.status = 'inactive'
 
     db.session.commit()
     return jsonify({'success': True, 'message': 'Application rejected', 'application': application.to_dict()}), 200

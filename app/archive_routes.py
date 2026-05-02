@@ -219,6 +219,26 @@ def permanent_delete_product(product_id):
             )
             refs['pos_order_items'] = 0
 
+        # Preserve online order history by re-pointing order items as well.
+        if refs.get('order_items'):
+            snapshot = _get_or_create_pos_snapshot_product(store, product)
+            OrderItem.query.filter_by(product_id=product_id).update(
+                {
+                    OrderItem.product_id: snapshot.id,
+                    OrderItem.variant_id: None,
+                },
+                synchronize_session=False,
+            )
+            refs['order_items'] = 0
+
+        # Safe to remove cart rows and ratings when deleting archived catalogue products.
+        if refs.get('carts'):
+            CartItem.query.filter_by(product_id=product_id).delete(synchronize_session=False)
+            refs['carts'] = 0
+        if refs.get('ratings'):
+            ProductRating.query.filter_by(product_id=product_id).delete(synchronize_session=False)
+            refs['ratings'] = 0
+
         if any(refs.values()):
             return jsonify({
                 'error': f'Cannot permanently delete. Product is still referenced by {_build_delete_block_reason(refs)}.',
@@ -375,6 +395,24 @@ def bulk_permanent_delete():
                         synchronize_session=False,
                     )
                     refs['pos_order_items'] = 0
+
+                if refs.get('order_items'):
+                    snapshot = _get_or_create_pos_snapshot_product(store, product)
+                    OrderItem.query.filter_by(product_id=product_id).update(
+                        {
+                            OrderItem.product_id: snapshot.id,
+                            OrderItem.variant_id: None,
+                        },
+                        synchronize_session=False,
+                    )
+                    refs['order_items'] = 0
+
+                if refs.get('carts'):
+                    CartItem.query.filter_by(product_id=product_id).delete(synchronize_session=False)
+                    refs['carts'] = 0
+                if refs.get('ratings'):
+                    ProductRating.query.filter_by(product_id=product_id).delete(synchronize_session=False)
+                    refs['ratings'] = 0
 
                 if any(refs.values()):
                     failed_products.append({

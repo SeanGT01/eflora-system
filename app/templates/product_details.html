@@ -2195,9 +2195,14 @@ function setGalleryImages(nextImages) {
        RATING DISPLAY UPDATE
     ════════════════════════════════ */
     function updateRatingDisplay(variantKey) {
-        const data = variantRatings[variantKey] || { avg: 0, count: 0 };
-        const avg = data.avg;
-        const count = data.count;
+        // "main" / Standard = base listing: show ALL product reviews (matches server avg/total).
+        // Per-variant buttons use only ratings tied to that variant_id.
+        const key = String(variantKey);
+        const data = key === 'main'
+            ? overallRating
+            : (variantRatings[key] || { avg: 0, count: 0 });
+        const avg = Number(data.avg) || 0;
+        const count = Number(data.count) || 0;
         const fullStars = Math.floor(avg);
         const hasHalf = (avg - fullStars) >= 0.3;
         const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);

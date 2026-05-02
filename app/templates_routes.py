@@ -1,14 +1,15 @@
 # app/templates_routes.py - FIXED VERSION
 from datetime import datetime, timedelta
+from collections import defaultdict
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, AccountBan, StorePaymentSetting
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
 from functools import wraps
 from decimal import Decimal
-from sqlalchemy import or_
+from sqlalchemy import or_, inspect, text
 from sqlalchemy.exc import ProgrammingError, OperationalError, IntegrityError
 import uuid
 import time
@@ -21,7 +22,7 @@ from flask import send_file
 from app.laguna_addresses import get_municipalities, get_barangays, get_coordinates, format_address, LAGUNA_ADDRESSES
 from app.models import UserAddress
 
-from app.utils.cloudinary_helper import upload_to_cloudinary
+from app.utils.cloudinary_helper import upload_to_cloudinary, delete_from_cloudinary
 # app/templates_routes.py - Add these imports at the top
 from flask_wtf.csrf import generate_csrf
 from sqlalchemy.orm import joinedload
@@ -212,19 +213,35 @@ def get_authenticated_user_id():
     return None
 
 
-def _serialize_customer_order(order):
-    """Shape order data for the customer account order UI."""
+def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
+    """Shape order data for the customer account order UI.
+
+    When listing many orders, pass rated_item_ids (set of order_item_id) and
+    store_rated (bool) to avoid N+1 queries.
+    """
     items_payload = []
     total_quantity = 0
 
-    # Pre-fetch existing ratings for this order if delivered
-    rated_item_ids = set()
-    if order.status == 'delivered':
-        try:
-            ratings = ProductRating.query.filter_by(order_id=order.id).all()
-            rated_item_ids = {r.order_item_id for r in ratings}
-        except Exception:
-            rated_item_ids = set()
+    if order.status in ('delivered', 'completed'):
+        if rated_item_ids is None:
+            try:
+                ratings = ProductRating.query.filter_by(order_id=order.id).all()
+                rated_item_ids = {r.order_item_id for r in ratings if r.order_item_id}
+            except Exception:
+                rated_item_ids = set()
+        if store_rated is None:
+            try:
+                store_rated_flag = (
+                    StoreRating.query.filter_by(order_id=order.id, customer_id=order.customer_id).first()
+                    is not None
+                )
+            except Exception:
+                store_rated_flag = False
+        else:
+            store_rated_flag = bool(store_rated)
+    else:
+        rated_item_ids = set()
+        store_rated_flag = True  # N/A for non-delivered; treat as satisfied for all_rated
 
     for item in order.items:
         quantity = item.quantity or 0
@@ -246,7 +263,12 @@ def _serialize_customer_order(order):
             'is_rated': item.id in rated_item_ids,
         })
 
-    all_rated = len(rated_item_ids) >= len(order.items) if order.items else False
+    n_items = len(order.items) if order.items else 0
+    products_all_rated = (len(rated_item_ids) >= n_items) if n_items else True
+    if order.status in ('delivered', 'completed'):
+        all_rated = bool(store_rated_flag) and products_all_rated
+    else:
+        all_rated = True
 
     return {
         'id': order.id,
@@ -261,17 +283,55 @@ def _serialize_customer_order(order):
         'delivery_address': order.delivery_address,
         'delivery_notes': order.delivery_notes,
         'payment_proof_url': order.payment_proof_url,
+        'done_preparing_proof_url': order.done_preparing_proof_url,
+        'delivery_proof_url': order.delivery_proof_url,
+        'delivery_proof_2_url': order.delivery_proof_2_url,
         'created_at': order.created_at.isoformat() if order.created_at else None,
         'updated_at': order.updated_at.isoformat() if order.updated_at else None,
+        'requested_delivery_date': order.requested_delivery_date.isoformat()
+        if getattr(order, 'requested_delivery_date', None)
+        else None,
+        'requested_delivery_time': getattr(order, 'requested_delivery_time', None),
         'store_id': order.store_id,
         'store_name': order.store.name if order.store else 'Store',
         'store_logo': order.store.logo_url if order.store else None,
         'store_contact': order.store.contact_number if order.store else None,
         'item_count': total_quantity,
         'items': items_payload,
+        'store_rated': bool(store_rated_flag),
         'all_rated': all_rated,
         'rated_count': len(rated_item_ids),
     }
+
+
+def _ensure_order_fulfillment_columns():
+    """Backfill missing order proof/status columns when migrations are pending."""
+    required = {
+        'done_preparing_proof': "ALTER TABLE orders ADD COLUMN done_preparing_proof VARCHAR(255)",
+        'done_preparing_proof_public_id': "ALTER TABLE orders ADD COLUMN done_preparing_proof_public_id VARCHAR(255)",
+        'done_preparing_proof_url': "ALTER TABLE orders ADD COLUMN done_preparing_proof_url VARCHAR(500)",
+        'completed_at': "ALTER TABLE orders ADD COLUMN completed_at TIMESTAMP",
+    }
+    try:
+        cols = {c['name'] for c in inspect(db.engine).get_columns('orders')}
+        for column_name, stmt in required.items():
+            if column_name in cols:
+                continue
+            try:
+                db.session.execute(text(stmt))
+                db.session.commit()
+            except Exception as col_exc:
+                db.session.rollback()
+                msg = str(col_exc).lower()
+                if 'duplicate column' in msg or 'already exists' in msg:
+                    continue
+                current_app.logger.warning('Could not add orders.%s: %s', column_name, col_exc)
+        refreshed = {c['name'] for c in inspect(db.engine).get_columns('orders')}
+        return all(col in refreshed for col in required.keys())
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.warning('Failed ensuring order fulfillment columns: %s', exc)
+        return False
 
 
 @templates_bp.route('/health')
@@ -402,6 +462,66 @@ def _product_list_for_storefront(orm_products):
     return product_list
 
 
+def _get_default_customer_address(user_id):
+    if not user_id:
+        return None
+    return (
+        UserAddress.query.filter_by(user_id=user_id)
+        .order_by(UserAddress.is_default.desc(), UserAddress.created_at.desc())
+        .first()
+    )
+
+
+def _store_delivery_match(store, address):
+    """Evaluate whether a store can deliver to the given user address."""
+    if not store or not address:
+        return {'can_deliver': False, 'reason': 'Set your default address to check delivery coverage.'}
+
+    address_municipality = (address.municipality or '').strip().casefold()
+    has_coords = address.latitude is not None and address.longitude is not None
+
+    try:
+        if store.delivery_method == 'municipality':
+            selected = store.selected_municipalities or []
+            if selected and address_municipality:
+                matched = any(str(name).strip().casefold() == address_municipality for name in selected)
+                if not matched:
+                    return {
+                        'can_deliver': False,
+                        'reason': f"{store.name} does not deliver to {address.municipality}.",
+                    }
+            return {'can_deliver': True, 'reason': None}
+
+        if not has_coords:
+            return {'can_deliver': False, 'reason': 'Your default address is missing map coordinates.'}
+
+        distance = store.calculate_distance(address.latitude, address.longitude)
+        if distance is None or distance == float('inf'):
+            return {'can_deliver': False, 'reason': 'Store location is incomplete for delivery matching.'}
+
+        max_distance = float(store.max_delivery_distance or 0)
+        if max_distance and distance > max_distance:
+            return {'can_deliver': False, 'reason': 'Outside delivery distance.'}
+
+        if store.delivery_method == 'radius':
+            radius_limit = float(store.delivery_radius_km or max_distance or 0)
+            if radius_limit and distance > radius_limit:
+                return {'can_deliver': False, 'reason': 'Outside delivery distance.'}
+            return {'can_deliver': True, 'reason': None}
+
+        if store.delivery_area is not None:
+            try:
+                if not store.can_deliver_to(address.latitude, address.longitude):
+                    return {'can_deliver': False, 'reason': 'Outside this store delivery zone.'}
+            except Exception:
+                # Fallback to distance-based decision only when geometry check fails.
+                pass
+
+        return {'can_deliver': True, 'reason': None}
+    except Exception:
+        return {'can_deliver': False, 'reason': 'Could not validate delivery coverage right now.'}
+
+
 @templates_bp.route('/')
 @limiter.limit("5 per minute")
 def index():
@@ -411,11 +531,20 @@ def index():
         from app.models import Category
         main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
 
-        # Get products for the landing page - only from active stores with stock
+        current_user_id = session.get('user_id')
+        is_customer = session.get('role') == 'customer' and current_user_id
+        customer_address = _get_default_customer_address(current_user_id) if is_customer else None
+
+        browse_all_arg = request.args.get('browse_all')
+        if browse_all_arg is not None:
+            session['storefront_browse_all'] = browse_all_arg == '1'
+        browse_all_mode = bool(session.get('storefront_browse_all', False))
+
+        # Get extra pool so filtering still yields enough cards.
         products = (
             _public_storefront_product_base_query()
             .order_by(Product.created_at.desc())
-            .limit(8)
+            .limit(40)
             .all()
         )
         
@@ -429,6 +558,23 @@ def index():
                 print(f"  Store Category: {p.store_category.name}")
         
         product_list = _product_list_for_storefront(products)
+        product_delivery_map = {}
+        if is_customer:
+            for product in products:
+                delivery = _store_delivery_match(product.store, customer_address)
+                product_delivery_map[product.id] = delivery
+
+        if is_customer and customer_address and not browse_all_mode:
+            products = [p for p in products if product_delivery_map.get(p.id, {}).get('can_deliver')]
+            product_list = _product_list_for_storefront(products)
+        elif is_customer:
+            for pd in product_list:
+                delivery = product_delivery_map.get(pd.get('id'), {'can_deliver': False, 'reason': 'Delivery coverage unavailable.'})
+                pd['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
+                pd['delivery_block_reason'] = delivery.get('reason')
+
+        # Keep featured strip concise after filtering.
+        product_list = product_list[:8]
         for product in products:
             if product.store:
                 print(f"Added store name '{product.store.name}' to product '{product.name}'")
@@ -439,7 +585,7 @@ def index():
         stores = Store.query\
             .filter_by(status='active')\
             .order_by(Store.created_at.desc())\
-            .limit(12)\
+            .limit(40)\
             .all()
         
         print(f"\n=== DEBUG STORES & LOGOS ===")
@@ -451,6 +597,13 @@ def index():
         store_list = []
         for store in stores:
             store_data = store.to_dict()
+            store_data['can_deliver_to_customer'] = True
+            store_data['delivery_block_reason'] = None
+
+            if is_customer:
+                delivery = _store_delivery_match(store, customer_address)
+                store_data['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
+                store_data['delivery_block_reason'] = delivery.get('reason')
 
             # Overall store performance (1-5) for featured carousel.
             # Pure fulfillment performance based on delivered/completed ratio.
@@ -480,6 +633,10 @@ def index():
             store_data['performance_fulfilled_count'] = int(delivered_or_completed)
             store_data['performance_order_count'] = int(total_orders)
             store_list.append(store_data)
+
+        if is_customer and customer_address and not browse_all_mode:
+            store_list = [s for s in store_list if s.get('can_deliver_to_customer')]
+        store_list = store_list[:12]
         
         # Format categories for the template (for featured categories section)
         featured_categories = []
@@ -551,6 +708,18 @@ def index():
             home_testimonial_can_submit=home_testimonial_can_submit,
             home_testimonial_lock_reason=home_testimonial_lock_reason,
             home_testimonial_existing=home_testimonial_existing.to_dict() if home_testimonial_existing else None,
+            browse_all_mode=browse_all_mode,
+            location_filter_enabled=bool(is_customer and customer_address and not browse_all_mode),
+            customer_has_default_address=bool(customer_address),
+            customer_location_label=(
+                f"{customer_address.barangay}, {customer_address.municipality}"
+                if customer_address and customer_address.barangay and customer_address.municipality
+                else (
+                    customer_address.municipality
+                    if customer_address and customer_address.municipality
+                    else None
+                )
+            ),
         )
     except Exception as e:
         print(f"ERROR loading landing page: {str(e)}")
@@ -569,7 +738,11 @@ def index():
                              home_testimonial_author_name=None,
                              home_testimonial_can_submit=False,
                              home_testimonial_lock_reason=None,
-                             home_testimonial_existing=None)
+                             home_testimonial_existing=None,
+                             browse_all_mode=False,
+                             location_filter_enabled=False,
+                             customer_has_default_address=False,
+                             customer_location_label=None)
 
 
 @templates_bp.route('/home-testimonials', methods=['POST'])
@@ -827,9 +1000,12 @@ def inject_user():
     )
 
 
-@templates_bp.route('/seller/apply', methods=['POST'])
+@templates_bp.route('/seller/apply', methods=['GET', 'POST'])
 def seller_apply():
-    """Handle seller application form submission with Cloudinary"""
+    """GET → redirect to seller portal. POST → submit seller application (JSON)."""
+    if request.method == 'GET':
+        return redirect(url_for('templates.seller_signup_landing'))
+
     if 'user_id' not in session:
         return jsonify({'error': 'Please login first'}), 401
     
@@ -840,43 +1016,125 @@ def seller_apply():
             return jsonify({'error': 'User not found'}), 404
         
         # Get form data
-        store_name = request.form.get('store_name')
-        store_description = request.form.get('store_description')
+        store_name = (request.form.get('store_name') or '').strip()
+        store_description = (request.form.get('store_description') or '').strip()
         agree_terms = request.form.get('agree_terms')
-        
-        # Validate required fields
-        if not store_name or not store_description:
-            return jsonify({'error': 'Please fill in all required fields'}), 400
-        
+
         # Get Cloudinary data from form (uploaded by frontend)
         store_logo_public_id = request.form.get('store_logo_public_id')
         store_logo_url = request.form.get('store_logo_url')
         government_id_public_id = request.form.get('government_id_public_id')
         government_id_url = request.form.get('government_id_url')
-        
-        # Validate Cloudinary data
-        if not store_logo_public_id or not store_logo_url:
-            return jsonify({'error': 'Store logo upload failed. Please try again.'}), 400
-        
-        if not government_id_public_id or not government_id_url:
-            return jsonify({'error': 'Government ID upload failed. Please try again.'}), 400
-        
+
         # Check if user already has a pending application
-        existing = SellerApplication.query.filter_by(
-            user_id=session['user_id'],
-            status='pending'
+        existing_pending = SellerApplication.query.filter(
+            SellerApplication.user_id == session['user_id'],
+            SellerApplication.status.in_(['pending', 'resubmitted'])
         ).first()
-        
-        if existing:
+
+        if existing_pending:
             # If there's an existing application, clean up the newly uploaded images
             from app.utils.cloudinary_helper import delete_from_cloudinary
-            delete_from_cloudinary(store_logo_public_id)
-            delete_from_cloudinary(government_id_public_id)
+            if store_logo_public_id:
+                delete_from_cloudinary(store_logo_public_id)
+            if government_id_public_id:
+                delete_from_cloudinary(government_id_public_id)
             return jsonify({'error': 'You already have a pending application'}), 400
-        
-        # Create seller application with Cloudinary data
+
+        # Rejected resubmission flow: keep same application record and only update rejected fields.
+        latest_rejected = (
+            SellerApplication.query.filter_by(user_id=session['user_id'], status='rejected')
+            .order_by(SellerApplication.submitted_at.desc())
+            .first()
+        )
+        if latest_rejected:
+            rejection_details = latest_rejected.rejection_details or {}
+            has_field_map = any(
+                isinstance(v, dict) and bool(v.get('rejected'))
+                for v in rejection_details.values()
+            )
+
+            updated_fields = []
+
+            # If admin did not provide per-field flags, allow full edit fallback.
+            if not has_field_map:
+                if not store_name or not store_description:
+                    return jsonify({'error': 'Please fill in store name and description.'}), 400
+                if not store_logo_public_id or not store_logo_url:
+                    return jsonify({'error': 'Store logo upload failed. Please try again.'}), 400
+                if not government_id_public_id or not government_id_url:
+                    return jsonify({'error': 'Government ID upload failed. Please try again.'}), 400
+
+                latest_rejected.store_name = store_name
+                latest_rejected.store_description = store_description
+                latest_rejected.store_logo_public_id = store_logo_public_id
+                latest_rejected.store_logo_url = store_logo_url
+                latest_rejected.government_id_public_id = government_id_public_id
+                latest_rejected.government_id_url = government_id_url
+                updated_fields = ['all']
+            else:
+                def _is_rejected(field_name):
+                    info = rejection_details.get(field_name)
+                    return isinstance(info, dict) and bool(info.get('rejected'))
+
+                if _is_rejected('store_name'):
+                    if not store_name:
+                        return jsonify({'error': 'Please provide an updated store name.'}), 400
+                    latest_rejected.store_name = store_name
+                    updated_fields.append('store_name')
+
+                if _is_rejected('store_description'):
+                    if not store_description:
+                        return jsonify({'error': 'Please provide an updated store description.'}), 400
+                    latest_rejected.store_description = store_description
+                    updated_fields.append('store_description')
+
+                if _is_rejected('store_logo'):
+                    if not store_logo_public_id or not store_logo_url:
+                        return jsonify({'error': 'Please upload a new store logo.'}), 400
+                    latest_rejected.store_logo_public_id = store_logo_public_id
+                    latest_rejected.store_logo_url = store_logo_url
+                    updated_fields.append('store_logo')
+
+                if _is_rejected('government_id'):
+                    if not government_id_public_id or not government_id_url:
+                        return jsonify({'error': 'Please upload a new government ID.'}), 400
+                    latest_rejected.government_id_public_id = government_id_public_id
+                    latest_rejected.government_id_url = government_id_url
+                    updated_fields.append('government_id')
+
+            if not updated_fields:
+                return jsonify({'error': 'No rejected fields were updated.'}), 400
+
+            latest_rejected.status = 'resubmitted'
+            latest_rejected.admin_notes = None
+            latest_rejected.rejection_details = None
+            latest_rejected.reviewed_at = None
+            latest_rejected.reviewed_by = None
+            latest_rejected.submitted_at = datetime.utcnow()
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': 'Application updated and resubmitted successfully.',
+                'resubmitted_fields': updated_fields,
+            })
+
+        # New application flow
+        if not store_name or not store_description:
+            return jsonify({'error': 'Please fill in all required fields'}), 400
+        if not store_logo_public_id or not store_logo_url:
+            return jsonify({'error': 'Store logo upload failed. Please try again.'}), 400
+        if not government_id_public_id or not government_id_url:
+            return jsonify({'error': 'Government ID upload failed. Please try again.'}), 400
+
+        src = 'seller_portal' if user.role == 'seller' else 'customer_account'
         application = SellerApplication(
             user_id=session['user_id'],
+            applicant_full_name=user.full_name,
+            applicant_email=user.email,
+            applicant_phone=user.phone,
+            application_source=src,
             store_name=store_name,
             store_description=store_description,
             store_logo_public_id=store_logo_public_id,
@@ -1173,7 +1431,16 @@ def login():
         if role == 'admin':
             return redirect(url_for('templates.admin_users'))
         if role == 'seller':
-            return redirect(url_for('templates.seller_products'))
+            u = User.query.get(session['user_id'])
+            if u and _seller_portal_active_store(u.id):
+                return redirect(url_for('templates.seller_products'))
+            if u:
+                pend_app = SellerApplication.query.filter_by(
+                    user_id=u.id, status='pending'
+                ).order_by(SellerApplication.submitted_at.desc()).first()
+                if pend_app:
+                    return redirect(url_for('templates.seller_signup_status'))
+            return redirect(url_for('templates.seller_signup_complete'))
         if role == 'rider':
             return redirect(url_for('templates.rider_dashboard'))
         return redirect(url_for('templates.index'))
@@ -1202,6 +1469,7 @@ def login():
                     'login.html',
                     error='This account is inactive. Please contact support.',
                     form_data={'email': email or ''},
+                    login_next=request.form.get('next') or request.args.get('next'),
                 )
 
             # Set session
@@ -1211,16 +1479,28 @@ def login():
             session['role'] = user.role
             session['email'] = user.email
             
-            # Check for redirect URL
-            next_url = request.args.get('next')
+            # Check for redirect URL (from query or hidden form field)
+            next_url = request.form.get('next') or request.args.get('next')
             if next_url:
                 return redirect(next_url)
             
+            # One-time post-registration prompt for customer address setup.
+            prompt_from_reg = request.args.get('prompt_address') == '1'
+            if user.role == 'customer' and (session.pop('prompt_address_after_login', False) or prompt_from_reg):
+                return redirect(url_for('templates.my_account', page='profile', prompt_address='1'))
+
             # Redirect based on role
             if user.role == 'admin':
                 return redirect(url_for('templates.admin_users'))
             elif user.role == 'seller':
-                return redirect(url_for('templates.seller_products'))
+                if _seller_portal_active_store(user.id):
+                    return redirect(url_for('templates.seller_products'))
+                pend_app = SellerApplication.query.filter_by(
+                    user_id=user.id, status='pending'
+                ).order_by(SellerApplication.submitted_at.desc()).first()
+                if pend_app:
+                    return redirect(url_for('templates.seller_signup_status'))
+                return redirect(url_for('templates.seller_signup_complete'))
             elif user.role == 'rider':
                 return redirect(url_for('templates.rider_dashboard'))
             else:  # customer
@@ -1230,12 +1510,18 @@ def login():
                 'login.html',
                 error='Invalid email or password',
                 form_data={'email': email or ''},
+                login_next=request.form.get('next') or request.args.get('next'),
             )
 
     verified = request.args.get('verified') == '1'
     prefill_email = (request.args.get('email') or '').strip().lower()
     form_data = {'email': prefill_email} if prefill_email else None
-    return render_template('login.html', verified=verified, form_data=form_data)
+    return render_template(
+        'login.html',
+        verified=verified,
+        form_data=form_data,
+        login_next=request.args.get('next'),
+    )
 
 @templates_bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -1433,7 +1719,9 @@ def _finalise_customer_registration(record, email):
     db.session.commit()
 
     session.pop('pending_reg_email', None)
-    return redirect(url_for('templates.login', verified='1', email=user.email))
+    # One-time UX flag: prompt address modal right after first login.
+    session['prompt_address_after_login'] = True
+    return redirect(url_for('templates.login', verified='1', email=user.email, prompt_address='1'))
 
 
 @templates_bp.route('/register/resend-otp', methods=['POST'])
@@ -1488,6 +1776,376 @@ def register_resend_otp():
     }), 200
 
 
+def _seller_portal_active_store(user_id):
+    return Store.query.filter_by(seller_id=user_id, status='active').first()
+
+
+def _seller_portal_latest_application(user_id):
+    return (
+        SellerApplication.query.filter_by(user_id=user_id)
+        .order_by(SellerApplication.submitted_at.desc())
+        .first()
+    )
+
+
+def _finalize_seller_signup_from_otp(record, email):
+    """Create seller user after OTP verification; log in and clear OTP row."""
+    if User.query.filter_by(email=email).first():
+        db.session.delete(record)
+        db.session.commit()
+        session.pop('pending_seller_reg_email', None)
+        return redirect(url_for('templates.login'))
+
+    pending = record.signup_data or {}
+    user = User(
+        full_name=pending.get('full_name', ''),
+        email=email,
+        role='seller',
+        status='active',
+        phone=pending.get('phone'),
+    )
+    user.password_hash = pending.get('password_hash', '')
+    db.session.add(user)
+    db.session.flush()
+    db.session.delete(record)
+    db.session.commit()
+
+    session.pop('pending_seller_reg_email', None)
+    session.permanent = True
+    session['user_id'] = user.id
+    session['user_name'] = user.full_name
+    session['role'] = user.role
+    session['email'] = user.email
+
+    return redirect(url_for('templates.seller_signup_complete'))
+
+
+@templates_bp.route('/seller/signup', methods=['GET'])
+def seller_signup_landing():
+    """Lazada-style seller portal entry: account step (Gmail OTP first)."""
+    print("\n" + "=" * 60)
+    print("🧭 SELLER SIGNUP LANDING HIT")
+    print(f"Path: {request.path}")
+    print(f"Session user_id: {session.get('user_id')}")
+    print(f"Session role: {session.get('role')}")
+    uid = session.get('user_id')
+    if uid:
+        user = User.query.get(uid)
+        print(f"User found: {bool(user)}")
+        if user:
+            print(f"User role(db): {user.role}")
+            if session.get('role') != user.role:
+                print(f"⚠️ Session role mismatch. session={session.get('role')} db={user.role}. Syncing session role.")
+                session['role'] = user.role
+        if user and user.role == 'seller':
+            if _seller_portal_active_store(user.id):
+                print("Decision: seller with active store -> seller_products")
+                print("=" * 60 + "\n")
+                return redirect(url_for('templates.seller_products'))
+            app_row = _seller_portal_latest_application(user.id)
+            if app_row and app_row.status in ('pending', 'resubmitted'):
+                print(f"Decision: seller app in-review ({app_row.status}) -> seller_signup_status")
+                print("=" * 60 + "\n")
+                return redirect(url_for('templates.seller_signup_status'))
+            print("Decision: seller without active store -> seller_signup_complete")
+            print("=" * 60 + "\n")
+            return redirect(url_for('templates.seller_signup_complete'))
+        if user and user.role == 'customer':
+            # Keep this page directly accessible for customers to avoid redirect loops.
+            print("Decision: customer -> render seller_signup_landing.html")
+            print("=" * 60 + "\n")
+            return render_template('seller_signup_landing.html')
+
+    print("Decision: guest/unknown -> render seller_signup_landing.html")
+    print("=" * 60 + "\n")
+    return render_template('seller_signup_landing.html')
+
+
+@templates_bp.route('/seller/signup/start', methods=['POST'])
+def seller_signup_start():
+    """Validate account fields, send Gmail OTP, redirect to verify step."""
+    if session.get('user_id'):
+        current_user = User.query.get(session.get('user_id'))
+        role_label = (getattr(current_user, 'role', None) or session.get('role') or 'existing').strip()
+        return render_template(
+            'seller_signup_landing.html',
+            error=(
+                f"Email already exists"
+            ),
+            form_data=request.form,
+        )
+
+    try:
+        from werkzeug.security import generate_password_hash
+        from app.utils.otp_service import (
+            DEFAULT_EXPIRY_MINUTES,
+            RESEND_COOLDOWN_SECONDS,
+            can_resend,
+            new_otp_pair,
+        )
+        from app.utils.email_helper import send_seller_signup_otp_email
+
+        full_name = (request.form.get('full_name') or '').strip()
+        email = (request.form.get('email') or '').strip().lower()
+        phone = _normalize_ph_mobile(request.form.get('phone'))
+        password = request.form.get('password') or ''
+        confirm_password = request.form.get('confirm_password') or ''
+
+        if not all([full_name, email, password, confirm_password]):
+            return render_template(
+                'seller_signup_landing.html',
+                error='All fields are required.',
+                form_data=request.form,
+            )
+
+        if password != confirm_password:
+            return render_template(
+                'seller_signup_landing.html',
+                error='Passwords do not match.',
+                form_data=request.form,
+            )
+
+        pw_error = _password_strength_error(password)
+        if pw_error:
+            return render_template(
+                'seller_signup_landing.html',
+                error=pw_error,
+                form_data=request.form,
+            )
+
+        existing = User.query.filter_by(email=email).first()
+        if existing:
+            if existing.role == 'customer':
+                existing_msg = (
+                    'This email is already registered as a customer account. '
+                    'Please sign in to continue your seller application, or use a different email.'
+                )
+            else:
+                existing_msg = (
+                    f"This email is already registered as a {existing.role} account. "
+                    'Please sign in, or use a different email.'
+                )
+            return render_template(
+                'seller_signup_landing.html',
+                error=existing_msg,
+                form_data=request.form,
+            )
+
+        plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+        pending_data = {
+            'full_name': full_name,
+            'password_hash': generate_password_hash(password),
+            'phone': phone,
+        }
+
+        record = SellerSignupOTP.query.filter_by(email=email).first()
+        if record:
+            allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+            if not allowed:
+                session['pending_seller_reg_email'] = email
+                return redirect(
+                    url_for('templates.seller_signup_verify', cooldown=retry_after)
+                )
+            record.otp_hash = otp_hash
+            record.signup_data = pending_data
+            record.expires_at = expires_at
+            record.last_sent_at = datetime.utcnow()
+            record.attempts = 0
+            record.is_verified = False
+            record.verified_at = None
+        else:
+            record = SellerSignupOTP(
+                email=email,
+                otp_hash=otp_hash,
+                signup_data=pending_data,
+                expires_at=expires_at,
+                last_sent_at=datetime.utcnow(),
+            )
+            db.session.add(record)
+
+        db.session.commit()
+
+        sent = send_seller_signup_otp_email(
+            recipient_email=email,
+            otp_code=plain_code,
+            full_name=full_name,
+            expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        )
+        if not sent:
+            db.session.rollback()
+            return render_template(
+                'seller_signup_landing.html',
+                error='Failed to send verification email. Please try again.',
+                form_data=request.form,
+            )
+
+        session['pending_seller_reg_email'] = email
+        return redirect(url_for('templates.seller_signup_verify'))
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('seller_signup_start: %s', e)
+        return render_template(
+            'seller_signup_landing.html',
+            error='Something went wrong. Please try again.',
+            form_data=request.form,
+        )
+
+
+@templates_bp.route('/seller/signup/verify', methods=['GET', 'POST'])
+def seller_signup_verify():
+    from app.utils.otp_service import MAX_VERIFY_ATTEMPTS, attempts_remaining, verify_otp
+
+    email = session.get('pending_seller_reg_email')
+    if not email:
+        return redirect(url_for('templates.seller_signup_landing'))
+
+    if request.method == 'GET':
+        cooldown = request.args.get('cooldown', 0, type=int)
+        return render_template(
+            'seller_signup_verify.html',
+            email=email,
+            cooldown=cooldown,
+        )
+
+    otp_code = (request.form.get('otp_code') or '').strip()
+    if not otp_code or len(otp_code) != 6 or not otp_code.isdigit():
+        return render_template(
+            'seller_signup_verify.html',
+            email=email,
+            error='Please enter the 6-digit code.',
+        )
+
+    record = SellerSignupOTP.query.filter_by(email=email).first()
+    if not record:
+        session.pop('pending_seller_reg_email', None)
+        return redirect(url_for('templates.seller_signup_landing'))
+
+    if record.is_verified:
+        return _finalize_seller_signup_from_otp(record, email)
+
+    if record.is_expired():
+        return render_template(
+            'seller_signup_verify.html',
+            email=email,
+            error='Your code has expired. Please request a new one.',
+            expired=True,
+        )
+
+    if (record.attempts or 0) >= MAX_VERIFY_ATTEMPTS:
+        return render_template(
+            'seller_signup_verify.html',
+            email=email,
+            error='Too many incorrect attempts. Please request a new code.',
+            locked=True,
+        )
+
+    if not verify_otp(otp_code, record.otp_hash):
+        record.attempts = (record.attempts or 0) + 1
+        db.session.commit()
+        left = attempts_remaining(record.attempts, MAX_VERIFY_ATTEMPTS)
+        return render_template(
+            'seller_signup_verify.html',
+            email=email,
+            error=f'Invalid code. {left} attempt{"s" if left != 1 else ""} remaining.',
+        )
+
+    record.is_verified = True
+    record.verified_at = datetime.utcnow()
+    db.session.commit()
+    return _finalize_seller_signup_from_otp(record, email)
+
+
+@templates_bp.route('/seller/signup/resend-otp', methods=['POST'])
+def seller_signup_resend_otp():
+    from app.utils.otp_service import (
+        DEFAULT_EXPIRY_MINUTES,
+        RESEND_COOLDOWN_SECONDS,
+        can_resend,
+        new_otp_pair,
+    )
+    from app.utils.email_helper import send_seller_signup_otp_email
+
+    email = session.get('pending_seller_reg_email')
+    if not email:
+        return jsonify({'success': False, 'error': 'Session expired. Please start again.'}), 400
+
+    record = SellerSignupOTP.query.filter_by(email=email, is_verified=False).first()
+    if not record:
+        return jsonify({'success': False, 'error': 'No pending verification found.'}), 404
+
+    allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+    if not allowed:
+        return jsonify(
+            {
+                'success': False,
+                'error': 'Please wait before requesting another code.',
+                'retry_after_seconds': retry_after,
+            }
+        ), 429
+
+    plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+    record.otp_hash = otp_hash
+    record.expires_at = expires_at
+    record.last_sent_at = datetime.utcnow()
+    record.attempts = 0
+    db.session.commit()
+
+    pending = record.signup_data or {}
+    sent = send_seller_signup_otp_email(
+        recipient_email=email,
+        otp_code=plain_code,
+        full_name=pending.get('full_name'),
+        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+    )
+    if not sent:
+        return jsonify({'success': False, 'error': 'Failed to resend email.'}), 500
+
+    return jsonify(
+        {
+            'success': True,
+            'message': f'A new code has been sent to {email}.',
+            'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
+        }
+    ), 200
+
+
+@templates_bp.route('/seller/signup/complete', methods=['GET'])
+def seller_signup_complete():
+    """Store details + documents (after Gmail OTP or signed-in customer)."""
+    if not session.get('user_id'):
+        return redirect(url_for('templates.login', next=url_for('templates.seller_signup_complete')))
+
+    user = User.query.get(session['user_id'])
+    if not user or user.role not in ('seller', 'customer'):
+        return redirect(url_for('templates.dashboard'))
+
+    if user.role == 'seller' and _seller_portal_active_store(user.id):
+        return redirect(url_for('templates.seller_products'))
+
+    latest = _seller_portal_latest_application(user.id)
+    if latest and latest.status in ('pending', 'resubmitted'):
+        return redirect(url_for('templates.seller_signup_status'))
+    return render_template('seller_signup_complete.html', user=user, application=latest)
+
+
+@templates_bp.route('/seller/signup/status', methods=['GET'])
+def seller_signup_status():
+    if not session.get('user_id'):
+        return redirect(url_for('templates.login'))
+
+    user = User.query.get(session['user_id'])
+    if not user:
+        return redirect(url_for('templates.index'))
+
+    latest = _seller_portal_latest_application(user.id)
+    return render_template(
+        'seller_signup_status.html',
+        user=user,
+        application=latest,
+    )
+
+
 @templates_bp.route('/api/account/orders/data')
 def orders_data():
     """Return JSON data for orders"""
@@ -1495,6 +2153,7 @@ def orders_data():
         return jsonify({'error': 'Unauthorized'}), 401
 
     user_id = session.get('user_id')
+    _ensure_order_fulfillment_columns()
 
     orders = (
         Order.query
@@ -1508,9 +2167,26 @@ def orders_data():
         .all()
     )
 
+    order_ids = [o.id for o in orders]
+    rated_by_order = defaultdict(set)
+    store_rated_ids = set()
+    if order_ids:
+        for pr in ProductRating.query.filter(ProductRating.order_id.in_(order_ids)).all():
+            if pr.order_item_id is not None:
+                rated_by_order[pr.order_id].add(pr.order_item_id)
+        store_rated_ids = {
+            r.order_id for r in StoreRating.query.filter(StoreRating.order_id.in_(order_ids)).all()
+        }
+
     orders_payload = []
     for order in orders:
-        order_dict = _serialize_customer_order(order)
+        if order.status in ('delivered', 'completed'):
+            rid = rated_by_order.get(order.id, set())
+            sr = order.id in store_rated_ids
+        else:
+            rid = set()
+            sr = True
+        order_dict = _serialize_customer_order(order, rated_item_ids=rid, store_rated=sr)
         order_dict['date'] = order_dict['created_at']
         orders_payload.append(order_dict)
 
@@ -1523,6 +2199,7 @@ def order_details(order_id):
         return jsonify({'error': 'Unauthorized'}), 401
 
     user_id = session.get('user_id')
+    _ensure_order_fulfillment_columns()
     order = (
         Order.query
         .options(
@@ -1567,6 +2244,25 @@ def cancel_order(order_id):
     return jsonify({'success': True, 'message': 'Order cancelled successfully'})
 
 
+@templates_bp.route('/api/account/orders/<int:order_id>/complete', methods=['POST'])
+def complete_order(order_id):
+    """Allow customer to confirm delivered order as completed."""
+    if not session.get('user_id'):
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+
+    _ensure_order_fulfillment_columns()
+    user_id = session.get('user_id')
+    order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
+    if not order:
+        return jsonify({'success': False, 'message': 'Order not found'}), 404
+    if order.status != 'delivered':
+        return jsonify({'success': False, 'message': 'Only delivered orders can be marked as completed.'}), 400
+
+    order.set_status('completed')
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Order marked as completed.'})
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # PRODUCT RATINGS — Session auth (Web)
 # ══════════════════════════════════════════════════════════════════════════
@@ -1583,14 +2279,20 @@ def get_order_ratings(order_id):
         return jsonify({'error': 'Order not found'}), 404
 
     ratings = ProductRating.query.filter_by(order_id=order_id, customer_id=user_id).all()
-    ratings_map = {r.order_item_id: r.to_dict() for r in ratings}
+    ratings_map = {r.order_item_id: r.to_dict() for r in ratings if r.order_item_id is not None}
 
-    return jsonify({'success': True, 'ratings': ratings_map})
+    store_row = StoreRating.query.filter_by(order_id=order_id, customer_id=user_id).first()
+
+    return jsonify({
+        'success': True,
+        'ratings': ratings_map,
+        'store_rating': store_row.to_dict() if store_row else None,
+    })
 
 
 @templates_bp.route('/api/account/orders/<int:order_id>/rate', methods=['POST'])
 def submit_order_ratings(order_id):
-    """Submit product ratings for a delivered order. Accepts multiple ratings at once."""
+    """Submit store and/or product ratings for a delivered or completed order."""
     if not session.get('user_id'):
         return jsonify({'error': 'Unauthorized'}), 401
 
@@ -1599,16 +2301,36 @@ def submit_order_ratings(order_id):
     if not order:
         return jsonify({'error': 'Order not found'}), 404
 
-    if order.status != 'delivered':
-        return jsonify({'error': 'Can only rate delivered orders'}), 400
+    if order.status not in ('delivered', 'completed'):
+        return jsonify({'error': 'Can only rate delivered or completed orders'}), 400
 
     data = request.get_json() or {}
-    ratings_data = data.get('ratings', [])
-
-    if not ratings_data:
-        return jsonify({'error': 'No ratings provided'}), 400
+    ratings_data = data.get('ratings') or []
+    store_payload = data.get('store_rating')
 
     created = []
+    created_store = False
+
+    if store_payload and isinstance(store_payload, dict):
+        rv = store_payload.get('rating')
+        try:
+            rv = int(rv) if rv is not None else None
+        except (TypeError, ValueError):
+            rv = None
+        if rv is not None and 1 <= rv <= 5:
+            existing_sr = StoreRating.query.filter_by(order_id=order_id, customer_id=user_id).first()
+            if not existing_sr:
+                comment_s = (store_payload.get('comment') or '').strip() if store_payload.get('comment') else None
+                db.session.add(
+                    StoreRating(
+                        customer_id=user_id,
+                        store_id=order.store_id,
+                        order_id=order_id,
+                        rating=rv,
+                        comment=comment_s or None,
+                    )
+                )
+                created_store = True
 
     for r in ratings_data:
         order_item_id = r.get('order_item_id')
@@ -1620,12 +2342,10 @@ def submit_order_ratings(order_id):
         if not (1 <= int(rating_value) <= 5):
             continue
 
-        # Verify item belongs to this order
         order_item = OrderItem.query.filter_by(id=order_item_id, order_id=order_id).first()
         if not order_item:
             continue
 
-        # Skip if already rated (ratings are final)
         existing = ProductRating.query.filter_by(
             customer_id=user_id, order_item_id=order_item_id
         ).first()
@@ -1645,12 +2365,21 @@ def submit_order_ratings(order_id):
         db.session.add(new_rating)
         created.append(new_rating)
 
+    if not ratings_data and not created_store:
+        return jsonify({'error': 'No ratings provided'}), 400
+
     db.session.commit()
 
+    parts = []
+    if created_store:
+        parts.append('store')
+    if created:
+        parts.append(f'{len(created)} product rating(s)')
     return jsonify({
         'success': True,
-        'message': f'{len(created)} rating(s) submitted',
+        'message': ', '.join(parts) if parts else 'Nothing new to save',
         'created': len(created),
+        'store_created': created_store,
     })
 
 
@@ -2288,8 +3017,12 @@ def seller_dashboard():
     store = Store.query.filter_by(seller_id=user_id, status='active').first()
 
     if not store:
-        flash('No active store found.', 'error')
-        return redirect(url_for('templates.index'))
+        pend_app = SellerApplication.query.filter_by(
+            user_id=user_id, status='pending'
+        ).order_by(SellerApplication.submitted_at.desc()).first()
+        if pend_app:
+            return redirect(url_for('templates.seller_signup_status'))
+        return redirect(url_for('templates.seller_signup_complete'))
 
     period = (request.args.get('period') or 'month').lower().strip()
     custom_from = request.args.get('from')
@@ -2519,6 +3252,13 @@ def seller_dashboard():
     avg_rating = round(float(avg_rating_row[0]), 1) if avg_rating_row else 0
     total_reviews = int(avg_rating_row[1]) if avg_rating_row else 0
 
+    store_avg_row = db.session.query(
+        func.coalesce(func.avg(StoreRating.rating), 0),
+        func.count(StoreRating.id),
+    ).filter(StoreRating.store_id == store.id).first()
+    store_avg_rating = round(float(store_avg_row[0]), 1) if store_avg_row else 0
+    store_total_reviews = int(store_avg_row[1]) if store_avg_row else 0
+
     # Products count & low stock
     total_products = Product.query.filter_by(store_id=store.id, is_archived=False).count()
     low_stock_products = Product.query.filter(
@@ -2680,6 +3420,15 @@ def seller_dashboard():
      .group_by(ProductRating.rating).all()
     rating_distribution = {int(r[0]): r[1] for r in rating_dist_query}
 
+    store_rating_dist_query = db.session.query(
+        StoreRating.rating, func.count(StoreRating.id)
+    ).filter(
+        StoreRating.store_id == store.id,
+        StoreRating.created_at >= range_start,
+        StoreRating.created_at < range_end,
+    ).group_by(StoreRating.rating).all()
+    store_rating_distribution = {int(r[0]): r[1] for r in store_rating_dist_query}
+
     # ── Analytics: Hourly order distribution (selected range) ──
     hourly_query = db.session.query(
         extract('hour', Order.created_at).label('hr'),
@@ -2753,6 +3502,8 @@ def seller_dashboard():
         chart_data=chart_data,
         avg_rating=avg_rating,
         total_reviews=total_reviews,
+        store_avg_rating=store_avg_rating,
+        store_total_reviews=store_total_reviews,
         total_products=total_products,
         low_stock_products=[p.to_dict() for p in low_stock_products],
         out_of_stock=out_of_stock,
@@ -2766,6 +3517,7 @@ def seller_dashboard():
         sales_by_category=sales_by_category,
         pos_vs_online=pos_vs_online,
         rating_distribution=rating_distribution,
+        store_rating_distribution=store_rating_distribution,
         hourly_distribution=hourly_distribution,
         aov_trend=aov_trend,
         new_customers=new_customers,
@@ -3116,7 +3868,9 @@ def reject_seller_application(app_id):
         # This hides their products from public without deleting anything
         user = User.query.get(application.user_id)
         if user:
-            user.role = 'customer'  # Revoke seller role
+            src = application.application_source or 'customer_account'
+            if src != 'seller_portal':
+                user.role = 'customer'
             existing_store = Store.query.filter_by(seller_id=user.id).first()
             if existing_store:
                 existing_store.status = 'inactive'
@@ -4770,6 +5524,7 @@ def date_format(value):
 def seller_orders():
     if session.get('role') != 'seller':
         return redirect(url_for('templates.dashboard'))
+    _ensure_order_fulfillment_columns()
 
     # Get seller's store
     store = Store.query.filter_by(seller_id=session['user_id']).first()
@@ -4818,8 +5573,9 @@ def seller_orders():
         'preparing': sum(1 for order in orders if order.status in ['accepted', 'preparing']),
         'on_delivery': sum(1 for order in orders if order.status == 'on_delivery'),
         'delivered': sum(1 for order in orders if order.status == 'delivered'),
+        'completed': sum(1 for order in orders if order.status == 'completed'),
         'cancelled': sum(1 for order in orders if order.status == 'cancelled'),
-        'revenue': float(sum((order.total_amount or 0) for order in orders if order.status == 'delivered'))
+        'revenue': float(sum((order.total_amount or 0) for order in orders if order.status in ['delivered', 'completed']))
     }
 
     riders_data = []
@@ -4899,12 +5655,20 @@ def seller_notification_read_api(notif_id):
 def seller_order_details_api(order_id):
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
+    _ensure_order_fulfillment_columns()
 
     store = Store.query.filter_by(seller_id=session['user_id']).first()
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
-    order = Order.query.filter_by(id=order_id, store_id=store.id).first()
+    order = (
+        Order.query.options(
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
+            joinedload(Order.items).joinedload(OrderItem.variant),
+        )
+        .filter_by(id=order_id, store_id=store.id)
+        .first()
+    )
     if not order:
         return jsonify({'error': 'Order not found'}), 404
 
@@ -4916,6 +5680,8 @@ def seller_order_status_api(order_id):
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
 
+    if not _ensure_order_fulfillment_columns():
+        return jsonify({'error': 'Order fulfillment columns are not ready yet. Please refresh and try again.'}), 503
     store = Store.query.filter_by(seller_id=session['user_id']).first()
     if not store:
         return jsonify({'error': 'No active store found'}), 404
@@ -4924,12 +5690,35 @@ def seller_order_status_api(order_id):
     if not order:
         return jsonify({'error': 'Order not found'}), 404
 
-    data = request.get_json() or {}
+    if request.content_type and request.content_type.startswith('multipart/form-data'):
+        data = request.form or {}
+    else:
+        data = request.get_json() or {}
     new_status = data.get('status')
     allowed_statuses = {'pending', 'accepted', 'preparing', 'done_preparing', 'on_delivery', 'delivered', 'cancelled'}
 
     if new_status not in allowed_statuses:
         return jsonify({'error': 'Invalid status'}), 400
+
+    if new_status == 'done_preparing':
+        proof_file = request.files.get('finished_product_image')
+        if not proof_file or not proof_file.filename:
+            return jsonify({'error': 'Finished product image is required before marking done preparing.'}), 400
+        upload_result = upload_to_cloudinary(
+            proof_file,
+            folder=f"e-flowers/orders/{order.id}/done-preparing",
+            transformation=current_app.config.get('CLOUDINARY_PRESETS', {}).get('product', {})
+        )
+        if not upload_result.get('success'):
+            raw_error = str(upload_result.get('error', 'Failed to upload finished product image'))
+            if 'File size too large' in raw_error:
+                return jsonify({'error': 'Finished product image is too large. Maximum file size is 10MB.'}), 400
+            return jsonify({'error': raw_error}), 400
+        if order.done_preparing_proof_public_id:
+            delete_from_cloudinary(order.done_preparing_proof_public_id)
+        order.done_preparing_proof = secure_filename(proof_file.filename)
+        order.done_preparing_proof_public_id = upload_result.get('public_id')
+        order.done_preparing_proof_url = upload_result.get('url')
 
     order.set_status(new_status)
     db.session.commit()
@@ -6563,9 +7352,25 @@ def checkout():
     if 'user_id' not in session:
         flash('Please login to checkout', 'warning')
         return redirect(url_for('templates.login'))
+    role = session.get('role')
+    if role in ('seller', 'admin'):
+        flash('Checkout is not available for seller/admin accounts.', 'warning')
+        return redirect(url_for('templates.index'))
     
     # Get user's cart
     cart = Cart.query.filter_by(user_id=session['user_id']).first()
+    address = _get_default_customer_address(session.get('user_id'))
+    if cart and cart.items:
+        for item in cart.items:
+            store = item.product.store if item.product else None
+            delivery = _store_delivery_match(store, address)
+            if not delivery.get('can_deliver'):
+                flash(
+                    f"Some cart items are outside your delivery area ({store.name if store else 'store'}). "
+                    "Please switch to a deliverable address or remove those items.",
+                    'warning',
+                )
+                return redirect(url_for('templates.index'))
     
     return render_template('checkout.html', cart=cart.to_dict() if cart else None)
 
@@ -6687,6 +7492,8 @@ def add_to_cart():
     user = get_current_user()
     if not user:
         return jsonify({'error': 'Not logged in'}), 401
+    if user.role in ('seller', 'admin'):
+        return jsonify({'error': 'Cart is not available for seller/admin accounts'}), 403
     
     try:
         data = request.get_json()
@@ -6704,6 +7511,14 @@ def add_to_cart():
         if not product:
             print(f"❌ Product not found: {product_id}")
             return jsonify({'error': 'Product not found'}), 404
+
+        address = _get_default_customer_address(user.id)
+        delivery = _store_delivery_match(product.store, address)
+        if not delivery.get('can_deliver'):
+            return jsonify({
+                'error': delivery.get('reason') or 'This store cannot deliver to your default address.',
+                'code': 'OUTSIDE_DELIVERY_AREA'
+            }), 400
         
         # If variant_id is provided, check variant exists and has stock
         variant = None
@@ -8464,6 +9279,35 @@ def get_municipality_boundaries():
         return jsonify({'error': str(e)}), 500
 
 
+@templates_bp.route('/api/municipality/province-boundary', methods=['GET'])
+def get_province_merged_boundary():
+    """Merge all municipality polygons in a province into one geometry (GeoJSON) for map overlays."""
+    province = (request.args.get('province') or 'Laguna').strip()
+    if not province:
+        return jsonify({'success': False, 'error': 'province is required'}), 400
+    try:
+        from sqlalchemy import func as sa_func
+        from geoalchemy2.functions import ST_AsGeoJSON, ST_Union
+
+        merged_geojson = (
+            db.session.query(ST_AsGeoJSON(ST_Union(MunicipalityBoundary.boundary)))
+            .filter(MunicipalityBoundary.province.ilike(f'%{province}%'))
+            .scalar()
+        )
+        if not merged_geojson:
+            return jsonify({'success': False, 'error': 'No boundary rows for this province'}), 404
+
+        geometry = json.loads(merged_geojson)
+        return jsonify({
+            'success': True,
+            'province': province,
+            'geometry': geometry,
+        })
+    except Exception as e:
+        current_app.logger.exception('get_province_merged_boundary: %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @templates_bp.route('/api/municipality/check-contiguity', methods=['POST'])
 def check_municipality_contiguity():
     """Check if a list of municipalities are contiguous"""
@@ -9424,7 +10268,14 @@ def pos_order_detail_api(order_id):
         return jsonify({'error': 'No active store found'}), 403
     
     try:
-        order = POSOrder.query.filter_by(id=order_id, store_id=store.id).first()
+        order = (
+            POSOrder.query.options(
+                joinedload(POSOrder.items).joinedload(POSOrderItem.product).joinedload(Product.images),
+                joinedload(POSOrder.items).joinedload(POSOrderItem.variant),
+            )
+            .filter_by(id=order_id, store_id=store.id)
+            .first()
+        )
         if not order:
             return jsonify({'error': 'Order not found'}), 404
         
@@ -9443,10 +10294,20 @@ def pos_order_detail_api(order_id):
                 'product_id': item.product_id,
                 'variant_id': item.variant_id,
                 'product_name': product_name,
+                'product_image_url': item.product_image,
                 'quantity': item.quantity,
                 'unit_price': float(item.price),
                 'subtotal': item_subtotal
             })
+
+        discount_val = float(order.discount or 0)
+        subtotal_val = float(subtotal)
+        computed_total = max(0.0, subtotal_val - discount_val)
+        # Do not use `if order.total_amount` — Decimal('0') is falsy but is a valid total.
+        if order.total_amount is not None:
+            total_val = float(order.total_amount)
+        else:
+            total_val = computed_total
 
         # created_at is stored as PH local time (naive datetime), so label with +08:00.
         created_at_iso = None
@@ -9462,11 +10323,11 @@ def pos_order_detail_api(order_id):
             'customer_name': order.customer_name or 'Walk-in',
             'customer_contact': order.customer_contact,
             'payment_method': order.payment_method or 'cash',
-            'amount_given': float(order.amount_given) if order.amount_given else 0,
-            'change_amount': float(order.change_amount) if order.change_amount else 0,
-            'total_amount': float(order.total_amount) if order.total_amount else 0,
-            'subtotal': subtotal,
-            'discount': float(order.discount or 0),
+            'amount_given': float(order.amount_given) if order.amount_given is not None else 0,
+            'change_amount': float(order.change_amount) if order.change_amount is not None else 0,
+            'total_amount': total_val,
+            'subtotal': subtotal_val,
+            'discount': discount_val,
             'items': items,
             'item_count': len(items)
         })
@@ -9556,6 +10417,13 @@ def pos_order_history_api():
     for o in pagination.items:
         subtotal   = sum(float(item.price * item.quantity) for item in o.items)
         item_count = sum(item.quantity for item in o.items)
+        discount_f = float(o.discount or 0)
+        subtotal_f = float(subtotal)
+        computed_total = max(0.0, subtotal_f - discount_f)
+        if o.total_amount is not None:
+            total_f = float(o.total_amount)
+        else:
+            total_f = computed_total
 
         if o.created_at:
             created_at_iso  = o.created_at.strftime('%Y-%m-%dT%H:%M:%S+08:00')
@@ -9571,11 +10439,11 @@ def pos_order_history_api():
             'customer_name':  o.customer_name or 'Walk-in',
             'customer_contact': o.customer_contact,
             'item_count':     item_count,
-            'subtotal':       float(subtotal),
-            'discount':       float(o.discount or 0),
-            'total_amount':   float(o.total_amount) if o.total_amount else 0,
-            'amount_given':   float(o.amount_given) if o.amount_given else 0,
-            'change_amount':  float(o.change_amount) if o.change_amount else 0,
+            'subtotal':       subtotal_f,
+            'discount':       discount_f,
+            'total_amount':   total_f,
+            'amount_given':   float(o.amount_given) if o.amount_given is not None else 0,
+            'change_amount':  float(o.change_amount) if o.change_amount is not None else 0,
             'payment_method': o.payment_method or 'cash'
         })
 

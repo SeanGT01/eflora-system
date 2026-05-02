@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store application — E-FLORA Seller</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        :root {
+            --cream: #faf6f0; --warm-white: #fffdf9; --blush: #f2c4ce; --deep-rose: #b5445a;
+            --charcoal: #2c2520; --muted: #9a8d85; --border: rgba(107,76,59,0.12);
+            --font-display: 'Cormorant Garamond', serif; --font-sans: 'DM Sans', sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-sans); background: var(--cream); color: var(--charcoal); min-height: 100vh; }
+        .wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .top a { color: var(--deep-rose); text-decoration: none; font-size: 14px; }
+        h1 { font-family: var(--font-display); font-size: 1.75rem; margin-bottom: 0.35rem; }
+        .sub { color: var(--muted); font-size: 14px; margin-bottom: 1.5rem; }
+        .card { background: var(--warm-white); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
+        .form-group { margin-bottom: 1.1rem; }
+        .form-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+        .form-control, textarea.form-control {
+            width: 100%; padding: 0.75rem 1rem; border: 1.5px solid var(--border); border-radius: 10px; font-family: var(--font-sans); font-size: 14px;
+        }
+        textarea.form-control { min-height: 100px; resize: vertical; }
+        .upload-zone {
+            border: 2px dashed var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; cursor: pointer; background: var(--cream);
+        }
+        .upload-zone i { font-size: 28px; color: var(--deep-rose); opacity: 0.7; }
+        .upload-preview { display: none; margin-top: 10px; }
+        .upload-preview img { max-width: 100%; max-height: 160px; border-radius: 8px; }
+        .progress { display: none; margin-top: 8px; height: 4px; background: #eee; border-radius: 2px; overflow: hidden; }
+        .progress-bar { height: 100%; width: 0; background: var(--deep-rose); transition: width 0.2s; }
+        .btn-submit {
+            width: 100%; margin-top: 0.5rem; padding: 0.85rem; border: none; border-radius: 100px;
+            background: var(--charcoal); color: var(--cream); font-weight: 600; cursor: pointer; font-size: 14px;
+        }
+        .btn-submit:disabled { opacity: 0.65; cursor: not-allowed; }
+        .terms-row { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 13px; margin-top: 0.5rem; }
+        .toast {
+            position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+            padding: 0.75rem 1.25rem; border-radius: 100px; font-size: 14px; color: #fff; z-index: 1000;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="top">
+        <a href="{{ url_for('templates.index') }}"><i class="ri-arrow-left-line"></i> Back to shop</a>
+        <a href="{{ url_for('templates.logout') }}">Sign out</a>
+    </div>
+    <h1>Complete your store application</h1>
+    <p class="sub">Signed in as <strong>{{ user.email }}</strong>. After submission, our admin team will review your documents.</p>
+    {% set is_rejected = application and application.status == 'rejected' %}
+    {% if is_rejected %}
+    <div class="card" style="margin-bottom:1rem;border-color:rgba(39,103,73,0.28);background:rgba(39,103,73,0.04);">
+        <div style="display:flex;align-items:center;gap:0.5rem;color:#1f5f41;font-weight:600;margin-bottom:0.65rem;">
+            <i class="ri-error-warning-line"></i>
+            <span>Application changes requested</span>
+        </div>
+        <p style="font-size:13px;color:#276749;margin:0;">
+            {% if application.admin_notes %}{{ application.admin_notes }}{% else %}Please update the rejected fields below and resubmit.{% endif %}
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <form id="storeAppForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label class="form-label">Store name *</label>
+                <input class="form-control" type="text" name="store_name" required placeholder="e.g. Laguna Blooms">
+                <small id="reason-store_name" style="display:none;color:#276749;font-size:12px;margin-top:6px;"></small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Store description *</label>
+                <textarea class="form-control" name="store_description" required placeholder="Describe your shop and what you sell…"></textarea>
+                <small id="reason-store_description" style="display:none;color:#276749;font-size:12px;margin-top:6px;"></small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Store logo *</label>
+                <div class="upload-zone" data-target="storeLogo">
+                    <input type="file" id="storeLogo" name="store_logo" accept="image/*" style="display:none">
+                    <i class="ri-image-add-line"></i>
+                    <p style="margin-top:8px;font-size:13px;">Click to upload logo</p>
+                </div>
+                <div class="upload-preview" id="logoPreview"><img alt="Logo preview"></div>
+                <div class="progress" id="logoProgress"><div class="progress-bar" id="logoBar"></div></div>
+                <small id="reason-store_logo" style="display:none;color:#276749;font-size:12px;margin-top:6px;"></small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Government ID *</label>
+                <div class="upload-zone" data-target="govId">
+                    <input type="file" id="govId" name="government_id" accept="image/*" style="display:none">
+                    <i class="ri-id-card-line"></i>
+                    <p style="margin-top:8px;font-size:13px;">Passport, driver's license, or national ID</p>
+                </div>
+                <div class="upload-preview" id="idPreview"><img alt="ID preview"></div>
+                <div class="progress" id="idProgress"><div class="progress-bar" id="idBar"></div></div>
+                <small id="reason-government_id" style="display:none;color:#276749;font-size:12px;margin-top:6px;"></small>
+            </div>
+            <div class="terms-row">
+                <input type="checkbox" name="agree_terms" id="agreeTerms" required>
+                <label for="agreeTerms">I agree to the seller terms and confirm my information is accurate.</label>
+            </div>
+            <button type="submit" class="btn-submit" id="submitBtn"><i class="ri-send-plane-line"></i> Submit for review</button>
+        </form>
+    </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const USER_ID = {{ user.id|int }};
+const STATUS_URL = "{{ url_for('templates.seller_signup_status') }}";
+const EXISTING_APPLICATION = {{ (application.to_dict() if application else {})|tojson }};
+const IS_REJECTED_RESUBMIT = !!(EXISTING_APPLICATION && EXISTING_APPLICATION.status === 'rejected');
+const REJECTION_DETAILS = (IS_REJECTED_RESUBMIT && EXISTING_APPLICATION.rejection_details) || {};
+
+function toast(msg, ok) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.background = ok ? '#276749' : '#9b1c1c';
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3200);
+}
+
+function isRejectedField(field) {
+    const f = REJECTION_DETAILS[field];
+    return !!(f && f.rejected);
+}
+
+function showFieldReason(field, fallbackLabel) {
+    const el = document.getElementById(`reason-${field}`);
+    if (!el) return;
+    const info = REJECTION_DETAILS[field];
+    if (info && info.rejected) {
+        el.textContent = `Admin note (${fallbackLabel}): ${info.reason || 'Please update this field.'}`;
+        el.style.color = '#9b1c1c';
+        el.style.display = 'block';
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+function setReasonResolved(field, resolved) {
+    const el = document.getElementById(`reason-${field}`);
+    if (!el || el.style.display === 'none') return;
+    el.style.color = resolved ? '#276749' : '#9b1c1c';
+}
+
+function markField(input, isRejected) {
+    if (!input) return;
+    input.style.borderColor = isRejected ? '#c0392b' : '';
+    if (isRejected) {
+        input.style.boxShadow = '0 0 0 3px rgba(192,57,43,0.10)';
+    } else {
+        input.style.boxShadow = '';
+    }
+}
+
+function hydrateFormForResubmission() {
+    if (!IS_REJECTED_RESUBMIT) return;
+
+    const form = document.getElementById('storeAppForm');
+    if (EXISTING_APPLICATION.store_name) form.store_name.value = EXISTING_APPLICATION.store_name;
+    if (EXISTING_APPLICATION.store_description) form.store_description.value = EXISTING_APPLICATION.store_description;
+    if (EXISTING_APPLICATION.store_logo_url) {
+        const prev = document.getElementById('logoPreview');
+        prev.style.display = 'block';
+        prev.querySelector('img').src = EXISTING_APPLICATION.store_logo_url;
+    }
+    if (EXISTING_APPLICATION.government_id_url) {
+        const prev = document.getElementById('idPreview');
+        prev.style.display = 'block';
+        prev.querySelector('img').src = EXISTING_APPLICATION.government_id_url;
+    }
+
+    markField(form.store_name, isRejectedField('store_name'));
+    markField(form.store_description, isRejectedField('store_description'));
+    markField(document.querySelector('[data-target="storeLogo"]'), isRejectedField('store_logo'));
+    markField(document.querySelector('[data-target="govId"]'), isRejectedField('government_id'));
+
+    showFieldReason('store_name', 'Store name');
+    showFieldReason('store_description', 'Store description');
+    showFieldReason('store_logo', 'Store logo');
+    showFieldReason('government_id', 'Government ID');
+
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.innerHTML = '<i class="ri-refresh-line"></i> Resubmit rejected fields';
+
+    // Real-time feedback: rejected note turns green when that field is changed.
+    const originalStoreName = (EXISTING_APPLICATION.store_name || '').trim();
+    const originalStoreDescription = (EXISTING_APPLICATION.store_description || '').trim();
+
+    form.store_name.addEventListener('input', function() {
+        if (!isRejectedField('store_name')) return;
+        const changed = this.value.trim() !== originalStoreName;
+        setReasonResolved('store_name', changed);
+    });
+
+    form.store_description.addEventListener('input', function() {
+        if (!isRejectedField('store_description')) return;
+        const changed = this.value.trim() !== originalStoreDescription;
+        setReasonResolved('store_description', changed);
+    });
+}
+
+async function uploadToCloudinary(file, folder) {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('folder', folder);
+    const csrf = document.querySelector('[name="csrf_token"]').value;
+    const r = await fetch('/api/v1/cloudinary/upload', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+        body: fd,
+        credentials: 'same-origin'
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.success) throw new Error(data.error || 'Upload failed');
+    return data;
+}
+
+document.querySelectorAll('.upload-zone').forEach(z => {
+    z.addEventListener('click', () => {
+        const id = z.getAttribute('data-target');
+        document.getElementById(id === 'storeLogo' ? 'storeLogo' : 'govId').click();
+    });
+});
+
+document.getElementById('storeLogo').addEventListener('change', function() {
+    const f = this.files[0];
+    if (!f) return;
+    const prev = document.getElementById('logoPreview');
+    prev.style.display = 'block';
+    prev.querySelector('img').src = URL.createObjectURL(f);
+    if (IS_REJECTED_RESUBMIT && isRejectedField('store_logo')) {
+        setReasonResolved('store_logo', true);
+    }
+});
+
+document.getElementById('govId').addEventListener('change', function() {
+    const f = this.files[0];
+    if (!f) return;
+    const prev = document.getElementById('idPreview');
+    prev.style.display = 'block';
+    prev.querySelector('img').src = URL.createObjectURL(f);
+    if (IS_REJECTED_RESUBMIT && isRejectedField('government_id')) {
+        setReasonResolved('government_id', true);
+    }
+});
+
+document.getElementById('storeAppForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const agree = document.getElementById('agreeTerms').checked;
+    if (!agree) { toast('Please accept the terms.', false); return; }
+
+    const storeName = this.store_name.value.trim();
+    const storeDesc = this.store_description.value.trim();
+    const logoFile = document.getElementById('storeLogo').files[0];
+    const idFile = document.getElementById('govId').files[0];
+
+    if (!storeName || !storeDesc) { toast('Fill in store name and description.', false); return; }
+    if (!IS_REJECTED_RESUBMIT && (!logoFile || !idFile)) { toast('Upload store logo and government ID.', false); return; }
+    if (IS_REJECTED_RESUBMIT && isRejectedField('store_logo') && !logoFile) { toast('Please upload the corrected store logo.', false); return; }
+    if (IS_REJECTED_RESUBMIT && isRejectedField('government_id') && !idFile) { toast('Please upload the corrected government ID.', false); return; }
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ri-loader-4-line"></i> Uploading…';
+
+    const logoProg = document.getElementById('logoProgress');
+    const idProg = document.getElementById('idProgress');
+    const logoBar = document.getElementById('logoBar');
+    const idBar = document.getElementById('idBar');
+    logoProg.style.display = idProg.style.display = 'block';
+    logoBar.style.width = idBar.style.width = '10%';
+
+    try {
+        let logo = null;
+        let gid = null;
+
+        if (!IS_REJECTED_RESUBMIT || isRejectedField('store_logo')) {
+            logo = await uploadToCloudinary(logoFile, 'e-flowers/sellers/' + USER_ID + '/app_logo');
+            logoBar.style.width = '55%';
+        }
+        if (!IS_REJECTED_RESUBMIT || isRejectedField('government_id')) {
+            gid = await uploadToCloudinary(idFile, 'e-flowers/sellers/' + USER_ID + '/app_govt');
+            idBar.style.width = '55%';
+        }
+
+        const fd = new FormData();
+        fd.append('store_name', storeName);
+        fd.append('store_description', storeDesc);
+        fd.append('agree_terms', 'on');
+        if (logo) {
+            fd.append('store_logo_public_id', logo.public_id);
+            fd.append('store_logo_url', logo.url);
+        }
+        if (gid) {
+            fd.append('government_id_public_id', gid.public_id);
+            fd.append('government_id_url', gid.url);
+        }
+
+        const csrf = document.querySelector('[name="csrf_token"]').value;
+        const r = await fetch('{{ url_for("templates.seller_apply") }}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+            body: fd,
+            credentials: 'same-origin'
+        });
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'Submit failed');
+
+        logoBar.style.width = idBar.style.width = '100%';
+        toast(IS_REJECTED_RESUBMIT ? 'Changes submitted for re-review!' : 'Application submitted!', true);
+        setTimeout(() => { window.location.href = STATUS_URL; }, 900);
+    } catch (err) {
+        toast(err.message || 'Error', false);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri-send-plane-line"></i> Submit for review';
+    }
+});
+
+hydrateFormForResubmission();
+</script>
+</body>
+</html>

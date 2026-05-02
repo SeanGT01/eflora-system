@@ -478,9 +478,15 @@ class SellerApplication(db.Model):
     __tablename__ = 'seller_applications'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     store_name = db.Column(db.String(100), nullable=False)
     store_description = db.Column(db.Text)
+
+    # Snapshot + source (supports seller portal without prior customer account)
+    applicant_full_name = db.Column(db.String(120), nullable=True)
+    applicant_email = db.Column(db.String(120), nullable=True, index=True)
+    applicant_phone = db.Column(db.String(20), nullable=True)
+    application_source = db.Column(db.String(30), nullable=True, default='customer_account')
     
     # ===== CLOUDINARY FIELDS (NO LOCAL FALLBACK) =====
     store_logo_path = db.Column(db.String(500), nullable=True)  # Deprecated - keep for backward compatibility
@@ -513,12 +519,17 @@ class SellerApplication(db.Model):
         return self.government_id_url
     
     def to_dict(self):
+        u = self.applicant
+        full_name = self.applicant_full_name or (u.full_name if u else None)
+        email = self.applicant_email or (u.email if u else None)
+        phone = self.applicant_phone or (u.phone if u else None)
         return {
             'id': self.id,
             'user_id': self.user_id,
-            'full_name': self.applicant.full_name if self.applicant else None,
-            'email': self.applicant.email if self.applicant else None,
-            'phone': self.applicant.phone if self.applicant else None,
+            'full_name': full_name,
+            'email': email,
+            'phone': phone,
+            'application_source': self.application_source or 'customer_account',
             'store_name': self.store_name,
             'store_description': self.store_description,
             'store_logo_url': self.store_logo_url,  # Cloudinary only
@@ -1176,6 +1187,11 @@ class Order(db.Model):
     delivery_proof_2 = db.Column(db.String(255), nullable=True)  # Original filename (metadata only)
     delivery_proof_2_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
     delivery_proof_2_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
+
+    # Seller finished product proof before handoff to rider
+    done_preparing_proof = db.Column(db.String(255), nullable=True)  # Original filename (metadata only)
+    done_preparing_proof_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    done_preparing_proof_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
     # ======================================================
     
     # Status timestamps for timeline tracking
@@ -1186,6 +1202,7 @@ class Order(db.Model):
     confirmed_at = db.Column(db.DateTime, nullable=True)  # When rider accepts the order
     on_delivery_at = db.Column(db.DateTime, nullable=True)  # DEPRECATED - use confirmed_at
     delivered_at = db.Column(db.DateTime, nullable=True)  # When rider submits proofs and marks delivered
+    completed_at = db.Column(db.DateTime, nullable=True)  # When customer confirms completion
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1220,6 +1237,7 @@ class Order(db.Model):
             'pending': 'pending_at',
             'done_preparing': 'done_preparing_at',
             'delivered': 'delivered_at',
+            'completed': 'completed_at',
         }
         field = timestamp_map.get(new_status)
         if field and getattr(self, field) is None:
@@ -1268,6 +1286,8 @@ class Order(db.Model):
             'delivery_proof_public_id': self.delivery_proof_public_id,
             'delivery_proof_2_url': self.delivery_proof_2_url,  # Cloudinary only
             'delivery_proof_2_public_id': self.delivery_proof_2_public_id,
+            'done_preparing_proof_url': self.done_preparing_proof_url,  # Cloudinary only
+            'done_preparing_proof_public_id': self.done_preparing_proof_public_id,
             'requested_delivery_date': self.requested_delivery_date.isoformat() if self.requested_delivery_date else None,
             'requested_delivery_time': self.requested_delivery_time,
             'customer_latitude': self.customer_latitude,
@@ -1280,6 +1300,7 @@ class Order(db.Model):
             'done_preparing_at': self.done_preparing_at.isoformat() if self.done_preparing_at else None,
             'confirmed_at': self.confirmed_at.isoformat() if self.confirmed_at else None,
             'delivered_at': self.delivered_at.isoformat() if self.delivered_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'customer_name': self.customer.full_name if self.customer else None,
             'customer_avatar': self.customer.avatar_url if self.customer else None,  # Cloudinary only
             'store_name': self.store.name if self.store else None,
@@ -1600,6 +1621,41 @@ class ProductRating(db.Model):
         }
 
 
+class StoreRating(db.Model):
+    """Per-store experience rating for an order (one per customer per order)."""
+    __tablename__ = 'store_ratings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id', ondelete='CASCADE'), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id', ondelete='CASCADE'), nullable=False)
+    rating = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = db.relationship('User', backref=db.backref('store_ratings', lazy='dynamic'))
+    store = db.relationship('Store', backref=db.backref('store_ratings', lazy='dynamic'))
+    order = db.relationship('Order', backref=db.backref('store_rating_row', uselist=False))
+
+    __table_args__ = (
+        db.UniqueConstraint('customer_id', 'order_id', name='unique_customer_order_store_rating'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'store_id': self.store_id,
+            'order_id': self.order_id,
+            'rating': self.rating,
+            'comment': self.comment,
+            'customer_name': self.customer.full_name if self.customer else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class OrderAnalytics(db.Model):
     __tablename__ = 'order_analytics'
     
@@ -1859,6 +1915,37 @@ class CustomerOTP(db.Model):
     email = db.Column(db.String(120), nullable=False, unique=True, index=True)
     otp_hash = db.Column(db.String(255), nullable=False)
     customer_data = db.Column(db.JSON, nullable=False)  # {full_name, password_hash, phone}
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    last_sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    verified_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'is_verified': self.is_verified,
+            'attempts': self.attempts,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SellerSignupOTP(db.Model):
+    """Email OTP for standalone seller registration (seller portal)."""
+
+    __tablename__ = 'seller_signup_otps'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    otp_hash = db.Column(db.String(255), nullable=False)
+    signup_data = db.Column(JSON, nullable=False)  # {full_name, password_hash, phone}
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
     attempts = db.Column(db.Integer, default=0, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)

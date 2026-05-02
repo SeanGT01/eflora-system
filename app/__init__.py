@@ -86,6 +86,29 @@ def create_app(config_class='default'):
     csrf.init_app(app)
     limiter.init_app(app)
     mail.init_app(app)
+
+    def _ensure_order_fulfillment_columns():
+        try:
+            with app.app_context():
+                existing_tables = inspect(db.engine).get_table_names()
+                if 'orders' not in existing_tables:
+                    return
+                cols = {c['name'] for c in inspect(db.engine).get_columns('orders')}
+                stmts = []
+                if 'done_preparing_proof' not in cols:
+                    stmts.append("ALTER TABLE orders ADD COLUMN done_preparing_proof VARCHAR(255)")
+                if 'done_preparing_proof_public_id' not in cols:
+                    stmts.append("ALTER TABLE orders ADD COLUMN done_preparing_proof_public_id VARCHAR(255)")
+                if 'done_preparing_proof_url' not in cols:
+                    stmts.append("ALTER TABLE orders ADD COLUMN done_preparing_proof_url VARCHAR(500)")
+                if 'completed_at' not in cols:
+                    stmts.append("ALTER TABLE orders ADD COLUMN completed_at TIMESTAMP")
+                for stmt in stmts:
+                    db.session.execute(text(stmt))
+                if stmts:
+                    db.session.commit()
+        except Exception:
+            db.session.rollback()
     
     # Log mail config for debugging (mask password)
     mail_user = app.config.get('MAIL_USERNAME', '')
@@ -111,6 +134,8 @@ def create_app(config_class='default'):
             print(f"   MAIL_DEFAULT_SENDER: {mail_sender}")
             print(f"   Gmail requires sender to match authenticated account!")
             print(f"   SOLUTION: Set MAIL_DEFAULT_SENDER={mail_user}")
+
+    _ensure_order_fulfillment_columns()
     
     # ====================================================
     # INITIALIZE CLOUDINARY
@@ -189,6 +214,34 @@ def create_app(config_class='default'):
         except Exception as db_patch_error:
             db.session.rollback()
             app.logger.warning(f"⚠️ Could not apply riders.is_archived patch: {db_patch_error}")
+
+        # store_ratings (Alembic chain may be broken locally; create table if missing)
+        try:
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            if 'store_ratings' not in tables:
+                db.session.execute(
+                    text(
+                        """
+                        CREATE TABLE store_ratings (
+                            id SERIAL PRIMARY KEY,
+                            customer_id INTEGER NOT NULL REFERENCES users(id),
+                            store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+                            order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                            rating INTEGER NOT NULL,
+                            comment TEXT,
+                            created_at TIMESTAMP,
+                            updated_at TIMESTAMP,
+                            CONSTRAINT unique_customer_order_store_rating UNIQUE (customer_id, order_id)
+                        )
+                        """
+                    )
+                )
+                db.session.commit()
+                app.logger.info("Created store_ratings table (migration not applied)")
+        except Exception as sr_exc:
+            db.session.rollback()
+            app.logger.warning("Could not ensure store_ratings table: %s", sr_exc)
 
     # Backward-safe DB patch: add pos_orders.is_seen_by_seller if missing.
     with app.app_context():
@@ -392,6 +445,20 @@ def create_app(config_class='default'):
             return
 
         normalized_path = request.path.rstrip('/') or '/'
+        # Public seller onboarding URLs must stay reachable for customers/guests.
+        seller_signup_public_paths = (
+            '/seller/signup',
+            '/seller/signup/start',
+            '/seller/signup/verify',
+            '/seller/signup/resend-otp',
+            '/seller/signup/complete',
+            '/seller/signup/status',
+        )
+        if any(
+            normalized_path == p or normalized_path.startswith(f'{p}/')
+            for p in seller_signup_public_paths
+        ):
+            return
 
         def role_home_redirect():
             if role == 'admin':

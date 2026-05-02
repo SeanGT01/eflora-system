@@ -1520,116 +1520,28 @@
     </div>
 </div>
 
-<!-- ─── Become a Seller ─── -->
-{% if session.get('role') == 'customer' %}
-<div class="profile-card" id="sellerApplicationSection">
-    <div class="card-header">
-        <div class="card-header-left">
-            <div class="card-header-icon"><i class="ri-store-2-line"></i></div>
-            <div class="card-title">Become a Seller</div>
-        </div>
-    </div>
-    <div class="card-body">
-        <div id="applicationStatus"></div>
-        <div id="sellerApplicationForm" style="display:none;">
-            <form id="sellerAppForm" enctype="multipart/form-data">
-                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="form-grid">
-                    <div class="form-group form-group-full">
-                        <label class="form-label">Store Name <span style="color:var(--deep-rose)">*</span></label>
-                        <input type="text" class="form-control" name="store_name"
-                               placeholder="e.g., Blooming Petals Shop" required>
-                    </div>
-
-                    <div class="form-group form-group-full">
-                        <label class="form-label">Store Description <span style="color:var(--deep-rose)">*</span></label>
-                        <textarea class="form-control" name="store_description" rows="3"
-                                  placeholder="Tell customers about your store and what makes it special…" required
-                                  style="resize:vertical;"></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Store Logo <span style="color:var(--deep-rose)">*</span></label>
-                        <div class="upload-zone" onclick="document.getElementById('storeLogo').click()">
-                            <input type="file" name="store_logo" id="storeLogo" accept="image/*" required style="display:none;">
-                            <i class="ri-image-add-line upload-zone-icon"></i>
-                            <p>Click to upload your store logo</p>
-                            <button type="button" class="btn btn-outline btn-sm">Choose Image</button>
-                            <div class="upload-preview" id="logoPreview">
-                                <img src="#" alt="Logo Preview">
-                            </div>
-                        </div>
-                        <div class="form-hint" style="margin-top:.5rem;">JPG, PNG, GIF, WebP — max 5 MB</div>
-                        <!-- Upload progress for logo -->
-                        <div id="logoUploadProgress" class="upload-progress" style="display:none;">
-                            <div class="progress-bar" id="logoProgressBar"></div>
-                            <span class="progress-text" id="logoProgressText">Uploading...</span>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Government ID <span style="color:var(--deep-rose)">*</span></label>
-                        <div class="upload-zone" onclick="document.getElementById('governmentID').click()">
-                            <input type="file" name="government_id" id="governmentID" accept="image/*" required style="display:none;">
-                            <i class="ri-image-add-line upload-zone-icon"></i>
-                            <p>Passport, Driver's License, or National ID</p>
-                            <button type="button" class="btn btn-outline btn-sm">Upload ID</button>
-                            <div class="upload-preview" id="idPreview">
-                                <img src="#" alt="ID Preview">
-                            </div>
-                        </div>
-                        <!-- Upload progress for ID -->
-                        <div id="idUploadProgress" class="upload-progress" style="display:none;">
-                            <div class="progress-bar" id="idProgressBar"></div>
-                            <span class="progress-text" id="idProgressText">Uploading...</span>
-                        </div>
-                    </div>
-
-                    <div class="form-group form-group-full">
-                        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-                            <button type="button" class="btn btn-outline btn-rose" onclick="openTermsModal()" style="display: inline-flex; align-items: center; gap: 0.5rem;">
-                                <i class="ri-file-text-line"></i>
-                                Review Terms & Conditions
-                            </button>
-                            <label class="checkbox-option" style="margin: 0;">
-                                <input type="checkbox" name="agree_terms" id="agreeTermsCheckbox" required disabled>
-                                <span>I agree to the Terms & Conditions</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-outline" onclick="cancelSellerApplication()">Cancel</button>
-                    <button type="submit" class="btn btn-rose" id="submitSellerAppBtn" disabled>
-                        <i class="ri-send-plane-line"></i> Submit Application
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Seller Active Status -->
+<!-- Seller account -->
 {% if session.get('role') == 'seller' %}
 <div class="profile-card">
     <div class="card-header">
         <div class="card-header-left">
             <div class="card-header-icon" style="background:rgba(72,187,120,0.1);color:#276749;"><i class="ri-store-2-line"></i></div>
-            <div class="card-title">Seller Status</div>
+            <div class="card-title">Seller account</div>
         </div>
-        <span class="status-badge badge-active">Active</span>
     </div>
     <div class="card-body">
         <div class="seller-banner">
             <div class="seller-banner-icon"><i class="ri-store-line"></i></div>
             <div class="seller-banner-text">
-                <div class="seller-banner-title">You're an approved seller!</div>
-                <div class="seller-banner-sub">Access your store dashboard to manage products and orders.</div>
+                <div class="seller-banner-title">Seller Center</div>
+                <div class="seller-banner-sub">Open your dashboard to manage the store, or check application status if you are still waiting for approval.</div>
             </div>
-            <a href="{{ url_for('templates.seller_products') }}" class="btn btn-rose" style="flex-shrink:0;">
-                <i class="ri-external-link-line"></i> Open Dashboard
-            </a>
+            <div style="display:flex;flex-direction:column;gap:0.5rem;flex-shrink:0;">
+                <a href="{{ url_for('templates.seller_products') }}" class="btn btn-rose">
+                    <i class="ri-external-link-line"></i> Seller dashboard
+                </a>
+                <a href="{{ url_for('templates.seller_signup_status') }}" class="btn btn-outline btn-sm">Application status</a>
+            </div>
         </div>
     </div>
 </div>
@@ -1729,8 +1641,7 @@
     </div>
 </div>
 
-
-
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 <script>
     // Terms Modal Functions
     function openTermsModal() {
@@ -1809,13 +1720,13 @@
             return;
         }
         
-        // Update the main form checkbox and enable submit button
         const mainTermsCheckbox = document.getElementById('agreeTermsCheckbox');
         const submitBtn = document.getElementById('submitSellerAppBtn');
-        
-        mainTermsCheckbox.checked = true;
-        mainTermsCheckbox.disabled = false;
-        submitBtn.disabled = false;
+        if (mainTermsCheckbox) {
+            mainTermsCheckbox.checked = true;
+            mainTermsCheckbox.disabled = false;
+        }
+        if (submitBtn) submitBtn.disabled = false;
         
         // Show success message
         showNotification('Terms accepted successfully! You can now submit your application.');
@@ -2446,6 +2357,95 @@ document.addEventListener('DOMContentLoaded', function() {
 let map = null;
 let marker = null;
 let geocoder = null;
+let __addressPromptConsumed = false;
+
+// Laguna province boundary (merged municipalities) for pin containment
+let lagunaProvinceFeature = null;
+let __lagunaBoundaryLoadPromise = null;
+
+const LAGUNA_BBOX_FALLBACK = {
+    minLng: 121.0,
+    maxLng: 121.6,
+    minLat: 14.0,
+    maxLat: 14.5,
+};
+
+function ensureLagunaBoundaryLoaded() {
+    if (__lagunaBoundaryLoadPromise) return __lagunaBoundaryLoadPromise;
+    __lagunaBoundaryLoadPromise = (async () => {
+        try {
+            const res = await fetch('/api/municipality/province-boundary?province=' + encodeURIComponent('Laguna'));
+            const data = await res.json();
+            if (data.success && data.geometry) {
+                lagunaProvinceFeature = {
+                    type: 'Feature',
+                    properties: {},
+                    geometry: data.geometry,
+                };
+            }
+        } catch (e) {
+            console.warn('Laguna boundary load failed:', e);
+        }
+    })();
+    return __lagunaBoundaryLoadPromise;
+}
+
+function isPointInLaguna(lng, lat) {
+    if (lagunaProvinceFeature && typeof turf !== 'undefined') {
+        try {
+            return turf.booleanPointInPolygon(turf.point([lng, lat]), lagunaProvinceFeature);
+        } catch (e) {
+            console.warn('isPointInLaguna:', e);
+        }
+    }
+    return lng >= LAGUNA_BBOX_FALLBACK.minLng && lng <= LAGUNA_BBOX_FALLBACK.maxLng &&
+        lat >= LAGUNA_BBOX_FALLBACK.minLat && lat <= LAGUNA_BBOX_FALLBACK.maxLat;
+}
+
+function getLagunaMapCenter() {
+    if (lagunaProvinceFeature && typeof turf !== 'undefined') {
+        try {
+            const c = turf.centroid(lagunaProvinceFeature);
+            if (c && c.geometry && c.geometry.coordinates) {
+                return { lng: c.geometry.coordinates[0], lat: c.geometry.coordinates[1] };
+            }
+        } catch (e) { /* ignore */ }
+    }
+    return {
+        lng: (LAGUNA_BBOX_FALLBACK.minLng + LAGUNA_BBOX_FALLBACK.maxLng) / 2,
+        lat: (LAGUNA_BBOX_FALLBACK.minLat + LAGUNA_BBOX_FALLBACK.maxLat) / 2,
+    };
+}
+
+let __lastValidPin = null;
+let __pinAtDragStart = null;
+let __initialAddressPrompt = false;
+
+try {
+    const __bootParams = new URLSearchParams(window.location.search);
+    __initialAddressPrompt = __bootParams.get('prompt_address') === '1';
+} catch (_) {
+    __initialAddressPrompt = false;
+}
+
+function shouldAutoPromptAddress() {
+    if (__addressPromptConsumed) return false;
+    return __initialAddressPrompt;
+}
+
+function consumeAutoAddressPromptParam() {
+    __addressPromptConsumed = true;
+    __initialAddressPrompt = false;
+    try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('prompt_address')) {
+            url.searchParams.delete('prompt_address');
+            window.history.replaceState({}, '', url.toString());
+        }
+    } catch (_) {
+        // no-op
+    }
+}
 
 async function loadAddresses() {
     try {
@@ -2494,6 +2494,15 @@ async function loadAddresses() {
                     </button>
                 </div>
             `;
+
+            // Panel-required UX: show add-address modal right after registration.
+            if (shouldAutoPromptAddress()) {
+                consumeAutoAddressPromptParam();
+                setTimeout(() => {
+                    showAddAddressModal(true);
+                    showToast('Please verify and save your current/default delivery address.', 'info');
+                }, 250);
+            }
         }
     } catch (error) {
         console.error('Error loading addresses:', error);
@@ -2542,7 +2551,7 @@ async function loadBarangays(municipality) {
             
             // Initialize map with municipality coordinates
             if (d.coordinates) {
-                initializeMap(d.coordinates.lat, d.coordinates.lng);
+                await initializeMap(d.coordinates.lat, d.coordinates.lng);
             }
             
             updateAddressPreview();
@@ -2553,8 +2562,23 @@ async function loadBarangays(municipality) {
     }
 }
 
-function initializeMap(lat, lng) {
-    console.log('🗺️ Initializing map:', lat, lng);
+async function initializeMap(lat, lng) {
+    await ensureLagunaBoundaryLoaded();
+
+    let centerLat = Number(lat);
+    let centerLng = Number(lng);
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) {
+        const c = getLagunaMapCenter();
+        centerLat = c.lat;
+        centerLng = c.lng;
+    } else if (!isPointInLaguna(centerLng, centerLat)) {
+        showToast('That location is outside Laguna province. Map centered in Laguna—please pin your exact location.', 'warning');
+        const c = getLagunaMapCenter();
+        centerLat = c.lat;
+        centerLng = c.lng;
+    }
+
+    console.log('🗺️ Initializing map:', centerLat, centerLng);
     
     // Show map section
     document.getElementById('mapSection').style.display = 'block';
@@ -2582,7 +2606,7 @@ function initializeMap(lat, lng) {
         map = new mapboxgl.Map({
             container: 'addressMap',
             style: 'mapbox://styles/mapbox/streets-v12',
-            center: [lng, lat],
+            center: [centerLng, centerLat],
             zoom: 15
         });
         
@@ -2594,15 +2618,17 @@ function initializeMap(lat, lng) {
             draggable: true,
             color: '#B5445A'
         })
-        .setLngLat([lng, lat])
+        .setLngLat([centerLng, centerLat])
         .addTo(map);
+
+        __lastValidPin = { lng: centerLng, lat: centerLat };
         
         // Update coordinates display
-        updateMapCoords(lat, lng);
+        updateMapCoords(centerLat, centerLng);
         
         // Update hidden inputs
-        document.getElementById('exactLat').value = lat;
-        document.getElementById('exactLng').value = lng;
+        document.getElementById('exactLat').value = centerLat;
+        document.getElementById('exactLng').value = centerLng;
         
         // Function to reverse geocode and get place_id
         async function reverseGeocode(lngLat) {
@@ -2624,24 +2650,38 @@ function initializeMap(lat, lng) {
             }
         }
         
+        marker.on('dragstart', function() {
+            __pinAtDragStart = marker.getLngLat();
+        });
+
         // Listen to marker drag
         marker.on('dragend', function() {
             const lngLat = marker.getLngLat();
+            if (!isPointInLaguna(lngLat.lng, lngLat.lat)) {
+                showToast('Pin must stay inside Laguna province.', 'error');
+                const revert = __pinAtDragStart || (__lastValidPin ? { lng: __lastValidPin.lng, lat: __lastValidPin.lat } : null);
+                if (revert) marker.setLngLat(revert);
+                return;
+            }
+            __lastValidPin = { lng: lngLat.lng, lat: lngLat.lat };
             updateMapCoords(lngLat.lat, lngLat.lng);
             document.getElementById('exactLat').value = lngLat.lat;
             document.getElementById('exactLng').value = lngLat.lng;
-            // Get place_id for new location
             reverseGeocode(lngLat);
         });
         
         // Click to place marker
         map.on('click', function(e) {
             const lngLat = e.lngLat;
+            if (!isPointInLaguna(lngLat.lng, lngLat.lat)) {
+                showToast('You can only pin a location inside Laguna province.', 'error');
+                return;
+            }
             marker.setLngLat([lngLat.lng, lngLat.lat]);
+            __lastValidPin = { lng: lngLat.lng, lat: lngLat.lat };
             updateMapCoords(lngLat.lat, lngLat.lng);
             document.getElementById('exactLat').value = lngLat.lat;
             document.getElementById('exactLng').value = lngLat.lng;
-            // Get place_id for clicked location
             reverseGeocode(lngLat);
         });
         
@@ -2663,7 +2703,7 @@ function initializeMap(lat, lng) {
                     marker: false,
                     placeholder: 'Search for your exact address',
                     countries: 'ph',
-                    proximity: [lng, lat]
+                    proximity: [centerLng, centerLat]
                 });
                 
                 // Add geocoder to map
@@ -2677,24 +2717,21 @@ function initializeMap(lat, lng) {
                     const result = e.result;
                     const coordinates = result.geometry.coordinates;
                     const placeId = result.id;
-                    
-                    // Update marker
-                    marker.setLngLat([coordinates[0], coordinates[1]]);
-                    
-                    // Update coordinates display
-                    updateMapCoords(coordinates[1], coordinates[0]);
-                    
-                    // Update hidden inputs
-                    document.getElementById('exactLat').value = coordinates[1];
-                    document.getElementById('exactLng').value = coordinates[0];
+                    const clng = coordinates[0];
+                    const clat = coordinates[1];
+
+                    if (!isPointInLaguna(clng, clat)) {
+                        showToast('Search result is outside Laguna province. Choose an address in Laguna.', 'error');
+                        return;
+                    }
+
+                    marker.setLngLat([clng, clat]);
+                    __lastValidPin = { lng: clng, lat: clat };
+                    updateMapCoords(clat, clng);
+                    document.getElementById('exactLat').value = clat;
+                    document.getElementById('exactLng').value = clng;
                     document.getElementById('exactPlaceId').value = placeId;
-                    
-                    // Fly to location
-                    map.flyTo({
-                        center: [coordinates[0], coordinates[1]],
-                        zoom: 17
-                    });
-                    
+                    map.flyTo({ center: [clng, clat], zoom: 17 });
                     console.log('✅ Place ID captured from search:', placeId);
                 });
                 
@@ -2704,7 +2741,7 @@ function initializeMap(lat, lng) {
         }, 500);
         
         // Initial reverse geocode for the default location
-        reverseGeocode({ lat, lng });
+        reverseGeocode({ lat: centerLat, lng: centerLng });
         
     }, 150);
 }
@@ -2733,6 +2770,7 @@ async function handleBarangayChange() {
     }
     
     try {
+        await ensureLagunaBoundaryLoaded();
         // Build search query: "Barangay, Municipality, Laguna, Philippines"
         const query = `${barangay}, ${municipality}, Laguna, Philippines`;
         
@@ -2750,11 +2788,21 @@ async function handleBarangayChange() {
         
         if (data.features && data.features.length > 0) {
             const coordinates = data.features[0].geometry.coordinates;
-            const place_name = data.features[0].place_name;
-            
+            const glng = coordinates[0];
+            const glat = coordinates[1];
+
+            if (!isPointInLaguna(glng, glat)) {
+                showToast('Geocoded location is outside Laguna. Please pin your house on the map.', 'error');
+                updateAddressPreview();
+                return;
+            }
+
             // Update marker position if map is initialized
             if (marker && map) {
                 marker.setLngLat(coordinates);
+                __lastValidPin = { lng: glng, lat: glat };
+                document.getElementById('exactLat').value = glat;
+                document.getElementById('exactLng').value = glng;
                 map.flyTo({ 
                     center: coordinates, 
                     zoom: 15,
@@ -2762,8 +2810,7 @@ async function handleBarangayChange() {
                 });
                 console.log(`✅ Updated map for barangay: ${barangay} at ${coordinates}`);
             } else if (!map) {
-                // If map doesn't exist, initialize it
-                initializeMap(coordinates[1], coordinates[0]);
+                await initializeMap(glat, glng);
             }
         } else {
             console.warn('Location not found for:', query);
@@ -2798,7 +2845,142 @@ function updateAddressPreview() {
     }
 }
 
-function showAddAddressModal() {
+async function autoDetectAndPrefillAddress() {
+    if (!navigator.geolocation) {
+        showToast('Location detection is not supported on this browser', 'error');
+        return;
+    }
+
+    const municipalitySelect = document.getElementById('municipality');
+    const barangaySelect = document.getElementById('barangay');
+    const streetInput = document.getElementById('street');
+
+    const getCurrentPosition = () =>
+        new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0,
+            });
+        });
+
+    try {
+        showToast('Detecting your current location...', 'info');
+        const pos = await getCurrentPosition();
+        const lat = Number(pos.coords.latitude);
+        const lng = Number(pos.coords.longitude);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            throw new Error('Invalid location coordinates');
+        }
+
+        await ensureLagunaBoundaryLoaded();
+        if (!isPointInLaguna(lng, lat)) {
+            showToast('Your current location is outside Laguna province. Select municipality and barangay, then pin on the map.', 'error');
+            updateAddressPreview();
+            return;
+        }
+
+        document.getElementById('exactLat').value = lat;
+        document.getElementById('exactLng').value = lng;
+        await initializeMap(lat, lng);
+
+        const token = window.MAPBOX_TOKEN || mapboxgl.accessToken;
+        if (!token) {
+            showToast('Mapbox token missing. Pin manually on map.', 'error');
+            return;
+        }
+
+        const reverseUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&types=address,poi,locality,place&country=ph&limit=1`;
+        const reverseResp = await fetch(reverseUrl);
+        const reverseData = await reverseResp.json().catch(() => ({}));
+        const feature = reverseData?.features?.[0];
+
+        if (!feature) {
+            showToast('Location found. Please complete the address fields manually.', 'info');
+            return;
+        }
+
+        document.getElementById('exactPlaceId').value = feature.id || '';
+
+        const normalizeForMatch = (s) => String(s || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\b(barangay|brgy\.?|city of|city|municipality of|municipality)\b/gi, ' ')
+            .replace(/[^a-z0-9\s]/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+        const contextText = normalizeForMatch(
+            [feature.text, feature.place_name, ...(feature.context || []).map(c => c.text || '')].join(', ')
+        );
+
+        const muniOptions = Array.from(municipalitySelect.options || []).map(o => o.value).filter(Boolean);
+        const matchedMunicipality = muniOptions.find(m => contextText.includes(normalizeForMatch(m)));
+
+        if (matchedMunicipality) {
+            municipalitySelect.value = matchedMunicipality;
+            await loadBarangays(matchedMunicipality);
+        }
+
+        const streetCandidate = (feature.text || '').trim();
+        if (streetInput && streetCandidate) {
+            streetInput.value = streetCandidate;
+        }
+
+        if (matchedMunicipality && !barangaySelect.disabled) {
+            const brgyOptions = Array.from(barangaySelect.options || []).map(o => o.value).filter(Boolean);
+            let matchedBarangay = brgyOptions.find(b => contextText.includes(normalizeForMatch(b)));
+
+            const extractBarangayHint = (rawText) => {
+                const s = String(rawText || '');
+                // Matches: "Brgy. X", "Barangay X", with common separators.
+                const m = s.match(/(?:brgy\.?|barangay)\s+([a-z0-9\s\-\.'`]+)/i);
+                if (!m || !m[1]) return '';
+                return normalizeForMatch(m[1]).split(' laguna')[0].trim();
+            };
+
+            // Fallback: Mapbox often returns barangay as neighborhood/locality context.
+            if (!matchedBarangay) {
+                const fallbackUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&types=neighborhood,locality,address&country=ph&limit=5`;
+                const fbResp = await fetch(fallbackUrl);
+                const fbData = await fbResp.json().catch(() => ({}));
+                const fbText = normalizeForMatch((fbData?.features || [])
+                    .map(f => [f.text, f.place_name].filter(Boolean).join(', '))
+                    .join(' | '));
+                matchedBarangay = brgyOptions.find(b => fbText.includes(normalizeForMatch(b)));
+
+                // Fallback 2: explicit Brgy/Barangay pattern from place_name text.
+                if (!matchedBarangay) {
+                    const hint = extractBarangayHint(
+                        [feature.place_name, ...(fbData?.features || []).map(f => f.place_name || '')].join(' | ')
+                    );
+                    if (hint) {
+                        matchedBarangay =
+                            brgyOptions.find(b => normalizeForMatch(b) === hint) ||
+                            brgyOptions.find(b => normalizeForMatch(b).startsWith(hint) || hint.startsWith(normalizeForMatch(b))) ||
+                            brgyOptions.find(b => normalizeForMatch(b).includes(hint) || hint.includes(normalizeForMatch(b)));
+                    }
+                }
+            }
+
+            if (matchedBarangay) {
+                barangaySelect.value = matchedBarangay;
+            } else if (brgyOptions.length) {
+                // Last resort so user doesn't start from blank; they can still change manually.
+                barangaySelect.selectedIndex = 1;
+            }
+        }
+
+        updateAddressPreview();
+        showToast('Current location detected. Please verify before saving.', 'success');
+    } catch (err) {
+        console.error('Auto-detect location failed:', err);
+        showToast('Unable to auto-detect location. You can still pin manually.', 'error');
+    }
+}
+
+function showAddAddressModal(autoDetect = true) {
     document.getElementById('addressModalTitle').textContent = 'Add Delivery Address';
     document.getElementById('addressForm').reset();
     document.getElementById('addressId').value = '';
@@ -2818,6 +3000,12 @@ function showAddAddressModal() {
         map.remove();
         map = null;
         marker = null;
+    }
+
+    if (autoDetect) {
+        setTimeout(() => {
+            autoDetectAndPrefillAddress();
+        }, 180);
     }
 }
 
@@ -2848,7 +3036,7 @@ async function editAddress(addressId) {
         document.getElementById('municipality').value = address.municipality;
         await loadBarangays(address.municipality);
         
-        setTimeout(() => {
+        setTimeout(async () => {
             document.getElementById('barangay').value = address.barangay;
             document.getElementById('street').value = address.street || '';
             document.getElementById('building_details').value = address.building_details || '';
@@ -2856,10 +3044,7 @@ async function editAddress(addressId) {
             
             // Set exact coordinates if available
             if (address.latitude && address.longitude) {
-                initializeMap(address.latitude, address.longitude);
-                document.getElementById('exactLat').value = address.latitude;
-                document.getElementById('exactLng').value = address.longitude;
-                // Place_id will be preserved from existing address data
+                await initializeMap(address.latitude, address.longitude);
                 if (address.place_id) {
                     document.getElementById('exactPlaceId').value = address.place_id;
                 }
@@ -3269,11 +3454,10 @@ function checkApplicationStatus() {
                         <div class="seller-banner-sub">Join our community of local flower shops and growers.</div>
                         ${showRetryNote ? '<div style="font-size:12px;color:var(--muted);margin-top:4px;">Could not load previous application status, but you can still apply now.</div>' : ''}
                     </div>
-                    <button class="btn btn-rose" onclick="showSellerApplication()" style="flex-shrink:0;">
-                        <i class="ri-add-line"></i> Apply Now
-                    </button>
                 </div>
             </div>`;
+        const portal = document.getElementById('sellerPortalCta');
+        if (portal) portal.style.display = 'block';
         if (formDiv) formDiv.style.display = 'none';
     };
 
@@ -3294,18 +3478,23 @@ function checkApplicationStatus() {
         .then(data => {
             if (data.status === 'none') {
                 renderDefaultApplyState(false);
-            } else if (data.status === 'pending') {
+            } else if (data.status === 'pending' || data.status === 'resubmitted') {
+                const portalPend = document.getElementById('sellerPortalCta');
+                if (portalPend) portalPend.style.display = 'none';
+                const isResubmitted = data.status === 'resubmitted';
                 statusDiv.innerHTML = `
-                    <div style="display:flex;align-items:center;gap:1rem;padding:1.25rem;background:rgba(240,180,41,0.06);border-radius:var(--radius-lg);border:1px solid rgba(240,180,41,0.2);">
-                        <div style="width:44px;height:44px;border-radius:50%;background:rgba(240,180,41,0.15);display:flex;align-items:center;justify-content:center;font-size:20px;color:#8a5e00;flex-shrink:0;"><i class="ri-time-line"></i></div>
+                    <div style="display:flex;align-items:center;gap:1rem;padding:1.25rem;background:${isResubmitted ? 'rgba(72,187,120,0.07)' : 'rgba(240,180,41,0.06)'};border-radius:var(--radius-lg);border:1px solid ${isResubmitted ? 'rgba(72,187,120,0.24)' : 'rgba(240,180,41,0.2)'};">
+                        <div style="width:44px;height:44px;border-radius:50%;background:${isResubmitted ? 'rgba(72,187,120,0.15)' : 'rgba(240,180,41,0.15)'};display:flex;align-items:center;justify-content:center;font-size:20px;color:${isResubmitted ? '#276749' : '#8a5e00'};flex-shrink:0;"><i class="${isResubmitted ? 'ri-checkbox-circle-line' : 'ri-time-line'}"></i></div>
                         <div>
                             <div style="font-weight:600;margin-bottom:2px;">${data.store_name}</div>
-                            <div style="font-size:12px;color:var(--muted);">Submitted ${new Date(data.submitted_at).toLocaleDateString('en-PH',{month:'long',day:'numeric',year:'numeric'})}</div>
+                            <div style="font-size:12px;color:var(--muted);">${isResubmitted ? 'Changes added and resubmitted' : 'Submitted'} ${new Date(data.submitted_at).toLocaleDateString('en-PH',{month:'long',day:'numeric',year:'numeric'})}</div>
                         </div>
-                        <span class="status-badge badge-pending" style="margin-left:auto;">Under Review</span>
+                        <span class="status-badge ${isResubmitted ? 'badge-approved' : 'badge-pending'}" style="margin-left:auto;">${isResubmitted ? 'Changes Added' : 'Under Review'}</span>
                     </div>`;
                 if (formDiv) formDiv.style.display = 'none';
             } else if (data.status === 'approved') {
+                const portalP = document.getElementById('sellerPortalCta');
+                if (portalP) portalP.style.display = 'none';
                 statusDiv.innerHTML = `
                     <div style="display:flex;align-items:center;gap:1rem;padding:1.25rem;background:rgba(72,187,120,0.06);border-radius:var(--radius-lg);border:1px solid rgba(72,187,120,0.2);">
                         <div style="width:44px;height:44px;border-radius:50%;background:rgba(72,187,120,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;color:#276749;flex-shrink:0;"><i class="ri-checkbox-circle-line"></i></div>
@@ -3317,6 +3506,8 @@ function checkApplicationStatus() {
                     </div>`;
                 if (formDiv) formDiv.style.display = 'none';
             } else if (data.status === 'rejected') {
+                const portalRej = document.getElementById('sellerPortalCta');
+                if (portalRej) portalRej.style.display = 'none';
                 // Build per-field rejection list
                 let rejectionHtml = '';
                 if (data.rejection_details) {
@@ -3355,9 +3546,9 @@ function checkApplicationStatus() {
                             <span class="status-badge badge-rejected">Rejected</span>
                         </div>
                         ${rejectionHtml}
-                        <button class="btn btn-outline btn-sm" onclick="showSellerApplication()" style="margin-top:1rem;">
-                            <i class="ri-refresh-line"></i> Apply Again
-                        </button>
+                        <a class="btn btn-outline btn-sm" href="{{ url_for('templates.seller_signup_complete') }}" style="margin-top:1rem;display:inline-flex;align-items:center;gap:0.35rem;">
+                            <i class="ri-refresh-line"></i> Apply again on Seller Center
+                        </a>
                     </div>`;
                 if (formDiv) formDiv.style.display = 'none';
             } else {
@@ -3384,106 +3575,14 @@ function getSellerProfileRequirements() {
 }
 
 function showSellerApplication() {
-    const profileRequirements = getSellerProfileRequirements();
-    if (profileRequirements.missing.length > 0) {
-        showToast(`Please complete your basic information first: ${profileRequirements.missing.join(', ')}.`, 'error');
-        const basicInfoCard = document.getElementById('basicInformationCard');
-        if (basicInfoCard) {
-            basicInfoCard.classList.remove('highlight-required');
-            void basicInfoCard.offsetWidth;
-            basicInfoCard.classList.add('highlight-required');
-            basicInfoCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            window.clearTimeout(window._basicInfoHighlightTimer);
-            window._basicInfoHighlightTimer = window.setTimeout(() => {
-                basicInfoCard.classList.remove('highlight-required');
-            }, 2600);
-        }
-        return;
-    }
-
-    document.getElementById('applicationStatus').style.display = 'none';
-    const formDiv = document.getElementById('sellerApplicationForm');
-    formDiv.style.display = 'block';
-    const form = document.getElementById('sellerAppForm');
-    if (!form) return;
-
-    // Pre-fill form with previous application data if rejected
-    const prev = window._rejectedAppData;
-    if (prev && prev.status === 'rejected') {
-        const nameInput = form.querySelector('[name="store_name"]');
-        const descInput = form.querySelector('[name="store_description"]');
-        const logoInput = form.querySelector('[name="store_logo"]');
-        const idInput = form.querySelector('[name="government_id"]');
-        if (nameInput && prev.store_name) nameInput.value = prev.store_name;
-        if (descInput && prev.store_description) descInput.value = prev.store_description;
-        if (logoInput) logoInput.required = !!prev.rejection_details?.store_logo?.rejected;
-        if (idInput) idInput.required = !!prev.rejection_details?.government_id?.rejected;
-
-        // Show rejection badges on fields
-        const rd = prev.rejection_details || {};
-        const fieldLabels = {
-            'store_name': 'store_name',
-            'store_description': 'store_description',
-            'store_logo': 'store_logo',
-            'government_id': 'government_id'
-        };
-
-        // Add rejection indicators next to rejected fields
-        form.querySelectorAll('.rejection-indicator').forEach(el => el.remove());
-
-        Object.entries(rd).forEach(([field, detail]) => {
-            if (!detail || !detail.rejected) return;
-
-            let targetInput;
-            if (field === 'store_name') targetInput = form.querySelector('[name="store_name"]');
-            else if (field === 'store_description') targetInput = form.querySelector('[name="store_description"]');
-            else if (field === 'store_logo') targetInput = document.getElementById('storeLogo')?.closest('.form-group');
-            else if (field === 'government_id') targetInput = document.getElementById('governmentID')?.closest('.form-group');
-
-            if (targetInput) {
-                const container = targetInput.closest ? targetInput.closest('.form-group') : targetInput;
-                if (container) {
-                    const indicator = document.createElement('div');
-                    indicator.className = 'rejection-indicator';
-                    indicator.style.cssText = 'display:flex;align-items:center;gap:0.4rem;padding:0.4rem 0.75rem;background:rgba(192,57,43,0.06);border-radius:6px;border:1px solid rgba(192,57,43,0.15);margin-top:0.4rem;font-size:12px;color:#9b1c1c;';
-                    indicator.innerHTML = `<i class="ri-error-warning-line"></i><span><strong>Rejected:</strong> ${detail.reason || 'Please update this field'}</span>`;
-                    container.appendChild(indicator);
-                }
-            }
-        });
-
-        // Show previous logo/ID thumbnails if available
-        if (prev.store_logo_url) {
-            const logoPreview = document.getElementById('logoPreview');
-            if (logoPreview) {
-                logoPreview.style.display = 'block';
-                logoPreview.querySelector('img').src = prev.store_logo_url;
-            }
-        }
-        if (prev.government_id_url) {
-            const idPreview = document.getElementById('idPreview');
-            if (idPreview) {
-                idPreview.style.display = 'block';
-                idPreview.querySelector('img').src = prev.government_id_url;
-            }
-        }
-    } else {
-        form.reset();
-        form.querySelectorAll('.rejection-indicator').forEach(el => el.remove());
-        const logoInput = form.querySelector('[name="store_logo"]');
-        const idInput = form.querySelector('[name="government_id"]');
-        if (logoInput) logoInput.required = true;
-        if (idInput) idInput.required = true;
-        const logoPreview = document.getElementById('logoPreview');
-        const idPreview = document.getElementById('idPreview');
-        if (logoPreview) logoPreview.style.display = 'none';
-        if (idPreview) idPreview.style.display = 'none';
-    }
+    window.location.href = "{{ url_for('templates.seller_signup_complete') }}";
 }
 
 function cancelSellerApplication() {
-    document.getElementById('sellerApplicationForm').style.display = 'none';
-    document.getElementById('applicationStatus').style.display = 'block';
+    const fd = document.getElementById('sellerApplicationForm');
+    if (fd) fd.style.display = 'none';
+    const st = document.getElementById('applicationStatus');
+    if (st) st.style.display = 'block';
     checkApplicationStatus();
 }
 
@@ -3513,3 +3612,4 @@ if (!document.getElementById('spin-style')) {
     document.head.appendChild(s);
 }
 </script>
+

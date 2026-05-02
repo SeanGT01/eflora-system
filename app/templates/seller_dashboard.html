@@ -1589,13 +1589,24 @@ table.dash-table {
         <div class="perf-body">
           <div class="perf-item">
             <div class="perf-meta">
-              <span class="perf-name"><i class="ri-star-line"></i> Customer Rating</span>
+              <span class="perf-name"><i class="ri-star-line"></i> Product ratings</span>
               <span class="perf-val">{{ avg_rating }}/5</span>
             </div>
             <div class="perf-track">
               <div class="perf-fill fill-rose" style="width:{{ (avg_rating / 5 * 100)|round }}%"></div>
             </div>
-            <div class="perf-note">Based on {{ total_reviews }} review{{ 's' if total_reviews != 1 else '' }}</div>
+            <div class="perf-note">Based on {{ total_reviews }} product review{{ 's' if total_reviews != 1 else '' }}</div>
+          </div>
+
+          <div class="perf-item">
+            <div class="perf-meta">
+              <span class="perf-name"><i class="ri-store-2-line"></i> Store experience</span>
+              <span class="perf-val">{{ store_avg_rating }}/5</span>
+            </div>
+            <div class="perf-track">
+              <div class="perf-fill fill-terra" style="width:{{ (store_avg_rating / 5 * 100)|round }}%"></div>
+            </div>
+            <div class="perf-note">Based on {{ store_total_reviews }} shop review{{ 's' if store_total_reviews != 1 else '' }}</div>
           </div>
 
           <div class="perf-item">
@@ -1868,18 +1879,31 @@ table.dash-table {
     </div>
   </div>
 
-  <!-- Row 4: Rating Distribution (full width) -->
-  <div class="analytics-grid" style="grid-template-columns:1fr;">
+  <!-- Row 4: Product vs store rating distribution -->
+  <div class="analytics-grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
     <div class="chart-panel">
       <div class="chart-panel-head">
         <div>
-          <div class="chart-panel-title">Rating Distribution</div>
-          <div class="chart-panel-subtitle">Customer review breakdown &middot; {{ total_reviews }} total reviews</div>
+          <div class="chart-panel-title">Product star breakdown</div>
+          <div class="chart-panel-subtitle">{{ total_reviews }} product review{{ 's' if total_reviews != 1 else '' }} in range</div>
         </div>
       </div>
       <div class="chart-panel-body">
         <div class="chart-canvas-sm" style="height:180px;">
           <canvas id="ratingChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <div class="chart-panel-title">Store experience breakdown</div>
+          <div class="chart-panel-subtitle">{{ store_total_reviews }} shop review{{ 's' if store_total_reviews != 1 else '' }} in range</div>
+        </div>
+      </div>
+      <div class="chart-panel-body">
+        <div class="chart-canvas-sm" style="height:180px;">
+          <canvas id="storeRatingChart"></canvas>
         </div>
       </div>
     </div>
@@ -2372,18 +2396,38 @@ const tooltipStyle = {
   });
 })();
 
-/* ── 7. Rating Distribution Bar ──────────────────────── */
+/* ── 7. Rating distribution (product + store) ───────── */
 (function(){
-  const ratingData = {{ rating_distribution|tojson }};
   const labels = ['1 ★', '2 ★', '3 ★', '4 ★', '5 ★'];
-  const values = [1,2,3,4,5].map(r => ratingData[r] || 0);
   const colors = ['#b5445a', '#c4714b', '#d4788a', '#7a9e7e', '#4a6b4e'];
+  const ratingData = {{ rating_distribution|tojson }};
+  const storeRatingData = {{ store_rating_distribution|tojson }};
+  const barOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { ...tooltipStyle, callbacks: { label: c => ` ${c.parsed.y} reviews` } }
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { font: { ...chartFont, size: 13, weight: 600 }, color: '#2c2520' }
+      },
+      y: {
+        grid: { color: 'rgba(107,76,59,.06)' },
+        ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', stepSize: 1 },
+        beginAtZero: true
+      }
+    }
+  };
+  const values = [1,2,3,4,5].map(r => ratingData[r] || 0);
   new Chart(document.getElementById('ratingChart'), {
     type: 'bar',
     data: {
       labels: labels,
       datasets: [{
-        label: 'Reviews',
+        label: 'Product',
         data: values,
         backgroundColor: colors,
         borderRadius: 8,
@@ -2391,25 +2435,23 @@ const tooltipStyle = {
         maxBarThickness: 48
       }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ${c.parsed.y} reviews` } }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { font: { ...chartFont, size: 13, weight: 600 }, color: '#2c2520' }
-        },
-        y: {
-          grid: { color: 'rgba(107,76,59,.06)' },
-          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', stepSize: 1 },
-          beginAtZero: true
-        }
-      }
-    }
+    options: barOpts
+  });
+  const svals = [1,2,3,4,5].map(r => storeRatingData[r] || 0);
+  new Chart(document.getElementById('storeRatingChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Store',
+        data: svals,
+        backgroundColor: colors,
+        borderRadius: 8,
+        borderSkipped: false,
+        maxBarThickness: 48
+      }]
+    },
+    options: barOpts
   });
 })();
 </script>

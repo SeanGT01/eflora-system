@@ -77,6 +77,10 @@
             <i class="ri-time-line"></i>Pending Review
             <span class="tab-badge" id="pending-badge" style="background: #f0b429; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; min-width: 20px; text-align: center;">0</span>
         </button>
+        <button class="tab-btn" id="resubmitted-tab" onclick="switchTab('resubmitted')" style="background: none; border: none; padding: 0.75rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition); display: flex; align-items: center; gap: 0.5rem;">
+            <i class="ri-refresh-line"></i>Resubmitted
+            <span class="tab-badge" id="resubmitted-badge" style="background: #d68910; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; min-width: 20px; text-align: center;">0</span>
+        </button>
         <button class="tab-btn" id="approved-tab" onclick="switchTab('approved')" style="background: none; border: none; padding: 0.75rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition); display: flex; align-items: center; gap: 0.5rem;">
             <i class="ri-checkbox-circle-line"></i>Approved
             <span class="tab-badge" id="approved-badge" style="background: var(--sage); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; min-width: 20px; text-align: center;">0</span>
@@ -119,6 +123,32 @@
                 </tr>
             </thead>
             <tbody id="pendingTableBody">
+                <tr>
+                    <td colspan="7" class="text-center py-4">
+                        <div class="loading"><div class="spinner"></div> Loading applications...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Applications Tables - Resubmitted -->
+<div id="resubmitted-table" class="table-section" style="display: none;">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Applicant</th>
+                    <th>Store Name</th>
+                    <th>Contact</th>
+                    <th>Resubmitted</th>
+                    <th>Documents</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="resubmittedTableBody">
                 <tr>
                     <td colspan="7" class="text-center py-4">
                         <div class="loading"><div class="spinner"></div> Loading applications...</div>
@@ -835,11 +865,13 @@
     
     function updateTabBadges() {
         const pending = currentApplications.filter(app => app.status === 'pending').length;
+        const resubmitted = currentApplications.filter(app => app.status === 'resubmitted').length;
         const approved = currentApplications.filter(app => app.status === 'approved').length;
         const rejected = currentApplications.filter(app => app.status === 'rejected').length;
         const total = currentApplications.length;
         
         document.getElementById('pending-badge').textContent = pending;
+        document.getElementById('resubmitted-badge').textContent = resubmitted;
         document.getElementById('approved-badge').textContent = approved;
         document.getElementById('rejected-badge').textContent = rejected;
         document.getElementById('all-badge').textContent = total;
@@ -862,7 +894,7 @@
     
     function updateStats() {
         const total = currentApplications.length;
-        const pending = currentApplications.filter(app => app.status === 'pending').length;
+        const pending = currentApplications.filter(app => app.status === 'pending' || app.status === 'resubmitted').length;
         const approved = currentApplications.filter(app => app.status === 'approved').length;
         const rejected = currentApplications.filter(app => app.status === 'rejected').length;
         
@@ -874,6 +906,7 @@
     
     function renderTables() {
         renderPendingTable();
+        renderResubmittedTable();
         renderApprovedTable();
         renderRejectedTable();
         renderAllTable();
@@ -894,6 +927,51 @@
                 <td>
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <div class="avatar" style="background: linear-gradient(135deg, var(--dusty-rose), var(--deep-rose)); color: white;">
+                            ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span style="font-weight: 500;">${app.store_name}</span></td>
+                <td>${app.phone || 'N/A'}</td>
+                <td>${app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : 'N/A'}</td>
+                <td>
+                    <button class="btn btn-outline btn-sm" onclick="viewDocuments(${app.id})" style="padding: 4px 10px;">
+                        <i class="ri-file-list-line"></i> View
+                    </button>
+                </td>
+                <td>
+                    <div class="action-btn-group">
+                        <button class="btn btn-icon btn-sm" onclick="openReviewModal(${app.id})" title="Review" style="background: var(--sage); color: white; width: 32px; height: 32px;">
+                            <i class="ri-check-line"></i>
+                        </button>
+                        <button class="btn btn-icon btn-sm btn-outline" onclick="viewApplication(${app.id})" title="View Details" style="width: 32px; height: 32px;">
+                            <i class="ri-eye-line"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function renderResubmittedTable() {
+        const tbody = document.getElementById('resubmittedTableBody');
+        const resubmittedApps = currentApplications.filter(app => app.status === 'resubmitted');
+
+        if (resubmittedApps.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="empty-state"><i class="ri-inbox-line empty-state-icon"></i><p>No resubmitted applications</p></div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = resubmittedApps.map(app => `
+            <tr>
+                <td><span style="font-weight: 600;">#${app.id}</span></td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div class="avatar" style="background: linear-gradient(135deg, #d68910, #f0b429); color: white;">
                             ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
                         </div>
                         <div>
@@ -1029,6 +1107,9 @@
             } else if (app.status === 'rejected') {
                 statusClass = 'status-rejected';
                 statusBg = '#c0392b';
+            } else if (app.status === 'resubmitted') {
+                statusClass = 'status-pending';
+                statusBg = '#d68910';
             } else {
                 statusClass = 'status-pending';
                 statusBg = '#f0b429';
@@ -1069,6 +1150,7 @@
         let tbodyId = '';
         switch(currentTab) {
             case 'pending': tbodyId = 'pendingTableBody'; break;
+            case 'resubmitted': tbodyId = 'resubmittedTableBody'; break;
             case 'approved': tbodyId = 'approvedTableBody'; break;
             case 'rejected': tbodyId = 'rejectedTableBody'; break;
             case 'all': tbodyId = 'allTableBody'; break;

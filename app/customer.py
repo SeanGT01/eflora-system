@@ -1,7 +1,9 @@
 # app/customer.py
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, ProductRating
+from collections import defaultdict
+
+from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, ProductRating, StoreRating
 from app.extensions import db
 from sqlalchemy.orm import joinedload
 from functools import wraps
@@ -480,21 +482,39 @@ def get_orders():
             page=page, per_page=20, error_out=False
         )
 
+        page_order_ids = [o.id for o in orders.items]
+        rated_by_order = defaultdict(set)
+        store_rated_ids = set()
+        if page_order_ids:
+            for pr in ProductRating.query.filter(ProductRating.order_id.in_(page_order_ids)).all():
+                if pr.order_item_id is not None:
+                    rated_by_order[pr.order_id].add(pr.order_item_id)
+            store_rated_ids = {
+                r.order_id for r in StoreRating.query.filter(StoreRating.order_id.in_(page_order_ids)).all()
+            }
+
         result = []
         for o in orders.items:
             d = o.to_dict()
-            # Attach order items with product info
             items = OrderItem.query.filter_by(order_id=o.id).all()
             d['items'] = [i.to_dict() for i in items]
-            # Attach store name
             if o.store_id:
                 store = Store.query.get(o.store_id)
                 d['store_name'] = store.name if store else None
-            # Attach rider name if assigned
             if o.rider_id:
                 rider = Rider.query.get(o.rider_id)
                 if rider and rider.user:
                     d['rider_name'] = rider.user.full_name
+            n_items = len(items)
+            if o.status in ('delivered', 'completed'):
+                rid = rated_by_order.get(o.id, set())
+                products_ok = len(rid) >= n_items if n_items else True
+                sr_ok = o.id in store_rated_ids
+                d['store_rated'] = sr_ok
+                d['all_rated'] = products_ok and sr_ok
+            else:
+                d['store_rated'] = True
+                d['all_rated'] = True
             result.append(d)
 
         print(f"✅ Found {len(result)} orders")
@@ -555,9 +575,16 @@ def get_order_ratings(order_id):
             return jsonify({'error': 'Order not found'}), 404
 
         ratings = ProductRating.query.filter_by(order_id=order_id, customer_id=user_id).all()
-        ratings_map = {str(r.order_item_id): r.to_dict() for r in ratings}
+        ratings_map = {
+            str(r.order_item_id): r.to_dict() for r in ratings if r.order_item_id is not None
+        }
+        store_row = StoreRating.query.filter_by(order_id=order_id, customer_id=user_id).first()
 
-        return jsonify({'success': True, 'ratings': ratings_map})
+        return jsonify({
+            'success': True,
+            'ratings': ratings_map,
+            'store_rating': store_row.to_dict() if store_row else None,
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -572,17 +599,36 @@ def submit_order_ratings(order_id):
         if not order:
             return jsonify({'error': 'Order not found'}), 404
 
-        if order.status != 'delivered':
-            return jsonify({'error': 'Can only rate delivered orders'}), 400
+        if order.status not in ('delivered', 'completed'):
+            return jsonify({'error': 'Can only rate delivered or completed orders'}), 400
 
         data = request.get_json() or {}
-        ratings_data = data.get('ratings', [])
-
-        if not ratings_data:
-            return jsonify({'error': 'No ratings provided'}), 400
+        ratings_data = data.get('ratings') or []
+        store_payload = data.get('store_rating')
 
         created = 0
-        updated = 0
+        created_store = False
+
+        if store_payload and isinstance(store_payload, dict):
+            rv = store_payload.get('rating')
+            try:
+                rv = int(rv) if rv is not None else None
+            except (TypeError, ValueError):
+                rv = None
+            if rv is not None and 1 <= rv <= 5:
+                existing_sr = StoreRating.query.filter_by(order_id=order_id, customer_id=user_id).first()
+                if not existing_sr:
+                    comment_s = (store_payload.get('comment') or '').strip() if store_payload.get('comment') else None
+                    db.session.add(
+                        StoreRating(
+                            customer_id=user_id,
+                            store_id=order.store_id,
+                            order_id=order_id,
+                            rating=rv,
+                            comment=comment_s or None,
+                        )
+                    )
+                    created_store = True
 
         for r in ratings_data:
             order_item_id = r.get('order_item_id')
@@ -598,7 +644,6 @@ def submit_order_ratings(order_id):
             if not order_item:
                 continue
 
-            # Skip if already rated (ratings are final)
             existing = ProductRating.query.filter_by(
                 customer_id=user_id, order_item_id=order_item_id
             ).first()
@@ -618,12 +663,16 @@ def submit_order_ratings(order_id):
             db.session.add(new_rating)
             created += 1
 
+        if not ratings_data and not created_store:
+            return jsonify({'error': 'No ratings provided'}), 400
+
         db.session.commit()
 
         return jsonify({
             'success': True,
-            'message': f'{created} rating(s) submitted',
+            'message': f'{created} product rating(s) submitted' + ('; store rated' if created_store else ''),
             'created': created,
+            'store_created': created_store,
         })
     except Exception as e:
         db.session.rollback()
@@ -768,13 +817,20 @@ def submit_seller_application():
     if errors:
         return jsonify({'error': 'Validation failed', 'field_errors': errors}), 400
 
-    # Check for existing pending application
-    existing = SellerApplication.query.filter_by(user_id=user_id, status='pending').first()
+    # Check for existing in-review application
+    existing = SellerApplication.query.filter(
+        SellerApplication.user_id == user_id,
+        SellerApplication.status.in_(['pending', 'resubmitted'])
+    ).first()
     if existing:
         return jsonify({'error': 'You already have a pending application'}), 400
 
     application = SellerApplication(
         user_id=user_id,
+        applicant_full_name=user.full_name,
+        applicant_email=user.email,
+        applicant_phone=user.phone,
+        application_source='customer_account',
         store_name=store_name,
         store_description=store_description,
         store_logo_url=store_logo_url,
@@ -848,8 +904,8 @@ def resubmit_seller_application():
     if not updated_fields:
         return jsonify({'error': 'No rejected fields were updated'}), 400
 
-    # Reset to pending for re-review
-    application.status = 'pending'
+    # Mark explicitly as resubmitted for admin visibility
+    application.status = 'resubmitted'
     application.admin_notes = None
     application.rejection_details = None
     application.reviewed_at = None

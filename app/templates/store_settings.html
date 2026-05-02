@@ -14,6 +14,8 @@
 <!-- Mapbox GL Draw for drawing delivery zones -->
 <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js'></script>
 <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css' />
+<!-- Turf: point/polygon vs province boundary checks -->
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 
 <style>
     /* QR visibility handled by JS + scoped QR slot styles below */
@@ -2060,6 +2062,30 @@
     box-shadow:0 12px 30px rgba(44,37,32,.08);
     background:linear-gradient(180deg,#fffdfa 0%, #fff 100%);
 }
+.settings-tabs{
+    display:flex;
+    gap:.6rem;
+    flex-wrap:wrap;
+    margin:0 0 1rem;
+}
+.settings-tab-btn{
+    border:1px solid rgba(212,120,138,.28);
+    background:#fff;
+    color:var(--charcoal);
+    border-radius:999px;
+    padding:.45rem .9rem;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+}
+.settings-tab-btn.is-active{
+    background:var(--deep-rose);
+    color:#fff;
+    border-color:var(--deep-rose);
+}
+.settings-page-grid.tabbed{
+    display:block;
+}
 .card-header{
     padding:1rem 1.1rem;
     border-bottom:1px solid rgba(212,120,138,.16);
@@ -2138,12 +2164,23 @@
             <i class="ri-store-2-line"></i> {{ store.name }}
         </div>
     </div>
+    <div class="settings-tabs" id="settings-tabs">
+        <button type="button" class="settings-tab-btn is-active" data-pane="pane-basic-info">
+            <i class="ri-store-2-line"></i> Basic Information
+        </button>
+        <button type="button" class="settings-tab-btn" data-pane="pane-delivery-settings">
+            <i class="ri-truck-line"></i> Delivery Settings
+        </button>
+        <button type="button" class="settings-tab-btn" data-pane="pane-payment-options">
+            <i class="ri-smartphone-line"></i> Payment Options
+        </button>
+    </div>
     
-    <div class="settings-grid settings-page-grid">
+    <div class="settings-grid settings-page-grid tabbed">
         <!-- Left Column - Basic Info & Map -->
         <div>
             <!-- Basic Information Card -->
-            <div class="settings-card">
+            <div class="settings-card" id="pane-basic-info">
                 <div class="card-header">
                     <div class="card-header-left">
                         <div class="card-header-icon"><i class="ri-store-2-line"></i></div>
@@ -2205,7 +2242,9 @@
                                             <div class="form-group" style="margin-bottom: 0;">
                                                 <label class="form-label">Contact Number</label>
                                                 <input type="tel" class="form-control" id="contact-number" 
-                                                       value="{{ store.contact_number or '' }}" placeholder="+63 900 000 0000">
+                                                       value="{{ store.contact_number or '' }}" placeholder="0XXXXXXXXXX"
+                                                       maxlength="11" inputmode="numeric" pattern="0[0-9]{10}"
+                                                       autocomplete="tel">
                                             </div>
                                             
                                             <!-- Status -->
@@ -2410,7 +2449,7 @@
         <!-- Right Column - Delivery & Settings -->
         <div>
             <!-- Delivery Settings Card -->
-            <div class="settings-card">
+            <div class="settings-card" id="pane-delivery-settings" style="display:none;">
                 <div class="card-header">
                     <div class="card-header-left">
                         <div class="card-header-icon"><i class="ri-truck-line"></i></div>
@@ -2723,7 +2762,7 @@
             </div>
             
             <!-- GCash Payment Settings Card -->
-            <div class="settings-card">
+            <div class="settings-card" id="pane-payment-options" style="display:none;">
                 <div class="card-header">
                     <div class="card-header-left">
                         <div class="card-header-icon"><i class="ri-smartphone-line"></i></div>
@@ -3105,17 +3144,160 @@
         }
     };
 
+    // ===== PHILIPPINE PHONE NUMBER VALIDATION =====
+    function validatePhilippinePhoneNumber(phoneNumber) {
+        if (!phoneNumber || phoneNumber.trim() === '') {
+            return { valid: true, message: '' }; // Optional field
+        }
+        const digits = phoneNumber.replace(/\D/g, '');
+        if (digits.length !== 11 || !/^0\d{10}$/.test(digits)) {
+            return {
+                valid: false,
+                message: 'Enter exactly 11 digits starting with 0 (e.g. 09XXXXXXXXX)',
+            };
+        }
+        return { valid: true, message: '' };
+    }
+
+    // ===== AUTO-DETECT AND PREFILL ADDRESS FOR STORE =====
+    async function autoDetectStoreLocation() {
+        if (!navigator.geolocation) {
+            showToast('Location detection is not supported on this browser', 'error');
+            return;
+        }
+
+        const municipalitySelect = document.getElementById('municipality');
+        const barangaySelect = document.getElementById('barangay');
+        const streetInput = document.getElementById('street-address');
+
+        const getCurrentPosition = () =>
+            new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0,
+                });
+            });
+
+        try {
+            showToast('Detecting your store location...', 'info');
+            const pos = await getCurrentPosition();
+            const lat = Number(pos.coords.latitude);
+            const lng = Number(pos.coords.longitude);
+
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                throw new Error('Invalid location coordinates');
+            }
+
+            await loadLagunaProvinceBoundaryFromApi();
+            if (!isPointInLaguna(lng, lat)) {
+                showToast('Your current location is outside Laguna province. Select municipality and barangay, then pin on the map.', 'error');
+                return;
+            }
+
+            // Update the map marker to detected location
+            if (marker && map) {
+                marker.setLngLat([lng, lat]);
+                map.flyTo({ center: [lng, lat], zoom: 17 });
+            }
+            __storeLastValidPin = { lng, lat };
+
+            currentLocation = { lat, lng, address: '' };
+
+            const token = mapboxToken || window.MAPBOX_TOKEN || mapboxgl.accessToken;
+            if (!token) {
+                showToast('Mapbox token missing. Please pin manually on the map.', 'error');
+                return;
+            }
+
+            // Reverse geocode with Mapbox
+            const reverseUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&types=address,poi,locality,place&country=ph&limit=1`;
+            const reverseResp = await fetch(reverseUrl);
+            const reverseData = await reverseResp.json().catch(() => ({}));
+            const feature = reverseData?.features?.[0];
+
+            if (!feature) {
+                showToast('Location found. Please complete the address fields manually.', 'info');
+                return;
+            }
+
+            // Helper to normalize text for matching
+            const normalizeForMatch = (s) => String(s || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/\b(barangay|brgy\.?|city of|city|municipality of|municipality)\b/gi, ' ')
+                .replace(/[^a-z0-9\s]/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+
+            const contextText = normalizeForMatch(
+                [feature.text, feature.place_name, ...(feature.context || []).map(c => c.text || '')].join(', ')
+            );
+
+            // Auto-match municipality
+            const muniOptions = Array.from(municipalitySelect.options || []).map(o => o.value).filter(Boolean);
+            const matchedMunicipality = muniOptions.find(m => contextText.includes(normalizeForMatch(m)));
+
+            if (matchedMunicipality) {
+                municipalitySelect.value = matchedMunicipality;
+                // Trigger change event to load barangays
+                await new Promise(resolve => {
+                    municipalitySelect.dispatchEvent(new Event('change'));
+                    setTimeout(resolve, 500);
+                });
+            }
+
+            // Auto-fill street address
+            const streetCandidate = (feature.text || '').trim();
+            if (streetInput && streetCandidate) {
+                streetInput.value = streetCandidate;
+            }
+
+            // Auto-match barangay
+            if (matchedMunicipality && !barangaySelect.disabled) {
+                const brgyOptions = Array.from(barangaySelect.options || []).map(o => o.value).filter(Boolean);
+                let matchedBarangay = brgyOptions.find(b => contextText.includes(normalizeForMatch(b)));
+
+                // Fallback: Try neighborhood/locality context
+                if (!matchedBarangay) {
+                    const fallbackUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&types=neighborhood,locality,address&country=ph&limit=5`;
+                    const fbResp = await fetch(fallbackUrl);
+                    const fbData = await fbResp.json().catch(() => ({}));
+                    const fbText = normalizeForMatch((fbData?.features || [])
+                        .map(f => [f.text, f.place_name].filter(Boolean).join(', '))
+                        .join(' | '));
+                    matchedBarangay = brgyOptions.find(b => fbText.includes(normalizeForMatch(b)));
+                }
+
+                if (matchedBarangay) {
+                    barangaySelect.value = matchedBarangay;
+                }
+            }
+
+            showToast('Store location detected. Please verify before saving.', 'success');
+        } catch (err) {
+            debug.warn('Auto-detect location failed:', err);
+            showToast('Unable to auto-detect location. You can pin manually on the map.', 'error');
+        }
+    }
+
     // ===== SHARED VARIABLES (outer scope so save handler + toggle can access) =====
     let map, marker, geocoder, draw;
     let currentLocation = null;
     let locationChanged = false;
     let mapboxToken = null;
+    let locationAutoDetectTriggered = false; // Track if auto-detect was already triggered
+    let __storePinAtDragStart = null;
+    let __storeLastValidPin = null;
 
-    // ===== LAGUNA BOUNDARY DEFINITIONS =====
-    const LAGUNA_BOUNDARY = {
+    // ===== LAGUNA PROVINCE BOUNDARY (from DB via API; fallback rectangle) =====
+    let lagunaProvinceFeature = null;
+
+    const LAGUNA_BOUNDARY_FALLBACK = {
         "type": "Polygon",
         "coordinates": [[
-            [121.0249, 14.0861], // Calamba area
+            [121.0249, 14.0861],
             [121.1542, 14.0861],
             [121.2835, 14.0861],
             [121.4128, 14.0861],
@@ -3129,11 +3311,10 @@
             [121.0249, 14.4740],
             [121.0249, 14.3447],
             [121.0249, 14.2154],
-            [121.0249, 14.0861]  // Back to start
+            [121.0249, 14.0861]
         ]]
     };
 
-    // Simple bounding box for quick checks
     const LAGUNA_BOUNDS = {
         minLng: 121.0,
         maxLng: 121.6,
@@ -3141,35 +3322,72 @@
         maxLat: 14.5
     };
 
-    // Check if a point is inside Laguna boundary
+    async function loadLagunaProvinceBoundaryFromApi() {
+        try {
+            const res = await fetch('/api/municipality/province-boundary?province=' + encodeURIComponent('Laguna'));
+            const data = await res.json();
+            if (data.success && data.geometry) {
+                lagunaProvinceFeature = {
+                    type: 'Feature',
+                    properties: { title: 'Laguna Province' },
+                    geometry: data.geometry
+                };
+                debug.success('Laguna province boundary loaded from database');
+                return true;
+            }
+        } catch (e) {
+            debug.warn('Could not load merged Laguna boundary:', e);
+        }
+        lagunaProvinceFeature = null;
+        debug.warn('Using fallback Laguna rectangle for map overlay');
+        return false;
+    }
+
     function isPointInLaguna(lng, lat) {
-        return lng >= LAGUNA_BOUNDS.minLng && lng <= LAGUNA_BOUNDS.maxLng && 
+        if (lagunaProvinceFeature && typeof turf !== 'undefined') {
+            try {
+                return turf.booleanPointInPolygon(turf.point([lng, lat]), lagunaProvinceFeature);
+            } catch (e) {
+                debug.warn('isPointInLaguna turf error:', e);
+            }
+        }
+        return lng >= LAGUNA_BOUNDS.minLng && lng <= LAGUNA_BOUNDS.maxLng &&
                lat >= LAGUNA_BOUNDS.minLat && lat <= LAGUNA_BOUNDS.maxLat;
     }
 
-    // Check if entire polygon is within Laguna
     function isPolygonInLaguna(coordinates) {
-        // Handle different GeoJSON structures
-        if (Array.isArray(coordinates[0])) {
-            if (Array.isArray(coordinates[0][0])) {
-                // It's a polygon with rings
-                for (let ring of coordinates) {
-                    for (let point of ring) {
-                        if (!isPointInLaguna(point[0], point[1])) {
-                            return false;
-                        }
-                    }
-                }
-            } else {
-                // It's a simple polygon
-                for (let point of coordinates) {
-                    if (!isPointInLaguna(point[0], point[1])) {
-                        return false;
-                    }
-                }
+        if (!coordinates || !coordinates.length) return true;
+        if (lagunaProvinceFeature && typeof turf !== 'undefined') {
+            try {
+                const poly = turf.polygon(coordinates);
+                return turf.booleanWithin(poly, lagunaProvinceFeature);
+            } catch (e) {
+                debug.warn('isPolygonInLaguna turf error:', e);
             }
         }
+        const outer = coordinates[0];
+        if (!Array.isArray(outer)) return true;
+        for (let i = 0; i < outer.length; i++) {
+            const p = outer[i];
+            if (!Array.isArray(p) || p.length < 2) continue;
+            if (!isPointInLaguna(p[0], p[1])) return false;
+        }
         return true;
+    }
+
+    function getLagunaMapCenter() {
+        if (lagunaProvinceFeature && typeof turf !== 'undefined') {
+            try {
+                const c = turf.centroid(lagunaProvinceFeature);
+                if (c && c.geometry && c.geometry.coordinates) {
+                    return { lng: c.geometry.coordinates[0], lat: c.geometry.coordinates[1] };
+                }
+            } catch (e) { /* ignore */ }
+        }
+        return {
+            lng: (LAGUNA_BOUNDS.minLng + LAGUNA_BOUNDS.maxLng) / 2,
+            lat: (LAGUNA_BOUNDS.minLat + LAGUNA_BOUNDS.maxLat) / 2
+        };
     }
 
     // Flash boundary effect when user tries to draw outside
@@ -3985,14 +4203,55 @@
     renderScheduleEntries();
     
     // Edit button
-    document.getElementById('edit-basic-info')?.addEventListener('click', () => {
+    document.getElementById('edit-basic-info')?.addEventListener('click', async () => {
         toggleBasicInfoSection(true);
+        
+        // Auto-detect location on first edit (when municipality is not yet selected)
+        // and only if we haven't already triggered it
+        const municipality = document.getElementById('municipality').value;
+        if (!municipality && !locationAutoDetectTriggered && map && marker) {
+            locationAutoDetectTriggered = true;
+            
+            // Wait a bit for the section to be fully visible, then trigger auto-detect
+            setTimeout(async () => {
+                await autoDetectStoreLocation();
+            }, 300);
+        }
     });
     
     // Cancel button
     document.getElementById('cancel-basic-info')?.addEventListener('click', () => {
         toggleBasicInfoSection(false);
     });
+    
+    // Real-time validation for contact number
+    const contactNumberInput = document.getElementById('contact-number');
+    if (contactNumberInput) {
+        contactNumberInput.addEventListener('input', () => {
+            const digits = contactNumberInput.value.replace(/\D/g, '').slice(0, 11);
+            if (contactNumberInput.value !== digits) {
+                contactNumberInput.value = digits;
+            }
+        });
+        contactNumberInput.addEventListener('blur', () => {
+            const value = contactNumberInput.value.trim();
+            if (value === '') return; // Skip validation if empty
+            
+            const validation = validatePhilippinePhoneNumber(value);
+            if (!validation.valid) {
+                contactNumberInput.style.borderColor = '#e74c3c';
+                contactNumberInput.title = validation.message;
+            } else {
+                contactNumberInput.style.borderColor = '';
+                contactNumberInput.title = '';
+            }
+        });
+        
+        contactNumberInput.addEventListener('focus', () => {
+            contactNumberInput.style.borderColor = '';
+            contactNumberInput.title = '';
+        });
+    }
     
     // Save button
     document.getElementById('save-basic-info')?.addEventListener('click', async () => {
@@ -4012,6 +4271,15 @@
             
             if (!storeName || !municipality || !barangay) {
                 showToast('Please fill in all required fields', 'error');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                return;
+            }
+            
+            // Validate Philippine phone number if provided
+            const phoneValidation = validatePhilippinePhoneNumber(contactNumber);
+            if (!phoneValidation.valid) {
+                showToast(phoneValidation.message, 'error');
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 return;
@@ -4760,6 +5028,7 @@ async function handleQRFile(file, index) {
         }
         
         try {
+            await loadLagunaProvinceBoundaryFromApi();
             // Build search query: "Barangay, Municipality, Laguna, Philippines"
             const query = `${barangay}, ${municipality}, Laguna, Philippines`;
             debug.log('Geocoding query:', query);
@@ -4774,6 +5043,13 @@ async function handleQRFile(file, index) {
             if (data.features && data.features.length > 0) {
                 const coordinates = data.features[0].geometry.coordinates;
                 const place_name = data.features[0].place_name;
+                const glng = coordinates[0];
+                const glat = coordinates[1];
+
+                if (!isPointInLaguna(glng, glat)) {
+                    showToast('Geocoded location is outside Laguna. Please pin your store on the map.', 'error');
+                    return;
+                }
                 
                 debug.success('Location found:', { coordinates, place_name });
                 
@@ -4781,6 +5057,7 @@ async function handleQRFile(file, index) {
                 if (marker && map) {
                     debug.log('Updating marker and map...');
                     marker.setLngLat(coordinates);
+                    __storeLastValidPin = { lng: glng, lat: glat };
                     map.flyTo({ 
                         center: coordinates, 
                         zoom: 15,
@@ -4789,8 +5066,8 @@ async function handleQRFile(file, index) {
                     
                     // Update location display
                     updateLocationDisplay({
-                        lat: coordinates[1],
-                        lng: coordinates[0],
+                        lat: glat,
+                        lng: glng,
                         address: place_name,
                         place_id: ''
                     });
@@ -4944,8 +5221,34 @@ async function handleQRFile(file, index) {
     }
 
     // Main initialization when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
         debug.log('Page loaded, initializing...');
+        await loadLagunaProvinceBoundaryFromApi();
+
+        // Top-level settings panes/tabs (UI-only; backend endpoints unchanged)
+        const tabButtons = Array.from(document.querySelectorAll('.settings-tab-btn'));
+        const panes = ['pane-basic-info', 'pane-delivery-settings', 'pane-payment-options']
+            .map(id => document.getElementById(id))
+            .filter(Boolean);
+
+        const showPane = (paneId) => {
+            panes.forEach((pane) => {
+                pane.style.display = pane.id === paneId ? 'block' : 'none';
+            });
+            tabButtons.forEach((btn) => {
+                btn.classList.toggle('is-active', btn.dataset.pane === paneId);
+            });
+            if (paneId === 'pane-basic-info') {
+                setTimeout(() => {
+                    if (typeof map !== 'undefined' && map) map.resize();
+                }, 120);
+            }
+        };
+
+        tabButtons.forEach((btn) => {
+            btn.addEventListener('click', () => showPane(btn.dataset.pane));
+        });
+        showPane('pane-basic-info');
 
         // Keep all cards open, but lock inputs until Edit is clicked.
         toggleBasicInfoSection(false);
@@ -5009,6 +5312,12 @@ async function handleQRFile(file, index) {
             address: storeData.formatted_address || '',
             place_id: storeData.place_id || ''
         };
+        if (!isPointInLaguna(currentLocation.lng, currentLocation.lat)) {
+            const c = getLagunaMapCenter();
+            showToast('Saved store map pin was outside Laguna. Centered in Laguna—please set your exact location.', 'warning');
+            currentLocation.lat = c.lat;
+            currentLocation.lng = c.lng;
+        }
         
         // map, marker, geocoder, draw, locationChanged declared at outer scope
 
@@ -5055,11 +5364,23 @@ async function handleQRFile(file, index) {
                     debug.success('Map loaded successfully');
                     
                     // ===== ADD LAGUNA BOUNDARY OVERLAY (always visible) =====
+                    const lagunaBoundaryFeature = lagunaProvinceFeature || {
+                        type: 'Feature',
+                        properties: { title: 'Laguna Province' },
+                        geometry: LAGUNA_BOUNDARY_FALLBACK
+                    };
                     map.addSource('laguna-boundary', {
                         'type': 'geojson',
-                        'data': {
-                            'type': 'Feature',
-                            'geometry': LAGUNA_BOUNDARY
+                        'data': lagunaBoundaryFeature
+                    });
+
+                    map.addLayer({
+                        'id': 'laguna-boundary-fill',
+                        'type': 'fill',
+                        'source': 'laguna-boundary',
+                        'paint': {
+                            'fill-color': '#DC2626',
+                            'fill-opacity': 0.1
                         }
                     });
 
@@ -5074,6 +5395,18 @@ async function handleQRFile(file, index) {
                         }
                     });
 
+                    let labelPoint = [121.5, 14.2];
+                    try {
+                        if (typeof turf !== 'undefined' && lagunaBoundaryFeature) {
+                            const c = turf.centroid(lagunaBoundaryFeature);
+                            if (c && c.geometry && c.geometry.coordinates) {
+                                labelPoint = c.geometry.coordinates;
+                            }
+                        }
+                    } catch (e) {
+                        debug.warn('Laguna label centroid:', e);
+                    }
+
                     // Add label source for Laguna
                     map.addSource('laguna-label-src', {
                         'type': 'geojson',
@@ -5086,7 +5419,7 @@ async function handleQRFile(file, index) {
                                 },
                                 'geometry': {
                                     'type': 'Point',
-                                    'coordinates': [121.5, 14.2]
+                                    'coordinates': labelPoint
                                 }
                             }]
                         }
@@ -5116,9 +5449,22 @@ async function handleQRFile(file, index) {
                     })
                         .setLngLat([currentLocation.lng, currentLocation.lat])
                         .addTo(map);
-                    
+                    __storeLastValidPin = { lng: currentLocation.lng, lat: currentLocation.lat };
+
+                    marker.on('dragstart', function() {
+                        __storePinAtDragStart = marker.getLngLat();
+                    });
+
                     marker.on('dragend', function() {
                         const lngLat = marker.getLngLat();
+                        if (!isPointInLaguna(lngLat.lng, lngLat.lat)) {
+                            showToast('Pin must stay inside Laguna province.', 'error');
+                            const revert = __storePinAtDragStart ||
+                                (__storeLastValidPin ? { lng: __storeLastValidPin.lng, lat: __storeLastValidPin.lat } : null);
+                            if (revert) marker.setLngLat(revert);
+                            return;
+                        }
+                        __storeLastValidPin = { lng: lngLat.lng, lat: lngLat.lat };
                         debug.log('Marker dragged to:', lngLat);
                         reverseGeocode(lngLat);
                     });
@@ -5231,9 +5577,16 @@ async function handleQRFile(file, index) {
                             
                             geocoder.on('result', (e) => {
                                 const coordinates = e.result.geometry.coordinates;
+                                const clng = coordinates[0];
+                                const clat = coordinates[1];
+                                if (!isPointInLaguna(clng, clat)) {
+                                    showToast('Search result is outside Laguna province. Choose an address in Laguna.', 'error');
+                                    return;
+                                }
                                 marker.setLngLat(coordinates);
+                                __storeLastValidPin = { lng: clng, lat: clat };
                                 map.flyTo({ center: coordinates, zoom: 17 });
-                                reverseGeocode({ lat: coordinates[1], lng: coordinates[0] });
+                                reverseGeocode({ lat: clat, lng: clng });
                             });
                         } catch (e) {
                             debug.error('Error initializing geocoder:', e);
@@ -5242,10 +5595,15 @@ async function handleQRFile(file, index) {
                 });
                 
                 map.on('click', (e) => {
-                    if (marker) {
-                        marker.setLngLat(e.lngLat);
-                        reverseGeocode(e.lngLat);
+                    if (!marker) return;
+                    const ll = e.lngLat;
+                    if (!isPointInLaguna(ll.lng, ll.lat)) {
+                        showToast('You can only pin a location inside Laguna province.', 'error');
+                        return;
                     }
+                    marker.setLngLat(ll);
+                    __storeLastValidPin = { lng: ll.lng, lat: ll.lat };
+                    reverseGeocode(ll);
                 });
                 
             } catch (error) {
