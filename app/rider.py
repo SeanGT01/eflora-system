@@ -384,12 +384,16 @@ def get_rider_stats():
         Order.updated_at >= month_ago
     ).count()
     
-    # Average delivery time (for delivered orders)
+    # Average time from rider accepting the order (confirmed_at) until delivered_at.
+    # Using created_at→updated_at was wrong: that includes payment wait, seller prep,
+    # and any later row updates — not the rider's trip.
     avg_delivery_time = db.session.query(
-        func.avg(func.extract('epoch', Order.updated_at - Order.created_at) / 60)
+        func.avg(func.extract('epoch', Order.delivered_at - Order.confirmed_at) / 60.0)
     ).filter(
         Order.rider_id == rider.id,
-        Order.status == 'delivered'
+        Order.status == 'delivered',
+        Order.delivered_at.isnot(None),
+        Order.confirmed_at.isnot(None),
     ).scalar()
     
     # Total deliveries
