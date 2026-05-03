@@ -782,7 +782,7 @@
                 <label class="form-label">Email Address</label>
                 <div class="input-wrap">
                     <i class="ri-mail-line input-icon"></i>
-                    <input class="form-control" type="email" name="email"
+                    <input class="form-control" type="email" name="email" id="loginEmail"
                            placeholder="your@email.com" required autofocus
                            value="{{ form_data.email if form_data else '' }}">
                 </div>
@@ -841,6 +841,16 @@
 {% endif %}
 
 <script>
+    /* ── Email: accept uppercase, normalize to lowercase (match register) ── */
+    (function () {
+        const el = document.getElementById('loginEmail');
+        if (!el) return;
+        el.addEventListener('input', function () {
+            const lo = (el.value || '').toLowerCase();
+            if (el.value !== lo) el.value = lo;
+        });
+    })();
+
     /* ── Password toggle ── */
     document.getElementById('loginPwToggle').addEventListener('click', function() {
         const input = document.getElementById('loginPassword');
@@ -856,6 +866,8 @@
 
     /* ── Submit loading state ── */
     document.getElementById('loginForm').addEventListener('submit', function() {
+        const em = document.getElementById('loginEmail');
+        if (em) em.value = (em.value || '').trim().toLowerCase();
         const btn = document.getElementById('loginSubmit');
         btn.innerHTML = '<i class="spin ri-loader-4-line"></i> Signing in…';
         btn.disabled  = true;
