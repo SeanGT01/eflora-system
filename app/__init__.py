@@ -135,7 +135,8 @@ def create_app(config_class='default'):
             print(f"   Gmail requires sender to match authenticated account!")
             print(f"   SOLUTION: Set MAIL_DEFAULT_SENDER={mail_user}")
 
-    _ensure_order_fulfillment_columns()
+    with app.app_context():
+        _ensure_order_fulfillment_columns()
     
     # ====================================================
     # INITIALIZE CLOUDINARY
