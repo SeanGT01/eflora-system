@@ -5,55 +5,121 @@
 
 {% block extra_css %}
 <style>
-    /* ─── Landing atmosphere: soft color + glass ─── */
+    /* ─── Landing atmosphere: florals + stronger glass ─── */
     .landing-atmosphere {
         position: relative;
         isolation: isolate;
+        overflow: clip;
     }
 
-    .landing-atmosphere::before,
-    .landing-atmosphere::after {
-        content: '';
+    .landing-florals {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        overflow: hidden;
+    }
+
+    .landing-florals__bloom {
         position: absolute;
         border-radius: 50%;
-        pointer-events: none;
-        z-index: 0;
-        filter: blur(40px);
+        background-size: cover;
+        background-position: center;
+        opacity: 0.55;
+        filter: blur(1.5px) saturate(1.35);
+        mix-blend-mode: multiply;
+        will-change: transform;
+        animation: floralFloat 18s ease-in-out infinite;
     }
 
-    .landing-atmosphere::before {
-        width: min(52vw, 520px);
-        height: min(52vw, 520px);
-        top: -8rem;
-        right: -6rem;
-        background: radial-gradient(circle, rgba(242, 196, 206, 0.55) 0%, rgba(212, 120, 138, 0.18) 45%, transparent 70%);
+    .landing-florals__bloom::after {
+        content: '';
+        position: absolute;
+        inset: -8%;
+        border-radius: 50%;
+        background: inherit;
+        background-size: cover;
+        background-position: center;
+        filter: blur(28px) saturate(1.5);
+        opacity: 0.7;
+        z-index: -1;
     }
 
-    .landing-atmosphere::after {
-        width: min(46vw, 460px);
-        height: min(46vw, 460px);
-        top: 28rem;
-        left: -8rem;
-        background: radial-gradient(circle, rgba(122, 158, 126, 0.35) 0%, rgba(181, 68, 90, 0.12) 50%, transparent 72%);
+    .landing-florals__bloom--1 {
+        width: min(42vw, 420px);
+        height: min(42vw, 420px);
+        top: -4rem;
+        right: -5rem;
+        background-image: url('/static/images/category_images/fresh_flowers.png');
+        animation-delay: 0s;
     }
 
-    .landing-atmosphere > * {
-        position: relative;
+    .landing-florals__bloom--2 {
+        width: min(36vw, 340px);
+        height: min(36vw, 340px);
+        top: 22rem;
+        left: -6rem;
+        background-image: url('/static/images/category_images/bouquets.png');
+        animation-delay: -4s;
+        animation-duration: 22s;
+    }
+
+    .landing-florals__bloom--3 {
+        width: min(30vw, 280px);
+        height: min(30vw, 280px);
+        top: 58%;
+        right: -3rem;
+        background-image: url('/static/images/category_images/potted_plants.png');
+        animation-delay: -8s;
+        animation-duration: 20s;
+        opacity: 0.42;
+    }
+
+    .landing-florals__bloom--4 {
+        width: min(28vw, 260px);
+        height: min(28vw, 260px);
+        bottom: 12%;
+        left: 8%;
+        background-image: url('/static/images/category_images/succulents.png');
+        animation-delay: -12s;
+        animation-duration: 24s;
+        opacity: 0.4;
+    }
+
+    .landing-florals__bloom--5 {
+        width: min(24vw, 220px);
+        height: min(24vw, 220px);
+        top: 38%;
+        left: 42%;
+        background-image: url('/static/images/category_images/fresh_flowers.png');
+        animation-delay: -6s;
+        animation-duration: 26s;
+        opacity: 0.28;
+        filter: blur(4px) saturate(1.4);
+    }
+
+    .landing-florals__veil {
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(ellipse 80% 50% at 90% 5%, rgba(242, 196, 206, 0.35), transparent 55%),
+            radial-gradient(ellipse 70% 45% at 5% 35%, rgba(122, 158, 126, 0.22), transparent 50%),
+            radial-gradient(ellipse 60% 40% at 70% 70%, rgba(212, 120, 138, 0.18), transparent 55%),
+            linear-gradient(180deg, rgba(250, 246, 240, 0.45) 0%, rgba(250, 246, 240, 0.28) 40%, rgba(250, 246, 240, 0.5) 100%);
+        backdrop-filter: blur(22px) saturate(1.45);
+        -webkit-backdrop-filter: blur(22px) saturate(1.45);
         z-index: 1;
     }
 
-    .landing-atmosphere .featured-section::before {
-        content: '';
-        position: absolute;
-        width: min(40vw, 380px);
-        height: min(40vw, 380px);
-        right: -4rem;
-        top: 2rem;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(196, 113, 75, 0.16) 0%, transparent 70%);
-        pointer-events: none;
-        z-index: 0;
-        filter: blur(20px);
+    @keyframes floralFloat {
+        0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+        33% { transform: translate3d(12px, -16px, 0) rotate(3deg) scale(1.04); }
+        66% { transform: translate3d(-10px, 10px, 0) rotate(-2deg) scale(0.98); }
+    }
+
+    .landing-atmosphere > *:not(.landing-florals) {
+        position: relative;
+        z-index: 2;
     }
 
     .landing-atmosphere .featured-section {
@@ -61,13 +127,23 @@
     }
 
     .glass-panel {
-        background: rgba(255, 253, 249, 0.55);
-        border: 1px solid rgba(255, 255, 255, 0.55);
+        background: rgba(255, 253, 249, 0.38);
+        border: 1px solid rgba(255, 255, 255, 0.65);
         box-shadow:
-            0 8px 32px rgba(181, 68, 90, 0.06),
-            inset 0 1px 0 rgba(255, 255, 255, 0.65);
-        backdrop-filter: blur(16px) saturate(1.35);
-        -webkit-backdrop-filter: blur(16px) saturate(1.35);
+            0 10px 40px rgba(181, 68, 90, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(22px) saturate(1.5);
+        -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .landing-florals__bloom { animation: none; }
+    }
+
+    @media (max-width: 768px) {
+        .landing-florals__bloom--3,
+        .landing-florals__bloom--5 { display: none; }
+        .landing-florals__bloom { opacity: 0.38; }
     }
 
     /* ─── Hero ─── */
@@ -81,8 +157,20 @@
         grid-template-columns: 0.75fr 1.25fr;
         transition: background 0.7s ease;
         box-shadow:
-            0 20px 60px rgba(42, 35, 30, 0.14),
-            0 0 0 1px rgba(255, 255, 255, 0.2);
+            0 24px 64px rgba(42, 35, 30, 0.16),
+            0 0 0 1px rgba(255, 255, 255, 0.35),
+            inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+
+    .hero-section::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
+        background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 42%, rgba(242,196,206,0.08) 100%);
     }
 
     /* Left panel */
@@ -463,13 +551,13 @@
         margin-top: 0.65rem;
         padding: 0.6rem;
         border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.55);
-        background: rgba(255, 253, 249, 0.58);
-        backdrop-filter: blur(14px) saturate(1.3);
-        -webkit-backdrop-filter: blur(14px) saturate(1.3);
+        border: 1px solid rgba(255, 255, 255, 0.7);
+        background: rgba(255, 253, 249, 0.36);
+        backdrop-filter: blur(22px) saturate(1.55);
+        -webkit-backdrop-filter: blur(22px) saturate(1.55);
         box-shadow:
-            0 8px 28px rgba(181, 68, 90, 0.06),
-            inset 0 1px 0 rgba(255, 255, 255, 0.7);
+            0 10px 36px rgba(181, 68, 90, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.8);
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
@@ -606,24 +694,25 @@
     width: 100%;
     aspect-ratio: 1 / 1;
     border-radius: var(--radius-lg);
-    background: rgba(255, 253, 249, 0.45);
+    background: rgba(255, 253, 249, 0.32);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.7);
     box-shadow:
-        0 8px 28px rgba(122, 158, 126, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.65);
-    backdrop-filter: blur(12px) saturate(1.25);
-    -webkit-backdrop-filter: blur(12px) saturate(1.25);
+        0 10px 36px rgba(122, 158, 126, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(20px) saturate(1.45);
+    -webkit-backdrop-filter: blur(20px) saturate(1.45);
     transition: var(--transition);
 }
 
 .category-image-wrap:hover {
     transform: translateY(-5px);
-    box-shadow: 0 14px 36px rgba(181, 68, 90, 0.14);
-    border-color: rgba(242, 196, 206, 0.85);
+    box-shadow: 0 16px 44px rgba(181, 68, 90, 0.16);
+    border-color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 253, 249, 0.45);
 }
 
 .category-image {
@@ -746,15 +835,15 @@
     }
 
     .product-card {
-        background: rgba(255, 253, 249, 0.58);
+        background: rgba(255, 253, 249, 0.34);
         border-radius: var(--radius-lg);
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.72);
         box-shadow:
-            0 8px 28px rgba(181, 68, 90, 0.05),
-            inset 0 1px 0 rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(16px) saturate(1.3);
-        -webkit-backdrop-filter: blur(16px) saturate(1.3);
+            0 10px 36px rgba(181, 68, 90, 0.07),
+            inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(24px) saturate(1.55);
+        -webkit-backdrop-filter: blur(24px) saturate(1.55);
         transition: var(--transition);
         position: relative;
         display: flex;
@@ -764,8 +853,9 @@
 
     .product-card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 16px 40px rgba(181, 68, 90, 0.12);
-        border-color: rgba(242, 196, 206, 0.75);
+        box-shadow: 0 18px 48px rgba(181, 68, 90, 0.14);
+        border-color: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 253, 249, 0.48);
     }
 
     .product-badge {
@@ -849,6 +939,9 @@
         flex: 1;
         display: flex;
         flex-direction: column;
+        background: linear-gradient(180deg, rgba(255, 253, 249, 0.2) 0%, rgba(255, 253, 249, 0.45) 100%);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
     }
 
     .product-category {
@@ -1013,15 +1106,15 @@
     }
 
     .store-card {
-        background: rgba(255, 253, 249, 0.58);
+        background: rgba(255, 253, 249, 0.34);
         border-radius: var(--radius-lg);
         padding: 1.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.72);
         box-shadow:
-            0 8px 28px rgba(122, 158, 126, 0.06),
-            inset 0 1px 0 rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(16px) saturate(1.3);
-        -webkit-backdrop-filter: blur(16px) saturate(1.3);
+            0 10px 36px rgba(122, 158, 126, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(24px) saturate(1.55);
+        -webkit-backdrop-filter: blur(24px) saturate(1.55);
         transition: var(--transition);
         display: flex;
         gap: 1.25rem;
@@ -1032,8 +1125,9 @@
     }
 
     .store-card:hover {
-        box-shadow: 0 14px 36px rgba(181, 68, 90, 0.12);
-        border-color: rgba(242, 196, 206, 0.7);
+        box-shadow: 0 16px 44px rgba(181, 68, 90, 0.14);
+        border-color: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 253, 249, 0.48);
         transform: translateY(-2px);
     }
 
@@ -1140,18 +1234,18 @@
     /* ─── Why Choose ─── */
     .why-section {
         background:
-            linear-gradient(145deg, rgba(42, 35, 30, 0.92) 0%, rgba(74, 48, 58, 0.9) 55%, rgba(42, 55, 48, 0.92) 100%);
+            linear-gradient(145deg, rgba(42, 35, 30, 0.78) 0%, rgba(74, 48, 58, 0.72) 55%, rgba(42, 55, 48, 0.78) 100%);
         border-radius: 28px;
         padding: 4rem 3.5rem;
         margin-bottom: 5rem;
         position: relative;
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.16);
         box-shadow:
-            0 20px 50px rgba(42, 35, 30, 0.25),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(18px) saturate(1.2);
-        -webkit-backdrop-filter: blur(18px) saturate(1.2);
+            0 24px 56px rgba(42, 35, 30, 0.28),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(28px) saturate(1.35);
+        -webkit-backdrop-filter: blur(28px) saturate(1.35);
     }
 
     .why-section::before {
@@ -1250,15 +1344,15 @@
     }
 
     .testimonial-card {
-        background: rgba(255, 253, 249, 0.58);
+        background: rgba(255, 253, 249, 0.34);
         border-radius: var(--radius-lg);
         padding: 2rem;
-        border: 1px solid rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.72);
         box-shadow:
-            0 8px 28px rgba(181, 68, 90, 0.05),
-            inset 0 1px 0 rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(16px) saturate(1.3);
-        -webkit-backdrop-filter: blur(16px) saturate(1.3);
+            0 10px 36px rgba(181, 68, 90, 0.07),
+            inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(24px) saturate(1.55);
+        -webkit-backdrop-filter: blur(24px) saturate(1.55);
         transition: var(--transition);
         position: relative;
     }
@@ -1271,13 +1365,14 @@
         font-family: var(--font-display);
         font-size: 72px;
         line-height: 1;
-        color: rgba(181, 68, 90, 0.12);
+        color: rgba(181, 68, 90, 0.14);
         font-weight: 400;
     }
 
     .testimonial-card:hover {
-        box-shadow: 0 14px 36px rgba(181, 68, 90, 0.12);
-        border-color: rgba(242, 196, 206, 0.7);
+        box-shadow: 0 16px 44px rgba(181, 68, 90, 0.14);
+        border-color: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 253, 249, 0.48);
         transform: translateY(-3px);
     }
 
@@ -1320,8 +1415,8 @@
 
     /* ─── Newsletter ─── */
     .newsletter-section {
-        background: linear-gradient(135deg, rgba(242, 196, 206, 0.28), rgba(122, 158, 126, 0.16));
-        border: 1px solid rgba(255, 255, 255, 0.55);
+        background: linear-gradient(135deg, rgba(242, 196, 206, 0.22), rgba(122, 158, 126, 0.14));
+        border: 1px solid rgba(255, 255, 255, 0.7);
         border-radius: 28px;
         padding: 4rem;
         text-align: center;
@@ -1329,10 +1424,10 @@
         position: relative;
         overflow: hidden;
         box-shadow:
-            0 12px 36px rgba(181, 68, 90, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.65);
-        backdrop-filter: blur(18px) saturate(1.35);
-        -webkit-backdrop-filter: blur(18px) saturate(1.35);
+            0 14px 44px rgba(181, 68, 90, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(26px) saturate(1.55);
+        -webkit-backdrop-filter: blur(26px) saturate(1.55);
     }
 
     .newsletter-section::before {
@@ -2100,6 +2195,14 @@
 
 {% block content %}
 <div class="landing-atmosphere">
+    <div class="landing-florals" aria-hidden="true">
+        <span class="landing-florals__bloom landing-florals__bloom--1"></span>
+        <span class="landing-florals__bloom landing-florals__bloom--2"></span>
+        <span class="landing-florals__bloom landing-florals__bloom--3"></span>
+        <span class="landing-florals__bloom landing-florals__bloom--4"></span>
+        <span class="landing-florals__bloom landing-florals__bloom--5"></span>
+        <div class="landing-florals__veil"></div>
+    </div>
 
 <!-- ─── Hero ─── -->
 <section class="hero-section" id="heroSection">
