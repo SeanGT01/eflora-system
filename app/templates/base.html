@@ -2401,6 +2401,8 @@ let selectedPaymentMethods = {};
 let currentOrderIndex = 0;
 let checkoutAddresses = [];
 let selectedCheckoutAddressId = null;
+/** addressId -> { canDeliver: bool, issues: [{store_name, reason, distance_km}] } */
+let checkoutAddressDeliveryMap = {};
 let currentCheckoutSession = null;
 let checkoutModalCloseHandler = null;
 let isCreatingOrders = false;  // ADDED: Prevents duplicate order creation
@@ -3566,6 +3568,108 @@ function goBackCheckout() {
     closeCheckout();
 }
 
+function isCheckoutAddressDeliverable(addressId) {
+    const status = checkoutAddressDeliveryMap[addressId];
+    if (!status) return true;
+    return status.canDeliver !== false;
+}
+
+function getCheckoutAddressDeliveryIssues(addressId) {
+    const status = checkoutAddressDeliveryMap[addressId];
+    return (status && Array.isArray(status.issues)) ? status.issues : [];
+}
+
+function markCheckoutAddressUndeliverable(addressId, issues) {
+    checkoutAddressDeliveryMap[addressId] = {
+        canDeliver: false,
+        issues: Array.isArray(issues) ? issues : [],
+    };
+}
+
+function pickDeliverableCheckoutAddress(preferredId = null) {
+    const deliverable = checkoutAddresses.filter(address => isCheckoutAddressDeliverable(address.id));
+    if (!deliverable.length) return null;
+    if (preferredId && deliverable.some(address => address.id === preferredId)) {
+        return preferredId;
+    }
+    const defaultAddress = deliverable.find(address => address.is_default);
+    return (defaultAddress || deliverable[0]).id;
+}
+
+async function probeCheckoutAddressDelivery(addressId) {
+    try {
+        let response;
+
+        if (buyNowMode && buyNowItem) {
+            response = await fetch('/api/v1/checkout/buy-now/validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (await getAuthToken())
+                },
+                body: JSON.stringify({
+                    product_id: buyNowItem.product_id,
+                    variant_id: buyNowItem.variant_id || null,
+                    quantity: buyNowItem.quantity || 1,
+                    delivery_address_id: addressId,
+                })
+            });
+        } else {
+            const selectedItems = cart.filter(item => item.is_selected);
+            if (!selectedItems.length) {
+                return { canDeliver: true, issues: [] };
+            }
+            response = await fetch('/api/v1/checkout/validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (await getAuthToken())
+                },
+                body: JSON.stringify({
+                    delivery_address_id: addressId,
+                    delivery_notes: '',
+                    items: selectedItems.map(item => ({
+                        item_id: item.cart_item_id,
+                        quantity: item.quantity
+                    }))
+                })
+            });
+        }
+
+        const result = await response.json();
+        if (result.success) {
+            return { canDeliver: true, issues: [] };
+        }
+
+        const issues = result.undeliverable_stores || [];
+        if (issues.length) {
+            return { canDeliver: false, issues };
+        }
+
+        // Non-delivery validation errors should not permanently grey the address.
+        return { canDeliver: true, issues: [] };
+    } catch (error) {
+        console.error('Address delivery probe failed:', addressId, error);
+        return { canDeliver: true, issues: [] };
+    }
+}
+
+async function evaluateCheckoutAddressCoverage() {
+    checkoutAddressDeliveryMap = {};
+    if (!checkoutAddresses.length) return;
+
+    const results = await Promise.all(
+        checkoutAddresses.map(async (address) => {
+            const status = await probeCheckoutAddressDelivery(address.id);
+            return [address.id, status];
+        })
+    );
+
+    results.forEach(([addressId, status]) => {
+        checkoutAddressDeliveryMap[addressId] = status;
+    });
+}
+
 async function loadCheckoutAddresses() {
     const listEl = document.getElementById('checkoutAddressList');
     const emptyEl = document.getElementById('checkoutAddressEmpty');
@@ -3577,12 +3681,30 @@ async function loadCheckoutAddresses() {
     emptyEl.style.display = 'none';
     issuesEl.style.display = 'none';
     issuesEl.innerHTML = '';
+    checkoutAddressDeliveryMap = {};
 
     try {
         checkoutAddresses = await fetchCheckoutAddresses();
-        const defaultAddress = checkoutAddresses.find(address => address.is_default) || checkoutAddresses[0] || null;
-        selectedCheckoutAddressId = defaultAddress ? defaultAddress.id : null;
+        if (!checkoutAddresses.length) {
+            selectedCheckoutAddressId = null;
+            renderCheckoutAddresses();
+            return;
+        }
+
+        listEl.innerHTML = '<div style="padding:12px; border:1px solid var(--border); border-radius: var(--radius-md); color: var(--muted);">Checking delivery coverage for your addresses...</div>';
+        await evaluateCheckoutAddressCoverage();
+
+        const preferred = checkoutAddresses.find(address => address.is_default) || checkoutAddresses[0];
+        selectedCheckoutAddressId = pickDeliverableCheckoutAddress(preferred ? preferred.id : null);
         renderCheckoutAddresses();
+
+        const undeliverableCount = checkoutAddresses.filter(address => !isCheckoutAddressDeliverable(address.id)).length;
+        if (!selectedCheckoutAddressId && undeliverableCount) {
+            const firstBlocked = checkoutAddresses.find(address => !isCheckoutAddressDeliverable(address.id));
+            renderCheckoutDeliveryIssues(getCheckoutAddressDeliveryIssues(firstBlocked.id));
+        } else {
+            renderCheckoutDeliveryIssues([]);
+        }
     } catch (error) {
         console.error('Checkout address load error:', error);
         listEl.innerHTML = '<div style="padding:12px; border:1px solid #e0b4b4; background:#fff5f5; color:#8b3a3a; border-radius: var(--radius-md);">Could not load saved addresses.</div>';
@@ -3601,25 +3723,69 @@ function renderCheckoutAddresses() {
     }
 
     emptyEl.style.display = 'none';
-    listEl.innerHTML = checkoutAddresses.map(address => `
-        <label style="display:block; border:1px solid ${selectedCheckoutAddressId === address.id ? 'var(--deep-rose)' : 'var(--border)'}; background:${selectedCheckoutAddressId === address.id ? 'rgba(176,74,98,0.06)' : 'white'}; border-radius: var(--radius-md); padding: 12px; margin-bottom: 10px; cursor:pointer;">
-            <div style="display:flex; gap:10px; align-items:flex-start;">
-                <input type="radio" name="checkoutAddress" value="${address.id}" ${selectedCheckoutAddressId === address.id ? 'checked' : ''} onchange="selectCheckoutAddress(${address.id})" style="margin-top:4px;">
-                <div style="flex:1;">
-                    <div style="font-weight:600; margin-bottom:4px;">
-                        ${address.address_label || 'Address'}
-                        ${address.is_default ? '<span style="font-size:11px; color: var(--deep-rose); margin-left:6px;">Default</span>' : ''}
+    listEl.innerHTML = checkoutAddresses.map(address => {
+        const isSelected = selectedCheckoutAddressId === address.id;
+        const canDeliver = isCheckoutAddressDeliverable(address.id);
+        const issues = getCheckoutAddressDeliveryIssues(address.id);
+        const issueReason = issues.length
+            ? issues.map(issue => {
+                const distance = (issue.distance_km !== null && issue.distance_km !== undefined)
+                    ? ` (${issue.distance_km} km away)`
+                    : '';
+                return `${issue.store_name}: ${issue.reason || 'This area is outside delivery area.'}${distance}`;
+            }).join('<br>')
+            : 'This area is outside delivery area.';
+
+        if (!canDeliver) {
+            return `
+                <div style="display:block; border:1px solid #d9d9d9; background:#f3f3f3; border-radius: var(--radius-md); padding: 12px; margin-bottom: 10px; cursor:not-allowed; opacity:0.72; color:#7a7a7a;" aria-disabled="true" title="This area is outside delivery area">
+                    <div style="display:flex; gap:10px; align-items:flex-start;">
+                        <input type="radio" name="checkoutAddress" value="${address.id}" disabled style="margin-top:4px; cursor:not-allowed;">
+                        <div style="flex:1;">
+                            <div style="font-weight:600; margin-bottom:4px;">
+                                ${address.address_label || 'Address'}
+                                ${address.is_default ? '<span style="font-size:11px; color:#9a6a6a; margin-left:6px;">Default</span>' : ''}
+                                <span style="font-size:11px; color:#8b3a3a; margin-left:6px;">Unavailable</span>
+                            </div>
+                            <div style="font-size:13px;">${address.address_line}</div>
+                            <div style="font-size:12px; margin-top:4px;">${address.municipality}, ${address.barangay}</div>
+                            <div style="font-size:12px; margin-top:8px; color:#8b3a3a; font-weight:600;">
+                                This area is outside delivery area
+                            </div>
+                            <div style="font-size:12px; margin-top:4px; color:#8b3a3a;">
+                                ${issueReason}
+                            </div>
+                        </div>
                     </div>
-                    <div style="font-size:13px; color: var(--charcoal);">${address.address_line}</div>
-                    <div style="font-size:12px; color: var(--muted); margin-top:4px;">${address.municipality}, ${address.barangay}</div>
                 </div>
-            </div>
-        </label>
-    `).join('');
+            `;
+        }
+
+        return `
+            <label style="display:block; border:1px solid ${isSelected ? 'var(--deep-rose)' : 'var(--border)'}; background:${isSelected ? 'rgba(176,74,98,0.06)' : 'white'}; border-radius: var(--radius-md); padding: 12px; margin-bottom: 10px; cursor:pointer;">
+                <div style="display:flex; gap:10px; align-items:flex-start;">
+                    <input type="radio" name="checkoutAddress" value="${address.id}" ${isSelected ? 'checked' : ''} onchange="selectCheckoutAddress(${address.id})" style="margin-top:4px;">
+                    <div style="flex:1;">
+                        <div style="font-weight:600; margin-bottom:4px;">
+                            ${address.address_label || 'Address'}
+                            ${address.is_default ? '<span style="font-size:11px; color: var(--deep-rose); margin-left:6px;">Default</span>' : ''}
+                        </div>
+                        <div style="font-size:13px; color: var(--charcoal);">${address.address_line}</div>
+                        <div style="font-size:12px; color: var(--muted); margin-top:4px;">${address.municipality}, ${address.barangay}</div>
+                    </div>
+                </div>
+            </label>
+        `;
+    }).join('');
 }
 
 function selectCheckoutAddress(addressId) {
+    if (!isCheckoutAddressDeliverable(addressId)) {
+        showToast('This area is outside delivery area');
+        return;
+    }
     selectedCheckoutAddressId = addressId;
+    renderCheckoutDeliveryIssues([]);
     renderCheckoutAddresses();
 }
 
@@ -3646,11 +3812,11 @@ function renderCheckoutDeliveryIssues(issues) {
             <div style="font-weight:600; margin-bottom:8px;">⚠️ ${heading}</div>
             ${issues.map(issue => `
                 <div style="font-size:13px; margin-bottom:6px;">
-                    <strong>${issue.store_name}</strong>: ${issue.reason}${issue.distance_km !== null && issue.distance_km !== undefined ? ` (${issue.distance_km} km away)` : ''}
+                    <strong>${issue.store_name}</strong>: ${issue.reason || 'This area is outside delivery area.'}${issue.distance_km !== null && issue.distance_km !== undefined ? ` (${issue.distance_km} km away)` : ''}
                 </div>
             `).join('')}
             <div style="font-size:12px; margin-top:8px; opacity:0.8;">
-                💡 Try selecting a different delivery address from your saved addresses.
+                💡 Greyed-out addresses are outside the flower shop delivery area and cannot be selected.
             </div>
         </div>
     `;
@@ -3660,7 +3826,16 @@ function renderCheckoutDeliveryIssues(issues) {
 async function proceedCheckout() {
     if (checkoutStep === 1) {
         if (!selectedCheckoutAddressId) {
-            showToast('Please select a saved delivery address');
+            showToast('Please select a saved delivery address within the delivery area');
+            return;
+        }
+        if (!isCheckoutAddressDeliverable(selectedCheckoutAddressId)) {
+            showToast('This area is outside delivery area');
+            selectedCheckoutAddressId = pickDeliverableCheckoutAddress();
+            renderCheckoutAddresses();
+            renderCheckoutDeliveryIssues(getCheckoutAddressDeliveryIssues(
+                checkoutAddresses.find(address => !isCheckoutAddressDeliverable(address.id))?.id
+            ));
             return;
         }
 
@@ -3732,12 +3907,18 @@ async function proceedCheckout() {
                 document.getElementById('checkoutNextBtn').textContent = '→ Proceed to Payment';
             } else {
                 console.error('❌ Validation failed:', result.error || 'Unknown error');
+                const blockedAddressId = selectedCheckoutAddressId;
+                if (blockedAddressId && result.undeliverable_stores && result.undeliverable_stores.length > 0) {
+                    markCheckoutAddressUndeliverable(blockedAddressId, result.undeliverable_stores);
+                    selectedCheckoutAddressId = pickDeliverableCheckoutAddress();
+                    renderCheckoutAddresses();
+                }
                 renderCheckoutDeliveryIssues(result.undeliverable_stores || []);
                 
                 // Show more helpful error message
                 if (result.undeliverable_stores && result.undeliverable_stores.length > 0) {
                     const issue = result.undeliverable_stores[0];
-                    showToast(`${issue.store_name}: ${issue.reason}`);
+                    showToast(`${issue.store_name}: ${issue.reason || 'This area is outside delivery area'}`);
                 } else {
                     showToast(result.error || 'Failed to validate delivery');
                 }
