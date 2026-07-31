@@ -18,6 +18,7 @@
     <!-- Icons -->
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     
    <style>
         :root {
@@ -1079,6 +1080,21 @@
             border-radius: var(--radius-md);
             font-size: 12px;
             background: #fff;
+        }
+
+        /* Flatpickr: make closed / past days visibly grey and unclickable */
+        .flatpickr-calendar .flatpickr-day.flatpickr-disabled,
+        .flatpickr-calendar .flatpickr-day.prevMonthDay.flatpickr-disabled,
+        .flatpickr-calendar .flatpickr-day.nextMonthDay.flatpickr-disabled,
+        .flatpickr-calendar .flatpickr-day.notAllowed,
+        .flatpickr-calendar .flatpickr-day.flatpickr-disabled:hover {
+            color: #b9aea6 !important;
+            background: #efe9e3 !important;
+            border-color: transparent !important;
+            text-decoration: line-through !important;
+            opacity: 0.5 !important;
+            cursor: not-allowed !important;
+            pointer-events: none !important;
         }
 
         .checkout-proof-status {
@@ -2491,27 +2507,40 @@ function getCheckoutDateLimitWindow() {
     return { today, maxDate };
 }
 
-function isCheckoutStoreOpenOnDate(schedule, dateObj) {
-    if (!schedule || !Array.isArray(schedule.schedules) || schedule.schedules.length === 0) {
-        return true; // no configured schedule -> allow day selection
-    }
-    const dayName = dateObj.toLocaleDateString('en-US', {
-        weekday: 'long',
-        timeZone: 'Asia/Manila',
-    }).toLowerCase();
-    return schedule.schedules.some(entry =>
-        Array.isArray(entry.days) &&
-        entry.days.map(d => String(d).toLowerCase()).includes(dayName)
-    );
+function getCalendarWeekdayName(dateObj) {
+    const names = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    return names[dateObj.getDay()];
 }
 
-function getFirstOpenCheckoutDate(schedule, preferredDateStr = null) {
+function extractOpenDaysFromSchedule(schedule) {
+    if (!schedule || !Array.isArray(schedule.schedules)) return [];
+    const days = new Set();
+    schedule.schedules.forEach(entry => {
+        (entry.days || []).forEach(day => {
+            if (day) days.add(String(day).toLowerCase());
+        });
+    });
+    return Array.from(days);
+}
+
+function isCheckoutStoreOpenOnDate(scheduleOrOpenDays, dateObj) {
+    let openDays = [];
+    if (Array.isArray(scheduleOrOpenDays)) {
+        openDays = scheduleOrOpenDays.map(d => String(d).toLowerCase());
+    } else {
+        openDays = extractOpenDaysFromSchedule(scheduleOrOpenDays);
+    }
+    if (!openDays.length) return true;
+    return openDays.includes(getCalendarWeekdayName(dateObj));
+}
+
+function getFirstOpenCheckoutDate(scheduleOrOpenDays, preferredDateStr = null) {
     const { today, maxDate } = getCheckoutDateLimitWindow();
 
     if (preferredDateStr) {
         const preferred = new Date(`${preferredDateStr}T00:00:00`);
         preferred.setHours(0, 0, 0, 0);
-        if (preferred >= today && preferred <= maxDate && isCheckoutStoreOpenOnDate(schedule, preferred)) {
+        if (preferred >= today && preferred <= maxDate && isCheckoutStoreOpenOnDate(scheduleOrOpenDays, preferred)) {
             return preferredDateStr;
         }
     }
@@ -2519,64 +2548,96 @@ function getFirstOpenCheckoutDate(schedule, preferredDateStr = null) {
     for (let i = 0; i <= 14; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
-        if (d <= maxDate && isCheckoutStoreOpenOnDate(schedule, d)) {
+        if (d <= maxDate && isCheckoutStoreOpenOnDate(scheduleOrOpenDays, d)) {
             return formatDateISOLocal(d);
         }
     }
     return null;
 }
 
-function initCheckoutDeliveryDatePicker(order, initialDateStr) {
+async function fetchStoreOpenDays(storeId, scheduleHint = null) {
+    const fromOrder = extractOpenDaysFromSchedule(scheduleHint);
+    if (fromOrder.length) {
+        return { openDays: fromOrder, hasSchedule: true };
+    }
+
+    // Prefer open_days from API when available.
+    try {
+        const resp = await fetch(`/api/store/${storeId}/time-slots?date=${getPhilippineTodayStr()}`);
+        const data = await resp.json();
+        if (data && data.success && Array.isArray(data.open_days) && data.open_days.length) {
+            return {
+                openDays: data.open_days.map(d => String(d).toLowerCase()),
+                hasSchedule: true,
+            };
+        }
+        // Store has no schedule configured.
+        if (data && data.success && data.has_schedule === false) {
+            return { openDays: [], hasSchedule: false };
+        }
+    } catch (e) {
+        console.warn('Could not fetch store open days summary:', e);
+    }
+
+    // Fallback: probe the next 7 days so closed weekdays still lock
+    // even if the API does not return open_days yet.
+    const { today } = getCheckoutDateLimitWindow();
+    const found = new Set();
+    let sawSchedule = false;
+    await Promise.all(Array.from({ length: 7 }, async (_, i) => {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const dateStr = formatDateISOLocal(d);
+        try {
+            const resp = await fetch(`/api/store/${storeId}/time-slots?date=${dateStr}`);
+            const data = await resp.json();
+            if (!data || !data.success) return;
+            if (data.has_schedule) sawSchedule = true;
+            if (Array.isArray(data.open_days) && data.open_days.length) {
+                data.open_days.forEach(day => found.add(String(day).toLowerCase()));
+            }
+            if (data.is_open && Array.isArray(data.time_slots) && data.time_slots.length) {
+                found.add(getCalendarWeekdayName(d));
+            }
+        } catch (_) { /* ignore single-day probe errors */ }
+    }));
+
+    return {
+        openDays: Array.from(found),
+        hasSchedule: sawSchedule || found.size > 0,
+    };
+}
+
+async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
     const input = document.getElementById(`storeDeliveryDate_${order.temp_id}`);
     if (!input) return initialDateStr;
 
-    const schedule = order.store_schedule || null;
-    const resolvedDate = getFirstOpenCheckoutDate(schedule, initialDateStr) || getPhilippineTodayStr();
+    const { openDays, hasSchedule } = await fetchStoreOpenDays(order.store_id, order.store_schedule || null);
+    order._openDays = openDays;
+    order._hasSchedule = hasSchedule;
+
+    const resolvedDate = getFirstOpenCheckoutDate(
+        hasSchedule ? openDays : (order.store_schedule || openDays),
+        initialDateStr
+    ) || getPhilippineTodayStr();
     const { today, maxDate } = getCheckoutDateLimitWindow();
 
     if (input._flatpickr) {
         input._flatpickr.destroy();
     }
 
-    if (typeof flatpickr === 'function') {
-        flatpickr(input, {
-            dateFormat: 'Y-m-d',
-            defaultDate: resolvedDate,
-            minDate: today,
-            maxDate: maxDate,
-            disable: [
-                function(date) {
-                    // Lock previous days and store closed days
-                    const candidate = new Date(date);
-                    candidate.setHours(0, 0, 0, 0);
-                    if (candidate < today) return true;
-                    return !isCheckoutStoreOpenOnDate(schedule, candidate);
-                }
-            ],
-            onChange: function(selectedDates, dateStr) {
-                if (!dateStr) return;
-                if (!isCheckoutStoreOpenOnDate(schedule, new Date(`${dateStr}T00:00:00`))) {
-                    showToast('Store is closed on this day. Please pick another date.', 'error');
-                    const fallback = getFirstOpenCheckoutDate(schedule);
-                    if (fallback && input._flatpickr) {
-                        input._flatpickr.setDate(fallback, true);
-                    }
-                    return;
-                }
-                setStoreDeliveryPreference(order.temp_id, dateStr, '');
-                fetchCheckoutTimeSlots(order.store_id, order.temp_id, dateStr);
-            }
-        });
-    } else {
-        // Fallback when flatpickr is unavailable
+    if (typeof flatpickr !== 'function') {
+        console.warn('flatpickr missing; date picker fallback active');
+        input.removeAttribute('readonly');
+        input.setAttribute('type', 'date');
         input.setAttribute('min', formatDateISOLocal(today));
         input.setAttribute('max', formatDateISOLocal(maxDate));
         input.value = resolvedDate;
-        input.addEventListener('change', (e) => {
+        input.onchange = (e) => {
             const dateStr = e.target.value;
-            if (!isCheckoutStoreOpenOnDate(schedule, new Date(`${dateStr}T00:00:00`))) {
+            if (hasSchedule && !isCheckoutStoreOpenOnDate(openDays, new Date(`${dateStr}T00:00:00`))) {
                 showToast('Store is closed on this day. Please pick another date.', 'error');
-                const fallback = getFirstOpenCheckoutDate(schedule);
+                const fallback = getFirstOpenCheckoutDate(openDays);
                 if (fallback) {
                     e.target.value = fallback;
                     setStoreDeliveryPreference(order.temp_id, fallback, '');
@@ -2586,8 +2647,54 @@ function initCheckoutDeliveryDatePicker(order, initialDateStr) {
             }
             setStoreDeliveryPreference(order.temp_id, dateStr, '');
             fetchCheckoutTimeSlots(order.store_id, order.temp_id, dateStr);
-        });
+        };
+        setStoreDeliveryPreference(order.temp_id, resolvedDate, storeDeliveryPreferences[order.temp_id]?.selectedTime || '');
+        return resolvedDate;
     }
+
+    flatpickr(input, {
+        dateFormat: 'Y-m-d',
+        defaultDate: resolvedDate,
+        minDate: today,
+        maxDate: maxDate,
+        allowInput: false,
+        disable: [
+            function(date) {
+                const candidate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                if (candidate < today) return true;
+                if (hasSchedule && openDays.length) {
+                    return !openDays.includes(getCalendarWeekdayName(candidate));
+                }
+                return false;
+            }
+        ],
+        onDayCreate: function(dObj, dStr, fp, dayElem) {
+            if (dayElem.classList.contains('flatpickr-disabled')) {
+                dayElem.title = 'Closed / unavailable';
+                dayElem.style.color = '#b9aea6';
+                dayElem.style.background = '#efe9e3';
+                dayElem.style.textDecoration = 'line-through';
+                dayElem.style.opacity = '0.5';
+                dayElem.style.cursor = 'not-allowed';
+            }
+        },
+        onChange: function(selectedDates, dateStr) {
+            if (!dateStr) return;
+            const picked = new Date(`${dateStr}T00:00:00`);
+            if (hasSchedule && !isCheckoutStoreOpenOnDate(openDays, picked)) {
+                showToast('Store is closed on this day. Please pick another date.', 'error');
+                const fallback = getFirstOpenCheckoutDate(openDays);
+                if (fallback && input._flatpickr) {
+                    input._flatpickr.setDate(fallback, false);
+                    setStoreDeliveryPreference(order.temp_id, fallback, '');
+                    fetchCheckoutTimeSlots(order.store_id, order.temp_id, fallback);
+                }
+                return;
+            }
+            setStoreDeliveryPreference(order.temp_id, dateStr, '');
+            fetchCheckoutTimeSlots(order.store_id, order.temp_id, dateStr);
+        }
+    });
 
     setStoreDeliveryPreference(order.temp_id, resolvedDate, storeDeliveryPreferences[order.temp_id]?.selectedTime || '');
     return resolvedDate;
@@ -2612,14 +2719,16 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
     const savedPrefs = JSON.parse(sessionStorage.getItem('deliveryPreferences') || '{}');
     const preferredTime = storeDeliveryPreferences[tempId]?.selectedTime || savedPrefs.selectedTime || '';
     const order = (checkoutOrders || []).find(o => o.temp_id === tempId) || null;
-    const schedule = order ? (order.store_schedule || null) : null;
+    const openDaysOrSchedule = (order && Array.isArray(order._openDays) && order._openDays.length)
+        ? order._openDays
+        : (order ? (order.store_schedule || null) : null);
 
     // Hard-lock past / closed days before calling the API
     const selectedDateObj = new Date(`${dateStr}T00:00:00`);
     selectedDateObj.setHours(0, 0, 0, 0);
     const { today } = getCheckoutDateLimitWindow();
-    if (selectedDateObj < today || !isCheckoutStoreOpenOnDate(schedule, selectedDateObj)) {
-        const fallback = getFirstOpenCheckoutDate(schedule);
+    if (selectedDateObj < today || !isCheckoutStoreOpenOnDate(openDaysOrSchedule, selectedDateObj)) {
+        const fallback = getFirstOpenCheckoutDate(openDaysOrSchedule);
         timeSelect.innerHTML = '<option value="">— Closed —</option>';
         timeSelect.disabled = true;
         if (closedMsg) {
@@ -2651,7 +2760,7 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                 timeSelect.disabled = true;
                 if (closedMsg) closedMsg.style.display = 'block';
 
-                const fallback = getFirstOpenCheckoutDate(schedule);
+                const fallback = getFirstOpenCheckoutDate(openDaysOrSchedule);
                 if (fallback && fallback !== dateStr && dateInput && dateInput._flatpickr) {
                     // Keep closed day locked in calendar; nudge user via message only.
                 }
@@ -4123,7 +4232,12 @@ async function proceedCheckout() {
             showToast('Please choose a delivery date within the next 14 days.', 'error');
             return;
         }
-        if (!isCheckoutStoreOpenOnDate(currentOrder.store_schedule || null, selectedDateObj)) {
+        if (!isCheckoutStoreOpenOnDate(
+            (Array.isArray(currentOrder._openDays) && currentOrder._openDays.length)
+                ? currentOrder._openDays
+                : (currentOrder.store_schedule || null),
+            selectedDateObj
+        )) {
             showToast('Store is closed on the selected date. Please pick an open day.', 'error');
             return;
         }
@@ -4386,7 +4500,7 @@ function displayOrderSummary() {
     document.getElementById('step2Total').textContent = '₱' + total.toFixed(2);
 }
 
-function displayGCashPayment() {
+async function displayGCashPayment() {
     const container = document.getElementById('gcashPaymentContainer');
     if (!container) return;
 
@@ -4591,7 +4705,7 @@ function displayGCashPayment() {
     }
     
     // Initialize calendar with store open days locked; then load matching time slots
-    const resolvedDate = initCheckoutDeliveryDatePicker(order, deliveryDate);
+    const resolvedDate = await initCheckoutDeliveryDatePicker(order, deliveryDate);
     fetchCheckoutTimeSlots(order.store_id, order.temp_id, resolvedDate);
     
     updateCheckoutPaymentAction();
@@ -4957,8 +5071,6 @@ updateCartDisplay();
 
     {% block extra_js %}
     {% endblock %}
-
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
     <!-- Chat Widget (Messenger-style floating button + drawer) -->
     {% include 'chat_widget.html' %}
