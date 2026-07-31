@@ -17,6 +17,7 @@
 
     <!-- Icons -->
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     
    <style>
         :root {
@@ -2449,7 +2450,7 @@ function getStoreDeliveryDate(tempId) {
         return storeDeliveryPreferences[tempId].selectedDate;
     }
     const prefs = JSON.parse(sessionStorage.getItem('deliveryPreferences') || '{}');
-    return prefs.selectedDate || getTodayDateString();
+    return prefs.selectedDate || getPhilippineTodayStr();
 }
 
 function getStoreDeliveryTime(tempId) {
@@ -2457,42 +2458,187 @@ function getStoreDeliveryTime(tempId) {
         return storeDeliveryPreferences[tempId].selectedTime;
     }
     const prefs = JSON.parse(sessionStorage.getItem('deliveryPreferences') || '{}');
-    return prefs.selectedTime || '08:00-12:00';
+    return prefs.selectedTime || '';
 }
 
 function getTodayDateString() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today.toISOString().split('T')[0];
+    return getPhilippineTodayStr();
 }
 
 // Get current time in Philippine timezone (UTC+8)
 function getPhilippineTime() {
     const now = new Date();
-    const phTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
-    return phTime;
+    return new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+}
+
+function formatDateISOLocal(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
 
 // Get today's date in Philippine timezone
 function getPhilippineTodayStr() {
-    const phTime = getPhilippineTime();
-    return phTime.toISOString().split('T')[0];
+    return formatDateISOLocal(getPhilippineTime());
+}
+
+function getCheckoutDateLimitWindow() {
+    const today = getPhilippineTime();
+    today.setHours(0, 0, 0, 0);
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 14);
+    return { today, maxDate };
+}
+
+function isCheckoutStoreOpenOnDate(schedule, dateObj) {
+    if (!schedule || !Array.isArray(schedule.schedules) || schedule.schedules.length === 0) {
+        return true; // no configured schedule -> allow day selection
+    }
+    const dayName = dateObj.toLocaleDateString('en-US', {
+        weekday: 'long',
+        timeZone: 'Asia/Manila',
+    }).toLowerCase();
+    return schedule.schedules.some(entry =>
+        Array.isArray(entry.days) &&
+        entry.days.map(d => String(d).toLowerCase()).includes(dayName)
+    );
+}
+
+function getFirstOpenCheckoutDate(schedule, preferredDateStr = null) {
+    const { today, maxDate } = getCheckoutDateLimitWindow();
+
+    if (preferredDateStr) {
+        const preferred = new Date(`${preferredDateStr}T00:00:00`);
+        preferred.setHours(0, 0, 0, 0);
+        if (preferred >= today && preferred <= maxDate && isCheckoutStoreOpenOnDate(schedule, preferred)) {
+            return preferredDateStr;
+        }
+    }
+
+    for (let i = 0; i <= 14; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        if (d <= maxDate && isCheckoutStoreOpenOnDate(schedule, d)) {
+            return formatDateISOLocal(d);
+        }
+    }
+    return null;
+}
+
+function initCheckoutDeliveryDatePicker(order, initialDateStr) {
+    const input = document.getElementById(`storeDeliveryDate_${order.temp_id}`);
+    if (!input) return initialDateStr;
+
+    const schedule = order.store_schedule || null;
+    const resolvedDate = getFirstOpenCheckoutDate(schedule, initialDateStr) || getPhilippineTodayStr();
+    const { today, maxDate } = getCheckoutDateLimitWindow();
+
+    if (input._flatpickr) {
+        input._flatpickr.destroy();
+    }
+
+    if (typeof flatpickr === 'function') {
+        flatpickr(input, {
+            dateFormat: 'Y-m-d',
+            defaultDate: resolvedDate,
+            minDate: today,
+            maxDate: maxDate,
+            disable: [
+                function(date) {
+                    // Lock previous days and store closed days
+                    const candidate = new Date(date);
+                    candidate.setHours(0, 0, 0, 0);
+                    if (candidate < today) return true;
+                    return !isCheckoutStoreOpenOnDate(schedule, candidate);
+                }
+            ],
+            onChange: function(selectedDates, dateStr) {
+                if (!dateStr) return;
+                if (!isCheckoutStoreOpenOnDate(schedule, new Date(`${dateStr}T00:00:00`))) {
+                    showToast('Store is closed on this day. Please pick another date.', 'error');
+                    const fallback = getFirstOpenCheckoutDate(schedule);
+                    if (fallback && input._flatpickr) {
+                        input._flatpickr.setDate(fallback, true);
+                    }
+                    return;
+                }
+                setStoreDeliveryPreference(order.temp_id, dateStr, '');
+                fetchCheckoutTimeSlots(order.store_id, order.temp_id, dateStr);
+            }
+        });
+    } else {
+        // Fallback when flatpickr is unavailable
+        input.setAttribute('min', formatDateISOLocal(today));
+        input.setAttribute('max', formatDateISOLocal(maxDate));
+        input.value = resolvedDate;
+        input.addEventListener('change', (e) => {
+            const dateStr = e.target.value;
+            if (!isCheckoutStoreOpenOnDate(schedule, new Date(`${dateStr}T00:00:00`))) {
+                showToast('Store is closed on this day. Please pick another date.', 'error');
+                const fallback = getFirstOpenCheckoutDate(schedule);
+                if (fallback) {
+                    e.target.value = fallback;
+                    setStoreDeliveryPreference(order.temp_id, fallback, '');
+                    fetchCheckoutTimeSlots(order.store_id, order.temp_id, fallback);
+                }
+                return;
+            }
+            setStoreDeliveryPreference(order.temp_id, dateStr, '');
+            fetchCheckoutTimeSlots(order.store_id, order.temp_id, dateStr);
+        });
+    }
+
+    setStoreDeliveryPreference(order.temp_id, resolvedDate, storeDeliveryPreferences[order.temp_id]?.selectedTime || '');
+    return resolvedDate;
 }
 
 // Fetch time slots from store schedule API for checkout modal
 async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
     const timeSelect = document.getElementById(`storeDeliveryTime_${tempId}`);
     const closedMsg = document.getElementById(`storeClosedMsg_${tempId}`);
+    const dateInput = document.getElementById(`storeDeliveryDate_${tempId}`);
     if (!timeSelect) return;
     
     // Show loading state
     timeSelect.innerHTML = '<option value="">Loading...</option>';
     timeSelect.disabled = true;
-    if (closedMsg) closedMsg.style.display = 'none';
+    if (closedMsg) {
+        closedMsg.style.display = 'none';
+        closedMsg.innerHTML = '<i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.';
+    }
     
     // Get the preferred time from product_details.html (sessionStorage) for pre-selection
     const savedPrefs = JSON.parse(sessionStorage.getItem('deliveryPreferences') || '{}');
     const preferredTime = storeDeliveryPreferences[tempId]?.selectedTime || savedPrefs.selectedTime || '';
+    const order = (checkoutOrders || []).find(o => o.temp_id === tempId) || null;
+    const schedule = order ? (order.store_schedule || null) : null;
+
+    // Hard-lock past / closed days before calling the API
+    const selectedDateObj = new Date(`${dateStr}T00:00:00`);
+    selectedDateObj.setHours(0, 0, 0, 0);
+    const { today } = getCheckoutDateLimitWindow();
+    if (selectedDateObj < today || !isCheckoutStoreOpenOnDate(schedule, selectedDateObj)) {
+        const fallback = getFirstOpenCheckoutDate(schedule);
+        timeSelect.innerHTML = '<option value="">— Closed —</option>';
+        timeSelect.disabled = true;
+        if (closedMsg) {
+            closedMsg.style.display = 'block';
+            closedMsg.innerHTML = selectedDateObj < today
+                ? '<i class="ri-calendar-close-line"></i> Past dates are locked. Please choose today or a future open day.'
+                : '<i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.';
+        }
+        if (fallback && fallback !== dateStr) {
+            if (dateInput && dateInput._flatpickr) {
+                dateInput._flatpickr.setDate(fallback, true);
+            } else if (dateInput) {
+                dateInput.value = fallback;
+                setStoreDeliveryPreference(tempId, fallback, '');
+                return fetchCheckoutTimeSlots(storeId, tempId, fallback);
+            }
+        }
+        return;
+    }
     
     try {
         const resp = await fetch(`/api/store/${storeId}/time-slots?date=${dateStr}`);
@@ -2504,6 +2650,12 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                 timeSelect.innerHTML = '<option value="">— Closed —</option>';
                 timeSelect.disabled = true;
                 if (closedMsg) closedMsg.style.display = 'block';
+
+                const fallback = getFirstOpenCheckoutDate(schedule);
+                if (fallback && fallback !== dateStr && dateInput && dateInput._flatpickr) {
+                    // Keep closed day locked in calendar; nudge user via message only.
+                }
+                setStoreDeliveryPreference(tempId, dateStr, '');
                 return;
             }
             
@@ -2511,7 +2663,6 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                 timeSelect.innerHTML = '';
                 let foundPreferred = false;
                 let hasAvailable = false;
-                console.log(`✅ Fetched ${data.time_slots.length} custom time slots for store ${storeId}`);
                 
                 const phTime = getPhilippineTime();
                 const todayStr = getPhilippineTodayStr();
@@ -2522,7 +2673,7 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                     const opt = document.createElement('option');
                     opt.value = slot.value;
                     
-                    // Check if slot has passed for today (using PH time)
+                    // Lock hours that have already passed for today (PH time)
                     let isPast = false;
                     if (isToday && slot.value.includes('-')) {
                         const endTime = slot.value.split('-')[1];
@@ -2531,7 +2682,7 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                     }
                     
                     if (isPast) {
-                        opt.textContent = slot.label;
+                        opt.textContent = `${slot.label} (closed)`;
                         opt.disabled = true;
                         opt.style.color = '#999';
                     } else {
@@ -2551,19 +2702,27 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                     timeSelect.disabled = true;
                     if (closedMsg) {
                         closedMsg.style.display = 'block';
-                        closedMsg.innerHTML = '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another date.';
+                        closedMsg.innerHTML = '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another open day.';
                     }
+                    setStoreDeliveryPreference(tempId, dateStr, '');
                     return;
                 }
                 
                 // If preferred time wasn't found or was past, select first available
                 if (!foundPreferred) {
-                    const firstAvail = [...timeSelect.options].find(o => !o.disabled);
+                    const firstAvail = [...timeSelect.options].find(o => !o.disabled && o.value);
                     if (firstAvail) firstAvail.selected = true;
                 }
                 timeSelect.disabled = false;
-                // Save the selected time
                 setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
+                return;
+            }
+
+            if (data.has_schedule) {
+                timeSelect.innerHTML = '<option value="">— Closed —</option>';
+                timeSelect.disabled = true;
+                if (closedMsg) closedMsg.style.display = 'block';
+                setStoreDeliveryPreference(tempId, dateStr, '');
                 return;
             }
         }
@@ -2571,7 +2730,7 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
         console.warn('Could not fetch store time slots, using defaults:', e);
     }
     
-    // Fallback to defaults (store schedule not configured)
+    // Fallback to defaults only when store schedule is not configured
     console.warn('⚠️ No custom time slots available. Using default times (8 AM - 6 PM). Store schedule may not be configured.');
     const phTime = getPhilippineTime();
     const todayStr = getPhilippineTodayStr();
@@ -2593,7 +2752,7 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
         
         let isPast = isToday && currentMinutes >= slot.end;
         if (isPast) {
-            opt.textContent = slot.label;
+            opt.textContent = `${slot.label} (closed)`;
             opt.disabled = true;
             opt.style.color = '#999';
         } else {
@@ -2607,16 +2766,19 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
     });
     
     if (!hasAvailableDefault && isToday) {
-        timeSelect.innerHTML = '<option value="">Store schedule not configured</option>';
+        timeSelect.innerHTML = '<option value="">All slots have passed</option>';
         timeSelect.disabled = true;
         if (closedMsg) {
             closedMsg.style.display = 'block';
-            closedMsg.innerHTML = '<i class="ri-alert-line"></i> Store schedule is not configured. Please contact the store.';
+            closedMsg.innerHTML = '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another date.';
         }
+        setStoreDeliveryPreference(tempId, dateStr, '');
     } else {
+        const firstAvail = [...timeSelect.options].find(o => !o.disabled && o.value);
+        if (firstAvail && !timeSelect.value) firstAvail.selected = true;
         timeSelect.disabled = false;
+        setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
     }
-    setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
 }
 
 function cancelCheckout(showWarning = false) {
@@ -3944,14 +4106,38 @@ async function proceedCheckout() {
         const paymentMethod = getOrderPaymentMethod(currentOrder);
         const proofState = getProofState(currentOrder.temp_id);
 
-        // Validate delivery date/time
+        // Validate delivery date/time against store open days/hours
+        const dateInput = document.getElementById(`storeDeliveryDate_${currentOrder.temp_id}`);
         const timeSelect = document.getElementById(`storeDeliveryTime_${currentOrder.temp_id}`);
         const closedMsg = document.getElementById(`storeClosedMsg_${currentOrder.temp_id}`);
+        const selectedDate = (dateInput && dateInput.value) || getStoreDeliveryDate(currentOrder.temp_id);
+        const selectedDateObj = new Date(`${selectedDate}T00:00:00`);
+        selectedDateObj.setHours(0, 0, 0, 0);
+        const { today, maxDate } = getCheckoutDateLimitWindow();
+
+        if (selectedDateObj < today) {
+            showToast('Past dates are locked. Please choose today or a future open day.', 'error');
+            return;
+        }
+        if (selectedDateObj > maxDate) {
+            showToast('Please choose a delivery date within the next 14 days.', 'error');
+            return;
+        }
+        if (!isCheckoutStoreOpenOnDate(currentOrder.store_schedule || null, selectedDateObj)) {
+            showToast('Store is closed on the selected date. Please pick an open day.', 'error');
+            return;
+        }
         if (closedMsg && closedMsg.style.display !== 'none') {
             showToast('Store is closed on the selected date. Please pick a different date.', 'error');
             return;
         }
-        if (timeSelect && (!timeSelect.value || timeSelect.disabled)) {
+        if (timeSelect) {
+            const selectedOption = timeSelect.options[timeSelect.selectedIndex];
+            if (!timeSelect.value || timeSelect.disabled || (selectedOption && selectedOption.disabled)) {
+                showToast('Please select a valid open delivery time slot', 'error');
+                return;
+            }
+        } else {
             showToast('Please select a valid delivery time slot', 'error');
             return;
         }
@@ -4226,7 +4412,6 @@ function displayGCashPayment() {
     const previewSrc = proofState.previewSrc;
     const deliveryDate = getStoreDeliveryDate(order.temp_id);
     const deliveryTime = getStoreDeliveryTime(order.temp_id);
-    const minDate = getTodayDateString();
     const orderItems = Array.isArray(order.items) ? order.items : [];
     const totalItemsCount = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     const cartItemsSafe = (typeof cart !== 'undefined' && Array.isArray(cart)) ? cart : [];
@@ -4296,7 +4481,7 @@ function displayGCashPayment() {
             <div class="checkout-delivery-grid">
                 <div>
                     <label class="checkout-delivery-label">Date</label>
-                    <input type="date" id="storeDeliveryDate_${order.temp_id}" value="${deliveryDate}" min="${minDate}" class="checkout-delivery-input" required>
+                    <input type="text" id="storeDeliveryDate_${order.temp_id}" value="${deliveryDate}" class="checkout-delivery-input" placeholder="Select date" required readonly>
                 </div>
                 <div>
                     <label class="checkout-delivery-label">Time Slot</label>
@@ -4304,6 +4489,9 @@ function displayGCashPayment() {
                         <option value="">Loading...</option>
                     </select>
                 </div>
+            </div>
+            <div style="font-size:11px; color:var(--muted); margin-top:8px;">
+                Closed days, past dates, and past hours are locked based on this store's open schedule.
             </div>
         </div>
     `;
@@ -4389,25 +4577,22 @@ function displayGCashPayment() {
     container.innerHTML = html;
     
     // Phase 1: Add event listeners for per-store delivery date/time
-    const dateInput = document.getElementById(`storeDeliveryDate_${order.temp_id}`);
     const timeInput = document.getElementById(`storeDeliveryTime_${order.temp_id}`);
-    
-    if (dateInput) {
-        // Fetch time slots when date changes
-        dateInput.addEventListener('change', (e) => {
-            setStoreDeliveryPreference(order.temp_id, e.target.value, '');
-            fetchCheckoutTimeSlots(order.store_id, order.temp_id, e.target.value);
-        });
-    }
     
     if (timeInput) {
         timeInput.addEventListener('change', (e) => {
+            const selectedOption = e.target.options[e.target.selectedIndex];
+            if (!e.target.value || (selectedOption && selectedOption.disabled)) {
+                showToast('Please select an open delivery time slot', 'error');
+                return;
+            }
             setStoreDeliveryPreference(order.temp_id, getStoreDeliveryDate(order.temp_id), e.target.value);
         });
     }
     
-    // Fetch time slots for the initial date
-    fetchCheckoutTimeSlots(order.store_id, order.temp_id, deliveryDate);
+    // Initialize calendar with store open days locked; then load matching time slots
+    const resolvedDate = initCheckoutDeliveryDatePicker(order, deliveryDate);
+    fetchCheckoutTimeSlots(order.store_id, order.temp_id, resolvedDate);
     
     updateCheckoutPaymentAction();
 
@@ -4772,6 +4957,8 @@ updateCartDisplay();
 
     {% block extra_js %}
     {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
     <!-- Chat Widget (Messenger-style floating button + drawer) -->
     {% include 'chat_widget.html' %}
