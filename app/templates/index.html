@@ -5,46 +5,55 @@
 
 {% block extra_css %}
 <style>
-    /* ─── Landing atmosphere: soft side color + glass (no floral images) ─── */
+    /* ─── Landing atmosphere: full-bleed soft color (no white middle strip) ─── */
+    body:has(.landing-atmosphere) {
+        background:
+            linear-gradient(
+                105deg,
+                rgba(242, 196, 206, 0.55) 0%,
+                rgba(250, 230, 220, 0.45) 18%,
+                rgba(245, 236, 228, 0.55) 38%,
+                rgba(232, 238, 228, 0.5) 62%,
+                rgba(196, 214, 198, 0.48) 82%,
+                rgba(242, 196, 206, 0.4) 100%
+            ),
+            var(--cream);
+        background-attachment: fixed;
+    }
+
+    body:has(.landing-atmosphere)::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        background:
+            radial-gradient(ellipse 55% 45% at 8% 20%, rgba(242, 196, 206, 0.45), transparent 70%),
+            radial-gradient(ellipse 50% 40% at 92% 30%, rgba(122, 158, 126, 0.35), transparent 70%),
+            radial-gradient(ellipse 60% 50% at 50% 85%, rgba(212, 120, 138, 0.18), transparent 65%),
+            radial-gradient(ellipse 45% 35% at 70% 10%, rgba(196, 214, 198, 0.28), transparent 70%);
+    }
+
+    body:has(.landing-atmosphere) .main-header,
+    body:has(.landing-atmosphere) .main-content,
+    body:has(.landing-atmosphere) .main-footer,
+    body:has(.landing-atmosphere) footer {
+        position: relative;
+        z-index: 1;
+    }
+
+    body:has(.landing-atmosphere) .main-header {
+        background: rgba(255, 253, 249, 0.72);
+        backdrop-filter: blur(16px) saturate(1.3);
+        -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    }
+
     .landing-atmosphere {
         position: relative;
         isolation: isolate;
         max-width: 1080px;
         margin: 0 auto;
         padding: 0 clamp(0.25rem, 1.5vw, 0.75rem);
-    }
-
-    .landing-atmosphere::before,
-    .landing-atmosphere::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: min(18vw, 160px);
-        pointer-events: none;
-        z-index: 0;
-        border-radius: 40px;
-        filter: blur(2px);
-    }
-
-    .landing-atmosphere::before {
-        left: calc(-1 * min(10vw, 96px));
-        background:
-            linear-gradient(180deg,
-                rgba(242, 196, 206, 0.28) 0%,
-                rgba(250, 246, 240, 0.1) 35%,
-                rgba(122, 158, 126, 0.16) 70%,
-                rgba(242, 196, 206, 0.18) 100%);
-    }
-
-    .landing-atmosphere::after {
-        right: calc(-1 * min(10vw, 96px));
-        background:
-            linear-gradient(180deg,
-                rgba(122, 158, 126, 0.2) 0%,
-                rgba(250, 246, 240, 0.1) 40%,
-                rgba(242, 196, 206, 0.22) 75%,
-                rgba(122, 158, 126, 0.14) 100%);
     }
 
     .landing-atmosphere > * {
@@ -71,18 +80,13 @@
         max-width: 1280px;
         padding-left: clamp(1.5rem, 5vw, 3.5rem);
         padding-right: clamp(1.5rem, 5vw, 3.5rem);
+        background: transparent;
     }
 
     @media (max-width: 768px) {
         .landing-atmosphere {
             max-width: 100%;
             padding: 0;
-        }
-
-        .landing-atmosphere::before,
-        .landing-atmosphere::after {
-            width: min(14vw, 72px);
-            opacity: 0.7;
         }
     }
 
