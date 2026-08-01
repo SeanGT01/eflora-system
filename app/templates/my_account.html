@@ -455,6 +455,77 @@
             gap: 2rem;
         }
     }
+
+    /* ─── Responsive hardening (applies over partial styles) ─── */
+
+    /* Grid/flex children default to min-width:auto, which lets long text,
+       tables and image rows push the cards wider than the viewport. */
+    .account-wrapper > *,
+    .profile-content,
+    .profile-content .card-body,
+    .profile-content .avatar-info,
+    .profile-content .order-item-info { min-width: 0; }
+
+    .profile-content .profile-card,
+    .profile-content .order-card,
+    .profile-content .orders-page { max-width: 100%; }
+
+    .profile-content img { max-width: 100%; }
+
+    @media (max-width: 767px) {
+        /* The main navbar already exposes these sections on phones */
+        .profile-sidebar { display: none; }
+
+        .account-wrapper { grid-template-columns: 1fr; }
+
+        /* Stacked form fields read far better on narrow screens */
+        .profile-content .form-grid { grid-template-columns: 1fr; }
+        .profile-content .form-group-full { grid-column: 1 / -1; }
+
+        /* Card headers keep icon + title on one line, actions wrap below */
+        .profile-content .card-header {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: center;
+            row-gap: 0.5rem;
+        }
+        .profile-content .card-header-left { min-width: 0; flex: 1 1 auto; }
+        .profile-content .card-title { word-break: break-word; }
+
+        .profile-content .orders-page { padding-left: 0; padding-right: 0; }
+
+        /* Status tabs wrap onto multiple rows so every status is reachable
+           without horizontal scrolling */
+        .profile-content .order-tabs {
+            flex-wrap: wrap;
+            overflow-x: visible;
+            gap: 0.4rem;
+            row-gap: 0.4rem;
+        }
+
+        .profile-content .order-tab {
+            flex: 1 1 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        /* Any wide table falls back to horizontal scroll instead of
+           stretching the page */
+        .profile-content table {
+            display: block;
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+    }
+
+    @media (max-width: 400px) {
+        .sidebar-nav > ul { grid-template-columns: 1fr; }
+        .menu-link { justify-content: flex-start; text-align: left; }
+    }
 </style>
 {% endblock %}
 
@@ -486,8 +557,8 @@
 
 <div class="account-wrapper">
     <!-- Sidebar -->
-    <aside class="profile-sidebar">
-        <nav class="sidebar-nav">
+    <aside class="profile-sidebar" id="accountSidebar">
+        <nav class="sidebar-nav" id="accountSidebarNav">
             <div class="sidebar-section-label">Account</div>
             <ul style="list-style:none;padding:0;">
                 <li class="menu-item active" data-page="profile">
