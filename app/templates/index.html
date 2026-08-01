@@ -1266,12 +1266,17 @@
         display: flex;
         flex-direction: row;
         gap: 0.75rem;
-        overflow-x: hidden;
+        /* auto (not hidden): iOS Safari won't scrollLeft / swipe with overflow:hidden */
+        overflow-x: auto;
         overflow-y: hidden;
         flex: 1;
+        min-width: 0;
         scroll-behavior: smooth;
         scrollbar-width: none;
         -ms-overflow-style: none;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
+        overscroll-behavior-x: contain;
         padding: 1.35rem 0.35rem;
         margin: -0.25rem 0;
         position: relative;
@@ -2050,6 +2055,10 @@
 
         .stores-grid { 
             gap: 0.75rem;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-x;
+            scroll-snap-type: x proximity;
         }
 
         .stores-arrow {
@@ -2063,6 +2072,8 @@
             gap: 0.6rem;
             padding: 0.8rem;
             min-width: 220px;
+            flex-shrink: 0;
+            scroll-snap-align: start;
             cursor: auto;
         }
         
@@ -3473,15 +3484,26 @@ function setupStoresCarousel() {
     let resumeTimeout = null;
     const scheduleResume = () => {
         clearTimeout(resumeTimeout);
-        resumeTimeout = setTimeout(() => {
-            if (!storesAutoScrollPaused) {
-                storesManualAnimating = false;
-            }
-        }, 2500);
+        resumeTimeout = setTimeout(resume, 2500);
     };
-    
-    container.addEventListener('mousedown', scheduleResume);
-    container.addEventListener('touchstart', scheduleResume);
+
+    // Pause while the user is swiping / dragging (critical on phones)
+    container.addEventListener('mousedown', () => {
+        pause();
+        storesManualAnimating = true;
+        scheduleResume();
+    });
+    container.addEventListener('touchstart', () => {
+        pause();
+        storesManualAnimating = true;
+        scheduleResume();
+    }, { passive: true });
+    container.addEventListener('touchend', scheduleResume, { passive: true });
+    container.addEventListener('touchcancel', scheduleResume, { passive: true });
+    container.addEventListener('scroll', () => {
+        // If the user is finger-scrolling, keep auto-scroll paused briefly
+        if (storesManualAnimating) scheduleResume();
+    }, { passive: true });
 
     container.scrollLeft = 0;
     // Avoid browser smooth interpolation conflicts during scripted looping.
