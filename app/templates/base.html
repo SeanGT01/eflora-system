@@ -4185,35 +4185,20 @@ function renderCheckoutAddresses() {
     listEl.innerHTML = checkoutAddresses.map(address => {
         const isSelected = selectedCheckoutAddressId === address.id;
         const canDeliver = isCheckoutAddressDeliverable(address.id);
-        const issues = getCheckoutAddressDeliveryIssues(address.id);
-        const issueReason = issues.length
-            ? issues.map(issue => {
-                const distance = (issue.distance_km !== null && issue.distance_km !== undefined)
-                    ? ` (${issue.distance_km} km away)`
-                    : '';
-                return `${issue.store_name}: ${issue.reason || 'This area is outside delivery area.'}${distance}`;
-            }).join('<br>')
-            : 'This area is outside delivery area.';
 
         if (!canDeliver) {
             return `
-                <div style="display:block; border:1px solid #d9d9d9; background:#f3f3f3; border-radius: var(--radius-md); padding: 12px; margin-bottom: 10px; cursor:not-allowed; opacity:0.72; color:#7a7a7a;" aria-disabled="true" title="This area is outside delivery area">
+                <div style="display:block; border:1px solid #d9d9d9; background:#f3f3f3; border-radius: var(--radius-md); padding: 12px; margin-bottom: 10px; cursor:not-allowed; opacity:0.72; color:#7a7a7a;" aria-disabled="true" title="Outside delivery area">
                     <div style="display:flex; gap:10px; align-items:flex-start;">
                         <input type="radio" name="checkoutAddress" value="${address.id}" disabled style="margin-top:4px; cursor:not-allowed;">
                         <div style="flex:1;">
                             <div style="font-weight:600; margin-bottom:4px;">
                                 ${address.address_label || 'Address'}
                                 ${address.is_default ? '<span style="font-size:11px; color:#9a6a6a; margin-left:6px;">Default</span>' : ''}
-                                <span style="font-size:11px; color:#8b3a3a; margin-left:6px;">Unavailable</span>
                             </div>
                             <div style="font-size:13px;">${address.address_line}</div>
                             <div style="font-size:12px; margin-top:4px;">${address.municipality}, ${address.barangay}</div>
-                            <div style="font-size:12px; margin-top:8px; color:#8b3a3a; font-weight:600;">
-                                This area is outside delivery area
-                            </div>
-                            <div style="font-size:12px; margin-top:4px; color:#8b3a3a;">
-                                ${issueReason}
-                            </div>
+                            <div style="font-size:12px; margin-top:6px; color:#8b3a3a;">Outside delivery area</div>
                         </div>
                     </div>
                 </div>
@@ -4240,7 +4225,7 @@ function renderCheckoutAddresses() {
 
 function selectCheckoutAddress(addressId) {
     if (!isCheckoutAddressDeliverable(addressId)) {
-        showToast('This area is outside delivery area');
+        showToast('Outside delivery area');
         return;
     }
     selectedCheckoutAddressId = addressId;
@@ -4259,24 +4244,14 @@ function renderCheckoutDeliveryIssues(issues) {
     }
 
     issuesEl.style.display = 'block';
-    
-    // Determine if single store or multiple
-    const isSingleStore = issues.length === 1;
-    const heading = isSingleStore 
-        ? `This store cannot deliver to your selected address` 
-        : `${issues.length} stores cannot deliver to your selected address`;
-    
+    const storeNames = [...new Set(issues.map(i => i.store_name).filter(Boolean))];
+    const detail = storeNames.length
+        ? ` — ${storeNames.slice(0, 2).join(', ')}${storeNames.length > 2 ? ` +${storeNames.length - 2}` : ''}`
+        : '';
+
     issuesEl.innerHTML = `
-        <div style="padding:12px; border:1px solid #e0b4b4; background:#fff5f5; color:#8b3a3a; border-radius: var(--radius-md);">
-            <div style="font-weight:600; margin-bottom:8px;">⚠️ ${heading}</div>
-            ${issues.map(issue => `
-                <div style="font-size:13px; margin-bottom:6px;">
-                    <strong>${issue.store_name}</strong>: ${issue.reason || 'This area is outside delivery area.'}${issue.distance_km !== null && issue.distance_km !== undefined ? ` (${issue.distance_km} km away)` : ''}
-                </div>
-            `).join('')}
-            <div style="font-size:12px; margin-top:8px; opacity:0.8;">
-                💡 Greyed-out addresses are outside the flower shop delivery area and cannot be selected.
-            </div>
+        <div style="padding:10px 12px; border:1px solid #e0b4b4; background:#fff5f5; color:#8b3a3a; border-radius: var(--radius-md); font-size:13px;">
+            Outside delivery area${detail}
         </div>
     `;
 }
@@ -4285,11 +4260,11 @@ function renderCheckoutDeliveryIssues(issues) {
 async function proceedCheckout() {
     if (checkoutStep === 1) {
         if (!selectedCheckoutAddressId) {
-            showToast('Please select a saved delivery address within the delivery area');
+            showToast('Select a deliverable address');
             return;
         }
         if (!isCheckoutAddressDeliverable(selectedCheckoutAddressId)) {
-            showToast('This area is outside delivery area');
+            showToast('Outside delivery area');
             selectedCheckoutAddressId = pickDeliverableCheckoutAddress();
             renderCheckoutAddresses();
             renderCheckoutDeliveryIssues(getCheckoutAddressDeliveryIssues(
@@ -4377,7 +4352,7 @@ async function proceedCheckout() {
                 // Show more helpful error message
                 if (result.undeliverable_stores && result.undeliverable_stores.length > 0) {
                     const issue = result.undeliverable_stores[0];
-                    showToast(`${issue.store_name}: ${issue.reason || 'This area is outside delivery area'}`);
+                    showToast(`${issue.store_name}: Outside delivery area`);
                 } else {
                     showToast(result.error || 'Failed to validate delivery');
                 }

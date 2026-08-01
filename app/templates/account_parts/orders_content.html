@@ -1680,10 +1680,86 @@ function viewCartGroupDetail(storeId) {
     modal.classList.add('active');
     modal.style.display = 'flex';
     title.textContent = `${group.store_name || 'Store'} Basket`;
-    body.innerHTML = buildCartDetailHTML(group);
+    body.innerHTML = buildCartDetailHTML(group, { loading: true });
+
+    // Load estimated delivery fee against the customer's default/saved address.
+    fetchCartGroupDeliveryEstimate(group).then(estimate => {
+        if (!modal.classList.contains('active')) return;
+        body.innerHTML = buildCartDetailHTML(group, estimate || {});
+    });
 }
 
-function buildCartDetailHTML(group) {
+async function fetchCartGroupDeliveryEstimate(group) {
+    try {
+        if (!group || !group.store_id) return null;
+
+        const addresses = typeof fetchCheckoutAddresses === 'function'
+            ? await fetchCheckoutAddresses()
+            : [];
+        if (!addresses.length) {
+            return { can_deliver: null, note: 'Add a delivery address to see the estimated fee.' };
+        }
+
+        const address = addresses.find(a => a.is_default) || addresses[0];
+        const itemIds = (group.items || [])
+            .map(item => item.cart_item_id || item.id)
+            .filter(Boolean)
+            .map(id => ({ item_id: Number(id) }));
+
+        if (!itemIds.length) return null;
+
+        const token = await getAuthToken();
+        const response = await fetch('/api/v1/checkout/validate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token,
+            },
+            body: JSON.stringify({
+                delivery_address_id: address.id,
+                items: itemIds,
+            }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        const storeId = String(group.store_id);
+
+        const matched = Array.isArray(data.orders)
+            ? data.orders.find(o => String(o.store_id) === storeId)
+            : null;
+        if (matched) {
+            return {
+                can_deliver: true,
+                delivery_fee: Number(matched.delivery_fee) || 0,
+                subtotal: Number(matched.subtotal) || Number(group.total_amount) || 0,
+                total: Number(matched.total) || 0,
+                distance_km: matched.distance_km,
+                address_label: address.address_label || address.address_line || 'Default address',
+            };
+        }
+
+        const blocked = Array.isArray(data.undeliverable_stores)
+            ? data.undeliverable_stores.find(s => String(s.store_id) === storeId)
+            : null;
+        if (blocked) {
+            return {
+                can_deliver: false,
+                note: 'Outside delivery area for your saved address.',
+                address_label: address.address_label || address.address_line || 'Default address',
+            };
+        }
+
+        return {
+            can_deliver: null,
+            note: data.error || 'Could not estimate delivery fee right now.',
+        };
+    } catch (err) {
+        console.error('Cart delivery estimate error:', err);
+        return { can_deliver: null, note: 'Could not estimate delivery fee right now.' };
+    }
+}
+
+function buildCartDetailHTML(group, estimate = {}) {
     const itemsHtml = (group.items || []).map(item => {
         const img = item.image_url || item.product_image_url;
         const name = item.name || item.product_name || 'Product';
@@ -1704,6 +1780,29 @@ function buildCartDetailHTML(group) {
             </div>`;
     }).join('');
 
+    const subtotal = Number(estimate.subtotal ?? group.total_amount ?? 0) || 0;
+    let feeRows = '';
+
+    if (estimate.loading) {
+        feeRows = `
+            <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">${formatPeso(subtotal)}</span></div>
+            <div class="sdm-row"><span class="sdm-k">Est. delivery fee</span><span class="sdm-v" style="color:var(--muted);">Calculating…</span></div>
+            <div class="sdm-row sdm-row--total"><span class="sdm-k">Est. total</span><span class="sdm-v">${formatPeso(subtotal)}</span></div>`;
+    } else if (estimate.can_deliver === true) {
+        const fee = Number(estimate.delivery_fee) || 0;
+        const total = Number(estimate.total) || (subtotal + fee);
+        feeRows = `
+            <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">${formatPeso(subtotal)}</span></div>
+            <div class="sdm-row"><span class="sdm-k">Est. delivery fee</span><span class="sdm-v">${formatPeso(fee)}</span></div>
+            <div class="sdm-row sdm-row--total"><span class="sdm-k">Est. total to pay</span><span class="sdm-v">${formatPeso(total)}</span></div>
+            ${estimate.address_label ? `<div class="sdm-row"><span class="sdm-k">Based on</span><span class="sdm-v" style="font-size:12px;color:var(--muted);">${esc(estimate.address_label)}</span></div>` : ''}`;
+    } else {
+        feeRows = `
+            <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">${formatPeso(subtotal)}</span></div>
+            <div class="sdm-row"><span class="sdm-k">Est. delivery fee</span><span class="sdm-v" style="color:#8b3a3a;">${esc(estimate.note || 'Unavailable')}</span></div>
+            <div class="sdm-row sdm-row--total"><span class="sdm-k">Items total</span><span class="sdm-v">${formatPeso(subtotal)}</span></div>`;
+    }
+
     return `
         <div class="sdm">
             <header class="sdm-topbar">
@@ -1722,7 +1821,7 @@ function buildCartDetailHTML(group) {
                 <div class="sdm-rows">
                     <div class="sdm-row"><span class="sdm-k">Store</span><span class="sdm-v">${esc(group.store_name || 'Store')}</span></div>
                     <div class="sdm-row"><span class="sdm-k">Line items</span><span class="sdm-v">${group.item_count}</span></div>
-                    <div class="sdm-row sdm-row--total"><span class="sdm-k">Subtotal</span><span class="sdm-v">${formatPeso(group.total_amount || 0)}</span></div>
+                    ${feeRows}
                 </div>
                 <button type="button" class="btn-order-action primary" style="margin-top:1rem;" onclick="payCartStore(${group.store_id})">
                     <i class="ri-bank-card-line"></i> Pay this basket
