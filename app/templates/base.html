@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#2c2520">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}E-FLOWERS — Blooming with Technology{% endblock %}</title>
     
@@ -55,7 +57,11 @@
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
-        html { scroll-behavior: smooth; }
+        html {
+            scroll-behavior: smooth;
+            /* Fills the Dynamic Island / status-bar band on iPhone */
+            background-color: var(--charcoal);
+        }
 
         body {
             font-family: var(--font-sans);
@@ -63,6 +69,8 @@
             color: var(--charcoal);
             line-height: 1.6;
             overflow-x: hidden;
+            min-height: 100%;
+            min-height: 100dvh;
         }
 
         /* ─── Grain Overlay ─── */
@@ -76,11 +84,18 @@
             opacity: 0.4;
         }
 
-        /* ─── Sticky header shell (topbar + main stay together) ─── */
-        .site-header-sticky {
-            position: sticky;
+        /* Keeps the status-bar / Dynamic Island band painted when the
+           brown topbar has scrolled away and the glass header is sticky */
+        body::after {
+            content: '';
+            position: fixed;
             top: 0;
-            z-index: 1000;
+            left: 0;
+            right: 0;
+            height: env(safe-area-inset-top, 0px);
+            background: var(--charcoal);
+            pointer-events: none;
+            z-index: 1001;
         }
 
         /* ─── Header ─── */
@@ -90,6 +105,9 @@
                 radial-gradient(ellipse 70% 100% at 100% 50%, rgba(210, 190, 240, 0.4) 0%, transparent 55%),
                 rgba(255, 250, 252, 0.42);
             border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+            position: sticky;
+            top: env(safe-area-inset-top, 0px);
+            z-index: 1000;
             backdrop-filter: blur(20px) saturate(1.45);
             -webkit-backdrop-filter: blur(20px) saturate(1.45);
             box-shadow:
@@ -102,6 +120,7 @@
             color: var(--cream);
             text-align: center;
             padding: 0.5rem 1rem;
+            padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
             font-size: 12px;
             font-family: var(--font-sans);
             letter-spacing: 0.08em;
@@ -328,9 +347,16 @@
 
         /* Navigation */
         .main-nav {
-            border-top: 1px solid var(--border);
-            background: var(--warm-white);
-            box-shadow: 0 4px 8px rgba(255, 200, 160, 0.185);
+            border-top: 1px solid rgba(255, 255, 255, 0.55);
+            background:
+                radial-gradient(ellipse 80% 120% at 0% 50%, rgba(255, 190, 210, 0.4) 0%, transparent 55%),
+                radial-gradient(ellipse 70% 100% at 100% 50%, rgba(210, 190, 240, 0.35) 0%, transparent 55%),
+                rgba(255, 250, 252, 0.5);
+            backdrop-filter: blur(16px) saturate(1.35);
+            -webkit-backdrop-filter: blur(16px) saturate(1.35);
+            box-shadow:
+                0 4px 16px rgba(181, 68, 90, 0.06),
+                inset 0 1px 0 rgba(255, 255, 255, 0.65);
         }
 
         .nav-container {
@@ -362,7 +388,7 @@
 
         .nav-link:hover { color: var(--deep-rose); }
 
-        .nav-link.active { color: var(--charcoal); }
+        .nav-link.active { color: #c24e68; font-weight: 600; }
 
         .nav-link.active::after {
             content: '';
@@ -371,7 +397,7 @@
             left: 1.25rem;
             right: 1.25rem;
             height: 2px;
-            background: var(--deep-rose);
+            background: linear-gradient(90deg, #c24e68, #d878a0, #b070c8);
             border-radius: 2px 2px 0 0;
         }
 
@@ -1898,6 +1924,7 @@
             /* Header Topbar */
             .header-topbar {
                 padding: 0.4rem 0.5rem;
+                padding-top: calc(0.4rem + env(safe-area-inset-top, 0px));
                 font-size: 10px;
             }
             
@@ -2320,8 +2347,6 @@
         </div>
     </div>
 
-    <!-- Sticky shell: topbar + header stay together (avoids iPhone gap) -->
-    <div class="site-header-sticky">
     <!-- Top Bar -->
     <div class="header-topbar">
         🌸 Online stores &nbsp;<span>|</span>&nbsp; Same-day delivery available &nbsp;<span>|</span>&nbsp; Fresh from local farms
@@ -2430,7 +2455,6 @@
 </nav>
 {% endif %}
     </header>
-    </div>
 
     <!-- Content -->
     <main class="main-content">
