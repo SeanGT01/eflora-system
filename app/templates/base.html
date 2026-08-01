@@ -123,8 +123,8 @@
         }
 
         /*
-          Scrolling down slides the logo/search/actions row out of view while
-          the category nav stays docked at the top; scrolling up brings it back.
+          Scrolling down slides the whole sticky header (search/actions +
+          category nav) out of view; scrolling up brings it back.
         */
         .main-header.header-hidden {
             transform: translateY(calc(-1 * var(--header-hide-offset, 0px)));
@@ -2578,14 +2578,14 @@ const DEBUG = {
 // ===== AUTO-HIDE HEADER ON SCROLL =====
 (function autoHideHeader() {
     const header = document.querySelector('.main-header');
-    const headerRow = header?.querySelector('.header-container');
-    if (!header || !headerRow) return;
+    if (!header) return;
 
     let lastY = window.scrollY;
     let ticking = false;
 
     function measure() {
-        header.style.setProperty('--header-hide-offset', `${headerRow.offsetHeight}px`);
+        // Full sticky block: logo/search/actions + category nav
+        header.style.setProperty('--header-hide-offset', `${header.offsetHeight}px`);
     }
 
     function update() {
@@ -2596,8 +2596,8 @@ const DEBUG = {
         // Ignore rubber-banding and jitter so the header doesn't flicker
         if (Math.abs(delta) < 6) return;
 
-        const pastRow = y > headerRow.offsetHeight + 40;
-        if (delta > 0 && pastRow) {
+        const pastHeader = y > header.offsetHeight + 40;
+        if (delta > 0 && pastHeader) {
             header.classList.add('header-hidden');
         } else if (delta < 0) {
             header.classList.remove('header-hidden');
