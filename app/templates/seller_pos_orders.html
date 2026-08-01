@@ -375,6 +375,58 @@ let currentFilters = {
 };
 
 /* ═══════════════════════════════════════
+   PH TIME HELPERS
+   API timestamps are UTC-based; always render in Asia/Manila.
+═══════════════════════════════════════ */
+function parseApiDateTime(value) {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date(`${raw}T00:00:00Z`);
+    if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(raw)) return new Date(raw);
+    // Naive ISO from API → treat as UTC
+    return new Date(`${raw}Z`);
+}
+
+function formatPosDatePH(value) {
+    const parsed = parseApiDateTime(value);
+    if (!parsed || Number.isNaN(parsed.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-CA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        timeZone: 'Asia/Manila',
+    }).format(parsed);
+}
+
+function formatPosTimePH(value) {
+    const parsed = parseApiDateTime(value);
+    if (!parsed || Number.isNaN(parsed.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Manila',
+    }).format(parsed);
+}
+
+function formatPosDateTimePH(value) {
+    const parsed = parseApiDateTime(value);
+    if (!parsed || Number.isNaN(parsed.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Manila',
+    }).format(parsed);
+}
+
+/* ═══════════════════════════════════════
    INIT
 ═══════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', function () {
@@ -469,22 +521,8 @@ function renderOrders(orders) {
     }
 
     tbody.innerHTML = orders.map(order => {
-
-        // ── TIME FIX ──────────────────────────────────────────────────────────
-        // Backend stores PH local time and sends it with a +08:00 offset tag.
-        // Stripping the offset before parsing prevents the browser from doing
-        // an additional 8-hour shift, so the displayed time matches the stored time.
-        const rawDt  = (order.created_at || '').replace(/[+-]\d{2}:\d{2}$/, '');
-        const dt     = rawDt ? new Date(rawDt) : new Date();
-
-        const dateStr = new Intl.DateTimeFormat('en-CA', {
-            year: 'numeric', month: '2-digit', day: '2-digit'
-        }).format(dt);
-
-        const timeStr = new Intl.DateTimeFormat('en-US', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
-        }).format(dt);
-        // ──────────────────────────────────────────────────────────────────────
+        const dateStr = formatPosDatePH(order.created_at);
+        const timeStr = formatPosTimePH(order.created_at);
 
         const amountGiven  = parseFloat(order.amount_given  || order.total_amount);
         const method       = order.payment_method || 'cash';
@@ -640,13 +678,8 @@ function renderOrderModal(order) {
     const modal   = document.getElementById('orderModal');
     const content = document.getElementById('orderDetailContent');
 
-    // Same time fix — strip offset
-    const rawDt      = (order.created_at || '').replace(/[+-]\d{2}:\d{2}$/, '');
-    const dt         = rawDt ? new Date(rawDt) : new Date();
-    const dateTimeStr = new Intl.DateTimeFormat('en-US', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
-    }).format(dt);
+    // Same PH timezone formatting as the table
+    const dateTimeStr = formatPosDateTimePH(order.created_at);
 
     const items = Array.isArray(order.items) ? order.items : [];
     const lineSum = items.reduce((sum, i) => {

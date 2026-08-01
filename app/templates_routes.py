@@ -6838,6 +6838,25 @@ def _fmt_pht(dt: datetime, pattern: str = '%b %d, %Y %I:%M %p') -> str:
     return dt.astimezone(PHT).strftime(pattern)
 
 
+def _to_pht_iso(dt):
+    """Serialize UTC-naive/aware datetimes as Asia/Manila ISO-8601 (+08:00)."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(PHT).isoformat()
+
+
+def _ph_day_bounds_as_utc_naive(day):
+    """PH calendar day [start, end] expressed as naive UTC for DB comparisons."""
+    start_ph = PHT.localize(datetime.combine(day, datetime.min.time()))
+    end_ph = PHT.localize(datetime.combine(day, datetime.max.time().replace(microsecond=0)))
+    return (
+        start_ph.astimezone(pytz.utc).replace(tzinfo=None),
+        end_ph.astimezone(pytz.utc).replace(tzinfo=None),
+    )
+
+
 def _push_saved_report_entry(entry: dict) -> None:
     """Persist report metadata so it survives logout/login."""
     user_id = session.get('user_id')
@@ -8336,8 +8355,15 @@ def get_store_time_slots_web(store_id):
                 {'label': '3:00 PM - 6:00 PM', 'value': '15:00-18:00'}
             ],
             'is_open': True,
-            'has_schedule': False
+            'has_schedule': False,
+            'open_days': [],
         })
+    
+    open_days = sorted({
+        str(day).lower()
+        for entry in schedule.get('schedules', [])
+        for day in (entry.get('days') or [])
+    })
     
     date_str = request.args.get('date')
     if date_str:
@@ -8362,7 +8388,8 @@ def get_store_time_slots_web(store_id):
             'time_slots': [],
             'is_open': False,
             'has_schedule': True,
-            'day': day_name
+            'day': day_name,
+            'open_days': open_days,
         })
     
     time_slots = []
@@ -8423,6 +8450,7 @@ def get_store_time_slots_web(store_id):
             'slot_duration': slot_duration,
             'delivery_start': delivery_start,
             'delivery_cutoff': delivery_cutoff,
+            'open_days': open_days,
         })
 
     return jsonify({
@@ -8434,6 +8462,7 @@ def get_store_time_slots_web(store_id):
         'slot_duration': slot_duration,
         'delivery_start': delivery_start,
         'delivery_cutoff': delivery_cutoff,
+        'open_days': open_days,
     })
 
 
@@ -10309,11 +10338,11 @@ def pos_order_detail_api(order_id):
         else:
             total_val = computed_total
 
-        # created_at is stored as PH local time (naive datetime), so label with +08:00.
+        # created_at is stored as UTC-naive (datetime.utcnow); emit true PHT ISO.
         created_at_iso = None
         created_at_date = None
         if order.created_at:
-            created_at_iso  = order.created_at.strftime('%Y-%m-%dT%H:%M:%S+08:00')
+            created_at_iso  = _to_pht_iso(order.created_at)
             created_at_date = _fmt_pht(order.created_at, '%Y-%m-%d')
 
         return jsonify({
@@ -10356,37 +10385,35 @@ def pos_order_history_api():
     query = POSOrder.query.filter_by(store_id=store.id)
 
     # ── Date filtering ────────────────────────────────────────────────────────
-    # created_at is stored as PH local time (naive datetime), NOT UTC.
-    # So we compare directly using PH local date boundaries — no UTC conversion.
-    import pytz
-    ph_tz = pytz.timezone('Asia/Manila')
-    today_ph = datetime.now(ph_tz).date()
+    # created_at is UTC-naive (datetime.utcnow). Convert PH calendar-day bounds
+    # to UTC-naive before comparing so "today" / week / month match Manila time.
+    today_ph = datetime.now(PHT).date()
 
     if date_filter == 'today':
-        start = datetime(today_ph.year, today_ph.month, today_ph.day, 0, 0, 0)
-        end   = datetime(today_ph.year, today_ph.month, today_ph.day, 23, 59, 59)
+        start, end = _ph_day_bounds_as_utc_naive(today_ph)
         query = query.filter(POSOrder.created_at >= start, POSOrder.created_at <= end)
 
     elif date_filter == 'yesterday':
         yesterday = today_ph - timedelta(days=1)
-        start = datetime(yesterday.year, yesterday.month, yesterday.day, 0, 0, 0)
-        end   = datetime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59)
+        start, end = _ph_day_bounds_as_utc_naive(yesterday)
         query = query.filter(POSOrder.created_at >= start, POSOrder.created_at <= end)
 
     elif date_filter == 'this_week':
         start_of_week = today_ph - timedelta(days=today_ph.weekday())  # Monday
-        start = datetime(start_of_week.year, start_of_week.month, start_of_week.day, 0, 0, 0)
+        start, _ = _ph_day_bounds_as_utc_naive(start_of_week)
         query = query.filter(POSOrder.created_at >= start)
 
     elif date_filter == 'this_month':
         start_of_month = today_ph.replace(day=1)
-        start = datetime(start_of_month.year, start_of_month.month, start_of_month.day, 0, 0, 0)
+        start, _ = _ph_day_bounds_as_utc_naive(start_of_month)
         query = query.filter(POSOrder.created_at >= start)
 
     elif date_filter == 'custom' and start_date and end_date:
         try:
-            start = datetime.strptime(start_date, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
-            end   = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            start_day = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_day = datetime.strptime(end_date, '%Y-%m-%d').date()
+            start, _ = _ph_day_bounds_as_utc_naive(start_day)
+            _, end = _ph_day_bounds_as_utc_naive(end_day)
             query = query.filter(POSOrder.created_at >= start, POSOrder.created_at <= end)
         except ValueError:
             pass
@@ -10411,8 +10438,7 @@ def pos_order_history_api():
     )
 
     # ── Serialize ─────────────────────────────────────────────────────────────
-    # created_at is stored as PH local time, so we just label it with +08:00
-    # offset directly — no UTC conversion needed.
+    # created_at is UTC-naive; convert to Asia/Manila before emitting ISO.
     orders = []
     for o in pagination.items:
         subtotal   = sum(float(item.price * item.quantity) for item in o.items)
@@ -10426,7 +10452,7 @@ def pos_order_history_api():
             total_f = computed_total
 
         if o.created_at:
-            created_at_iso  = o.created_at.strftime('%Y-%m-%dT%H:%M:%S+08:00')
+            created_at_iso  = _to_pht_iso(o.created_at)
             created_at_date = _fmt_pht(o.created_at, '%Y-%m-%d')
         else:
             created_at_iso  = None

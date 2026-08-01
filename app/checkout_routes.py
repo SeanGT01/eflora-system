@@ -466,6 +466,7 @@ def validate_checkout():
                     "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
                     "gcash_instructions": store.gcash_instructions,
                     "allow_cod": _store_allows_cod(store.id),
+                    "store_schedule": store.store_schedule,
                 })
 
         if undeliverable_stores:
@@ -1361,6 +1362,7 @@ def buy_now_validate():
                 "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
                 "gcash_instructions": store.gcash_instructions,
                 "allow_cod": _store_allows_cod(store.id),
+                "store_schedule": store.store_schedule,
             }],
             "address": address.to_dict(),
         }), 200
