@@ -1,5 +1,5 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask import Blueprint, request, jsonify, session
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from app import db
 from app.models import User, Store, Order, Product, Rider, OrderAnalytics, SellerApplication, Notification
 from sqlalchemy import func, extract
@@ -19,6 +19,44 @@ def admin_required(fn):
         return fn(*args, **kwargs)
     
     # IMPORTANT: Preserve the original function's name
+    decorated_function.__name__ = fn.__name__
+    return decorated_function
+
+
+def _is_session_admin():
+    """Website admin UI uses Flask session cookies (not JWT)."""
+    user_id = session.get('user_id')
+    role = (session.get('role') or '').strip().lower()
+    if user_id and role == 'admin':
+        return True
+    if not user_id:
+        return False
+    user = User.query.get(user_id)
+    if user and (user.role or '').strip().lower() == 'admin':
+        session['role'] = 'admin'
+        return True
+    return False
+
+
+def _is_jwt_admin():
+    try:
+        verify_jwt_in_request(optional=True)
+        user_id = get_jwt_identity()
+        if user_id is None or user_id == '':
+            return False
+        user = User.query.get(int(str(user_id).strip()))
+        return bool(user and (user.role or '').strip().lower() == 'admin')
+    except Exception:
+        return False
+
+
+def admin_session_or_jwt_required(fn):
+    """Allow either website session admin or JWT admin API clients."""
+    def decorated_function(*args, **kwargs):
+        if _is_session_admin() or _is_jwt_admin():
+            return fn(*args, **kwargs)
+        return jsonify({'error': 'Unauthorized'}), 401
+
     decorated_function.__name__ = fn.__name__
     return decorated_function
 
@@ -124,28 +162,44 @@ def get_stores():
     return jsonify({'stores': store_data}), 200
 
 @admin_bp.route('/stores/<int:store_id>/status', methods=['PUT'])
-@admin_required
+@admin_session_or_jwt_required
 def update_store_status(store_id):
-    data = request.get_json()
-    status = data.get('status')
-    
-    if status not in ['pending', 'active', 'suspended', 'inactive']:
-        return jsonify({'error': 'Invalid status'}), 400
-    
+    """
+    Update store status.
+    Used by the website admin Stores page (session cookie) and JWT admin clients.
+    This route is registered on admin_bp at /api/v1/admin/... and must accept
+    session auth — otherwise the browser UI gets 401 (no JWT).
+    """
+    data = request.get_json(silent=True) or {}
+    status = (data.get('status') or '').strip().lower()
+    if status == 'inactive':
+        status = 'suspended'
+
+    if status not in ['pending', 'active', 'suspended']:
+        return jsonify({'error': 'Invalid status. Use pending, active, or suspended.'}), 400
+
     store = Store.query.get(store_id)
     if not store:
         return jsonify({'error': 'Store not found'}), 404
-    
+
     store.status = status
     store.updated_at = datetime.utcnow()
-    db.session.commit()
-    
+
     # Activate seller if store is approved
-    if status == 'active' and store.seller:
+    if status == 'active' and store.seller and (store.seller.status or '').lower() != 'active':
         store.seller.status = 'active'
+
+    try:
         db.session.commit()
-    
-    return jsonify({'message': 'Store status updated', 'store': store.to_dict()}), 200
+        return jsonify({
+            'success': True,
+            'message': 'Store status updated',
+            'status': store.status,
+            'store': store.to_dict(),
+        }), 200
+    except Exception as ex:
+        db.session.rollback()
+        return jsonify({'error': f'Could not update status: {ex}'}), 500
 
 @admin_bp.route('/orders', methods=['GET'])
 @admin_required

@@ -3,7 +3,46 @@
 {% block title %}Support - E-FLOWERS{% endblock %}
 {% block page_title %}Support{% endblock %}
 
+{% block extra_css %}
+<style>
+.admin-support-page .faq-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.admin-support-page .faq-actions .btn {
+    width: auto;
+}
+.admin-support-page .admin-table-scroll table {
+    min-width: 0;
+}
+@media (min-width: 901px) {
+    .admin-support-page .admin-table-scroll table {
+        min-width: 680px;
+    }
+}
+@media (max-width: 760px) {
+    .admin-support-page .card {
+        padding: 1.1rem !important;
+    }
+    .admin-support-page .section-title {
+        font-size: 1.35rem !important;
+    }
+    .admin-support-page .btn.btn-rose {
+        width: 100%;
+        justify-content: center;
+    }
+    .admin-support-page #faqSaveBtn,
+    .admin-support-page #faqCancelBtn {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
+<div class="admin-support-page">
 <div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
     <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap: wrap;">
         <div>
@@ -51,8 +90,8 @@
     </div>
 </div>
 
-<div class="table-wrap">
-    <table class="table">
+<div class="table-wrap admin-table-scroll">
+    <table class="table admin-responsive-table">
         <thead>
             <tr>
                 <th style="width: 36%;">Question</th>
@@ -67,6 +106,7 @@
             </tr>
         </tbody>
     </table>
+</div>
 </div>
 {% endblock %}
 
@@ -114,7 +154,7 @@ async function loadFaqs() {
                 <td style="white-space:pre-wrap;">${esc(f.answer)}</td>
                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                 <td>
-                    <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                    <div class="faq-actions">
                         <button class="btn btn-outline" style="padding:0.42rem 0.7rem; font-size:12px;" onclick="startEditFaq(${f.id})"><i class="ri-edit-line"></i> Edit</button>
                         <button class="btn btn-outline" style="padding:0.42rem 0.7rem; font-size:12px;" onclick="toggleFaq(${f.id})">
                             <i class="ri-${f.is_active ? 'eye-off' : 'eye'}-line"></i> ${f.is_active ? 'Hide' : 'Show'}

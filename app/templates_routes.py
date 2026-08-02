@@ -862,13 +862,20 @@ def submit_home_testimonial():
 
 
 def seller_required(f):
-    """Require user to be logged in as a seller."""
+    """Require user to be logged in as a seller with an accessible storefront."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('templates.login'))
         if session.get('role') != 'seller':
             return redirect(url_for('templates.dashboard'))
+        # Suspended storefronts cannot use seller tools.
+        if request.endpoint != 'templates.seller_store_suspended':
+            if (
+                _seller_portal_suspended_store(session['user_id'])
+                and not _seller_portal_active_store(session['user_id'])
+            ):
+                return redirect(url_for('templates.seller_store_suspended'))
         return f(*args, **kwargs)
     return decorated
 
@@ -1432,14 +1439,8 @@ def login():
             return redirect(url_for('templates.admin_users'))
         if role == 'seller':
             u = User.query.get(session['user_id'])
-            if u and _seller_portal_active_store(u.id):
-                return redirect(url_for('templates.seller_products'))
             if u:
-                pend_app = SellerApplication.query.filter_by(
-                    user_id=u.id, status='pending'
-                ).order_by(SellerApplication.submitted_at.desc()).first()
-                if pend_app:
-                    return redirect(url_for('templates.seller_signup_status'))
+                return _seller_home_redirect(u.id)
             return redirect(url_for('templates.seller_signup_complete'))
         if role == 'rider':
             return redirect(url_for('templates.rider_dashboard'))
@@ -1493,14 +1494,7 @@ def login():
             if user.role == 'admin':
                 return redirect(url_for('templates.admin_users'))
             elif user.role == 'seller':
-                if _seller_portal_active_store(user.id):
-                    return redirect(url_for('templates.seller_products'))
-                pend_app = SellerApplication.query.filter_by(
-                    user_id=user.id, status='pending'
-                ).order_by(SellerApplication.submitted_at.desc()).first()
-                if pend_app:
-                    return redirect(url_for('templates.seller_signup_status'))
-                return redirect(url_for('templates.seller_signup_complete'))
+                return _seller_home_redirect(user.id)
             elif user.role == 'rider':
                 return redirect(url_for('templates.rider_dashboard'))
             else:  # customer
@@ -1780,6 +1774,37 @@ def _seller_portal_active_store(user_id):
     return Store.query.filter_by(seller_id=user_id, status='active').first()
 
 
+def _seller_portal_suspended_store(user_id):
+    """Storefront marked suspended/inactive by admin (not merely pending signup)."""
+    return (
+        Store.query.filter(
+            Store.seller_id == user_id,
+            Store.status.in_(('suspended', 'inactive')),
+        )
+        .order_by(Store.updated_at.desc().nullslast(), Store.id.desc())
+        .first()
+    )
+
+
+def _seller_home_redirect(user_id):
+    """Where a logged-in seller should land after login / portal entry."""
+    if _seller_portal_active_store(user_id):
+        return redirect(url_for('templates.seller_products'))
+    suspended = _seller_portal_suspended_store(user_id)
+    if suspended:
+        return redirect(url_for('templates.seller_store_suspended'))
+    pend_app = SellerApplication.query.filter_by(
+        user_id=user_id, status='pending'
+    ).order_by(SellerApplication.submitted_at.desc()).first()
+    if pend_app:
+        return redirect(url_for('templates.seller_signup_status'))
+    # Also treat resubmitted apps as in-review
+    latest = _seller_portal_latest_application(user_id)
+    if latest and latest.status in ('pending', 'resubmitted'):
+        return redirect(url_for('templates.seller_signup_status'))
+    return redirect(url_for('templates.seller_signup_complete'))
+
+
 def _seller_portal_latest_application(user_id):
     return (
         SellerApplication.query.filter_by(user_id=user_id)
@@ -1838,18 +1863,9 @@ def seller_signup_landing():
                 print(f"⚠️ Session role mismatch. session={session.get('role')} db={user.role}. Syncing session role.")
                 session['role'] = user.role
         if user and user.role == 'seller':
-            if _seller_portal_active_store(user.id):
-                print("Decision: seller with active store -> seller_products")
-                print("=" * 60 + "\n")
-                return redirect(url_for('templates.seller_products'))
-            app_row = _seller_portal_latest_application(user.id)
-            if app_row and app_row.status in ('pending', 'resubmitted'):
-                print(f"Decision: seller app in-review ({app_row.status}) -> seller_signup_status")
-                print("=" * 60 + "\n")
-                return redirect(url_for('templates.seller_signup_status'))
-            print("Decision: seller without active store -> seller_signup_complete")
+            print("Decision: seller -> _seller_home_redirect")
             print("=" * 60 + "\n")
-            return redirect(url_for('templates.seller_signup_complete'))
+            return _seller_home_redirect(user.id)
         if user and user.role == 'customer':
             # Keep this page directly accessible for customers to avoid redirect loops.
             print("Decision: customer -> render seller_signup_landing.html")
@@ -2123,10 +2139,38 @@ def seller_signup_complete():
     if user.role == 'seller' and _seller_portal_active_store(user.id):
         return redirect(url_for('templates.seller_products'))
 
+    if user.role == 'seller' and _seller_portal_suspended_store(user.id):
+        return redirect(url_for('templates.seller_store_suspended'))
+
     latest = _seller_portal_latest_application(user.id)
     if latest and latest.status in ('pending', 'resubmitted'):
         return redirect(url_for('templates.seller_signup_status'))
     return render_template('seller_signup_complete.html', user=user, application=latest)
+
+
+@templates_bp.route('/seller/suspended', methods=['GET'])
+def seller_store_suspended():
+    """Shown when the seller's storefront was suspended/inactive by admin."""
+    if not session.get('user_id'):
+        return redirect(url_for('templates.login', next=url_for('templates.seller_store_suspended')))
+
+    user = User.query.get(session['user_id'])
+    if not user or user.role != 'seller':
+        return redirect(url_for('templates.index'))
+
+    # If they were reactivated, send them back into the portal.
+    if _seller_portal_active_store(user.id):
+        return redirect(url_for('templates.seller_products'))
+
+    store = _seller_portal_suspended_store(user.id)
+    if not store:
+        return _seller_home_redirect(user.id)
+
+    return render_template(
+        'seller_store_suspended.html',
+        user=user,
+        store=store,
+    )
 
 
 @templates_bp.route('/seller/signup/status', methods=['GET'])
@@ -2137,6 +2181,9 @@ def seller_signup_status():
     user = User.query.get(session['user_id'])
     if not user:
         return redirect(url_for('templates.index'))
+
+    if user.role == 'seller' and _seller_portal_suspended_store(user.id) and not _seller_portal_active_store(user.id):
+        return redirect(url_for('templates.seller_store_suspended'))
 
     latest = _seller_portal_latest_application(user.id)
     return render_template(
@@ -3017,6 +3064,9 @@ def seller_dashboard():
     store = Store.query.filter_by(seller_id=user_id, status='active').first()
 
     if not store:
+        suspended = _seller_portal_suspended_store(user_id)
+        if suspended:
+            return redirect(url_for('templates.seller_store_suspended'))
         pend_app = SellerApplication.query.filter_by(
             user_id=user_id, status='pending'
         ).order_by(SellerApplication.submitted_at.desc()).first()
@@ -3911,7 +3961,6 @@ def admin_stores():
     user_id = session.get('user_id')
 
     stores = (Store.query
-              .filter(Store.status == 'active')
               .order_by(Store.created_at.desc().nullslast(), Store.id.desc())
               .all())
 
@@ -3920,7 +3969,9 @@ def admin_stores():
         'total': Store.query.count(),
         'active': Store.query.filter(Store.status == 'active').count(),
         'pending': Store.query.filter(Store.status == 'pending').count(),
-        'suspended': Store.query.filter(Store.status == 'suspended').count(),
+        'suspended': Store.query.filter(
+            Store.status.in_(('suspended', 'inactive'))
+        ).count(),
     }
     total_revenue = 0.0
 
@@ -3944,7 +3995,9 @@ def admin_stores():
 
         owner_name = s.seller.full_name if s.seller else 'Unassigned'
         owner_email = s.seller.email if s.seller else ''
-        status_key = (s.status or 'pending').lower()
+        raw_status = (s.status or 'pending').lower()
+        # Normalize legacy "inactive" to suspended for the admin UI.
+        status_key = 'suspended' if raw_status == 'inactive' else raw_status
 
         rows.append({
             'id': s.id,
@@ -4017,7 +4070,11 @@ def _store_summary_dict(store: 'Store') -> dict:
         'address': store.address or '',
         'contact_number': store.contact_number or '',
         'logo_url': store.logo_url,
-        'status': (store.status or 'pending').lower(),
+        'status': (
+            'suspended'
+            if (store.status or '').lower() == 'inactive'
+            else (store.status or 'pending').lower()
+        ),
         'owner': {
             'id': store.seller.id if store.seller else None,
             'full_name': store.seller.full_name if store.seller else 'Unassigned',
@@ -4042,7 +4099,6 @@ def api_admin_stores_list():
         return jsonify({'error': 'Unauthorized'}), 401
     try:
         stores = (Store.query
-                  .filter(Store.status == 'active')
                   .order_by(Store.created_at.desc().nullslast(), Store.id.desc())
                   .all())
         return jsonify({'stores': [_store_summary_dict(s) for s in stores]})
@@ -4111,12 +4167,26 @@ def api_admin_store_status(store_id):
     store = Store.query.get_or_404(store_id)
     data = request.get_json(silent=True) or {}
     new_status = (data.get('status') or '').strip().lower()
+    # Accept legacy "inactive" from older rows / UIs as suspended.
+    if new_status == 'inactive':
+        new_status = 'suspended'
     if new_status not in ('pending', 'active', 'suspended'):
-        return jsonify({'error': 'Invalid status'}), 400
+        return jsonify({'error': 'Invalid status. Use pending, active, or suspended.'}), 400
+
     store.status = new_status
+    store.updated_at = datetime.utcnow()
+
+    # When approving a storefront, ensure the seller account is active.
+    if new_status == 'active' and store.seller and (store.seller.status or '').lower() != 'active':
+        store.seller.status = 'active'
+
     try:
         db.session.commit()
-        return jsonify({'success': True, 'status': store.status})
+        return jsonify({
+            'success': True,
+            'status': store.status,
+            'store': _store_summary_dict(store),
+        })
     except Exception as ex:
         db.session.rollback()
         current_app.logger.exception('api_admin_store_status: %s', ex)
@@ -4317,12 +4387,18 @@ def api_admin_home_testimonial_visibility(tid):
 def seller_products():
     if session.get('role') != 'seller':
         return redirect(url_for('templates.dashboard'))
-    
+    user_id = session.get('user_id')
+    if (
+        _seller_portal_suspended_store(user_id)
+        and not _seller_portal_active_store(user_id)
+    ):
+        return redirect(url_for('templates.seller_store_suspended'))
+
     # Get seller's store
-    store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+    store = Store.query.filter_by(seller_id=user_id, status='active').first()
     categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order.asc(), Category.name.asc()).all()
     if not store:
-        return render_template('products.html', products=[], categories=categories)
+        return _seller_home_redirect(user_id)
     
     # Get ONLY NON-ARCHIVED products for this store
     products = Product.query.filter_by(
@@ -4340,10 +4416,16 @@ def seller_products():
 def seller_inventory():
     if session.get('role') != 'seller':
         return redirect(url_for('templates.dashboard'))
+    user_id = session.get('user_id')
+    if (
+        _seller_portal_suspended_store(user_id)
+        and not _seller_portal_active_store(user_id)
+    ):
+        return redirect(url_for('templates.seller_store_suspended'))
 
-    store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+    store = Store.query.filter_by(seller_id=user_id, status='active').first()
     if not store:
-        return render_template('seller_inventory.html', products=[])
+        return _seller_home_redirect(user_id)
 
     products = Product.query.filter_by(
         store_id=store.id,

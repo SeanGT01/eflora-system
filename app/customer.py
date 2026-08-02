@@ -84,6 +84,48 @@ def _resolve_optional_customer_address():
     except Exception:
         return None, None
 
+
+def _listing_delivery_match(store, address):
+    """
+    Storefront coverage check — aligned with templates_routes._store_delivery_match
+    so mobile listing filters match the web landing page.
+    """
+    if not store or not address:
+        return {'can_deliver': False, 'reason': 'Set your default address to check delivery coverage.'}
+
+    address_municipality = (address.municipality or '').strip().casefold()
+    has_coords = address.latitude is not None and address.longitude is not None
+
+    try:
+        if store.delivery_method == 'municipality':
+            selected = store.selected_municipalities or []
+            if selected and address_municipality:
+                matched = any(
+                    str(name).strip().casefold() == address_municipality for name in selected
+                )
+                if not matched:
+                    return {
+                        'can_deliver': False,
+                        'reason': f"{store.name} does not deliver to {address.municipality}.",
+                    }
+            return {'can_deliver': True, 'reason': None}
+
+        if not has_coords:
+            return {
+                'can_deliver': False,
+                'reason': 'Your default address is missing map coordinates.',
+            }
+
+        # Reuse checkout geo/fee helper when coordinates exist
+        baseline = 1.0
+        return _check_store_delivery(store, address, baseline)
+    except Exception:
+        return {
+            'can_deliver': False,
+            'reason': 'Could not validate delivery coverage right now.',
+        }
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # PRODUCTS — public
 # ══════════════════════════════════════════════════════════════════════════
@@ -96,7 +138,14 @@ def get_products():
     search   = request.args.get('q', '')
     page     = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 20, type=int), 100)
-    include_outside = request.args.get('include_outside_location', '1') in ('1', 'true', 'True', 'yes')
+    _, address = _resolve_optional_customer_address()
+    # Match web storefront: when a customer has a default address, hide
+    # out-of-range products unless include_outside_location=1.
+    include_outside_arg = request.args.get('include_outside_location')
+    if include_outside_arg is None:
+        include_outside = address is None
+    else:
+        include_outside = include_outside_arg in ('1', 'true', 'True', 'yes')
 
     # NOTE: We used to filter by stock_quantity > 0, but now we return all available products.
     # The frontend (web/mobile) handles visibility logic:
@@ -121,18 +170,17 @@ def get_products():
     if search:
         q = q.filter(Product.name.ilike(f'%{search}%'))
 
-    paged = q.paginate(page=page, per_page=per_page, error_out=False)
+    # Over-fetch when location-filtering so a page still has enough cards
+    # after out-of-range products are dropped (same idea as web limit=40).
+    fetch_size = per_page * 3 if (address and not include_outside) else per_page
+    paged = q.paginate(page=page, per_page=fetch_size, error_out=False)
 
-    _, address = _resolve_optional_customer_address()
     products = []
     for p in paged.items:
         d = p.to_dict()
         d['store_name'] = p.store.name if p.store else None
         if address and p.store:
-            unit_price = float(p.effective_price or p.price or 0)
-            # Positive baseline for fee helper inside _check_store_delivery (coverage is geo-based).
-            subtotal_for_coverage = max(unit_price, 1.0)
-            delivery_check = _check_store_delivery(p.store, address, subtotal_for_coverage)
+            delivery_check = _listing_delivery_match(p.store, address)
             d['can_deliver_to_customer'] = bool(delivery_check.get('can_deliver'))
             d['delivery_reason'] = delivery_check.get('reason')
         else:
@@ -140,6 +188,8 @@ def get_products():
             d['delivery_reason'] = None
         if include_outside or d['can_deliver_to_customer']:
             products.append(d)
+        if len(products) >= per_page:
+            break
 
     return jsonify({
         'products': products,
@@ -207,16 +257,18 @@ def get_categories():
 @customer_bp.route('/stores', methods=['GET'])
 def get_stores():
     """Public store listing."""
-    include_outside = request.args.get('include_outside_location', '1') in ('1', 'true', 'True', 'yes')
     _, address = _resolve_optional_customer_address()
+    include_outside_arg = request.args.get('include_outside_location')
+    if include_outside_arg is None:
+        include_outside = address is None
+    else:
+        include_outside = include_outside_arg in ('1', 'true', 'True', 'yes')
     stores = Store.query.filter_by(status='active').all()
     result = []
     for s in stores:
         sd = s.to_dict()
         if address:
-            # Baseline subtotal for coverage checks (distance / area only; fee calc is incidental).
-            baseline = max(1.0, float(s.free_delivery_minimum or 0))
-            delivery_check = _check_store_delivery(s, address, baseline)
+            delivery_check = _listing_delivery_match(s, address)
             sd['can_deliver_to_customer'] = bool(delivery_check.get('can_deliver'))
             sd['delivery_reason'] = delivery_check.get('reason')
         else:

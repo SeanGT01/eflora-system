@@ -454,6 +454,7 @@ def create_app(config_class='default'):
             '/seller/signup/resend-otp',
             '/seller/signup/complete',
             '/seller/signup/status',
+            '/seller/suspended',
         )
         if any(
             normalized_path == p or normalized_path.startswith(f'{p}/')

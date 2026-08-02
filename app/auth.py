@@ -436,14 +436,7 @@ def login():
     return jsonify({
         'success': True,
         'token': token,
-        'user': {
-            'id': user.id,
-            'full_name': user.full_name,
-            'email': user.email,
-            'role': user.role,
-            'avatar_filename': user.avatar_filename,
-            'phone': user.phone
-        }
+        'user': user.to_dict(),
     })
 
 @auth_bp.route('/register', methods=['POST'])

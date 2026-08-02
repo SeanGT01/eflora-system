@@ -4,7 +4,85 @@
 
 {% block page_title %}Users{% endblock %}
 
+{% block extra_css %}
+<style>
+.admin-users-page .subcat-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.admin-users-page .admin-tabs-scroll {
+    display: flex;
+    gap: 0.35rem 0.75rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+.admin-users-page .admin-tabs-scroll .tab-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+.admin-users-page .review-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+@media (max-width: 1100px) {
+    .admin-users-page .card {
+        padding-left: 1.1rem !important;
+        padding-right: 1.1rem !important;
+    }
+}
+@media (max-width: 760px) {
+    .admin-users-page .modal.modal-lg,
+    .admin-users-page .modal {
+        width: 96% !important;
+        max-width: 96% !important;
+        margin: 0.75rem auto;
+        max-height: 92vh;
+    }
+    .admin-users-page .modal-body {
+        padding: 1rem;
+    }
+    .admin-users-page .modal-footer {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .admin-users-page .modal-footer .btn {
+        flex: 1 1 auto;
+    }
+    .admin-users-page .review-details-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    .admin-users-page .admin-toolbar-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .admin-users-page .admin-toolbar-row .btn {
+        width: 100%;
+    }
+}
+@media (max-width: 480px) {
+    .admin-users-page .subcat-btn {
+        flex: 1 1 auto;
+        justify-content: center;
+        font-size: 12.5px;
+        padding: 0.55rem 0.7rem;
+    }
+    .admin-users-page #usersPagination {
+        justify-content: center !important;
+        flex-wrap: wrap;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
+<div class="admin-users-page">
 <!-- Sub-categories -->
 <div class="card" style="padding: 0.75rem; margin-bottom: 1rem;">
     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -19,7 +97,7 @@
 
 <div id="applications-panel">
 <!-- Stats Cards Row -->
-<div class="stat-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.75rem;">
+<div class="admin-stat-grid">
     <div class="stat-card">
         <div class="stat-card-stripe stripe-primary" style="background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));"></div>
         <div class="stat-card-header">
@@ -72,7 +150,7 @@
 <!-- Filter Tabs & Search -->
 <div class="card" style="padding: 1.5rem; margin-bottom: 2rem;">
     <!-- Tabs with Badges -->
-    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); flex-wrap: wrap;">
+    <div class="admin-tabs-scroll">
         <button class="tab-btn active" id="pending-tab" onclick="switchTab('pending')" style="background: none; border: none; padding: 0.75rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition); display: flex; align-items: center; gap: 0.5rem;">
             <i class="ri-time-line"></i>Pending Review
             <span class="tab-badge" id="pending-badge" style="background: #f0b429; color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 10px; min-width: 20px; text-align: center;">0</span>
@@ -96,8 +174,8 @@
     </div>
     
     <!-- Search Bar -->
-    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-        <div style="position: relative; flex: 1; min-width: 300px;">
+    <div class="admin-toolbar-row">
+        <div class="admin-search-grow">
             <i class="ri-search-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted);"></i>
             <input type="text" id="searchInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Search by name, store, or email..." onkeyup="filterCurrentSection()">
         </div>
@@ -109,8 +187,8 @@
 
 <!-- Applications Tables - Pending -->
 <div id="pending-table" class="table-section" style="display: block;">
-    <div class="table-wrap">
-        <table class="table">
+    <div class="table-wrap admin-table-scroll">
+        <table class="table admin-responsive-table">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -135,8 +213,8 @@
 
 <!-- Applications Tables - Resubmitted -->
 <div id="resubmitted-table" class="table-section" style="display: none;">
-    <div class="table-wrap">
-        <table class="table">
+    <div class="table-wrap admin-table-scroll">
+        <table class="table admin-responsive-table">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -161,8 +239,8 @@
 
 <!-- Applications Tables - Approved -->
 <div id="approved-table" class="table-section" style="display: none;">
-    <div class="table-wrap">
-        <table class="table">
+    <div class="table-wrap admin-table-scroll">
+        <table class="table admin-responsive-table">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -187,8 +265,8 @@
 
 <!-- Applications Tables - Rejected -->
 <div id="rejected-table" class="table-section" style="display: none;">
-    <div class="table-wrap">
-        <table class="table">
+    <div class="table-wrap admin-table-scroll">
+        <table class="table admin-responsive-table">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -213,8 +291,8 @@
 
 <!-- Applications Tables - All -->
 <div id="all-table" class="table-section" style="display: none;">
-    <div class="table-wrap">
-        <table class="table">
+    <div class="table-wrap admin-table-scroll">
+        <table class="table admin-responsive-table">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -239,7 +317,7 @@
 </div>
 
 <div id="users-panel" style="display: none;">
-    <div class="stat-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.75rem;">
+    <div class="admin-stat-grid">
         <div class="stat-card">
             <div class="stat-card-stripe stripe-primary" style="background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));"></div>
             <div class="stat-card-header">
@@ -278,8 +356,8 @@
         </div>
     </div>
 
-    <div class="table-wrap">
-        <table class="table">
+    <div class="table-wrap admin-table-scroll">
+        <table class="table admin-responsive-table">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -306,8 +384,8 @@
             <h4 style="margin: 0; font-size: 15px; font-weight: 600; color: var(--charcoal);">Banned Accounts</h4>
             <button class="btn btn-outline btn-sm" onclick="loadBannedAccounts()"><i class="ri-refresh-line"></i> Refresh</button>
         </div>
-        <div class="table-wrap">
-            <table class="table">
+        <div class="table-wrap admin-table-scroll">
+            <table class="table admin-responsive-table">
                 <thead>
                     <tr>
                         <th>User</th>
@@ -709,6 +787,7 @@
         to { transform: translateX(0); opacity: 1; }
     }
 </style>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -1562,7 +1641,7 @@
         // Load application details
         const detailsDiv = document.getElementById('applicationDetails');
         detailsDiv.innerHTML = `
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div class="review-details-grid">
                 <div>
                     <h6 style="font-weight: 600; color: var(--charcoal); margin-bottom: 0.75rem;">Applicant Information</h6>
                     <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Name:</strong> ${app.full_name || 'N/A'}</p>
