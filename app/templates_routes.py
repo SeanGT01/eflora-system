@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting, Conversation
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -976,6 +976,7 @@ def inject_user():
     user = None
     seller_orders_badge_count = 0
     pos_orders_badge_count = 0
+    chat_unread_count = 0
     if session.get('user_id'):
         user_obj = User.query.get(session['user_id'])
         if user_obj:
@@ -999,10 +1000,42 @@ def inject_user():
                         POSOrder.store_id.in_(active_store_ids),
                         POSOrder.is_seen_by_seller.is_(False)
                     ).count()
+
+            # Seed chat FAB badge on every page render (seller/admin/customer)
+            try:
+                uid = user_obj.id
+                role = user_obj.role
+                if role == 'admin':
+                    admin_ids = [
+                        row[0] for row in db.session.query(User.id).filter_by(role='admin').all()
+                    ] or [uid]
+                    seller_total = db.session.query(
+                        db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)
+                    ).filter(
+                        Conversation.seller_id.in_(admin_ids),
+                        Conversation.seller_deleted_at.is_(None),
+                    ).scalar()
+                else:
+                    seller_total = db.session.query(
+                        db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)
+                    ).filter(
+                        Conversation.seller_id == uid,
+                        Conversation.seller_deleted_at.is_(None),
+                    ).scalar()
+                customer_total = db.session.query(
+                    db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)
+                ).filter(
+                    Conversation.customer_id == uid,
+                    Conversation.customer_deleted_at.is_(None),
+                ).scalar()
+                chat_unread_count = int(seller_total or 0) + int(customer_total or 0)
+            except Exception:
+                chat_unread_count = 0
     return dict(
         user=user,
         seller_orders_badge_count=seller_orders_badge_count,
         pos_orders_badge_count=pos_orders_badge_count,
+        chat_unread_count=chat_unread_count,
         current_year=datetime.utcnow().year,
     )
 

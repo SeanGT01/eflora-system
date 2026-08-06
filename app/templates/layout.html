@@ -2142,14 +2142,25 @@
 {% include 'chat_widget.html' %}
 <script>
 (function () {
-    fetch('/api/chat/session-check', { credentials: 'include' })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-            if (data.user_id && window.chatWidget) {
-                chatWidget.init(data.token || '', data.user_id, data.role || '');
-            }
-        })
-        .catch(function (e) { console.log('Chat: session check failed', e); });
+    function bootChat() {
+        fetch('/api/chat/session-check', { credentials: 'include' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.user_id && window.chatWidget) {
+                    chatWidget.init(
+                        data.token || '',
+                        data.user_id,
+                        data.role || {{ session.get('role')|tojson }}
+                    );
+                }
+            })
+            .catch(function (e) { console.log('Chat: session check failed', e); });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootChat);
+    } else {
+        bootChat();
+    }
 })();
 </script>
 {% endif %}

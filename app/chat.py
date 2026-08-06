@@ -669,6 +669,9 @@ def total_unread_count():
     GET /api/v1/chat/unread-count
     Returns the total unread message count across all conversations.
     Used for the floating chat badge.
+
+    Must match list_conversations filters + Conversation.unread_for() so
+    seller/admin badges stay consistent with the inbox.
     """
     user = _current_user()
     if not user:
@@ -676,17 +679,38 @@ def total_unread_count():
 
     if user.role == 'admin':
         admin_ids = _admin_user_ids() or [user.id]
-        seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
-            .filter(Conversation.seller_id.in_(admin_ids), Conversation.seller_deleted_at.is_(None)) \
-            .scalar()
+        convos = Conversation.query.filter(
+            or_(
+                db.and_(
+                    Conversation.customer_id == user.id,
+                    Conversation.customer_deleted_at.is_(None),
+                ),
+                db.and_(
+                    Conversation.seller_id.in_(admin_ids),
+                    Conversation.seller_deleted_at.is_(None),
+                ),
+            )
+        ).all()
     else:
-        seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
-            .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
-            .scalar()
-    customer_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)) \
-        .filter(Conversation.customer_id == user.id, Conversation.customer_deleted_at.is_(None)) \
-        .scalar()
-    total = int(seller_total or 0) + int(customer_total or 0)
+        convos = Conversation.query.filter(
+            or_(
+                db.and_(
+                    Conversation.customer_id == user.id,
+                    Conversation.customer_deleted_at.is_(None),
+                ),
+                db.and_(
+                    Conversation.seller_id == user.id,
+                    Conversation.seller_deleted_at.is_(None),
+                ),
+            )
+        ).all()
+
+    total = 0
+    for c in convos:
+        try:
+            total += int(c.unread_for(user.id) or 0)
+        except (TypeError, ValueError):
+            pass
 
     return jsonify({'unread_count': total}), 200
 

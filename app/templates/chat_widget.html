@@ -695,8 +695,11 @@
 <!-- FLOATING ACTION BUTTON -->
 <button id="chat-fab" onclick="chatWidget.toggle()" style="display:flex;" title="Messages">
     <i class="ri-chat-3-fill"></i>
-    <span class="badge" id="chat-badge">0</span>
+    <span class="badge{% if chat_unread_count|default(0) > 0 %} show{% endif %}" id="chat-badge">{% if chat_unread_count|default(0) > 99 %}99+{% else %}{{ chat_unread_count|default(0) }}{% endif %}</span>
 </button>
+<script>
+window.__eflowersChatUnread = {{ chat_unread_count|default(0)|int }};
+</script>
 
 <!-- OVERLAY + DRAWER -->
 <div id="chat-overlay">
@@ -781,6 +784,7 @@ const chatWidget = (() => {
     let _lastUnreadCount = 0;
     let _lastMessagesFingerprint = '';
     let _lastInboxFingerprint = '';
+    let _locallyReadIds = new Set(); // suppress poll race after opening a thread
     let _supportFaqs = null;
     let _quickAnswersMode = false;
 
@@ -837,13 +841,84 @@ const chatWidget = (() => {
         _token = token;
         _userId = userId;
         _userRole = role || _userRole;
-        document.getElementById('chat-fab').style.display = 'flex';
+        const fab = document.getElementById('chat-fab');
+        if (fab) fab.style.display = 'flex';
         _updateSupportEntryVisibility();
         _updateStoreDiscoveryVisibility();
         if (_userId) {
-            _pollUnread();
+            // Prefer server-rendered count, then session cache — never flash to 0
+            let seeded = 0;
+            if (typeof window.__eflowersChatUnread === 'number') {
+                seeded = window.__eflowersChatUnread;
+            } else {
+                try {
+                    const cached = sessionStorage.getItem('eflowers_chat_unread');
+                    if (cached != null) seeded = parseInt(cached, 10) || 0;
+                } catch (e) {}
+            }
+            if (seeded > 0) _setFabBadge(seeded);
+            _lastInboxBadge = seeded;
+            _inboxBadgeConfirmed = seeded > 0;
+
+            // Inbox is source of truth while drawer is closed (seller page jumps)
+            _syncBadgeFromInbox();
             if (!_unreadPollTimer) {
-                _unreadPollTimer = setInterval(_pollUnread, 5000);
+                _unreadPollTimer = setInterval(function () {
+                    const drawerOpen = !!document.getElementById('chat-overlay')?.classList.contains('open');
+                    if (drawerOpen) _pollUnread();
+                    else _syncBadgeFromInbox();
+                }, 4000);
+            }
+            if (!_badgeVisibilityBound) {
+                _badgeVisibilityBound = true;
+                document.addEventListener('visibilitychange', function () {
+                    if (!document.hidden && _userId) _syncBadgeFromInbox();
+                });
+                window.addEventListener('pageshow', function () {
+                    if (_userId) _syncBadgeFromInbox();
+                });
+            }
+        }
+    }
+
+    let _badgeVisibilityBound = false;
+    let _badgeInboxSyncing = false;
+    let _badgeInboxQueued = false;
+    let _inboxBadgeConfirmed = false;
+    let _lastInboxBadge = 0;
+
+    /** Same source of truth as opening the chat modal — critical for seller/admin. */
+    async function _syncBadgeFromInbox() {
+        if (!_userId) return;
+        if (_badgeInboxSyncing) {
+            _badgeInboxQueued = true;
+            return;
+        }
+        const drawerOpen = !!document.getElementById('chat-overlay')?.classList.contains('open');
+        // While reading a thread, message/read polls own the badge
+        if (drawerOpen && _activeConvoId) return;
+        _badgeInboxSyncing = true;
+        try {
+            const res = await _fetch(API + '/conversations', { headers: _headers() });
+            if (!res.ok) return;
+            const data = await res.json();
+            const next = data.conversations || [];
+            if (!drawerOpen) {
+                _convos = next;
+            }
+            const localTotal = next.reduce(function (sum, c) {
+                return sum + (c.unread_count || 0);
+            }, 0);
+            _lastInboxBadge = localTotal;
+            _inboxBadgeConfirmed = true;
+            _setFabBadge(localTotal);
+        } catch (e) {
+            console.error('Chat: badge inbox sync failed', e);
+        } finally {
+            _badgeInboxSyncing = false;
+            if (_badgeInboxQueued) {
+                _badgeInboxQueued = false;
+                _syncBadgeFromInbox();
             }
         }
     }
@@ -901,6 +976,9 @@ const chatWidget = (() => {
         document.getElementById('chat-overlay').classList.remove('open');
         _stopPoll();
         _stopLiveSync();
+        _activeConvoId = null;
+        _locallyReadIds.clear();
+        _syncBadgeFromInbox();
     }
 
     // ═══ INBOX ═══
@@ -911,16 +989,37 @@ const chatWidget = (() => {
         document.getElementById('chat-inbox-view').style.display = '';
         document.getElementById('chat-detail-view').style.display = 'none';
         _updateSupportEntryVisibility();
-        _loadConversations();
+        // Paint optimistic local state immediately (Messenger-style), then reconcile
+        _renderInbox();
+        _loadConversations({ quiet: true });
     }
 
     function _updateSupportEntryVisibility() {}
+
+    function _applyLocalReadOverrides(list) {
+        if (!list || !list.length) return list || [];
+        if (!_locallyReadIds.size && !_activeConvoId) return list;
+        return list.map(function (c) {
+            if ((_locallyReadIds.has(c.id) || c.id === _activeConvoId) && (c.unread_count || 0) > 0) {
+                return Object.assign({}, c, { unread_count: 0 });
+            }
+            return c;
+        });
+    }
 
     async function _loadConversations({ quiet = false } = {}) {
         try {
             const res = await _fetch(API + '/conversations', { headers: _headers() });
             const data = await res.json();
-            const next = data.conversations || [];
+            const raw = data.conversations || [];
+            // Only lift suppress when server confirms unread is gone
+            _locallyReadIds.forEach(function (id) {
+                const row = raw.find(function (c) { return c.id === id; });
+                if (row && (row.unread_count || 0) === 0 && id !== _activeConvoId) {
+                    _locallyReadIds.delete(id);
+                }
+            });
+            let next = _applyLocalReadOverrides(raw);
             const fingerprint = next.map(function (c) {
                 return [c.id, c.unread_count || 0, c.last_message_at || '', c.last_message_text || ''].join(':');
             }).join('|');
@@ -941,6 +1040,7 @@ const chatWidget = (() => {
     function _setFabBadge(count) {
         const n = Math.max(0, Number(count) || 0);
         _lastUnreadCount = n;
+        try { sessionStorage.setItem('eflowers_chat_unread', String(n)); } catch (e) {}
         const badge = document.getElementById('chat-badge');
         const fab = document.getElementById('chat-fab');
         if (!badge || !fab) return;
@@ -955,18 +1055,16 @@ const chatWidget = (() => {
     }
 
     function _clearConversationUnreadLocal(convoId) {
+        _locallyReadIds.add(convoId);
+        _lastInboxFingerprint = '';
         const c = _convos.find(x => x.id === convoId);
-        if (!c) {
-            // Conversation not in local inbox yet — sync badge from server
-            _pollUnread();
-            return;
+        if (c) {
+            const prev = c.unread_count || 0;
+            c.unread_count = 0;
+            if (prev > 0) _setFabBadge(_lastUnreadCount - prev);
         }
-        const prev = c.unread_count || 0;
-        if (prev <= 0) return;
-        c.unread_count = 0;
-        _setFabBadge(_lastUnreadCount - prev);
-        const inboxVisible = document.getElementById('chat-inbox-view')?.style.display !== 'none';
-        if (inboxVisible && !_activeConvoId) _renderInbox();
+        // Keep hidden inbox DOM in sync so back-navigation is instant
+        try { _renderInbox(); } catch (e) { console.error('Chat: inbox render failed', e); }
     }
 
     function _touchConversationPreview(convoId, previewText, senderId) {
@@ -981,6 +1079,9 @@ const chatWidget = (() => {
         c.last_sender_id = senderId;
         _convos.splice(idx, 1);
         _convos.unshift(c);
+        _lastInboxFingerprint = '';
+        // Update inbox DOM even while viewing a thread (instant back-nav)
+        try { _renderInbox(); } catch (e) { console.error('Chat: inbox render failed', e); }
     }
 
     function _startLiveSync() {
@@ -994,6 +1095,18 @@ const chatWidget = (() => {
             }
         }, 5000);
     }
+
+    // Background badge sync while drawer is closed (seller/admin dashboards)
+    let _closedBadgeTimer = null;
+    function _ensureClosedBadgeSync() {
+        if (_closedBadgeTimer) return;
+        _closedBadgeTimer = setInterval(function () {
+            if (document.hidden || !_userId) return;
+            const drawerOpen = !!document.getElementById('chat-overlay')?.classList.contains('open');
+            if (!drawerOpen) _syncBadgeFromInbox();
+        }, 8000);
+    }
+    _ensureClosedBadgeSync();
 
     function _stopLiveSync() {
         if (_liveSyncTimer) {
@@ -1070,7 +1183,7 @@ const chatWidget = (() => {
 
     function _renderInbox() {
         const list = document.getElementById('chat-inbox-list');
-        const empty = document.getElementById('chat-inbox-empty');
+        if (!list) return;
         const isAdmin = _userRole === 'admin';
         const supportConvo = isAdmin
             ? null
@@ -1081,13 +1194,11 @@ const chatWidget = (() => {
 
         const hasAnyItems = (!isAdmin) || normalConvos.length > 0;
         if (!hasAnyItems) {
-            empty.style.display = '';
-            list.innerHTML = '';
-            list.appendChild(empty);
+            // Recreate empty state each time — innerHTML previously destroyed #chat-inbox-empty
+            list.innerHTML = '<div class="inbox-empty" id="chat-inbox-empty">No conversations yet</div>';
             return;
         }
 
-        empty.style.display = 'none';
         const parts = [];
         if (!isAdmin) {
             const supportUnread = supportConvo ? (supportConvo.unread_count || 0) : 0;
@@ -1160,11 +1271,15 @@ const chatWidget = (() => {
         }
         if (convo) _renderHeader(convo);
 
-        // Instantly clear unread badge for this thread (Messenger-style)
-        _clearConversationUnreadLocal(convoId);
+        // Instantly clear unread badge + mark read (don't wait for messages)
+        try {
+            _clearConversationUnreadLocal(convoId);
+            _markRead();
+        } catch (e) {
+            console.error('Chat: local unread clear failed', e);
+        }
         _lastMessagesFingerprint = '';
         await _loadMessages({ forceScroll: true });
-        _markRead();
         _startPoll();
     }
 
@@ -1769,10 +1884,15 @@ const chatWidget = (() => {
     // ═══ MARK READ ═══
     async function _markRead() {
         if (!_activeConvoId) return;
-        _clearConversationUnreadLocal(_activeConvoId);
+        const convoId = _activeConvoId;
+        _clearConversationUnreadLocal(convoId);
         try {
-            await _fetch(API + '/conversations/' + _activeConvoId + '/read', { method: 'POST', headers: _headers() });
-            _pollUnread();
+            await _fetch(API + '/conversations/' + convoId + '/read', { method: 'POST', headers: _headers() });
+            // Reconcile only after server has cleared — poll respects _locallyReadIds
+            await _pollUnread();
+            if (convoId !== _activeConvoId) {
+                _locallyReadIds.delete(convoId);
+            }
         } catch(e) {}
     }
 
@@ -1799,11 +1919,27 @@ const chatWidget = (() => {
 
     async function _pollUnread() {
         if (!_userId || document.hidden) return;
+        const drawerOpen = !!document.getElementById('chat-overlay')?.classList.contains('open');
+        // While drawer is closed, inbox sync owns the FAB (avoids wiping seller badge on page jumps)
+        if (!drawerOpen) {
+            await _syncBadgeFromInbox();
+            return;
+        }
         try {
             const res = await _fetch(API + '/unread-count', { headers: _headers() });
+            if (!res.ok) return;
             const data = await res.json();
-            _setFabBadge(data.unread_count || 0);
-        } catch(e) {}
+            let n = Number(data.unread_count) || 0;
+
+            if (_activeConvoId && _locallyReadIds.has(_activeConvoId) && _convos.length) {
+                const localSum = (_convos || []).reduce(function (sum, c) {
+                    return sum + (c.unread_count || 0);
+                }, 0);
+                if (n > localSum) n = localSum;
+            }
+
+            _setFabBadge(n);
+        } catch (e) {}
     }
 
     // ═══ TYPING ═══

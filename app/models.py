@@ -2173,9 +2173,12 @@ class Conversation(db.Model):
     )
 
     def unread_for(self, user_id):
+        if user_id is None:
+            return 0
         if user_id == self.customer_id:
-            return self.customer_unread
-        return self.seller_unread
+            return self.customer_unread or 0
+        # Seller, rider, or any admin viewing a support thread
+        return self.seller_unread or 0
 
     def to_dict(self, current_user_id=None):
         # Determine the "other" participant relative to current user.
@@ -2183,14 +2186,14 @@ class Conversation(db.Model):
         # prefer showing the latest rider sender when applicable.
         if current_user_id == self.customer_id:
             other = self.seller
-            unread = self.customer_unread
             if self.last_sender_id and self.last_sender_id not in (self.customer_id, self.seller_id):
                 rider_sender = User.query.get(self.last_sender_id)
                 if rider_sender:
                     other = rider_sender
         else:
             other = self.customer
-            unread = self.seller_unread
+
+        unread = self.unread_for(current_user_id)
 
         return {
             'id': self.id,
