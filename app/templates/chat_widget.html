@@ -444,18 +444,6 @@
     font-weight: 700;
     color: var(--charcoal);
 }
-.msg-role-chip {
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid rgba(181, 68, 90, 0.25);
-    background: rgba(181, 68, 90, 0.08);
-    color: var(--deep-rose);
-    border-radius: 999px;
-    padding: 1px 7px;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: capitalize;
-}
 
 /* Image grid for consecutive images */
 .img-grid {
@@ -788,6 +776,11 @@ const chatWidget = (() => {
     let _pollTimer = null;
     let _typingTimer = null;
     let _unreadPollTimer = null;
+    let _liveSyncTimer = null;
+    let _readPollTimer = null;
+    let _lastUnreadCount = 0;
+    let _lastMessagesFingerprint = '';
+    let _lastInboxFingerprint = '';
     let _supportFaqs = null;
     let _quickAnswersMode = false;
 
@@ -846,10 +839,27 @@ const chatWidget = (() => {
         _userRole = role || _userRole;
         document.getElementById('chat-fab').style.display = 'flex';
         _updateSupportEntryVisibility();
+        _updateStoreDiscoveryVisibility();
         if (_userId) {
             _pollUnread();
-            _unreadPollTimer = setInterval(_pollUnread, 5000);
+            if (!_unreadPollTimer) {
+                _unreadPollTimer = setInterval(_pollUnread, 5000);
+            }
         }
+    }
+
+    function _isCustomerRole() {
+        return !_userRole || _userRole === 'customer';
+    }
+
+    function _updateStoreDiscoveryVisibility() {
+        const show = _isCustomerRole();
+        const searchBar = document.querySelector('#chat-inbox-view .chat-search-bar');
+        const results = document.getElementById('chat-search-results');
+        const recommended = document.getElementById('chat-recommended-wrap');
+        if (searchBar) searchBar.style.display = show ? '' : 'none';
+        if (results && !show) results.style.display = 'none';
+        if (recommended && !show) recommended.style.display = 'none';
     }
 
     // ═══ TOGGLE / OPEN / CLOSE ═══
@@ -884,11 +894,13 @@ const chatWidget = (() => {
     function open() {
         document.getElementById('chat-overlay').classList.add('open');
         showInbox();
+        _startLiveSync();
     }
 
     function close() {
         document.getElementById('chat-overlay').classList.remove('open');
         _stopPoll();
+        _stopLiveSync();
     }
 
     // ═══ INBOX ═══
@@ -904,14 +916,90 @@ const chatWidget = (() => {
 
     function _updateSupportEntryVisibility() {}
 
-    async function _loadConversations() {
+    async function _loadConversations({ quiet = false } = {}) {
         try {
             const res = await _fetch(API + '/conversations', { headers: _headers() });
             const data = await res.json();
-            _convos = data.conversations || [];
+            const next = data.conversations || [];
+            const fingerprint = next.map(function (c) {
+                return [c.id, c.unread_count || 0, c.last_message_at || '', c.last_message_text || ''].join(':');
+            }).join('|');
+            if (fingerprint === _lastInboxFingerprint && quiet) {
+                return;
+            }
+            _lastInboxFingerprint = fingerprint;
+            _convos = next;
             _renderInbox();
-            _loadRecommendedShops();
+            if (!quiet) _loadRecommendedShops();
+            const localTotal = (_convos || []).reduce(function (sum, c) {
+                return sum + (c.unread_count || 0);
+            }, 0);
+            if (typeof localTotal === 'number') _setFabBadge(localTotal);
         } catch(e) { console.error('Chat: load convos failed', e); }
+    }
+
+    function _setFabBadge(count) {
+        const n = Math.max(0, Number(count) || 0);
+        _lastUnreadCount = n;
+        const badge = document.getElementById('chat-badge');
+        const fab = document.getElementById('chat-fab');
+        if (!badge || !fab) return;
+        if (n > 0) {
+            badge.textContent = n > 99 ? '99+' : String(n);
+            badge.classList.add('show');
+            fab.classList.add('pulse');
+        } else {
+            badge.classList.remove('show');
+            fab.classList.remove('pulse');
+        }
+    }
+
+    function _clearConversationUnreadLocal(convoId) {
+        const c = _convos.find(x => x.id === convoId);
+        if (!c) {
+            // Conversation not in local inbox yet — sync badge from server
+            _pollUnread();
+            return;
+        }
+        const prev = c.unread_count || 0;
+        if (prev <= 0) return;
+        c.unread_count = 0;
+        _setFabBadge(_lastUnreadCount - prev);
+        const inboxVisible = document.getElementById('chat-inbox-view')?.style.display !== 'none';
+        if (inboxVisible && !_activeConvoId) _renderInbox();
+    }
+
+    function _touchConversationPreview(convoId, previewText, senderId) {
+        const idx = _convos.findIndex(c => c.id === convoId);
+        if (idx === -1) {
+            _loadConversations({ quiet: true });
+            return;
+        }
+        const c = Object.assign({}, _convos[idx]);
+        c.last_message_text = previewText;
+        c.last_message_at = new Date().toISOString();
+        c.last_sender_id = senderId;
+        _convos.splice(idx, 1);
+        _convos.unshift(c);
+    }
+
+    function _startLiveSync() {
+        _stopLiveSync();
+        _liveSyncTimer = setInterval(async () => {
+            if (document.hidden) return;
+            await _pollUnread();
+            // Inbox open: refresh every tick; thread open: skip (message poll handles it)
+            if (!_activeConvoId) {
+                await _loadConversations({ quiet: true });
+            }
+        }, 5000);
+    }
+
+    function _stopLiveSync() {
+        if (_liveSyncTimer) {
+            clearInterval(_liveSyncTimer);
+            _liveSyncTimer = null;
+        }
     }
 
     async function _getAllStores() {
@@ -930,6 +1018,10 @@ const chatWidget = (() => {
         const wrap = document.getElementById('chat-recommended-wrap');
         const list = document.getElementById('chat-recommended-list');
         if (!wrap || !list) return;
+        if (!_isCustomerRole()) {
+            wrap.style.display = 'none';
+            return;
+        }
 
         const stores = await _getAllStores();
         if (!Array.isArray(stores) || stores.length === 0) {
@@ -1068,7 +1160,10 @@ const chatWidget = (() => {
         }
         if (convo) _renderHeader(convo);
 
-        await _loadMessages();
+        // Instantly clear unread badge for this thread (Messenger-style)
+        _clearConversationUnreadLocal(convoId);
+        _lastMessagesFingerprint = '';
+        await _loadMessages({ forceScroll: true });
         _markRead();
         _startPoll();
     }
@@ -1286,17 +1381,39 @@ const chatWidget = (() => {
     }
 
     // ═══ MESSAGES ═══
-    async function _loadMessages() {
+    async function _loadMessages({ forceScroll = false } = {}) {
         if (!_activeConvoId) return;
         try {
+            const area = document.getElementById('chat-messages-area');
+            const nearBottom = !area || (area.scrollHeight - area.scrollTop - area.clientHeight) < 100;
+            const prevLastId = _messages.length ? _messages[_messages.length - 1].id : null;
             const res = await _fetch(API + '/conversations/' + _activeConvoId + '/messages?per_page=50', { headers: _headers() });
             const data = await res.json();
-            _messages = data.messages || [];
-            _renderMessages();
+            const next = data.messages || [];
+            const fingerprint = next.map(function (m) {
+                return [m.id, m.is_deleted ? 1 : 0, m.is_read ? 1 : 0, m.text || '', m.image_url || ''].join(':');
+            }).join('|');
+            const unchanged = fingerprint === _lastMessagesFingerprint && !forceScroll;
+            const nextLastId = next.length ? next[next.length - 1].id : null;
+            const hasNew = nextLastId && nextLastId !== prevLastId;
+            _messages = next;
+            _lastMessagesFingerprint = fingerprint;
+            if (!unchanged) {
+                _renderMessages({ scroll: forceScroll || !prevLastId || (hasNew && nearBottom) });
+            }
+
+            // Keep inbox preview live while reading this thread
+            if (hasNew && next.length) {
+                const last = next[next.length - 1];
+                const preview = last.message_type === 'image'
+                    ? (last.text || '[Image]')
+                    : (last.text || '');
+                _touchConversationPreview(_activeConvoId, preview, last.sender_id);
+            }
         } catch(e) { console.error('Chat: load msgs failed', e); }
     }
 
-    function _renderMessages() {
+    function _renderMessages({ scroll = true } = {}) {
         const area = document.getElementById('chat-messages-area');
         if (_messages.length === 0) {
             area.innerHTML = '<div style="text-align:center;color:var(--muted);padding:30px 0;font-size:13px;">Start a conversation!</div>';
@@ -1318,11 +1435,7 @@ const chatWidget = (() => {
         function senderMetaHtml(m, isSent) {
             if (isSent) return '';
             const senderName = _esc(m.sender_name || 'Unknown');
-            const role = String(m.sender_role || '').toLowerCase();
-            const roleChip = role
-                ? `<span class="msg-role-chip">${_esc(role)}</span>`
-                : '';
-            return `<div class="msg-sender-meta"><span class="msg-sender-name">${senderName}</span>${roleChip}</div>`;
+            return `<div class="msg-sender-meta"><span class="msg-sender-name">${senderName}</span></div>`;
         }
 
         function senderAvatarHtml(m, isSent) {
@@ -1425,7 +1538,7 @@ const chatWidget = (() => {
         }
 
         area.innerHTML = html;
-        area.scrollTop = area.scrollHeight;
+        if (scroll) area.scrollTop = area.scrollHeight;
     }
 
     function _esc(s) {
@@ -1459,7 +1572,13 @@ const chatWidget = (() => {
             const data = await res.json();
             if (data.message) {
                 _messages.push(data.message);
-                _renderMessages();
+                _lastMessagesFingerprint = '';
+                _renderMessages({ scroll: true });
+                _touchConversationPreview(
+                    _activeConvoId,
+                    data.message.text || text,
+                    data.message.sender_id || _userId
+                );
             }
         } catch(e) { console.error('Chat: send failed', e); }
     }
@@ -1605,7 +1724,13 @@ const chatWidget = (() => {
                 const data = await res.json();
                 if (data.message) {
                     _messages.push(data.message);
-                    _renderMessages();
+                    _lastMessagesFingerprint = '';
+                    _renderMessages({ scroll: true });
+                    _touchConversationPreview(
+                        _activeConvoId,
+                        data.message.text || '[Image]',
+                        data.message.sender_id || _userId
+                    );
                 }
             } catch(e) { console.error('Chat: send image failed', e); }
         }
@@ -1629,7 +1754,13 @@ const chatWidget = (() => {
             const data = await res.json();
             if (data.message) {
                 _messages.push(data.message);
-                _renderMessages();
+                _lastMessagesFingerprint = '';
+                _renderMessages({ scroll: true });
+                _touchConversationPreview(
+                    _activeConvoId,
+                    data.message.text || '[Image]',
+                    data.message.sender_id || _userId
+                );
             }
         } catch(e) { console.error('Chat: send image failed', e); }
         fileInput.value = '';
@@ -1638,6 +1769,7 @@ const chatWidget = (() => {
     // ═══ MARK READ ═══
     async function _markRead() {
         if (!_activeConvoId) return;
+        _clearConversationUnreadLocal(_activeConvoId);
         try {
             await _fetch(API + '/conversations/' + _activeConvoId + '/read', { method: 'POST', headers: _headers() });
             _pollUnread();
@@ -1648,35 +1780,29 @@ const chatWidget = (() => {
         return document.querySelector('.msg-menu-popup.open') !== null;
     }
 
-    // ═══ POLLING (fallback for real-time) ═══
+    // ═══ POLLING (near real-time while chat is open) ═══
     function _startPoll() {
         _stopPoll();
         _pollTimer = setInterval(async () => {
+            if (document.hidden) return;
             if (!_hasOpenMenu()) await _loadMessages();
             _pollTyping();
-            _pollUnread();
         }, 3000);
+        _readPollTimer = setInterval(function () {
+            if (!document.hidden && _activeConvoId) _markRead();
+        }, 6000);
     }
     function _stopPoll() {
         if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+        if (_readPollTimer) { clearInterval(_readPollTimer); _readPollTimer = null; }
     }
 
     async function _pollUnread() {
-        if (!_userId) return;
+        if (!_userId || document.hidden) return;
         try {
             const res = await _fetch(API + '/unread-count', { headers: _headers() });
             const data = await res.json();
-            const count = data.unread_count || 0;
-            const badge = document.getElementById('chat-badge');
-            const fab = document.getElementById('chat-fab');
-            if (count > 0) {
-                badge.textContent = count > 99 ? '99+' : count;
-                badge.classList.add('show');
-                fab.classList.add('pulse');
-            } else {
-                badge.classList.remove('show');
-                fab.classList.remove('pulse');
-            }
+            _setFabBadge(data.unread_count || 0);
         } catch(e) {}
     }
 
@@ -1684,8 +1810,13 @@ const chatWidget = (() => {
     function onType() {
         if (!_activeConvoId) return;
         clearTimeout(_typingTimer);
-        _fetch(API + '/conversations/' + _activeConvoId + '/typing', { method: 'POST', headers: _headers() }).catch(()=>{});
-        _typingTimer = setTimeout(() => {}, 3000);
+        // Debounce typing POSTs — avoid a request on every keystroke
+        _typingTimer = setTimeout(function () {
+            _fetch(API + '/conversations/' + _activeConvoId + '/typing', {
+                method: 'POST',
+                headers: _headers(),
+            }).catch(function () {});
+        }, 1200);
     }
 
     async function _pollTyping() {

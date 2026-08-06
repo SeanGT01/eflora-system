@@ -2140,6 +2140,18 @@
 {% if session.get('role') in ['seller', 'admin'] %}
 <!-- Seller/Admin Chat Widget -->
 {% include 'chat_widget.html' %}
+<script>
+(function () {
+    fetch('/api/chat/session-check', { credentials: 'include' })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data.user_id && window.chatWidget) {
+                chatWidget.init(data.token || '', data.user_id, data.role || '');
+            }
+        })
+        .catch(function (e) { console.log('Chat: session check failed', e); });
+})();
+</script>
 {% endif %}
 
 {% block extra_js %}{% endblock %}

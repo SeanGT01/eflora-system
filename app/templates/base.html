@@ -7,6 +7,57 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}E-FLOWERS — Blooming with Technology{% endblock %}</title>
+    <script>
+    /* Device capability flags:
+       - perf-lite: drop expensive glass blur (never on iPhone/iPad)
+       - fx-lite: skip heavy decorative FX on low-end Android only
+       Desktop PCs and iPhone always keep stores auto-carousel. */
+    (function () {
+        try {
+            var ua = navigator.userAgent || '';
+            var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            var isAndroid = /Android/i.test(ua);
+            var isMobileUa = /Mobile|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+            // Real computer browsers (Windows/macOS/Linux desktop)
+            var isDesktopComputer = !isIOS && !isAndroid && !isMobileUa;
+            var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            var mem = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : null;
+            var lowMem = mem !== null && mem <= 4;
+            var highMem = mem !== null && mem >= 6;
+            var saveData = !!(c && c.saveData);
+            var slowNet = !!(c && (c.effectiveType === 'slow-2g' || c.effectiveType === '2g'));
+            var reduceMotion = false;
+            try {
+                reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            } catch (e1) {}
+
+            // Blur degrade for constrained non-Apple clients only
+            if (!isIOS && !isDesktopComputer && (lowMem || saveData || slowNet)) {
+                document.documentElement.classList.add('perf-lite');
+            }
+
+            // Carousel / rich UI: always on for desktop computers + iPhone/iPad
+            var richFx = isDesktopComputer || isIOS || (isAndroid && highMem);
+            // Decorative petals only (respect OS reduce-motion)
+            var decorFx = richFx && !reduceMotion;
+
+            // fx-lite only for low-end / typical Android phones — never desktop/iPhone
+            if (!richFx) {
+                document.documentElement.classList.add('fx-lite');
+            }
+            if (reduceMotion) {
+                document.documentElement.classList.add('reduce-motion');
+            }
+
+            window.__eflowersRichFx = !!richFx;   // stores auto-carousel
+            window.__eflowersDecorFx = !!decorFx; // petals / hero florals motion
+        } catch (e) {
+            window.__eflowersRichFx = true;
+            window.__eflowersDecorFx = true;
+        }
+    })();
+    </script>
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2319,6 +2370,46 @@
                 flex-direction: column;
                 gap: 0.25rem;
                 padding: 0 0.5rem;
+            }
+        }
+
+        /* ─── LOW-END PERFORMANCE: drop expensive backdrop blur ─── */
+        /* iPhone/iPad keep glass (desktop-like). Only fx-lite / perf-lite / a11y. */
+        @media (prefers-reduced-transparency: reduce) {
+            body *,
+            body *::before,
+            body *::after {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+            }
+        }
+
+        html.fx-lite body *,
+        html.fx-lite body *::before,
+        html.fx-lite body *::after,
+        html.perf-lite body *,
+        html.perf-lite body *::before,
+        html.perf-lite body *::after {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+        html.fx-lite .main-header,
+        html.perf-lite .main-header {
+            will-change: auto;
+            background: rgba(255, 250, 252, 0.96) !important;
+        }
+        html.fx-lite .product-card,
+        html.perf-lite .product-card {
+            background: rgba(255, 255, 255, 0.92) !important;
+        }
+        html.fx-lite #chat-fab.pulse,
+        html.perf-lite #chat-fab.pulse {
+            animation: none !important;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #chat-fab.pulse {
+                animation: none !important;
             }
         }
     </style>

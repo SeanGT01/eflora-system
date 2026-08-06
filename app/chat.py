@@ -10,6 +10,9 @@ from datetime import datetime, timedelta
 from functools import wraps
 import pytz
 
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
+
 from app.extensions import db
 from app.models import User, Store, Conversation, ChatMessage, Rider, Order
 
@@ -63,25 +66,43 @@ def _current_user():
     return None
 
 
+def _admin_user_ids():
+    return [row[0] for row in db.session.query(User.id).filter_by(role='admin').all()]
+
+
 def _can_access_conversation(user, convo):
     if not user or not convo:
         return False
-    return user.id in (convo.customer_id, convo.seller_id)
+    if user.id in (convo.customer_id, convo.seller_id):
+        return True
+    # Any admin can access support threads bound to an admin account
+    if user.role == 'admin':
+        seller = User.query.get(convo.seller_id)
+        return bool(seller and seller.role == 'admin')
+    return False
 
 
 def _support_store_for_chat(customer_id, admin_user_id=None):
     """
-    Pick a store context for support that does NOT collide with an existing
-    customer/store conversation (unique_customer_store_conversation).
+    Pick a store_id for a new support thread.
+
+    Uniqueness is (customer_id, store_id, seller_id), so only stores already used
+    with this admin (seller_id) are blocked — not every store the customer has
+    ever messaged.
     """
+    collide_filter = [Conversation.customer_id == customer_id]
+    if admin_user_id:
+        collide_filter.append(Conversation.seller_id == admin_user_id)
+    else:
+        admin_ids = _admin_user_ids()
+        if admin_ids:
+            collide_filter.append(Conversation.seller_id.in_(admin_ids))
+
     used_store_ids = {
         row[0]
-        for row in db.session.query(Conversation.store_id)
-        .filter(Conversation.customer_id == customer_id)
-        .all()
+        for row in db.session.query(Conversation.store_id).filter(*collide_filter).all()
     }
 
-    # Prefer stores owned by the selected admin (if any), then any store named support.
     candidates = []
     if admin_user_id:
         candidates.extend(
@@ -102,6 +123,46 @@ def _support_store_for_chat(customer_id, admin_user_id=None):
     return None
 
 
+def _bump_other_unread(convo, sender_id):
+    """Atomically increment the recipient unread counter."""
+    if sender_id == convo.customer_id:
+        Conversation.query.filter_by(id=convo.id).update(
+            {Conversation.seller_unread: func.coalesce(Conversation.seller_unread, 0) + 1},
+            synchronize_session=False,
+        )
+        if convo.seller_deleted_at:
+            convo.seller_deleted_at = None
+    else:
+        Conversation.query.filter_by(id=convo.id).update(
+            {Conversation.customer_unread: func.coalesce(Conversation.customer_unread, 0) + 1},
+            synchronize_session=False,
+        )
+        if convo.customer_deleted_at:
+            convo.customer_deleted_at = None
+
+
+def _refresh_conversation_preview(convo):
+    """Rebuild denormalized last-message fields from the latest visible message."""
+    latest = (
+        ChatMessage.query
+        .filter_by(conversation_id=convo.id, is_deleted=False)
+        .order_by(ChatMessage.created_at.desc())
+        .first()
+    )
+    if not latest:
+        convo.last_message_text = None
+        convo.last_message_at = None
+        convo.last_sender_id = None
+        return
+    if latest.message_type == 'image':
+        preview = (latest.text[:200] if latest.text else '[Image]')
+    else:
+        preview = (latest.text[:200] if latest.text else None)
+    convo.last_message_text = preview
+    convo.last_message_at = latest.created_at
+    convo.last_sender_id = latest.sender_id
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # CONVERSATIONS
 # ═══════════════════════════════════════════════════════════════════════
@@ -112,23 +173,39 @@ def list_conversations():
     """
     GET /api/v1/chat/conversations
     Returns all conversations for the current user (customer or seller).
+    Admins also see support threads owned by any admin account.
     """
     user = _current_user()
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    convos = Conversation.query.filter(
-        db.or_(
-            db.and_(
-                Conversation.customer_id == user.id,
-                Conversation.customer_deleted_at.is_(None)
-            ),
-            db.and_(
-                Conversation.seller_id == user.id,
-                Conversation.seller_deleted_at.is_(None)
+    if user.role == 'admin':
+        admin_ids = _admin_user_ids() or [user.id]
+        convos = Conversation.query.filter(
+            or_(
+                db.and_(
+                    Conversation.customer_id == user.id,
+                    Conversation.customer_deleted_at.is_(None),
+                ),
+                db.and_(
+                    Conversation.seller_id.in_(admin_ids),
+                    Conversation.seller_deleted_at.is_(None),
+                ),
             )
-        )
-    ).order_by(Conversation.last_message_at.desc().nullslast()).all()
+        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
+    else:
+        convos = Conversation.query.filter(
+            or_(
+                db.and_(
+                    Conversation.customer_id == user.id,
+                    Conversation.customer_deleted_at.is_(None),
+                ),
+                db.and_(
+                    Conversation.seller_id == user.id,
+                    Conversation.seller_deleted_at.is_(None),
+                ),
+            )
+        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
 
     return jsonify({
         'conversations': [c.to_dict(current_user_id=user.id) for c in convos]
@@ -198,6 +275,8 @@ def create_or_get_conversation():
     user = _current_user()
     if not user:
         return jsonify({'error': 'User not found'}), 404
+    if user.role != 'customer':
+        return jsonify({'error': 'Only customers can start a store chat'}), 403
 
     data = request.get_json(silent=True) or {}
     store_id = data.get('store_id')
@@ -231,7 +310,18 @@ def create_or_get_conversation():
         store_id=store.id,
     )
     db.session.add(convo)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        convo = Conversation.query.filter_by(
+            customer_id=user.id,
+            store_id=store.id,
+            seller_id=store.seller_id
+        ).first()
+        if not convo:
+            return jsonify({'error': 'Could not open conversation'}), 500
+        return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
 
     return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 201
 
@@ -282,7 +372,19 @@ def create_or_get_support_conversation():
         last_sender_id=user.id,
     )
     db.session.add(convo)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        existing = (
+            Conversation.query
+            .filter_by(customer_id=user.id, seller_id=admin_user.id)
+            .order_by(Conversation.updated_at.desc())
+            .first()
+        )
+        if not existing:
+            return jsonify({'error': 'Could not open support conversation'}), 500
+        return jsonify({'conversation': existing.to_dict(current_user_id=user.id)}), 200
 
     return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 201
 
@@ -405,16 +507,8 @@ def send_message(convo_id):
     convo.last_sender_id = user.id
     convo.updated_at = now
 
-    # Increment unread for the OTHER participant
-    if user.id == convo.customer_id:
-        convo.seller_unread = (convo.seller_unread or 0) + 1
-        # Un-delete for seller if they had deleted the conversation
-        if convo.seller_deleted_at:
-            convo.seller_deleted_at = None
-    else:
-        convo.customer_unread = (convo.customer_unread or 0) + 1
-        if convo.customer_deleted_at:
-            convo.customer_deleted_at = None
+    # Increment unread for the OTHER participant (atomic)
+    _bump_other_unread(convo, user.id)
 
     db.session.commit()
 
@@ -476,14 +570,7 @@ def send_image_message(convo_id):
     convo.last_sender_id = user.id
     convo.updated_at = now
 
-    if user.id == convo.customer_id:
-        convo.seller_unread = (convo.seller_unread or 0) + 1
-        if convo.seller_deleted_at:
-            convo.seller_deleted_at = None
-    else:
-        convo.customer_unread = (convo.customer_unread or 0) + 1
-        if convo.customer_deleted_at:
-            convo.customer_deleted_at = None
+    _bump_other_unread(convo, user.id)
 
     db.session.commit()
 
@@ -527,6 +614,8 @@ def delete_message(convo_id, msg_id):
     msg.image_url = None
     msg.image_public_id = None
     msg.message_type = 'deleted'
+    db.session.flush()
+    _refresh_conversation_preview(convo)
     db.session.commit()
 
     return jsonify({'message': msg.to_dict()}), 200
@@ -585,9 +674,15 @@ def total_unread_count():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
-        .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
-        .scalar()
+    if user.role == 'admin':
+        admin_ids = _admin_user_ids() or [user.id]
+        seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
+            .filter(Conversation.seller_id.in_(admin_ids), Conversation.seller_deleted_at.is_(None)) \
+            .scalar()
+    else:
+        seller_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.seller_unread), 0)) \
+            .filter(Conversation.seller_id == user.id, Conversation.seller_deleted_at.is_(None)) \
+            .scalar()
     customer_total = db.session.query(db.func.coalesce(db.func.sum(Conversation.customer_unread), 0)) \
         .filter(Conversation.customer_id == user.id, Conversation.customer_deleted_at.is_(None)) \
         .scalar()

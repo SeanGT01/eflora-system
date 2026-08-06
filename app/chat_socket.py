@@ -32,6 +32,47 @@ def _user_from_token(token_str):
     return None
 
 
+def _user_id_from_sid(sid):
+    for uid, sids in _online_users.items():
+        if sid in sids:
+            return uid
+    return None
+
+
+def _can_access_conversation(user, convo):
+    if not user or not convo:
+        return False
+    if user.id in (convo.customer_id, convo.seller_id):
+        return True
+    if user.role == 'admin':
+        seller = User.query.get(convo.seller_id)
+        return bool(seller and seller.role == 'admin')
+    return False
+
+
+def _conversations_for_user(user):
+    """Join rooms by customer_id OR seller_id (covers riders/admins on seller slot)."""
+    if user.role == 'admin':
+        admin_ids = [row[0] for row in db.session.query(User.id).filter_by(role='admin').all()] or [user.id]
+        return Conversation.query.filter(
+            db.or_(
+                Conversation.customer_id == user.id,
+                Conversation.seller_id.in_(admin_ids),
+            )
+        ).all()
+    return Conversation.query.filter(
+        db.or_(
+            Conversation.customer_id == user.id,
+            Conversation.seller_id == user.id,
+        )
+    ).all()
+
+
+def is_user_online(user_id):
+    """Check if a user has any active socket connections."""
+    return user_id in _online_users and len(_online_users[user_id]) > 0
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # CONNECTION
 # ═══════════════════════════════════════════════════════════════════════
@@ -55,16 +96,10 @@ def handle_connect(auth=None):
     sid = flask_request.sid
     _online_users.setdefault(user.id, set()).add(sid)
 
-    # Auto-join all the user's conversation rooms
-    if user.role == 'seller':
-        convos = Conversation.query.filter_by(seller_id=user.id).all()
-    else:
-        convos = Conversation.query.filter_by(customer_id=user.id).all()
-
+    convos = _conversations_for_user(user)
     for c in convos:
         join_room(_room_name(c.id))
 
-    # Broadcast online status to relevant conversations
     for c in convos:
         emit('user_online', {'user_id': user.id}, room=_room_name(c.id), include_self=False)
 
@@ -77,7 +112,6 @@ def handle_disconnect():
     from flask import request as flask_request
     sid = flask_request.sid
 
-    # Find and remove from online tracking
     disconnected_uid = None
     for uid, sids in list(_online_users.items()):
         if sid in sids:
@@ -90,11 +124,7 @@ def handle_disconnect():
     if disconnected_uid:
         user = User.query.get(disconnected_uid)
         if user:
-            if user.role == 'seller':
-                convos = Conversation.query.filter_by(seller_id=user.id).all()
-            else:
-                convos = Conversation.query.filter_by(customer_id=user.id).all()
-            for c in convos:
+            for c in _conversations_for_user(user):
                 emit('user_offline', {'user_id': disconnected_uid}, room=_room_name(c.id))
 
 
@@ -104,17 +134,36 @@ def handle_disconnect():
 
 @socketio.on('join_conversation')
 def handle_join(data):
-    convo_id = data.get('conversation_id')
-    if convo_id:
-        join_room(_room_name(convo_id))
-        emit('joined', {'conversation_id': convo_id})
+    from flask import request as flask_request
+    uid = _user_id_from_sid(flask_request.sid)
+    if not uid:
+        return
+    user = User.query.get(uid)
+    convo_id = (data or {}).get('conversation_id')
+    if not convo_id:
+        return
+    convo = Conversation.query.get(convo_id)
+    if not _can_access_conversation(user, convo):
+        emit('error', {'message': 'Access denied'})
+        return
+    join_room(_room_name(convo_id))
+    emit('joined', {'conversation_id': convo_id})
 
 
 @socketio.on('leave_conversation')
 def handle_leave(data):
-    convo_id = data.get('conversation_id')
-    if convo_id:
-        leave_room(_room_name(convo_id))
+    from flask import request as flask_request
+    uid = _user_id_from_sid(flask_request.sid)
+    if not uid:
+        return
+    convo_id = (data or {}).get('conversation_id')
+    if not convo_id:
+        return
+    user = User.query.get(uid)
+    convo = Conversation.query.get(convo_id)
+    if not _can_access_conversation(user, convo):
+        return
+    leave_room(_room_name(convo_id))
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -135,7 +184,7 @@ def handle_send_message(data):
 
     convo_id = data.get('conversation_id')
     convo = Conversation.query.get(convo_id)
-    if not convo or user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         emit('error', {'message': 'Invalid conversation'})
         return
 
@@ -162,15 +211,17 @@ def handle_send_message(data):
 
     if user.id == convo.customer_id:
         convo.seller_unread = (convo.seller_unread or 0) + 1
+        if convo.seller_deleted_at:
+            convo.seller_deleted_at = None
     else:
         convo.customer_unread = (convo.customer_unread or 0) + 1
+        if convo.customer_deleted_at:
+            convo.customer_deleted_at = None
 
     db.session.commit()
 
-    # Broadcast to room
     emit('new_message', msg.to_dict(), room=_room_name(convo_id), include_self=True)
 
-    # Also emit conversation update for inbox refresh
     for uid in (convo.customer_id, convo.seller_id):
         emit('conversation_updated', convo.to_dict(current_user_id=uid), room=_room_name(convo_id))
 
@@ -187,6 +238,10 @@ def handle_typing_start(data):
         return
 
     convo_id = data.get('conversation_id')
+    convo = Conversation.query.get(convo_id)
+    if not _can_access_conversation(user, convo):
+        return
+
     emit('typing', {
         'conversation_id': convo_id,
         'user_id': user.id,
@@ -203,6 +258,10 @@ def handle_typing_stop(data):
         return
 
     convo_id = data.get('conversation_id')
+    convo = Conversation.query.get(convo_id)
+    if not _can_access_conversation(user, convo):
+        return
+
     emit('typing', {
         'conversation_id': convo_id,
         'user_id': user.id,
@@ -224,14 +283,14 @@ def handle_mark_read(data):
 
     convo_id = data.get('conversation_id')
     convo = Conversation.query.get(convo_id)
-    if not convo or user.id not in (convo.customer_id, convo.seller_id):
+    if not _can_access_conversation(user, convo):
         return
 
     now = datetime.utcnow()
     ChatMessage.query.filter(
         ChatMessage.conversation_id == convo_id,
         ChatMessage.sender_id != user.id,
-        ChatMessage.is_read == False
+        ChatMessage.is_read == False  # noqa: E712
     ).update({
         ChatMessage.is_read: True,
         ChatMessage.read_at: now,
@@ -249,8 +308,3 @@ def handle_mark_read(data):
         'read_by': user.id,
         'read_at': now.isoformat(),
     }, room=_room_name(convo_id), include_self=False)
-
-
-def is_user_online(user_id):
-    """Check if a user has any active socket connections."""
-    return user_id in _online_users and len(_online_users[user_id]) > 0
