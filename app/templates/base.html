@@ -244,22 +244,35 @@
         .user-actions {
             display: flex;
             align-items: center;
-            gap: 0.25rem;
+            gap: 0.15rem;
         }
 
         .action-btn {
-            display: flex;
-            flex-direction: column;
+            display: inline-flex;
+            flex-direction: row;
             align-items: center;
-            gap: 3px;
+            justify-content: center;
+            gap: 0;
             text-decoration: none;
             color: var(--charcoal);
-            padding: 0.6rem 0.75rem;
+            width: 46px;
+            min-width: 46px;
+            height: 46px;
+            padding: 0;
+            margin: 0;
             border-radius: var(--radius-md);
             transition: var(--transition);
             border: none;
             background: none;
             cursor: pointer;
+            box-sizing: border-box;
+            flex-shrink: 0;
+            line-height: 1;
+            font-family: inherit;
+            font-size: inherit;
+            vertical-align: middle;
+            -webkit-appearance: none;
+            appearance: none;
         }
 
         .action-btn:hover {
@@ -267,30 +280,64 @@
             background: rgba(181, 68, 90, 0.06);
         }
 
-        .action-icon { font-size: 20px; }
-        .action-text { 
+        .action-icon {
+            font-size: 20px;
+            line-height: 1;
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .action-text {
+            display: none; /* keep header icons evenly aligned */
             font-size: clamp(10px, 0.3rem + 1vw, 12px);
-            font-weight:600 ; 
+            font-weight: 600;
             color: rgba(75, 46, 30, 0.822);
         }
 
-        .cart-btn { position: relative; }
+        .action-btn.has-label {
+            width: auto;
+            min-width: 46px;
+            height: auto;
+            flex-direction: column;
+            gap: 2px;
+            padding: 0.45rem 0.7rem;
+        }
+
+        .action-btn.has-label .action-text {
+            display: block;
+        }
+
+        .cart-btn {
+            position: relative;
+        }
 
         .cart-count {
             position: absolute;
-            top: 4px;
-            right: 4px;
+            top: 6px;
+            right: 6px;
             background: var(--deep-rose);
             color: white;
             font-size: 10px;
-            min-width: 17px;
-            height: 17px;
+            min-width: 16px;
+            height: 16px;
+            padding: 0 3px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 600;
             font-family: var(--font-sans);
+            line-height: 1;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+
+        .cart-count.is-empty {
+            display: none;
         }
 
         /* Avatar */
@@ -320,6 +367,11 @@
 
         .user-menu-trigger {
             position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            height: 46px;
         }
 
         .user-menu {
@@ -1800,12 +1852,22 @@
             }
             
             .action-btn {
-                padding: 0.4rem 0.5rem;
+                width: 42px;
+                min-width: 42px;
+                height: 42px;
+                padding: 0;
                 font-size: 9px;
+            }
+
+            .action-btn.has-label {
+                width: auto;
+                height: auto;
+                padding: 0.35rem 0.45rem;
             }
             
             .action-icon { font-size: 18px; }
             .action-text { display: none; }
+            .action-btn.has-label .action-text { display: none; }
             
             /* User avatar */
             .user-avatar {
@@ -1950,11 +2012,14 @@
             
             /* Cart Count */
             .cart-count {
-                top: 2px;
-                right: 2px;
+                top: 5px;
+                right: 5px;
                 font-size: 8px;
-                min-width: 15px;
-                height: 15px;
+                min-width: 14px;
+                height: 14px;
+            }
+            .cart-count.is-empty {
+                display: none;
             }
             
             /* Toast */
@@ -2053,10 +2118,20 @@
             }
             
             .action-btn {
-                padding: 0.5rem 0.625rem;
+                width: 44px;
+                min-width: 44px;
+                height: 44px;
+                padding: 0;
+            }
+
+            .action-btn.has-label {
+                width: auto;
+                height: auto;
+                padding: 0.4rem 0.55rem;
             }
             
             .action-text { display: none; }
+            .action-btn.has-label .action-text { display: none; }
             .action-icon { font-size: 18px; }
             
             .user-avatar {
@@ -2485,27 +2560,27 @@
             <div class="user-actions">
                 {% set hide_shop_icons = session.get('role') in ['seller', 'admin'] %}
                 {% if session.get('role') == 'seller' %}
-                <a href="{{ url_for('templates.dashboard') }}" class="action-btn">
+                <a href="{{ url_for('templates.dashboard') }}" class="action-btn has-label" title="Seller Dashboard">
                     <i class="ri-store-2-line action-icon"></i>
                     <span class="action-text">Seller Dashboard</span>
                 </a>
                 {% endif %}
 
                 {% if not hide_shop_icons %}
-                <a href="{{ url_for('templates.index') }}" class="action-btn">
+                <a href="{{ url_for('templates.index') }}" class="action-btn" title="Home" aria-label="Home">
                     <i class="ri-home-5-line action-icon"></i>
                 </a>
 
-                <button class="action-btn cart-btn" onclick="toggleCart()">
-                    <i class="ri-shopping-bag-line action-icon bag"></i>
-                    <span class="cart-count" id="cartCount">0</span>
+                <button type="button" class="action-btn cart-btn" onclick="toggleCart()" title="Cart" aria-label="Cart">
+                    <i class="ri-shopping-bag-line action-icon bag" aria-hidden="true"></i>
+                    <span class="cart-count is-empty" id="cartCount" aria-hidden="true">0</span>
                 </button>
                 {% endif %}
 
                 {% if session.get('user_id') %}
                     {% if not hide_shop_icons %}
                     <div class="user-menu-trigger">
-                        <button class="action-btn" onclick="toggleUserMenu(event)" id="userAvatarBtn">
+                        <button type="button" class="action-btn" onclick="toggleUserMenu(event)" id="userAvatarBtn" title="Account" aria-label="Account">
                             <i class="ri-user-3-line action-icon"></i>
                         </button>
                         <div class="user-menu" id="userMenu">
@@ -2525,13 +2600,11 @@
                     </div>
                     {% endif %}
                 {% else %}
-                <a href="{{ url_for('templates.seller_signup_landing') }}" class="action-btn" title="Sell on E-Flora" onclick="return goToSellerSignup(event, this.href);">
+                <a href="{{ url_for('templates.seller_signup_landing') }}" class="action-btn" title="Sell on E-Flora" aria-label="Sell on E-Flora" onclick="return goToSellerSignup(event, this.href);">
                     <i class="ri-store-2-line action-icon"></i>
-                    <span class="action-text">Sell</span>
                 </a>
-                <a href="{{ url_for('templates.login') }}" class="action-btn">
+                <a href="{{ url_for('templates.login') }}" class="action-btn" title="Sign In" aria-label="Sign In">
                     <i class="ri-user-line action-icon"></i>
-                    <span class="action-text">Sign In</span>
                 </a>
                 {% endif %}
             </div>
@@ -2698,6 +2771,7 @@ const DEBUG = {
 let cart = [];
 let cartQtyTimers = {};
 let cartQtyPending = {};
+const HAS_SERVER_CART = {{ 'true' if session.get('user_id') else 'false' }};
 let isLoadingCart = false;
 let checkoutStep = 1;
 let checkoutOrders = [];
@@ -3374,14 +3448,39 @@ document.addEventListener('DOMContentLoaded', function() {
     loadCart();
 
     {% if session.get('user_id') %}
-    const guestCart = localStorage.getItem('cart');
-    if (guestCart && JSON.parse(guestCart).length > 0) {
-        setTimeout(() => {
-            showCartSyncModal(JSON.parse(guestCart));
-        }, 1000);
+    try {
+        const rawGuestCart = localStorage.getItem('cart');
+        if (rawGuestCart) {
+            const parsed = JSON.parse(rawGuestCart);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                // Only treat items without cart_item_id as a real guest cart.
+                // Logged-in qty/remove updates used to pollute localStorage with
+                // the server cart, which falsely triggered this sync modal.
+                const guestOnly = parsed.filter(function (item) {
+                    return item && item.cart_item_id == null && item.id != null;
+                });
+                if (guestOnly.length > 0) {
+                    localStorage.setItem('cart', JSON.stringify(guestOnly));
+                    setTimeout(function () {
+                        showCartSyncModal(guestOnly);
+                    }, 1000);
+                } else {
+                    localStorage.removeItem('cart');
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Guest cart check failed', e);
+        localStorage.removeItem('cart');
     }
     {% endif %}
 });
+
+function persistLocalCart() {
+    // localStorage is only the guest cart store. Never mirror the server cart there.
+    if (HAS_SERVER_CART) return;
+    localStorage.setItem('cart', JSON.stringify(cart));
+}
 
 function showCartSyncModal(guestCart) {
     const modal = document.getElementById('cartSyncModal');
@@ -3511,7 +3610,23 @@ function loadCart() {
 
 function updateCartCount() {
     const total = cart.reduce((s, i) => s + i.quantity, 0);
-    document.getElementById('cartCount').textContent = total;
+    const badge = document.getElementById('cartCount');
+    if (!badge) return;
+    badge.textContent = total > 99 ? '99+' : String(total);
+    const empty = total <= 0;
+    badge.classList.toggle('is-empty', empty);
+    badge.setAttribute('aria-hidden', empty ? 'true' : 'false');
+}
+
+function updateChatFabVisibility() {
+    const chatFab = document.getElementById('chat-fab');
+    if (!chatFab) return;
+
+    const cartOpen = !!document.getElementById('cartSidebar')?.classList.contains('active');
+    const modalOpen = !!document.querySelector(
+        '.modal-overlay.active, .sync-modal-overlay.active, .qa-overlay.open, .app-confirm-overlay.show'
+    );
+    chatFab.classList.toggle('cart-open-hidden', cartOpen || modalOpen);
 }
 
 function updateCartDisplay() {
@@ -3769,7 +3884,7 @@ function addToCartLocalStorage(product) {
         cart.push(cartItem);
     }
     
-    localStorage.setItem('cart', JSON.stringify(cart));
+    persistLocalCart();
     updateCartCount();
     updateCartDisplay();
 }
@@ -3804,7 +3919,7 @@ function updateQuantity(index, change) {
 
     // Instant local update so users can tap +/- quickly
     item.quantity = newQuantity;
-    localStorage.setItem('cart', JSON.stringify(cart));
+    persistLocalCart();
     updateCartCount();
     updateCartDisplay();
 
@@ -3859,7 +3974,7 @@ function flushCartQtySync(key) {
 function updateQuantityLocal(index, change) {
     cart[index].quantity += change;
     if (cart[index].quantity <= 0) cart.splice(index, 1);
-    localStorage.setItem('cart', JSON.stringify(cart));
+    persistLocalCart();
     updateCartCount();
     updateCartDisplay();
 }
@@ -3899,7 +4014,7 @@ function removeFromCart(index) {
 function removeFromCartLocal(index) {
     const removedItem = cart[index];
     cart.splice(index, 1);
-    localStorage.setItem('cart', JSON.stringify(cart));
+    persistLocalCart();
     updateCartCount();
     updateCartDisplay();
     showToast(`Removed from basket — ${removedItem.name}`);
@@ -3929,7 +4044,7 @@ async function clearCart() {
 
 function clearCartLocal() {
     cart = [];
-    localStorage.setItem('cart', JSON.stringify(cart));
+    persistLocalCart();
     updateCartCount();
     updateCartDisplay();
     showToast('Basket cleared');
@@ -3942,12 +4057,9 @@ function toggleCart() {
     }
     const sidebar = document.getElementById('cartSidebar');
     const overlay = document.getElementById('cartOverlay');
-    const chatFab = document.getElementById('chat-fab');
     sidebar.classList.toggle('active');
     overlay.classList.toggle('active');
-    if (chatFab) {
-        chatFab.classList.toggle('cart-open-hidden', sidebar.classList.contains('active'));
-    }
+    updateChatFabVisibility();
     if (sidebar.classList.contains('active')) updateCartDisplay();
 }
 
@@ -4869,7 +4981,7 @@ async function completeCheckout() {
     } else {
         // Normal checkout: clear selected cart items
         cart = cart.filter(item => !item.is_selected);
-        localStorage.setItem('cart', JSON.stringify(cart));
+        persistLocalCart();
         updateCartCount();
         updateCartDisplay();
     }
@@ -5384,7 +5496,9 @@ function debugCart() {
         console.log(`${index + 1}: ${item.name} (x${item.quantity}) - ₱${item.price}`);
     });
 }
-window.debugCart = debugCart;
+window.addToCartLocalStorage = addToCartLocalStorage;
+window.persistLocalCart = persistLocalCart;
+
 
 function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
@@ -5444,8 +5558,10 @@ function showToast(message, type = 'success') {
         okBtn.textContent = options.confirmText || 'Confirm';
         return new Promise(function(resolve) {
             overlay.classList.add('show');
+            if (typeof updateChatFabVisibility === 'function') updateChatFabVisibility();
             const close = function(result) {
                 overlay.classList.remove('show');
+                if (typeof updateChatFabVisibility === 'function') updateChatFabVisibility();
                 overlay.removeEventListener('click', handleOverlayClick);
                 cancelBtn.removeEventListener('click', onCancel);
                 okBtn.removeEventListener('click', onConfirm);
@@ -5526,6 +5642,27 @@ function showToast(message, type = 'success') {
 // Initialize cart display
 updateCartCount();
 updateCartDisplay();
+updateChatFabVisibility();
+
+// Keep chat FAB hidden while any modal / overlay is open
+(function setupChatFabOverlayWatcher() {
+    if (typeof MutationObserver === 'undefined') return;
+    let scheduled = false;
+    const schedule = function () {
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(function () {
+            scheduled = false;
+            updateChatFabVisibility();
+        });
+    };
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'hidden'],
+    });
+})();
     </script>
 
     {% block extra_js %}
