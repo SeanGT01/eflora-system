@@ -1637,10 +1637,17 @@ function renderCartGroupCard(group) {
 function buildCTAButtons(order) {
     const id = order.id;
     const display = getDisplayState(order);
+    const paymentStatus = order.payment_status || '';
+    const paymentMethod = String(order.payment_method || '').trim().toLowerCase();
+    const isCodPending = paymentMethod === 'cod' && (paymentStatus === 'cod_pending' || order.status === 'pending');
     let btns = `<button class="btn-order-action" onclick="viewOrderDetail(${id})">View Details</button>`;
 
     if (display.key === 'pending') {
         btns += `<button class="btn-order-action primary" onclick="payOrder(${id})"><i class="ri-bank-card-line"></i> Pay Now</button>`;
+        btns += `<button class="btn-order-action danger" onclick="cancelOrderFromCard(${id})">Cancel</button>`;
+    }
+    // COD awaiting seller confirmation — allow cancel, never show Pay Now
+    if (isCodPending && display.key === 'processing') {
         btns += `<button class="btn-order-action danger" onclick="cancelOrderFromCard(${id})">Cancel</button>`;
     }
     if (display.key === 'delivered') {
@@ -2592,6 +2599,8 @@ function formatPaymentMethod(method) {
 function getDisplayState(order) {
     const status = order.status || 'pending';
     const paymentStatus = order.payment_status || 'pending';
+    const paymentMethod = String(order.payment_method || '').trim().toLowerCase();
+    const isCod = paymentMethod === 'cod' || paymentStatus === 'cod_pending' || paymentStatus === 'cod_approved';
 
     if (status === 'cancelled') {
         return { key: 'cancelled', label: 'Cancelled', progressKey: 'cancelled' };
@@ -2607,6 +2616,14 @@ function getDisplayState(order) {
     }
     if (status === 'done_preparing') {
         return { key: 'processing', label: 'Ready', progressKey: 'done_preparing' };
+    }
+
+    // COD: no online payment step — show under To Ship while awaiting seller / preparing.
+    if (isCod && (status === 'pending' || paymentStatus === 'cod_pending')) {
+        return { key: 'processing', label: 'Awaiting Confirmation', progressKey: 'pending' };
+    }
+    if (isCod && (paymentStatus === 'cod_approved' || status === 'accepted' || status === 'preparing')) {
+        return { key: 'processing', label: 'Preparing', progressKey: 'processing' };
     }
 
     // Receipt uploaded but still waiting for seller/admin review.

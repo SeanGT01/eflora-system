@@ -92,31 +92,79 @@ def _build_stock_lookup(cart_items):
 
 def _validate_stock_lookup(stock_lookup):
     """Validate that all requested product or variant stock is available."""
+    issues = _collect_stock_issues(stock_lookup)
+    if issues:
+        raise ValueError(issues[0]["message"])
+
+
+def _collect_stock_issues(stock_lookup):
+    """Return structured stock problems for checkout pre-checks."""
+    issues = []
     for entry in stock_lookup.values():
         product = entry["product"]
         variant = entry["variant"]
-        quantity = entry["quantity"]
+        quantity = int(entry.get("quantity") or 0)
+        label = f"{product.name} — {variant.name}" if variant else product.name
+        image_url = None
+        if variant and getattr(variant, "image_url", None):
+            image_url = variant.image_url
+        elif product and getattr(product, "images", None):
+            primary = next((img for img in product.images if img.is_primary), None)
+            image_url = (primary or (product.images[0] if product.images else None))
+            image_url = image_url.image_url if image_url else None
 
         if quantity < 1:
-            raise ValueError(f'Invalid quantity for "{product.name}"')
+            issues.append({
+                "product_id": product.id,
+                "variant_id": variant.id if variant else None,
+                "name": label,
+                "requested": quantity,
+                "available": 0,
+                "code": "invalid_quantity",
+                "message": f'Invalid quantity for "{label}"',
+                "image_url": image_url,
+            })
+            continue
 
-        if not product.is_available:
-            raise ValueError(f'"{product.name}" is no longer available')
+        if not product.is_available or (variant and not variant.is_available):
+            issues.append({
+                "product_id": product.id,
+                "variant_id": variant.id if variant else None,
+                "name": label,
+                "requested": quantity,
+                "available": 0,
+                "code": "unavailable",
+                "message": f'"{label}" is no longer available from the store.',
+                "image_url": image_url,
+            })
+            continue
 
-        if variant:
-            if not variant.is_available:
-                raise ValueError(f'"{product.name}" - {variant.name} is no longer available')
-            if variant.stock_quantity < quantity:
-                raise ValueError(
-                    f'Insufficient stock for "{product.name}" - {variant.name}. '
-                    f"Available: {variant.stock_quantity}, requested: {quantity}."
-                )
-        else:
-            if product.stock_quantity < quantity:
-                raise ValueError(
-                    f'Insufficient stock for "{product.name}". '
-                    f"Available: {product.stock_quantity}, requested: {quantity}."
-                )
+        available = int(variant.stock_quantity if variant else product.stock_quantity or 0)
+        if available <= 0:
+            issues.append({
+                "product_id": product.id,
+                "variant_id": variant.id if variant else None,
+                "name": label,
+                "requested": quantity,
+                "available": 0,
+                "code": "out_of_stock",
+                "message": f'"{label}" is out of stock.',
+                "image_url": image_url,
+            })
+        elif available < quantity:
+            issues.append({
+                "product_id": product.id,
+                "variant_id": variant.id if variant else None,
+                "name": label,
+                "requested": quantity,
+                "available": available,
+                "code": "insufficient",
+                "message": (
+                    f'"{label}" only has {available} left, but you selected {quantity}.'
+                ),
+                "image_url": image_url,
+            })
+    return issues
 
 
 def _reduce_stock_lookup(stock_lookup, user_id, reason_notes):
@@ -370,6 +418,97 @@ def _check_store_delivery(store, address, subtotal):
 
 
 # ===== NEW ENDPOINT: Validate delivery and calculate totals (no order creation) =====
+@checkout_bp.route("/validate-stock", methods=["POST"])
+@customer_only
+def validate_checkout_stock():
+    """Pre-checkout stock check for selected cart items or a buy-now item."""
+    try:
+        user_id = request.user_id
+        data = request.get_json() or {}
+        mode = (data.get("mode") or "cart").strip().lower()
+
+        stock_lookup = {}
+
+        if mode == "buy_now":
+            product_id = data.get("product_id")
+            variant_id = data.get("variant_id")
+            quantity = int(data.get("quantity") or 1)
+            if not product_id:
+                return jsonify({"success": False, "error": "product_id is required"}), 400
+
+            product = Product.query.get(product_id)
+            if not product:
+                return jsonify({"success": False, "error": "Product not found"}), 404
+
+            variant = None
+            if variant_id:
+                variant = ProductVariant.query.filter_by(id=variant_id, product_id=product.id).first()
+                if not variant:
+                    return jsonify({"success": False, "error": "Variant not found"}), 404
+
+            stock_lookup[(product.id, variant.id if variant else None)] = {
+                "product": product,
+                "variant": variant,
+                "quantity": quantity,
+            }
+        else:
+            cart = Cart.query.filter_by(user_id=user_id).first()
+            if not cart:
+                return jsonify({"success": False, "error": "Cart is empty"}), 404
+
+            requested_items = data.get("items") or []
+            selected_item_ids = [
+                int(item["item_id"])
+                for item in requested_items
+                if item.get("item_id") is not None
+            ]
+
+            selected_items_query = CartItem.query.filter(CartItem.cart_id == cart.id)
+            if selected_item_ids:
+                selected_items_query = selected_items_query.filter(CartItem.id.in_(selected_item_ids))
+            else:
+                selected_items_query = selected_items_query.filter(CartItem.is_selected == True)
+
+            selected_items = selected_items_query.all()
+            if not selected_items:
+                return jsonify({"success": False, "error": "No items selected for checkout"}), 400
+
+            # Prefer quantities from the request payload when provided
+            qty_by_id = {}
+            for item in requested_items:
+                if item.get("item_id") is not None:
+                    qty_by_id[int(item["item_id"])] = int(item.get("quantity") or 0)
+
+            for cart_item in selected_items:
+                if not cart_item.product:
+                    continue
+                key = (cart_item.product_id, cart_item.variant_id)
+                qty = qty_by_id.get(cart_item.id, int(cart_item.quantity or 0))
+                if key not in stock_lookup:
+                    stock_lookup[key] = {
+                        "product": cart_item.product,
+                        "variant": cart_item.variant,
+                        "quantity": 0,
+                    }
+                stock_lookup[key]["quantity"] += max(qty, 0)
+
+        issues = _collect_stock_issues(stock_lookup)
+        if issues:
+            return jsonify({
+                "success": False,
+                "error": "Some selected items are unavailable or have insufficient stock.",
+                "stock_issues": issues,
+            }), 400
+
+        return jsonify({"success": True, "stock_issues": []}), 200
+
+    except Exception as e:
+        print(f"Validate stock error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @checkout_bp.route("/validate", methods=["POST"])
 @customer_only
 def validate_checkout():
@@ -431,6 +570,20 @@ def validate_checkout():
                     raise Exception(f"{item.product.name} is no longer available")
 
                 src = item.variant if item.variant else item.product
+                if item.variant and not item.variant.is_available:
+                    raise Exception(f"{item.product.name} — {item.variant.name} is no longer available")
+                available = int(src.stock_quantity or 0)
+                if available < int(item.quantity or 0):
+                    label = (
+                        f"{item.product.name} — {item.variant.name}"
+                        if item.variant else item.product.name
+                    )
+                    if available <= 0:
+                        raise Exception(f'"{label}" is out of stock')
+                    raise Exception(
+                        f'"{label}" only has {available} left, but you selected {item.quantity}.'
+                    )
+
                 item_price = Decimal(str(src.effective_price))
                 orig_price = float(src.price)
                 disc_pct = src.discount_pct

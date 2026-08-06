@@ -2335,6 +2335,28 @@
         </div>
     </div>
 
+    <!-- Stock availability modal (shown before checkout when stock fails) -->
+    <div class="modal-overlay" id="stockIssueModal" onclick="if(event.target===this)closeStockIssueModal()">
+        <div class="modal modal-sm" style="max-width:440px;" role="dialog" aria-modal="true" aria-labelledby="stockIssueTitle">
+            <div class="modal-header">
+                <h3 id="stockIssueTitle">Stock unavailable</h3>
+                <button class="cart-close" type="button" onclick="closeStockIssueModal()" aria-label="Close"><i class="ri-close-line"></i></button>
+            </div>
+            <div class="modal-body" style="padding-top:0.5rem;">
+                <p id="stockIssueIntro" style="font-size:14px;color:var(--muted);line-height:1.55;margin:0 0 1rem;">
+                    Some items in your selection can’t be checked out right now.
+                </p>
+                <div id="stockIssueList" style="display:flex;flex-direction:column;gap:0.65rem;max-height:min(50vh,360px);overflow:auto;"></div>
+            </div>
+            <div class="modal-footer" style="gap:0.5rem;">
+                <button type="button" class="btn btn-outline" onclick="closeStockIssueModal()">Close</button>
+                <button type="button" class="btn btn-rose" onclick="closeStockIssueModal(); if(typeof openCart==='function'){openCart();} else if(typeof toggleCart==='function'){toggleCart();}">
+                    <i class="ri-shopping-bag-line"></i> Review basket
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Cart Sync Modal -->
     <div class="sync-modal-overlay" id="cartSyncModal">
         <div class="sync-modal">
@@ -3888,6 +3910,84 @@ async function fetchCheckoutAddresses() {
     return Array.isArray(result.addresses) ? result.addresses : [];
 }
 
+function closeStockIssueModal() {
+    const modal = document.getElementById('stockIssueModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function showStockIssueModal(issues, introText) {
+    const modal = document.getElementById('stockIssueModal');
+    const list = document.getElementById('stockIssueList');
+    const intro = document.getElementById('stockIssueIntro');
+    if (!modal || !list) {
+        const first = (issues && issues[0] && issues[0].message) || 'Some items are unavailable.';
+        showToast(first, 'error');
+        return;
+    }
+
+    if (intro) {
+        intro.textContent = introText || 'Some items in your selection can’t be checked out right now. Update your basket quantities, then try again.';
+    }
+
+    list.innerHTML = (issues || []).map(function (issue) {
+        const available = Number(issue.available) || 0;
+        const requested = Number(issue.requested) || 0;
+        const badge = available <= 0
+            ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(192,57,43,0.12);color:#9b1c1c;font-size:11px;font-weight:700;">Out of stock</span>'
+            : '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(240,180,41,0.18);color:#8a5a00;font-size:11px;font-weight:700;">Only ' + available + ' left</span>';
+        const img = issue.image_url
+            ? '<img src="' + String(issue.image_url).replace(/"/g, '&quot;') + '" alt="" style="width:48px;height:48px;border-radius:10px;object-fit:cover;background:#f5ede6;flex-shrink:0;" onerror="this.style.display=\'none\'">'
+            : '<div style="width:48px;height:48px;border-radius:10px;background:linear-gradient(145deg,#f5ede6,#ede3d8);display:flex;align-items:center;justify-content:center;color:rgba(107,76,59,0.3);flex-shrink:0;"><i class="ri-flower-line"></i></div>';
+        return (
+            '<div style="display:flex;gap:0.75rem;align-items:flex-start;padding:0.75rem;border:1px solid rgba(107,76,59,0.12);border-radius:14px;background:#fffdf9;">' +
+            img +
+            '<div style="min-width:0;flex:1;">' +
+            '<div style="display:flex;justify-content:space-between;gap:0.5rem;align-items:flex-start;margin-bottom:0.25rem;">' +
+            '<div style="font-weight:600;font-size:13.5px;color:var(--charcoal);line-height:1.3;">' + String(issue.name || 'Item').replace(/</g, '&lt;') + '</div>' +
+            badge +
+            '</div>' +
+            '<div style="font-size:12.5px;color:var(--muted);line-height:1.45;">' +
+            String(issue.message || '').replace(/</g, '&lt;') +
+            '</div>' +
+            (requested > 0
+                ? '<div style="margin-top:0.35rem;font-size:12px;color:var(--charcoal);">Requested: <strong>' + requested + '</strong> · Available: <strong>' + available + '</strong></div>'
+                : '') +
+            '</div></div>'
+        );
+    }).join('');
+
+    modal.classList.add('active');
+}
+
+async function ensureCheckoutStockAvailable(payload) {
+    try {
+        const response = await fetch('/api/v1/checkout/validate-stock', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + (await getAuthToken())
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload || {})
+        });
+        const result = await response.json().catch(function () { return {}; });
+        if (response.ok && result.success) return true;
+
+        const issues = result.stock_issues || [];
+        if (issues.length) {
+            showStockIssueModal(issues);
+            return false;
+        }
+
+        showToast(result.error || 'Could not verify item stock right now', 'error');
+        return false;
+    } catch (err) {
+        console.error('Stock precheck failed', err);
+        showToast('Could not verify item stock right now', 'error');
+        return false;
+    }
+}
+
 async function buyNowDirect(item) {
     if (SHOPPING_DISABLED) {
         showToast('Checkout is disabled for seller/admin accounts', 'error');
@@ -3912,6 +4012,18 @@ async function buyNowDirect(item) {
     } catch (error) {
         console.error('Buy now address precheck error:', error);
         showToast('Could not verify your saved addresses right now');
+        buyNowMode = false;
+        buyNowItem = null;
+        return;
+    }
+
+    const stockOk = await ensureCheckoutStockAvailable({
+        mode: 'buy_now',
+        product_id: item.product_id,
+        variant_id: item.variant_id || null,
+        quantity: item.quantity || 1
+    });
+    if (!stockOk) {
         buyNowMode = false;
         buyNowItem = null;
         return;
@@ -3985,6 +4097,15 @@ async function checkout() {
         showToast('Could not verify your saved addresses right now');
         return;
     }
+
+    const stockOk = await ensureCheckoutStockAvailable({
+        mode: 'cart',
+        items: selectedItems.map(item => ({
+            item_id: item.cart_item_id,
+            quantity: item.quantity
+        }))
+    });
+    if (!stockOk) return;
 
     startCheckoutSession();
     

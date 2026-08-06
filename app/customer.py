@@ -727,6 +727,31 @@ def complete_order(order_id):
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
+@customer_bp.route('/orders/<int:order_id>/cancel', methods=['POST'])
+@customer_only
+def cancel_order(order_id):
+    """Cancel a pending order (including COD awaiting confirmation)."""
+    try:
+        user_id = int(get_jwt_identity())
+        order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
+        if not order:
+            return jsonify({'success': False, 'message': 'Order not found'}), 404
+        if order.status != 'pending':
+            return jsonify({
+                'success': False,
+                'message': 'Only pending orders can be cancelled.',
+            }), 400
+
+        order.status = 'cancelled'
+        if hasattr(order, 'updated_at'):
+            order.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Order cancelled successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # PRODUCT RATINGS — JWT auth (Flutter)
 # ══════════════════════════════════════════════════════════════════════════
