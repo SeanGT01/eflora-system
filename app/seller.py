@@ -211,6 +211,10 @@ def update_order_status(order_id):
     allowed_statuses = {'pending', 'accepted', 'preparing', 'done_preparing', 'on_delivery', 'delivered', 'cancelled'}
     if new_status not in allowed_statuses:
         return jsonify({'error': 'Invalid status'}), 400
+
+    previous_status = order.status
+    if new_status == 'cancelled' and previous_status != 'cancelled':
+        order.restore_stock_on_cancel(user_id)
     
     order.set_status(new_status)
     db.session.commit()

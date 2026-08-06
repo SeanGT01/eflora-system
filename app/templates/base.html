@@ -858,27 +858,80 @@
         }
 
         .quantity-btn {
-            width: 26px;
-            height: 26px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, 0.7);
-            background: rgba(255, 255, 255, 0.4);
+            border: 1px solid rgba(230, 170, 195, 0.45);
+            background: rgba(255, 255, 255, 0.55);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             font-size: 14px;
+            font-weight: 600;
+            line-height: 1;
             transition: var(--transition);
             color: var(--charcoal);
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+            padding: 0;
+            flex-shrink: 0;
         }
 
-        .quantity-btn:hover {
-            background: var(--deep-rose);
-            color: white;
-            border-color: var(--deep-rose);
+        .quantity-btn:hover:not(:disabled) {
+            background: rgba(255, 190, 210, 0.22);
+            color: var(--deep-rose);
+            border-color: rgba(194, 78, 104, 0.45);
+        }
+
+        .quantity-btn:disabled {
+            opacity: 0.4;
+            cursor: default;
+            box-shadow: none;
+        }
+
+        .cart-qty-control {
+            display: inline-flex;
+            align-items: center;
+            border: 1.5px solid rgba(230, 170, 195, 0.45);
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.65);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+            min-height: 32px;
+        }
+
+        .cart-qty-control .quantity-btn {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            font-size: 15px;
+        }
+
+        .cart-qty-control .quantity-btn:hover:not(:disabled) {
+            background: rgba(255, 190, 210, 0.18);
+            color: var(--deep-rose);
+        }
+
+        .cart-qty-value {
+            min-width: 28px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-left: 1.5px solid rgba(230, 170, 195, 0.28);
+            border-right: 1.5px solid rgba(230, 170, 195, 0.28);
+            font-family: var(--font-display, 'Cormorant Garamond', Georgia, serif);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--charcoal);
+            user-select: none;
         }
 
         .quantity-input {
@@ -2643,6 +2696,8 @@ const DEBUG = {
 })();
 
 let cart = [];
+let cartQtyTimers = {};
+let cartQtyPending = {};
 let isLoadingCart = false;
 let checkoutStep = 1;
 let checkoutOrders = [];
@@ -3415,6 +3470,15 @@ function loadCart() {
                         imageUrl = item.product.images[0].image_url;
                     }
                     
+                    let stockQty = null;
+                    if (item.stock_quantity != null) {
+                        stockQty = Number(item.stock_quantity);
+                    } else if (item.variant && item.variant.stock_quantity != null) {
+                        stockQty = Number(item.variant.stock_quantity);
+                    } else if (item.product && item.product.stock_quantity != null) {
+                        stockQty = Number(item.product.stock_quantity);
+                    }
+
                     return {
                         id: productId,
                         variant_id: variantId || null,
@@ -3426,6 +3490,7 @@ function loadCart() {
                         store_name: storeName,
                         image_url: imageUrl,
                         quantity: item.quantity || 1,
+                        stock_quantity: Number.isFinite(stockQty) ? stockQty : null,
                         cart_item_id: item.id || item.cart_item_id,
                         is_selected: item.is_selected !== false
                     };
@@ -3495,6 +3560,12 @@ function updateCartDisplay() {
 
         storeItems.forEach((item, idx) => {
             const isVariant = !!item.variant_id;
+            const maxStock = Number.isFinite(Number(item.stock_quantity))
+                ? Number(item.stock_quantity)
+                : null;
+            const atMax = maxStock != null && item.quantity >= maxStock;
+            const minusDisabled = item.quantity <= 1 ? 'disabled' : '';
+            const plusDisabled = atMax ? 'disabled' : '';
             html += `
                 <div class="cart-item" data-index="${item.cartIndex}" data-product-id="${item.id}" data-variant-id="${item.variant_id || ''}" style="border: none; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; margin-bottom: 0; border-bottom: ${idx < storeItems.length - 1 ? '1px solid var(--border)' : 'none'}; display: flex; gap: 12px; padding: 12px 16px;">
                     <input type="checkbox" class="item-checkbox" data-index="${item.cartIndex}" onchange="toggleItem(${item.cartIndex})" ${item.is_selected ? 'checked' : ''} style="cursor: pointer; margin-top: 4px;">
@@ -3509,10 +3580,10 @@ function updateCartDisplay() {
                             ${item.original_price ? `<span class="cart-item-price-original">₱${item.original_price.toFixed(2)}</span>` : ''}
                             ${item.discount_pct ? `<span class="cart-item-discount-chip">${item.discount_pct}% off</span>` : ''}
                         </div>
-                        <div style="display: flex; gap: 6px; align-items: center;">
-                            <button class="quantity-btn" onclick="updateQuantity(${item.cartIndex},-1)" style="width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px;">−</button>
-                            <input class="quantity-input" value="${item.quantity}" readonly style="width: 30px; text-align: center; border: none; background: transparent; font-weight: 600;">
-                            <button class="quantity-btn" onclick="updateQuantity(${item.cartIndex},1)" style="width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px;">+</button>
+                        <div class="cart-qty-control" aria-label="Quantity">
+                            <button type="button" class="quantity-btn" onclick="updateQuantity(${item.cartIndex},-1)" aria-label="Decrease quantity" ${minusDisabled}>−</button>
+                            <span class="cart-qty-value" aria-live="polite">${item.quantity}</span>
+                            <button type="button" class="quantity-btn" onclick="updateQuantity(${item.cartIndex},1)" aria-label="Increase quantity" ${plusDisabled}>+</button>
                         </div>
                     </div>
                     <div style="text-align: right; display: flex; flex-direction: column; justify-content: space-between;">
@@ -3713,35 +3784,76 @@ function loadCartFromLocal() {
 
 function updateQuantity(index, change) {
     const item = cart[index];
+    if (!item) return;
+
     const newQuantity = item.quantity + change;
-    
     if (newQuantity <= 0) {
         removeFromCart(index);
         return;
     }
-    
+
+    const maxStock = Number.isFinite(Number(item.stock_quantity))
+        ? Number(item.stock_quantity)
+        : null;
+    if (maxStock != null && newQuantity > maxStock) {
+        if (typeof showToast === 'function') {
+            showToast('Only ' + maxStock + ' available for this item', 'error');
+        }
+        return;
+    }
+
+    // Instant local update so users can tap +/- quickly
+    item.quantity = newQuantity;
+    localStorage.setItem('cart', JSON.stringify(cart));
+    updateCartCount();
+    updateCartDisplay();
+
     {% if session.get('user_id') %}
     if (item.cart_item_id) {
-        fetch(`/api/cart/items/${item.cart_item_id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ quantity: newQuantity })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                loadCart();
-            }
-        })
-        .catch(error => {
-            updateQuantityLocal(index, change);
-        });
-    } else {
-        updateQuantityLocal(index, change);
+        scheduleCartQtySync(item.cart_item_id, newQuantity);
+        return;
     }
-    {% else %}
-    updateQuantityLocal(index, change);
     {% endif %}
+}
+
+function scheduleCartQtySync(cartItemId, quantity) {
+    const key = String(cartItemId);
+    cartQtyPending[key] = quantity;
+    if (cartQtyTimers[key]) clearTimeout(cartQtyTimers[key]);
+    cartQtyTimers[key] = setTimeout(function () {
+        flushCartQtySync(key);
+    }, 400);
+}
+
+function flushCartQtySync(key) {
+    const quantity = cartQtyPending[key];
+    delete cartQtyPending[key];
+    delete cartQtyTimers[key];
+    if (quantity == null) return;
+
+    fetch(`/api/cart/items/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: quantity })
+    })
+    .then(function (response) { return response.json(); })
+    .then(function (data) {
+        // A newer pending edit exists — ignore this stale response
+        if (cartQtyPending[key] != null || cartQtyTimers[key]) return;
+        if (!data.success) {
+            if (typeof showToast === 'function') {
+                showToast(data.error || data.message || 'Could not update quantity', 'error');
+            }
+            loadCart();
+        }
+    })
+    .catch(function () {
+        if (cartQtyPending[key] != null || cartQtyTimers[key]) return;
+        if (typeof showToast === 'function') {
+            showToast('Could not update quantity', 'error');
+        }
+        loadCart();
+    });
 }
 
 function updateQuantityLocal(index, change) {
@@ -3754,27 +3866,34 @@ function updateQuantityLocal(index, change) {
 
 function removeFromCart(index) {
     const item = cart[index];
-    
+    if (!item) return;
+
     {% if session.get('user_id') %}
     if (item.cart_item_id) {
+        const key = String(item.cart_item_id);
+        if (cartQtyTimers[key]) {
+            clearTimeout(cartQtyTimers[key]);
+            delete cartQtyTimers[key];
+        }
+        delete cartQtyPending[key];
+
+        // Instant local remove; sync delete in background
+        removeFromCartLocal(index);
+
         fetch(`/api/cart/items/${item.cart_item_id}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                loadCart();
-            }
+            if (!data.success) loadCart();
         })
-        .catch(error => {
-            removeFromCartLocal(index);
+        .catch(function () {
+            loadCart();
         });
-    } else {
-        removeFromCartLocal(index);
+        return;
     }
-    {% else %}
-    removeFromCartLocal(index);
     {% endif %}
+    removeFromCartLocal(index);
 }
 
 function removeFromCartLocal(index) {

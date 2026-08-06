@@ -838,7 +838,44 @@ class Product(db.Model):
         
         db.session.add(reduction)
         return reduction
-    
+
+    def restore_stock(self, amount, user_id, reason_notes=None, variant=None):
+        """
+        Restore stock with audit trail (e.g. after order cancellation).
+
+        Uses StockReduction with reason 'restock' so seller history shows a +.
+        """
+        if amount <= 0:
+            raise ValueError("Restore amount must be positive")
+
+        notes = reason_notes or 'Order cancelled — stock restored'
+
+        if variant:
+            variant.stock_quantity = int(variant.stock_quantity or 0) + amount
+            variant.updated_at = datetime.utcnow()
+            reduction = StockReduction(
+                product_id=self.id,
+                variant_id=variant.id,
+                reduction_amount=amount,
+                reason='restock',
+                reason_notes=notes,
+                reduced_by=user_id,
+            )
+        else:
+            self.stock_quantity = int(self.stock_quantity or 0) + amount
+            self.updated_at = datetime.utcnow()
+            reduction = StockReduction(
+                product_id=self.id,
+                variant_id=None,
+                reduction_amount=amount,
+                reason='restock',
+                reason_notes=notes,
+                reduced_by=user_id,
+            )
+
+        db.session.add(reduction)
+        return reduction
+
     def delete_with_cloudinary(self):
         """Delete product and all associated Cloudinary images"""
         from app.utils.cloudinary_helper import delete_from_cloudinary
@@ -1263,6 +1300,30 @@ class Order(db.Model):
                 self.confirmed_at = now
         
         self.updated_at = now
+
+    def restore_stock_on_cancel(self, user_id):
+        """Return reserved product/variant quantities after this order is cancelled."""
+        for item in self.items:
+            qty = int(item.quantity or 0)
+            if qty <= 0:
+                continue
+
+            product = item.product
+            if product is None and item.product_id:
+                product = Product.query.get(item.product_id)
+            if product is None:
+                continue
+
+            variant = item.variant
+            if item.variant_id and variant is None:
+                variant = ProductVariant.query.get(item.variant_id)
+
+            product.restore_stock(
+                qty,
+                user_id,
+                reason_notes=f'Restored after cancellation of order #{self.id}',
+                variant=variant,
+            )
     
     def to_dict(self):
         return {
@@ -1817,6 +1878,11 @@ class CartItem(db.Model):
             'product': product_dict,
             'variant': variant_dict,
             'quantity': self.quantity,
+            'stock_quantity': (
+                int(self.variant.stock_quantity)
+                if self.variant is not None
+                else int(self.product.stock_quantity if self.product else 0)
+            ),
             'is_selected': self.is_selected,
             'subtotal': float(self.subtotal),
             'image_url': self.item_image,

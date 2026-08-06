@@ -2267,7 +2267,7 @@ def order_details(order_id):
 
 @templates_bp.route('/api/account/orders/<int:order_id>/cancel', methods=['POST'])
 def cancel_order(order_id):
-    """Cancel an order"""
+    """Cancel an order and restore reserved product stock."""
     if not session.get('user_id'):
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
 
@@ -2284,9 +2284,14 @@ def cancel_order(order_id):
             'message': 'Only pending orders can be cancelled.'
         }), 400
 
-    order.status = 'cancelled'
-    order.updated_at = datetime.utcnow()
-    db.session.commit()
+    try:
+        order.restore_stock_on_cancel(user_id)
+        order.status = 'cancelled'
+        order.updated_at = datetime.utcnow()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
 
     return jsonify({'success': True, 'message': 'Order cancelled successfully'})
 
@@ -5802,6 +5807,10 @@ def seller_order_status_api(order_id):
         order.done_preparing_proof_public_id = upload_result.get('public_id')
         order.done_preparing_proof_url = upload_result.get('url')
 
+    previous_status = order.status
+    if new_status == 'cancelled' and previous_status != 'cancelled':
+        order.restore_stock_on_cancel(session['user_id'])
+
     order.set_status(new_status)
     db.session.commit()
 
@@ -5877,6 +5886,9 @@ def seller_order_update_status(order_id):
     # Only allow transition from 'accepted' to 'preparing'
     if new_status == 'preparing' and current_status != 'accepted':
         return jsonify({'error': 'Order must be in accepted status to mark as preparing'}), 400
+
+    if new_status == 'cancelled' and current_status != 'cancelled':
+        order.restore_stock_on_cancel(session['user_id'])
     
     # Log status update
     order.set_status(new_status)

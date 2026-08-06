@@ -730,7 +730,7 @@ def complete_order(order_id):
 @customer_bp.route('/orders/<int:order_id>/cancel', methods=['POST'])
 @customer_only
 def cancel_order(order_id):
-    """Cancel a pending order (including COD awaiting confirmation)."""
+    """Cancel a pending order and restore reserved product stock."""
     try:
         user_id = int(get_jwt_identity())
         order = Order.query.filter_by(id=order_id, customer_id=user_id).first()
@@ -742,6 +742,7 @@ def cancel_order(order_id):
                 'message': 'Only pending orders can be cancelled.',
             }), 400
 
+        order.restore_stock_on_cancel(user_id)
         order.status = 'cancelled'
         if hasattr(order, 'updated_at'):
             order.updated_at = datetime.utcnow()
