@@ -16,13 +16,14 @@ def session_check():
     Returns a temporary JWT token for chat API access.
     
     GET /api/chat/session-check
-    Returns: { user_id: int, token: str } or error
+    Returns: { logged_in: true, user_id, token, role } or { logged_in: false }
     """
     user_id = session.get('user_id')
     user_role = session.get('role')
     
     if not user_id:
-        return jsonify({'error': 'Not logged in'}), 401
+        # Public status check — not an auth failure; avoid noisy 401s for guests
+        return jsonify({'logged_in': False}), 200
     
     # Create a temporary JWT token for this request
     payload = {
@@ -39,6 +40,7 @@ def session_check():
     )
     
     return jsonify({
+        'logged_in': True,
         'user_id': user_id,
         'token': token,
         'role': user_role
