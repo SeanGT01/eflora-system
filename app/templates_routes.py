@@ -1580,7 +1580,11 @@ def register():
                 DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
                 can_resend, new_otp_pair,
             )
-            from app.utils.email_helper import send_customer_otp_email
+            from app.utils.email_helper import (
+                send_customer_otp_email,
+                EMAIL_SERVICE_UNAVAILABLE_CODE,
+                EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+            )
 
             full_name        = (request.form.get('full_name')        or '').strip()
             email            = (request.form.get('email')            or '').strip().lower()
@@ -1652,9 +1656,12 @@ def register():
                 expiry_minutes  = DEFAULT_EXPIRY_MINUTES,
             )
             if not sent:
-                return render_template('register.html',
-                                       error='Failed to send verification email. Please try again.',
-                                       form_data=request.form)
+                return render_template(
+                    'register.html',
+                    error=EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+                    error_code=EMAIL_SERVICE_UNAVAILABLE_CODE,
+                    form_data=request.form,
+                )
 
             # ── Store email in session and redirect ───────────────────────
             session['pending_reg_email'] = email
@@ -1772,7 +1779,11 @@ def register_resend_otp():
         DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
         can_resend, new_otp_pair,
     )
-    from app.utils.email_helper import send_customer_otp_email
+    from app.utils.email_helper import (
+        send_customer_otp_email,
+        EMAIL_SERVICE_UNAVAILABLE_CODE,
+        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+    )
 
     email = session.get('pending_reg_email')
     if not email:
@@ -1805,7 +1816,11 @@ def register_resend_otp():
         expiry_minutes  = DEFAULT_EXPIRY_MINUTES,
     )
     if not sent:
-        return jsonify({'success': False, 'error': 'Failed to resend email.'}), 500
+        return jsonify({
+            'success': False,
+            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
+        }), 503
 
     return jsonify({
         'success': True,

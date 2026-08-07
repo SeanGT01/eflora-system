@@ -8,6 +8,10 @@ from app.utils.cloudinary_helper import upload_delivery_proof
 
 rider_bp = Blueprint('rider', __name__)
 
+# Customer confirmation moves delivered → completed; both count as fulfilled deliveries.
+_DELIVERED_STATUSES = ('delivered', 'completed')
+
+
 def rider_required(fn):
     @jwt_required()
     def decorated_function(*args, **kwargs):
@@ -43,10 +47,11 @@ def rider_dashboard():
         func.date(Order.created_at) == today
     ).count()
     
+    # Count delivered + completed (customer-confirmed) using fulfillment date.
     today_delivered = Order.query.filter(
         Order.rider_id == rider.id,
-        func.date(Order.created_at) == today,
-        Order.status == 'delivered'
+        Order.status.in_(_DELIVERED_STATUSES),
+        func.date(func.coalesce(Order.delivered_at, Order.updated_at, Order.created_at)) == today
     ).count()
     
     # Current active delivery
@@ -371,8 +376,8 @@ def get_rider_stats():
     
     weekly_deliveries = Order.query.filter(
         Order.rider_id == rider.id,
-        Order.status == 'delivered',
-        Order.updated_at >= week_ago
+        Order.status.in_(_DELIVERED_STATUSES),
+        func.coalesce(Order.delivered_at, Order.updated_at) >= week_ago
     ).count()
     
     # Monthly stats
@@ -380,8 +385,8 @@ def get_rider_stats():
     
     monthly_deliveries = Order.query.filter(
         Order.rider_id == rider.id,
-        Order.status == 'delivered',
-        Order.updated_at >= month_ago
+        Order.status.in_(_DELIVERED_STATUSES),
+        func.coalesce(Order.delivered_at, Order.updated_at) >= month_ago
     ).count()
     
     # Average time from rider accepting the order (confirmed_at) until delivered_at.
@@ -391,15 +396,15 @@ def get_rider_stats():
         func.avg(func.extract('epoch', Order.delivered_at - Order.confirmed_at) / 60.0)
     ).filter(
         Order.rider_id == rider.id,
-        Order.status == 'delivered',
+        Order.status.in_(_DELIVERED_STATUSES),
         Order.delivered_at.isnot(None),
         Order.confirmed_at.isnot(None),
     ).scalar()
     
     # Total deliveries
-    total_deliveries = Order.query.filter_by(
-        rider_id=rider.id,
-        status='delivered'
+    total_deliveries = Order.query.filter(
+        Order.rider_id == rider.id,
+        Order.status.in_(_DELIVERED_STATUSES),
     ).count()
     
     return jsonify({

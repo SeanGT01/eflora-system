@@ -30,6 +30,18 @@ def pht_now():
     return datetime.now(PHT)
 
 
+def _to_pht(dt):
+    """Normalize naive/aware datetimes to Asia/Manila for safe comparisons.
+
+    Naive values are treated as UTC (same convention as models.to_pht_iso).
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.UTC.localize(dt)
+    return dt.astimezone(PHT)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════════════════════
@@ -846,12 +858,13 @@ def check_online_status(user_id):
     target = User.query.get_or_404(user_id)
     from datetime import timedelta
     threshold = pht_now() - timedelta(minutes=5)
-    is_online = target.updated_at and target.updated_at >= threshold
+    last_active = _to_pht(target.updated_at)
+    is_online = last_active is not None and last_active >= threshold
 
     return jsonify({
         'user_id': target.id,
         'is_online': bool(is_online),
-        'last_active': target.updated_at.isoformat() if target.updated_at else None,
+        'last_active': last_active.isoformat() if last_active else None,
     }), 200
 
 
@@ -902,11 +915,12 @@ def get_typing(convo_id):
 
     if convo_id in _typing_state:
         for uid, ts in list(_typing_state[convo_id].items()):
-            if ts >= threshold and uid != user.id:
+            ts_pht = _to_pht(ts) or ts
+            if ts_pht >= threshold and uid != user.id:
                 u = User.query.get(uid)
                 if u:
                     typing_users.append({'id': u.id, 'full_name': u.full_name})
-            elif ts < threshold:
+            elif ts_pht < threshold:
                 del _typing_state[convo_id][uid]
 
     return jsonify({'typing': typing_users}), 200

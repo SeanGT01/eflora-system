@@ -11,6 +11,17 @@ from flask_mail import Message
 from app.extensions import mail
 
 
+# Returned to clients when Gmail OAuth / outbound email fails during OTP flows.
+EMAIL_SERVICE_UNAVAILABLE_CODE = 'email_service_unavailable'
+EMAIL_SERVICE_UNAVAILABLE_MESSAGE = (
+    "We couldn't send your verification email right now. "
+    "This is a temporary system issue on our side — not a problem with your details. "
+    "Please contact the developer or support team so they can restore email delivery, "
+    "then try signing up again. "
+    "Support: support@eflora.ph"
+)
+
+
 def generate_verification_token():
     """Generate a secure URL-safe verification token."""
     return secrets.token_urlsafe(32)
@@ -327,19 +338,17 @@ def send_customer_otp_email(recipient_email, otp_code, full_name=None, expiry_mi
 
         sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
 
-        app = current_app._get_current_object()
-        thread = threading.Thread(
-            target=_send_email_async,
-            args=(app, recipient_email, subject, html_body, sender),
-        )
-        thread.daemon = True
-        thread.start()
-
-        current_app.logger.info(f"📧 Customer OTP email queued for {recipient_email}")
-        return True
+        # Send synchronously so registration can fail loudly if Gmail OAuth is broken
+        # (async queue previously returned success even when the background send failed).
+        ok = _send_email_gmail_oauth(recipient_email, subject, html_body, sender)
+        if ok:
+            current_app.logger.info(f"📧 Customer OTP email sent to {recipient_email}")
+        else:
+            current_app.logger.error(f"❌ Customer OTP email failed for {recipient_email}")
+        return ok
 
     except Exception as e:
-        current_app.logger.error(f"❌ Failed to queue customer OTP email for {recipient_email}: {e}")
+        current_app.logger.error(f"❌ Failed to send customer OTP email for {recipient_email}: {e}")
         return False
 
 
@@ -392,19 +401,15 @@ def send_seller_signup_otp_email(recipient_email, otp_code, full_name=None, expi
 
         sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
 
-        app = current_app._get_current_object()
-        thread = threading.Thread(
-            target=_send_email_async,
-            args=(app, recipient_email, subject, html_body, sender),
-        )
-        thread.daemon = True
-        thread.start()
-
-        current_app.logger.info(f"📧 Seller signup OTP email queued for {recipient_email}")
-        return True
+        ok = _send_email_gmail_oauth(recipient_email, subject, html_body, sender)
+        if ok:
+            current_app.logger.info(f"📧 Seller signup OTP email sent to {recipient_email}")
+        else:
+            current_app.logger.error(f"❌ Seller signup OTP email failed for {recipient_email}")
+        return ok
 
     except Exception as e:
-        current_app.logger.error(f"❌ Failed to queue seller signup OTP for {recipient_email}: {e}")
+        current_app.logger.error(f"❌ Failed to send seller signup OTP for {recipient_email}: {e}")
         return False
 
 

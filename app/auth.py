@@ -97,7 +97,11 @@ def customer_send_otp():
         can_resend,
         new_otp_pair,
     )
-    from app.utils.email_helper import send_customer_otp_email
+    from app.utils.email_helper import (
+        send_customer_otp_email,
+        EMAIL_SERVICE_UNAVAILABLE_CODE,
+        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+    )
 
     data = request.get_json(silent=True) or {}
     fields, err = _validate_registration_payload(data, require_password=True)
@@ -158,8 +162,9 @@ def customer_send_otp():
     if not sent:
         return jsonify({
             'success': False,
-            'error': 'Failed to send verification email. Please try again shortly.',
-        }), 500
+            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
+        }), 503
 
     return jsonify({
         'success': True,
@@ -183,7 +188,11 @@ def customer_resend_otp():
         can_resend,
         new_otp_pair,
     )
-    from app.utils.email_helper import send_customer_otp_email
+    from app.utils.email_helper import (
+        send_customer_otp_email,
+        EMAIL_SERVICE_UNAVAILABLE_CODE,
+        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+    )
 
     data = request.get_json(silent=True) or {}
     email = _normalize_email(data.get('email'))
@@ -222,8 +231,9 @@ def customer_resend_otp():
     if not sent:
         return jsonify({
             'success': False,
-            'error': 'Failed to send verification email. Please try again shortly.',
-        }), 500
+            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
+        }), 503
 
     return jsonify({
         'success': True,
