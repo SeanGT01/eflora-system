@@ -451,6 +451,25 @@ def _public_storefront_product_base_query():
 def _product_list_for_storefront(orm_products):
     """Match landing-page dict shape (store_name, nested categories) for Jinja cards."""
     product_list = []
+    product_ids = [p.id for p in orm_products if getattr(p, 'id', None) is not None]
+    rating_map = {}
+    if product_ids:
+        rows = (
+            db.session.query(
+                ProductRating.product_id,
+                db.func.avg(ProductRating.rating),
+                db.func.count(ProductRating.id),
+            )
+            .filter(ProductRating.product_id.in_(product_ids))
+            .group_by(ProductRating.product_id)
+            .all()
+        )
+        for product_id, avg_rating, review_count in rows:
+            rating_map[product_id] = (
+                round(float(avg_rating or 0), 1),
+                int(review_count or 0),
+            )
+
     for product in orm_products:
         product_dict = product.to_dict()
         if product.store:
@@ -469,6 +488,9 @@ def _product_list_for_storefront(orm_products):
                 'name': product.store_category.name,
                 'slug': product.store_category.slug
             }
+        avg_rating, review_count = rating_map.get(product.id, (0.0, 0))
+        product_dict['avg_rating'] = avg_rating
+        product_dict['review_count'] = review_count
         product_list.append(product_dict)
     return product_list
 
@@ -2627,27 +2649,7 @@ def category(category_identifier):
             is_archived=False
         ).join(Store).filter(Store.status == 'active').all()
         
-        # Convert products to dict and add store_name
-        product_list = []
-        for product in products:
-            product_dict = product.to_dict()
-            product_dict['store_name'] = product.store.name if product.store else 'Unknown Store'
-            
-            if product.main_category:
-                product_dict['main_category'] = {
-                    'id': product.main_category.id,
-                    'name': product.main_category.name,
-                    'slug': product.main_category.slug
-                }
-            
-            if product.store_category:
-                product_dict['store_category'] = {
-                    'id': product.store_category.id,
-                    'name': product.store_category.name,
-                    'slug': product.store_category.slug
-                }
-            
-            product_list.append(product_dict)
+        product_list = _product_list_for_storefront(products)
         
         return render_template('category.html',
                              category=category,
@@ -2697,10 +2699,7 @@ def search():
                 Product.is_archived == False,
                 Store.status == 'active'
             ).all()
-        for p in raw:
-            pd = p.to_dict()
-            pd['store_name'] = p.store.name if p.store else 'Flower Shop'
-            products.append(pd)
+        products = _product_list_for_storefront(raw)
 
     return render_template('search.html', query=query, products=products)
 
@@ -8431,11 +8430,7 @@ def store_detail(store_id):
             .order_by(Product.created_at.desc()) \
             .all()
 
-        product_list = []
-        for p in products:
-            pd = p.to_dict()
-            pd['store_name'] = store.name
-            product_list.append(pd)
+        product_list = _product_list_for_storefront(products)
 
         # Fetch testimonials for this store (most recent 10)
         testimonials = Testimonial.query \

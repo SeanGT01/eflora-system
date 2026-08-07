@@ -315,8 +315,20 @@
     /* ─── Products Grid ─── */
     .store-products-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 1.25rem;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    @media (max-width: 1399px) {
+        .store-products-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 1199px) {
+        .store-products-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.875rem; }
+    }
+
+    @media (max-width: 899px) {
+        .store-products-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
     }
 
     .product-card {
@@ -422,70 +434,84 @@
     .overlay-btn:hover { background: var(--deep-rose); color: white; transform: scale(1.1) !important; }
 
     .product-content {
-        padding: 1rem 1.25rem 1.25rem;
+        padding: 0.45rem 0.35rem 0.4rem;
         flex: 1;
         display: flex;
         flex-direction: column;
     }
 
-    .product-category {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: #c44a7a;
-        margin-bottom: 0.3rem;
-        font-family: var(--font-sans);
+    .product-category,
+    .product-card .add-btn,
+    .product-card .ep-price__badge {
+        display: none !important;
     }
 
     .product-title {
         font-family: var(--font-display);
-        font-size: 17px;
+        font-size: 16px;
         font-weight: 500;
         color: var(--charcoal);
-        margin-bottom: 0.5rem;
-        line-height: 1.3;
+        margin: 0 0 0.2rem;
+        line-height: 1.25;
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
         -webkit-box-orient: vertical;
         overflow: hidden;
-        min-height: 2.8rem;
     }
 
-    .product-footer {
+    .product-footer,
+    .product-meta {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-top: auto;
-        padding-top: 0.75rem;
-        border-top: 1px solid var(--border);
+        gap: 0.35rem;
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
     }
 
     .product-price {
         font-family: var(--font-display);
-        font-size: 19px;
+        font-size: 17px;
         font-weight: 600;
         color: var(--deep-rose);
+        margin: 0;
+        padding: 0;
+        border: none;
     }
 
-    .add-btn {
-        width: 36px; height: 36px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #c24e68 0%, #d878a0 55%, #b070c8 100%);
-        border: 1px solid rgba(255, 255, 255, 0.35);
-        display: flex;
+    .product-price .ep-price__sale,
+    .product-price .ep-price__regular {
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--deep-rose);
+        font-family: var(--font-display);
+    }
+
+    .product-price .ep-price__original {
+        font-size: 12px;
+        color: var(--muted);
+        font-family: var(--font-sans);
+    }
+
+    .product-rating {
+        display: inline-flex;
         align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        color: white;
-        font-size: 18px;
-        transition: var(--transition);
+        gap: 0.18rem;
         flex-shrink: 0;
-        box-shadow: 0 6px 14px rgba(181, 68, 90, 0.25);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--charcoal);
+        white-space: nowrap;
     }
 
-    .add-btn:hover { transform: scale(1.1) rotate(90deg); }
-    .add-btn:disabled { background: var(--border-strong); cursor: not-allowed; transform: none; box-shadow: none; }
+    .product-rating i { color: var(--terracotta); font-size: 13px; }
+    .product-rating__count { color: var(--muted); font-weight: 500; }
+
+    .add-btn { display: none; }
+
+    .product-price .ep-price { gap: 4px; }
 
     /* ─── Sidebar ─── */
     .store-sidebar {
@@ -690,10 +716,10 @@
         .store-logo-large { width: 72px; height: 72px; font-size: 28px; }
         .store-hero-name { font-size: clamp(22px, 5vw, 32px); }
         .store-stats-bar { grid-template-columns: repeat(2, 1fr); }
-        .store-products-grid { grid-template-columns: repeat(2, 1fr); gap: 0.875rem; }
+        .store-products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
         .product-image { aspect-ratio: 1 / 1; height: auto; }
-        .product-content { padding: 0.75rem; }
-        .product-title { font-size: 14px; }
+        .product-content { padding: 0.45rem 0.55rem 0.6rem; }
+        .product-title { font-size: 13px; }
     }
 
     @media (max-width: 420px) {
@@ -859,18 +885,18 @@
                     </div>
 
                     <div class="product-content">
-                        {% if product.category %}
-                        <div class="product-category">{{ product.category }}</div>
-                        {% endif %}
                         <div class="product-title">{{ product.name }}</div>
-                        <div class="product-footer">
-                            <div class="product-price">{{ price_tag(product, 'md') }}</div>
-                            <button class="add-btn"
-                                {% if not product.is_available or product.stock_quantity == 0 %}disabled{% endif %}
-                                onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'")|safe }}', {{ product.price }}, '{{ product.category|replace("'", "\\'")|safe }}')"
-                                title="{{ 'Add to cart' if product.is_available and product.stock_quantity > 0 else 'Out of stock' }}">
-                                <i class="ri-add-line"></i>
-                            </button>
+                        <div class="product-meta">
+                            <div class="product-price">{{ price_tag(product, 'sm', false) }}</div>
+                            {% set rating = product.avg_rating if product.avg_rating is defined else 0 %}
+                            {% set reviews = product.review_count if product.review_count is defined else 0 %}
+                            {% if reviews and reviews > 0 %}
+                            <div class="product-rating">
+                                <i class="ri-star-fill"></i>
+                                <span>{{ '%.1f'|format(rating) }}</span>
+                                <span class="product-rating__count">({{ reviews }})</span>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

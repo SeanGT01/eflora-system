@@ -215,9 +215,21 @@
   /* ─── Product Grid ─── */
   .product-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 1.75rem;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 1rem;
     margin-bottom: 3rem;
+  }
+
+  @media (max-width: 1399px) {
+    .product-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 1199px) {
+    .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.875rem; }
+  }
+
+  @media (max-width: 899px) {
+    .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
   }
 
   .product-card {
@@ -229,6 +241,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    cursor: pointer;
     box-shadow:
       0 8px 24px rgba(80, 40, 70, 0.06),
       inset 0 1px 0 rgba(255, 255, 255, 0.75);
@@ -282,33 +295,113 @@
   .product-card:hover .product-image img { transform: scale(1.06); }
 
   .product-content {
-    padding: 1.25rem 1.5rem 1.5rem;
+    padding: 0.45rem 0.35rem 0.4rem;
     flex: 1;
     display: flex;
     flex-direction: column;
   }
 
-  .product-store {
-    font-size: 11px;
-    color: #c44a7a;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 0.4rem;
+  .product-store,
+  .product-actions,
+  .product-card .ep-price__badge {
+    display: none !important;
   }
 
   .product-title {
     font-family: var(--font-display);
-    font-size: 19px;
+    font-size: 16px;
     font-weight: 500;
     color: var(--charcoal);
-    margin-bottom: 0.5rem;
-    line-height: 1.3;
+    margin: 0 0 0.2rem;
+    line-height: 1.25;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  .product-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+  }
+
+  .product-price {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--deep-rose);
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  .product-price .ep-price__sale,
+  .product-price .ep-price__regular {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--deep-rose);
+    font-family: var(--font-display);
+  }
+
+  .product-price .ep-price__original {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--font-sans);
+  }
+
+  .product-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.18rem;
+    flex-shrink: 0;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--charcoal);
+    white-space: nowrap;
+  }
+
+  .product-rating i { color: var(--terracotta); font-size: 13px; }
+  .product-rating__count { color: var(--muted); font-weight: 500; }
+
+  .product-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(42,35,30,0);
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .product-card:hover .product-overlay { background: rgba(80, 40, 70, 0.22); }
+
+  .overlay-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transform: translateY(10px);
+    opacity: 0;
+    transition: var(--transition);
+    font-size: 16px;
+    color: var(--charcoal);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  }
+
+  .product-card:hover .overlay-btn {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .overlay-btn:hover { background: var(--deep-rose); color: white; transform: scale(1.1) !important; }
 
   /* Highlight matching text */
   .product-title mark {
@@ -316,22 +409,6 @@
     color: var(--deep-rose);
     border-radius: 3px;
     padding: 0 2px;
-  }
-
-  .product-price {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--deep-rose);
-    margin-bottom: 1.25rem;
-    font-family: var(--font-display);
-    margin-top: auto;
-    padding-top: 0.5rem;
-  }
-
-  .product-actions {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
   }
 
   /* ─── Empty State ─── */
@@ -444,15 +521,15 @@
   @media (max-width: 768px) {
     .search-hero { padding: 1.75rem 1.5rem; }
     .results-meta { flex-direction: column; align-items: flex-start; }
-    .product-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
   }
 
   @media (max-width: 480px) {
     .search-hero { padding: 1.25rem 1rem; }
-    .product-grid { gap: 0.75rem; }
+    .product-grid { gap: 0.5rem; }
     .product-image { aspect-ratio: 1 / 1; height: auto; }
-    .product-content { padding: 0.875rem 1rem 1rem; }
-    .product-title { font-size: 16px; }
+    .product-content { padding: 0.4rem 0.45rem 0.55rem; }
+    .product-title { font-size: 13px; }
     .search-bar-btn { display: none; }
     .search-bar-input { padding-right: 1.25rem; }
   }
@@ -524,9 +601,12 @@
     {% for product in products %}
     <div class="product-card"
          data-price="{{ product.price }}"
-         data-name="{{ product.name|lower }}">
+         data-name="{{ product.name|lower }}"
+         onclick="viewProduct({{ product.id }})"
+         data-product-id="{{ product.id }}">
+      {% set has_sellable_stock = product.is_available and product.stock_quantity > 0 %}
 
-      {% if product.stock_quantity < 10 %}
+      {% if product.stock_quantity < 10 and product.stock_quantity > 0 %}
         <div class="product-badge">Low Stock</div>
       {% endif %}
 
@@ -541,42 +621,39 @@
         {% else %}
           <div style="font-size:48px;opacity:0.2"><i class="ri-flower-line"></i></div>
         {% endif %}
+        <div class="product-overlay">
+          <button class="overlay-btn" type="button" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="View Details">
+            <i class="ri-eye-line"></i>
+          </button>
+          {% if has_sellable_stock and session.get('role') not in ['seller', 'admin'] %}
+          <button class="overlay-btn" type="button" onclick="event.stopPropagation(); addToCart({
+            id: {{ product.id }},
+            name: {{ product.name|tojson }},
+            price: {{ product.effective_price }},
+            special_price: {{ product.special_price if product.special_price else 'null' }},
+            effective_price: {{ product.effective_price }},
+            store_id: {{ product.store_id }},
+            store_name: {{ (product.store_name or 'Flower Shop')|tojson }},
+            image_url: {{ (product.image_url or '')|tojson }}
+          })" title="Quick Add">
+            <i class="ri-shopping-bag-line"></i>
+          </button>
+          {% endif %}
+        </div>
       </div>
 
       <div class="product-content">
-        <div class="product-store">{{ product.store_name or 'Flower Shop' }}</div>
-
-        <!-- Highlight query in title -->
-        <h3 class="product-title" data-raw="{{ product.name }}">
-          {{ product.name }}
-        </h3>
-
-        <div class="product-price">{{ price_tag(product, 'md') }}</div>
-
-        <div class="product-actions">
-          {% if product.stock_quantity > 0 and product.is_available %}
-          <button
-            class="btn btn-primary"
-            onclick='addToCart({
-              id: {{ product.id }},
-              name: {{ product.name|tojson }},
-              price: {{ product.effective_price }},
-              special_price: {{ product.special_price if product.special_price else "null" }},
-              effective_price: {{ product.effective_price }},
-              store_id: {{ product.store_id }},
-              store_name: {{ (product.store_name or "Flower Shop")|tojson }},
-              image_url: {{ (product.image_url or "")|tojson }}
-            })'
-          >
-            <i class="ri-shopping-bag-line"></i> Add to Bag
-          </button>
-          <button class="btn btn-outline btn-icon" onclick="viewProduct({{ product.id }})">
-            <i class="ri-eye-line"></i>
-          </button>
-          {% else %}
-          <button class="btn btn-outline" disabled style="flex:1;opacity:0.5;cursor:not-allowed;">
-            Out of Stock
-          </button>
+        <h3 class="product-title" data-raw="{{ product.name }}">{{ product.name }}</h3>
+        <div class="product-meta">
+          <div class="product-price">{{ price_tag(product, 'sm', false) }}</div>
+          {% set rating = product.avg_rating if product.avg_rating is defined else 0 %}
+          {% set reviews = product.review_count if product.review_count is defined else 0 %}
+          {% if reviews and reviews > 0 %}
+          <div class="product-rating">
+            <i class="ri-star-fill"></i>
+            <span>{{ '%.1f'|format(rating) }}</span>
+            <span class="product-rating__count">({{ reviews }})</span>
+          </div>
           {% endif %}
         </div>
       </div>
