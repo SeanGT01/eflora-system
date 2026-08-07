@@ -12,9 +12,10 @@ import pytz
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models import User, Store, Conversation, ChatMessage, Rider, Order
+from app.models import User, Store, Conversation, ChatMessage, Rider, Order, OrderItem, Product
 
 import cloudinary
 import cloudinary.uploader
@@ -80,6 +81,100 @@ def _can_access_conversation(user, convo):
         seller = User.query.get(convo.seller_id)
         return bool(seller and seller.role == 'admin')
     return False
+
+
+_ACTIVE_RIDER_ORDER_STATUSES = (
+    'accepted',
+    'preparing',
+    'done_preparing',
+    'confirmed',
+    'picked_up',
+    'on_delivery',
+    'out_for_delivery',
+)
+
+
+def _build_order_chat_context(order):
+    """Compact order summary for rider↔customer chat headers."""
+    if not order:
+        return None
+
+    items = []
+    for item in (order.items or []):
+        items.append({
+            'id': item.id,
+            'name': item.product.name if item.product else 'Product',
+            'variant_name': item.variant.name if item.variant else None,
+            'quantity': item.quantity or 1,
+            'price': float(item.price or 0),
+            'total': float((item.quantity or 0) * float(item.price or 0)),
+            'image_url': item.product_image,
+        })
+
+    return {
+        'order_id': order.id,
+        'order_number': f'ORD-{order.id:05d}',
+        'status': order.status,
+        'store_name': order.store.name if order.store else None,
+        'total_amount': float(order.total_amount or 0),
+        'subtotal_amount': float(order.subtotal_amount or 0),
+        'delivery_fee': float(order.delivery_fee or 0),
+        'item_count': len(items),
+        'items': items,
+    }
+
+
+def _resolve_order_for_rider_conversation(convo, preferred_order_id=None):
+    """Find the order that this rider↔customer thread is about."""
+    if not convo:
+        return None
+
+    rider = Rider.query.filter_by(user_id=convo.seller_id, is_archived=False).first()
+    if not rider:
+        rider = Rider.query.filter_by(user_id=convo.seller_id).first()
+    if not rider:
+        return None
+
+    base = (
+        Order.query.options(
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
+            joinedload(Order.items).joinedload(OrderItem.variant),
+            joinedload(Order.store),
+        )
+        .filter_by(
+            customer_id=convo.customer_id,
+            store_id=convo.store_id,
+            rider_id=rider.id,
+        )
+    )
+
+    if preferred_order_id:
+        preferred = base.filter_by(id=preferred_order_id).first()
+        if preferred:
+            return preferred
+
+    active = (
+        base.filter(Order.status.in_(_ACTIVE_RIDER_ORDER_STATUSES))
+        .order_by(Order.updated_at.desc(), Order.id.desc())
+        .first()
+    )
+    if active:
+        return active
+
+    return base.order_by(Order.created_at.desc(), Order.id.desc()).first()
+
+
+def _conversation_payload(convo, user, preferred_order_id=None):
+    """Serialize conversation and attach rider order context when applicable."""
+    data = convo.to_dict(current_user_id=user.id if user else None)
+    order = _resolve_order_for_rider_conversation(convo, preferred_order_id)
+    if order:
+        data['is_rider_thread'] = True
+        data['order_context'] = _build_order_chat_context(order)
+    else:
+        data['is_rider_thread'] = False
+        data['order_context'] = None
+    return data
 
 
 def _support_store_for_chat(customer_id, admin_user_id=None):
@@ -267,7 +362,8 @@ def create_or_get_rider_conversation():
         seller_id=rider_user_id,
     ).first()
     if convo:
-        return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
+        payload = _conversation_payload(convo, user, preferred_order_id=order.id)
+        return jsonify({'conversation': payload, 'order_context': payload.get('order_context')}), 200
 
     convo = Conversation(
         customer_id=order.customer_id,
@@ -276,7 +372,8 @@ def create_or_get_rider_conversation():
     )
     db.session.add(convo)
     db.session.commit()
-    return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 201
+    payload = _conversation_payload(convo, user, preferred_order_id=order.id)
+    return jsonify({'conversation': payload, 'order_context': payload.get('order_context')}), 201
 
 
 @chat_bp.route('/conversations', methods=['POST'])
@@ -411,6 +508,7 @@ def get_conversation(convo_id):
     """
     GET /api/v1/chat/conversations/<id>
     Returns conversation details (header info).
+    Optional query: order_id — prefer that order for rider-thread context.
     """
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
@@ -418,7 +516,9 @@ def get_conversation(convo_id):
     if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
-    return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
+    preferred_order_id = request.args.get('order_id', type=int)
+    payload = _conversation_payload(convo, user, preferred_order_id=preferred_order_id)
+    return jsonify({'conversation': payload, 'order_context': payload.get('order_context')}), 200
 
 
 @chat_bp.route('/conversations/<int:convo_id>', methods=['DELETE'])

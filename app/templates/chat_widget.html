@@ -177,6 +177,162 @@
 }
 .chat-head .back-btn { display: none; cursor: pointer; background: none; border: none; color: var(--charcoal); font-size: 18px; margin-right: 4px; }
 
+/* ══════════ ORDER CONTEXT (rider↔customer) ══════════ */
+.chat-order-context {
+    display: none;
+    background: #fff6f8;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.chat-order-context.is-visible { display: block; }
+.chat-order-context .oc-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+}
+.chat-order-context.is-expandable .oc-summary {
+    cursor: pointer;
+    user-select: none;
+}
+.chat-order-context.is-expandable .oc-summary:hover {
+    background: rgba(181, 68, 90, 0.04);
+}
+.chat-order-context .oc-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: var(--blush);
+    flex-shrink: 0;
+}
+.chat-order-context .oc-thumb-sm {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: var(--blush);
+    flex-shrink: 0;
+}
+.chat-order-context .oc-thumb-placeholder {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #f2c4ce, #e8a0b0);
+    color: #b5445a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+.chat-order-context .oc-thumb-placeholder.sm {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    font-size: 16px;
+}
+.chat-order-context .oc-body { flex: 1; min-width: 0; }
+.chat-order-context .oc-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+.chat-order-context .oc-order {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--deep-rose, #b5445a);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-order-context .oc-status {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--deep-rose, #b5445a);
+    background: rgba(181, 68, 90, 0.1);
+    padding: 2px 7px;
+    border-radius: 8px;
+    white-space: nowrap;
+}
+.chat-order-context .oc-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--charcoal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-order-context .oc-sub {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+}
+.chat-order-context .oc-price {
+    text-align: right;
+    flex-shrink: 0;
+}
+.chat-order-context .oc-price .amt {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--charcoal);
+}
+.chat-order-context .oc-price .lbl {
+    font-size: 10px;
+    color: var(--muted);
+}
+.chat-order-context .oc-chevron {
+    color: var(--muted);
+    font-size: 18px;
+    flex-shrink: 0;
+    transition: transform 0.18s ease;
+}
+.chat-order-context.is-expanded .oc-chevron {
+    transform: rotate(180deg);
+}
+.chat-order-context .oc-items {
+    display: none;
+    max-height: 220px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.55);
+    padding: 8px 14px 10px;
+}
+.chat-order-context.is-expanded .oc-items { display: block; }
+.chat-order-context .oc-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+}
+.chat-order-context .oc-item + .oc-item {
+    border-top: 1px solid rgba(107, 76, 59, 0.08);
+}
+.chat-order-context .oc-item-body { flex: 1; min-width: 0; }
+.chat-order-context .oc-item-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--charcoal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-order-context .oc-item-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 1px;
+}
+.chat-order-context .oc-item-price {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--charcoal);
+    flex-shrink: 0;
+}
+
 /* ══════════ INBOX LIST ══════════ */
 #chat-inbox-view {
     display: flex;
@@ -738,6 +894,7 @@ window.__eflowersChatUnread = {{ chat_unread_count|default(0)|int }};
                 </div>
                 <button class="close-btn" onclick="chatWidget.close()" title="Close"><i class="ri-close-line"></i></button>
             </div>
+            <div class="chat-order-context" id="chat-order-context" aria-live="polite"></div>
             <div class="chat-messages" id="chat-messages-area"></div>
             <div class="typing-indicator" id="chat-typing" style="display:none;padding:4px 16px;">
                 <span id="chat-typing-name"></span> is typing<span class="dots"><span></span><span></span><span></span></span>
@@ -787,6 +944,11 @@ const chatWidget = (() => {
     let _locallyReadIds = new Set(); // suppress poll race after opening a thread
     let _supportFaqs = null;
     let _quickAnswersMode = false;
+    let _preferredOrderId = null;
+    let _pendingOrderContext = null;
+    let _orderContextExpanded = false;
+    let _orderContextOrderId = null;
+    let _lastOrderContext = null;
 
     function _headers() {
         const h = { 'Content-Type': 'application/json' };
@@ -984,8 +1146,13 @@ const chatWidget = (() => {
     // ═══ INBOX ═══
     function showInbox() {
         _activeConvoId = null;
+        _preferredOrderId = null;
+        _pendingOrderContext = null;
+        _orderContextExpanded = false;
+        _orderContextOrderId = null;
         _quickAnswersMode = false;
         _stopPoll();
+        _renderOrderContext(null);
         document.getElementById('chat-inbox-view').style.display = '';
         document.getElementById('chat-detail-view').style.display = 'none';
         _updateSupportEntryVisibility();
@@ -1259,17 +1426,41 @@ const chatWidget = (() => {
         document.getElementById('chat-inbox-view').style.display = 'none';
         document.getElementById('chat-detail-view').style.display = 'flex';
         _setComposerVisible(true);
+        _renderOrderContext(null);
 
         // Find conversation data
         let convo = _convos.find(c => c.id === convoId);
         if (!convo) {
             try {
-                const res = await _fetch(API + '/conversations/' + convoId, { headers: _headers() });
+                const qs = _preferredOrderId ? ('?order_id=' + _preferredOrderId) : '';
+                const res = await _fetch(API + '/conversations/' + convoId + qs, { headers: _headers() });
                 const data = await res.json();
                 convo = data.conversation;
+                if (convo && !convo.order_context && data.order_context) {
+                    convo.order_context = data.order_context;
+                }
             } catch(e) {}
         }
         if (convo) _renderHeader(convo);
+
+        let orderCtx = (convo && convo.order_context) || _pendingOrderContext || null;
+        _pendingOrderContext = null;
+
+        const otherRole = convo && convo.other_user ? convo.other_user.role : null;
+        const needsOrderCtx = !orderCtx && (otherRole === 'rider' || _userRole === 'rider' || (convo && convo.is_rider_thread));
+        if (needsOrderCtx || (_preferredOrderId && orderCtx && orderCtx.order_id !== _preferredOrderId)) {
+            try {
+                const qs = _preferredOrderId ? ('?order_id=' + _preferredOrderId) : '';
+                const res = await _fetch(API + '/conversations/' + convoId + qs, { headers: _headers() });
+                const data = await res.json();
+                if (data.conversation) {
+                    convo = data.conversation;
+                    _renderHeader(convo);
+                    orderCtx = convo.order_context || data.order_context || orderCtx;
+                }
+            } catch (e) {}
+        }
+        _renderOrderContext(orderCtx);
 
         // Instantly clear unread badge + mark read (don't wait for messages)
         try {
@@ -1383,7 +1574,10 @@ const chatWidget = (() => {
             });
             const data = await res.json();
             if (data.conversation) {
+                // open() resets preferred order via showInbox — set after.
                 open();
+                _preferredOrderId = orderId;
+                _pendingOrderContext = data.conversation.order_context || data.order_context || null;
                 openConvo(data.conversation.id);
             } else {
                 alert(data.error || 'Could not open rider chat');
@@ -1510,6 +1704,119 @@ const chatWidget = (() => {
         document.getElementById('chat-detail-name').textContent = displayName;
         // Check online
         _checkOnline(other.id || convo.seller_id);
+    }
+
+    function _orderStatusLabel(status) {
+        const map = {
+            pending: 'Pending',
+            accepted: 'Preparing',
+            preparing: 'Preparing',
+            done_preparing: 'Ready',
+            confirmed: 'Picked Up',
+            picked_up: 'Picked Up',
+            on_delivery: 'In Transit',
+            out_for_delivery: 'In Transit',
+            delivered: 'Delivered',
+            completed: 'Completed',
+            cancelled: 'Cancelled',
+        };
+        if (!status) return 'Order';
+        return map[status] || String(status).replace(/_/g, ' ');
+    }
+
+    function _formatPeso(n) {
+        const num = Number(n || 0);
+        return '₱' + num.toLocaleString('en-PH', {
+            minimumFractionDigits: num % 1 === 0 ? 0 : 2,
+            maximumFractionDigits: 2,
+        });
+    }
+
+    function _renderOrderContext(ctx) {
+        const el = document.getElementById('chat-order-context');
+        if (!el) return;
+        if (!ctx || !ctx.order_id) {
+            el.classList.remove('is-visible', 'is-expandable', 'is-expanded');
+            el.innerHTML = '';
+            _orderContextExpanded = false;
+            _orderContextOrderId = null;
+            _lastOrderContext = null;
+            return;
+        }
+        if (_orderContextOrderId !== ctx.order_id) {
+            _orderContextExpanded = false;
+            _orderContextOrderId = ctx.order_id;
+        }
+        _lastOrderContext = ctx;
+
+        const items = ctx.items || [];
+        const primary = items[0] || null;
+        const itemCount = ctx.item_count || items.length;
+        const canExpand = items.length >= 2 || itemCount >= 2;
+        const extra = Math.max(0, itemCount - 1);
+        const name = primary
+            ? [primary.name, primary.variant_name].filter(Boolean).join(' · ')
+            : (ctx.store_name || 'Order items');
+        const subParts = [];
+        if (primary) subParts.push('Qty ' + (primary.quantity || 1));
+        if (canExpand && !_orderContextExpanded && extra > 0) subParts.push('+' + extra + ' more');
+        if (canExpand && _orderContextExpanded) subParts.push(itemCount + ' items');
+        if (!canExpand && ctx.store_name) subParts.push(ctx.store_name);
+
+        function thumbHtml(item, small) {
+            if (item && item.image_url) {
+                const cls = small ? 'oc-thumb-sm' : 'oc-thumb';
+                const phCls = small ? 'oc-thumb-placeholder sm' : 'oc-thumb-placeholder';
+                return `<img class="${cls}" src="${_esc(item.image_url)}" alt="" onerror="this.outerHTML='<div class=\\'${phCls}\\'><i class=\\'ri-flower-line\\'></i></div>'">`;
+            }
+            return `<div class="oc-thumb-placeholder${small ? ' sm' : ''}"><i class="ri-flower-line"></i></div>`;
+        }
+
+        const itemsHtml = items.map(function (item) {
+            const title = [item.name, item.variant_name].filter(Boolean).join(' · ');
+            const lineTotal = (item.total != null)
+                ? Number(item.total)
+                : (Number(item.price || 0) * Number(item.quantity || 1));
+            return `<div class="oc-item">
+                ${thumbHtml(item, true)}
+                <div class="oc-item-body">
+                    <div class="oc-item-name">${_esc(title || 'Product')}</div>
+                    <div class="oc-item-sub">Qty ${item.quantity || 1} · ${_formatPeso(item.price)} each</div>
+                </div>
+                <div class="oc-item-price">${_formatPeso(lineTotal)}</div>
+            </div>`;
+        }).join('');
+
+        el.innerHTML = `
+            <div class="oc-summary" ${canExpand ? 'onclick="chatWidget.toggleOrderContext()"' : ''}>
+                ${thumbHtml(primary, false)}
+                <div class="oc-body">
+                    <div class="oc-meta">
+                        <span class="oc-order">${_esc(ctx.order_number || ('ORD-' + ctx.order_id))}</span>
+                        <span class="oc-status">${_esc(_orderStatusLabel(ctx.status))}</span>
+                    </div>
+                    <div class="oc-name">${_esc(name)}</div>
+                    <div class="oc-sub">${_esc(subParts.join(' · '))}</div>
+                </div>
+                <div class="oc-price">
+                    <div class="amt">${_formatPeso(ctx.total_amount)}</div>
+                    <div class="lbl">Total</div>
+                </div>
+                ${canExpand ? '<i class="ri-arrow-down-s-line oc-chevron"></i>' : ''}
+            </div>
+            ${canExpand ? `<div class="oc-items">${itemsHtml}</div>` : ''}
+        `;
+        el.classList.add('is-visible');
+        el.classList.toggle('is-expandable', canExpand);
+        el.classList.toggle('is-expanded', canExpand && _orderContextExpanded);
+    }
+
+    function toggleOrderContext() {
+        if (!_lastOrderContext) return;
+        const items = _lastOrderContext.items || [];
+        if (items.length < 2 && (_lastOrderContext.item_count || 0) < 2) return;
+        _orderContextExpanded = !_orderContextExpanded;
+        _renderOrderContext(_lastOrderContext);
     }
 
     async function _checkOnline(uid) {
@@ -2024,6 +2331,7 @@ const chatWidget = (() => {
         openSupport,
         openQuickAnswers,
         showFaqAnswer,
+        toggleOrderContext,
         _openSupportFromInbox,
         searchStores,
         send,
