@@ -873,7 +873,9 @@ def check_online_status(user_id):
 # ═══════════════════════════════════════════════════════════════════════
 
 # In-memory typing state (per-conversation, per-user)
-_typing_state = {}  # {convo_id: {user_id: datetime}}
+# {convo_id: {user_id: {'at': datetime, 'name': str}}}
+_typing_state = {}
+_TYPING_TTL_SECONDS = 6
 
 
 @chat_bp.route('/conversations/<int:convo_id>/typing', methods=['POST'])
@@ -881,7 +883,7 @@ _typing_state = {}  # {convo_id: {user_id: datetime}}
 def set_typing(convo_id):
     """
     POST /api/v1/chat/conversations/<id>/typing
-    Signals that the current user is typing. Expires after 5 seconds.
+    Signals that the current user is typing. Expires after a few seconds.
     """
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
@@ -891,7 +893,10 @@ def set_typing(convo_id):
 
     if convo_id not in _typing_state:
         _typing_state[convo_id] = {}
-    _typing_state[convo_id][user.id] = pht_now()
+    _typing_state[convo_id][user.id] = {
+        'at': pht_now(),
+        'name': user.full_name or 'Someone',
+    }
 
     return jsonify({'status': 'ok'}), 200
 
@@ -909,18 +914,32 @@ def get_typing(convo_id):
     if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
-    from datetime import timedelta
-    threshold = pht_now() - timedelta(seconds=5)
+    threshold = pht_now() - timedelta(seconds=_TYPING_TTL_SECONDS)
     typing_users = []
 
-    if convo_id in _typing_state:
-        for uid, ts in list(_typing_state[convo_id].items()):
-            ts_pht = _to_pht(ts) or ts
-            if ts_pht >= threshold and uid != user.id:
-                u = User.query.get(uid)
-                if u:
-                    typing_users.append({'id': u.id, 'full_name': u.full_name})
-            elif ts_pht < threshold:
-                del _typing_state[convo_id][uid]
+    state = _typing_state.get(convo_id) or {}
+    for uid, meta in list(state.items()):
+        # Back-compat if an older process still stored bare datetimes.
+        if isinstance(meta, datetime):
+            ts = meta
+            name = None
+        else:
+            ts = meta.get('at')
+            name = meta.get('name')
+
+        ts_pht = _to_pht(ts) or ts
+        if ts_pht is None or ts_pht < threshold:
+            state.pop(uid, None)
+            continue
+        if uid == user.id:
+            continue
+
+        if not name:
+            u = User.query.get(uid)
+            name = u.full_name if u else 'Someone'
+        typing_users.append({'id': uid, 'full_name': name})
+
+    if convo_id in _typing_state and not _typing_state[convo_id]:
+        _typing_state.pop(convo_id, None)
 
     return jsonify({'typing': typing_users}), 200

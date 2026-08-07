@@ -718,22 +718,41 @@
 }
 .chat-reply-bar .reply-cancel:hover { color: #d32f2f; background: rgba(211,47,47,.08); }
 
-/* Typing indicator */
-.typing-indicator { font-size: 12px; color: var(--muted); padding: 4px 0; }
+/* Typing indicator — sticky under message list */
+.typing-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    font-size: 12.5px;
+    font-family: var(--font-sans);
+    color: var(--muted);
+    padding: 2px 16px 8px;
+    background: transparent;
+}
+.typing-indicator.is-visible { display: flex; }
+.typing-indicator .typing-label { font-weight: 500; }
+.typing-indicator .dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 2px;
+}
 .typing-indicator .dots span {
     display: inline-block;
-    width: 5px; height: 5px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
-    background: #999;
-    animation: dot-bounce 1.4s infinite ease-in-out both;
-    margin: 0 1px;
+    background: var(--deep-rose, #B5445A);
+    opacity: 0.35;
+    animation: typing-dot 1.2s infinite ease-in-out;
 }
 .typing-indicator .dots span:nth-child(1) { animation-delay: 0s; }
-.typing-indicator .dots span:nth-child(2) { animation-delay: .16s; }
-.typing-indicator .dots span:nth-child(3) { animation-delay: .32s; }
-@keyframes dot-bounce {
-    0%, 80%, 100% { transform: scale(0); }
-    40% { transform: scale(1); }
+.typing-indicator .dots span:nth-child(2) { animation-delay: .15s; }
+.typing-indicator .dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes typing-dot {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+    40% { transform: translateY(-3px); opacity: 1; }
 }
 
 /* ══════════ INPUT BAR ══════════ */
@@ -896,8 +915,9 @@ window.__eflowersChatUnread = {{ chat_unread_count|default(0)|int }};
             </div>
             <div class="chat-order-context" id="chat-order-context" aria-live="polite"></div>
             <div class="chat-messages" id="chat-messages-area"></div>
-            <div class="typing-indicator" id="chat-typing" style="display:none;padding:4px 16px;">
-                <span id="chat-typing-name"></span> is typing<span class="dots"><span></span><span></span><span></span></span>
+            <div class="typing-indicator" id="chat-typing" aria-live="polite">
+                <span class="typing-label"><span id="chat-typing-name"></span> is typing</span>
+                <span class="dots" aria-hidden="true"><span></span><span></span><span></span></span>
             </div>
             <div class="chat-reply-bar" id="chat-reply-bar">
                 <div class="reply-preview">
@@ -935,6 +955,9 @@ const chatWidget = (() => {
     let _messages = [];
     let _pollTimer = null;
     let _typingTimer = null;
+    let _typingPollTimer = null;
+    let _typingKeepAlive = null;
+    let _lastTypingPing = 0;
     let _unreadPollTimer = null;
     let _liveSyncTimer = null;
     let _readPollTimer = null;
@@ -1642,7 +1665,7 @@ const chatWidget = (() => {
         if (inputBar) inputBar.style.display = show ? '' : 'none';
         if (replyBar) replyBar.style.display = show ? '' : 'none';
         if (imgPreview) imgPreview.style.display = 'none';
-        if (typing) typing.style.display = 'none';
+        if (typing) typing.classList.remove('is-visible');
     }
 
     async function openQuickAnswers() {
@@ -1881,7 +1904,16 @@ const chatWidget = (() => {
         function replyHtml(m) {
             if (!m.reply_to_id) return '';
             const rName = _esc(m.reply_to_sender_name || 'Unknown');
-            const rText = m.reply_to_text ? _esc(m.reply_to_text) : '<i>Message has been deleted</i>';
+            let rText;
+            if (m.reply_to_text) {
+                rText = _esc(m.reply_to_text);
+            } else if (m.reply_to_message_type === 'deleted') {
+                rText = '<i>Message has been deleted</i>';
+            } else if (m.reply_to_message_type === 'image' || !m.reply_to_message_type) {
+                rText = _esc('[Image]');
+            } else {
+                rText = '<i>Message has been deleted</i>';
+            }
             return `<div class="msg-reply-quote"><div class="reply-name">${rName}</div><div class="reply-text">${rText}</div></div>`;
         }
 
@@ -2244,15 +2276,23 @@ const chatWidget = (() => {
         _pollTimer = setInterval(async () => {
             if (document.hidden) return;
             if (!_hasOpenMenu()) await _loadMessages();
-            _pollTyping();
         }, 3000);
+        // Typing is polled faster than messages so the indicator feels live.
+        _typingPollTimer = setInterval(function () {
+            if (!document.hidden && _activeConvoId) _pollTyping();
+        }, 1500);
+        _pollTyping();
         _readPollTimer = setInterval(function () {
             if (!document.hidden && _activeConvoId) _markRead();
         }, 6000);
     }
     function _stopPoll() {
         if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+        if (_typingPollTimer) { clearInterval(_typingPollTimer); _typingPollTimer = null; }
         if (_readPollTimer) { clearInterval(_readPollTimer); _readPollTimer = null; }
+        clearTimeout(_typingTimer);
+        clearInterval(_typingKeepAlive);
+        _typingKeepAlive = null;
     }
 
     async function _pollUnread() {
@@ -2281,16 +2321,29 @@ const chatWidget = (() => {
     }
 
     // ═══ TYPING ═══
+    function _pingTyping() {
+        if (!_activeConvoId) return;
+        const now = Date.now();
+        // Throttle network pings while still refreshing within server TTL.
+        if (now - _lastTypingPing < 1800) return;
+        _lastTypingPing = now;
+        _fetch(API + '/conversations/' + _activeConvoId + '/typing', {
+            method: 'POST',
+            headers: _headers(),
+        }).catch(function () {});
+    }
+
     function onType() {
         if (!_activeConvoId) return;
+        _pingTyping();
         clearTimeout(_typingTimer);
-        // Debounce typing POSTs — avoid a request on every keystroke
+        clearInterval(_typingKeepAlive);
+        // Keep signaling while the user continues to type.
+        _typingKeepAlive = setInterval(_pingTyping, 2000);
         _typingTimer = setTimeout(function () {
-            _fetch(API + '/conversations/' + _activeConvoId + '/typing', {
-                method: 'POST',
-                headers: _headers(),
-            }).catch(function () {});
-        }, 1200);
+            clearInterval(_typingKeepAlive);
+            _typingKeepAlive = null;
+        }, 4000);
     }
 
     async function _pollTyping() {
@@ -2299,11 +2352,13 @@ const chatWidget = (() => {
             const res = await _fetch(API + '/conversations/' + _activeConvoId + '/typing', { headers: _headers() });
             const data = await res.json();
             const el = document.getElementById('chat-typing');
+            const nameEl = document.getElementById('chat-typing-name');
+            if (!el) return;
             if (data.typing && data.typing.length > 0) {
-                document.getElementById('chat-typing-name').textContent = data.typing[0].full_name;
-                el.style.display = '';
+                if (nameEl) nameEl.textContent = data.typing[0].full_name || 'Someone';
+                el.classList.add('is-visible');
             } else {
-                el.style.display = 'none';
+                el.classList.remove('is-visible');
             }
         } catch(e) {}
     }

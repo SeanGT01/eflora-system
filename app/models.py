@@ -2267,6 +2267,7 @@ class ChatMessage(db.Model):
             'reply_to_text': None,
             'reply_to_sender_name': None,
             'reply_to_sender_role': None,
+            'reply_to_message_type': None,
         }
         if self.is_deleted:
             d['text'] = None
@@ -2277,7 +2278,18 @@ class ChatMessage(db.Model):
             d['image_url'] = self.image_url
             d['image_public_id'] = self.image_public_id
         if self.reply_to_id and self.reply_to:
-            d['reply_to_text'] = self.reply_to.text if not self.reply_to.is_deleted else None
+            if self.reply_to.is_deleted:
+                d['reply_to_text'] = None
+                d['reply_to_message_type'] = 'deleted'
+            elif self.reply_to.text:
+                d['reply_to_text'] = self.reply_to.text
+                d['reply_to_message_type'] = self.reply_to.message_type or 'text'
+            elif (self.reply_to.message_type == 'image') or self.reply_to.image_url:
+                d['reply_to_text'] = '[Image]'
+                d['reply_to_message_type'] = 'image'
+            else:
+                d['reply_to_text'] = None
+                d['reply_to_message_type'] = self.reply_to.message_type or 'text'
             d['reply_to_sender_name'] = self.reply_to.sender.full_name if self.reply_to.sender else None
             d['reply_to_sender_role'] = self.reply_to.sender.role if self.reply_to.sender else None
         return d
