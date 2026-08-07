@@ -1942,6 +1942,24 @@ function buildOrderDetailHTML(order) {
             </div>
         </section>` : '';
 
+    const riderAssigned = !!(order.rider_name || order.rider_id);
+    const riderSection = `
+        <section class="sdm-block sdm-block--full">
+            <h4>Rider</h4>
+            <div class="sdm-rows">
+                <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${esc(order.rider_name || 'Not assigned yet')}</span></div>
+                <div class="sdm-row"><span class="sdm-k">Vehicle</span><span class="sdm-v">${esc(order.rider_vehicle || '—')}</span></div>
+            </div>
+            ${riderAssigned ? `
+            <div style="margin-top:12px;">
+                <button type="button" class="btn-order-action primary"
+                    style="width:100%;"
+                    onclick="chatWidget.openWithRiderOrder(${Number(order.id) || 0})">
+                    <i class="ri-chat-3-line"></i> Chat with rider
+                </button>
+            </div>` : ''}
+        </section>`;
+
     return `
         <div class="sdm">
             <header class="sdm-topbar">
@@ -1974,6 +1992,7 @@ function buildOrderDetailHTML(order) {
                 </section>
             </div>
             ${deliverySection}
+            ${riderSection}
             ${proofSection}
             <section class="sdm-block sdm-block--full">
                 <h4>Summary</h4>

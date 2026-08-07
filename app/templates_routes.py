@@ -296,6 +296,17 @@ def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
         'store_name': order.store.name if order.store else 'Store',
         'store_logo': order.store.logo_url if order.store else None,
         'store_contact': order.store.contact_number if order.store else None,
+        'rider_id': order.rider_id,
+        'rider_name': (
+            order.assigned_rider.user.full_name
+            if getattr(order, 'assigned_rider', None) and order.assigned_rider.user
+            else None
+        ),
+        'rider_vehicle': (
+            order.assigned_rider.vehicle_type
+            if getattr(order, 'assigned_rider', None)
+            else None
+        ),
         'item_count': total_quantity,
         'items': items_payload,
         'store_rated': bool(store_rated_flag),

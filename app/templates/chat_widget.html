@@ -1363,6 +1363,37 @@ const chatWidget = (() => {
         } catch(e) { console.error('Chat: open with store failed', e); }
     }
 
+    async function openWithRiderOrder(orderId) {
+        if (!orderId) return;
+        if (!_userId) {
+            try {
+                const chk = await fetch('/api/chat/session-check', { credentials: 'include' });
+                if (chk.ok) {
+                    const d = await chk.json();
+                    if (d.user_id) { init(d.token || '', d.user_id, d.role || ''); }
+                    else { window.location.href = '/login'; return; }
+                } else { window.location.href = '/login'; return; }
+            } catch (e) { window.location.href = '/login'; return; }
+        }
+        try {
+            const res = await _fetch(API + '/conversations/rider-order', {
+                method: 'POST',
+                headers: _headers(),
+                body: JSON.stringify({ order_id: orderId }),
+            });
+            const data = await res.json();
+            if (data.conversation) {
+                open();
+                openConvo(data.conversation.id);
+            } else {
+                alert(data.error || 'Could not open rider chat');
+            }
+        } catch (e) {
+            console.error('Chat: open with rider order failed', e);
+            alert('Could not open rider chat');
+        }
+    }
+
     async function openSupport() {
         if (!_userId) {
             try {
@@ -1989,6 +2020,7 @@ const chatWidget = (() => {
         showInbox,
         openConvo,
         openWithStore,
+        openWithRiderOrder,
         openSupport,
         openQuickAnswers,
         showFaqAnswer,

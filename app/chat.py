@@ -218,28 +218,44 @@ def create_or_get_rider_conversation():
     """
     POST /api/v1/chat/conversations/rider-order
     Body: { "order_id": <int> }
-    Opens chat for rider's assigned order/customer.
+
+    Opens (or creates) the private rider↔customer thread for an assigned order.
+    Allowed for:
+      - the assigned rider
+      - the customer who placed the order (once a rider is assigned)
     """
     user = _current_user()
     if not user:
         return jsonify({'error': 'User not found'}), 404
-    if user.role != 'rider':
-        return jsonify({'error': 'Rider access required'}), 403
 
     data = request.get_json(silent=True) or {}
     order_id = data.get('order_id')
     if not order_id:
         return jsonify({'error': 'order_id is required'}), 400
 
-    rider = Rider.query.filter_by(user_id=user.id, is_archived=False).first()
-    if not rider:
-        return jsonify({'error': 'Rider profile not found'}), 404
-
     order = Order.query.get(order_id)
     if not order:
         return jsonify({'error': 'Order not found'}), 404
-    if order.rider_id != rider.id:
-        return jsonify({'error': 'Order is not assigned to this rider'}), 403
+    if not order.rider_id:
+        return jsonify({'error': 'No rider assigned to this order yet'}), 400
+
+    assigned_rider = Rider.query.get(order.rider_id)
+    if not assigned_rider or not assigned_rider.user_id:
+        return jsonify({'error': 'Rider profile not found'}), 404
+
+    rider_user_id = assigned_rider.user_id
+
+    if user.role == 'rider':
+        my_rider = Rider.query.filter_by(user_id=user.id, is_archived=False).first()
+        if not my_rider:
+            return jsonify({'error': 'Rider profile not found'}), 404
+        if order.rider_id != my_rider.id:
+            return jsonify({'error': 'Order is not assigned to this rider'}), 403
+    elif user.role == 'customer':
+        if order.customer_id != user.id:
+            return jsonify({'error': 'Access denied'}), 403
+    else:
+        return jsonify({'error': 'Only the customer or assigned rider can open this chat'}), 403
 
     store = Store.query.get(order.store_id)
     if not store:
@@ -248,14 +264,14 @@ def create_or_get_rider_conversation():
     convo = Conversation.query.filter_by(
         customer_id=order.customer_id,
         store_id=order.store_id,
-        seller_id=user.id
+        seller_id=rider_user_id,
     ).first()
     if convo:
         return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
 
     convo = Conversation(
         customer_id=order.customer_id,
-        seller_id=user.id,  # private rider-customer thread
+        seller_id=rider_user_id,  # private rider-customer thread
         store_id=order.store_id,
     )
     db.session.add(convo)
