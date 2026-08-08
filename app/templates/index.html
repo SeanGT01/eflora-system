@@ -773,6 +773,69 @@
         line-height: 1.3;
     }
 
+    /* Browse-outside limitations modal (mirrors Flutter app) */
+    #browseLimitationsModal.modal-overlay {
+        z-index: 1100;
+    }
+    #browseLimitationsModal .modal {
+        max-width: 440px;
+    }
+    #browseLimitationsModal .modal-header h3 {
+        font-family: var(--font-display);
+        font-size: 1.45rem;
+        font-weight: 500;
+        color: var(--charcoal);
+    }
+    .browse-limit-intro {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--charcoal);
+        margin: 0 0 0.85rem;
+        line-height: 1.45;
+    }
+    .browse-limit-list {
+        margin: 0 0 1.15rem;
+        padding-left: 1.1rem;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .browse-limit-list li { margin-bottom: 0.45rem; }
+    .browse-limit-dont-show {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        user-select: none;
+        font-size: 13px;
+        color: var(--charcoal);
+        font-weight: 500;
+    }
+    .browse-limit-dont-show input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--deep-rose);
+        cursor: pointer;
+    }
+    #browseLimitationsModal .modal-close {
+        width: 34px;
+        height: 34px;
+        border: none;
+        border-radius: 50%;
+        background: rgba(194, 78, 104, 0.08);
+        color: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 18px;
+        transition: var(--transition);
+    }
+    #browseLimitationsModal .modal-close:hover {
+        background: rgba(194, 78, 104, 0.14);
+        color: var(--deep-rose);
+    }
+
     @media (max-width: 640px) {
         .location-filter-panel {
             padding: 0.5rem;
@@ -3124,7 +3187,7 @@
                     {% endif %}
                     {% if customer_has_default_address %}
                     <label class="location-checkbox-wrapper">
-                        <input type="checkbox" id="browseAllMode" {{ 'checked' if browse_all_mode else '' }} onclick="toggleBrowseMode()" class="location-checkbox">
+                        <input type="checkbox" id="browseAllMode" {{ 'checked' if browse_all_mode else '' }} onchange="onBrowseOutsideChange(event)" class="location-checkbox">
                         <span class="checkbox-label">Browse outside area</span>
                     </label>
                     {% endif %}
@@ -3432,6 +3495,36 @@
 
 </div>
 
+{# Browse outside area — limitations modal (Flutter parity) #}
+<div class="modal-overlay" id="browseLimitationsModal" role="dialog" aria-modal="true"
+     aria-labelledby="browseLimitationsTitle" onclick="onBrowseLimitationsBackdrop(event)">
+    <div class="modal modal-sm" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 id="browseLimitationsTitle">Browse Outside Coverage Area</h3>
+            <button type="button" class="modal-close" onclick="cancelBrowseLimitations()" aria-label="Close">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p class="browse-limit-intro">
+                You can browse products from stores outside your delivery area, but:
+            </p>
+            <ul class="browse-limit-list">
+                <li>You cannot add items to cart from unavailable stores</li>
+                <li>You cannot checkout unless you change your address to match store delivery coverage</li>
+            </ul>
+            <label class="browse-limit-dont-show">
+                <input type="checkbox" id="browseDontShowAgain">
+                <span>Do not show again</span>
+            </label>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="cancelBrowseLimitations()">Cancel</button>
+            <button type="button" class="btn btn-rose" onclick="confirmBrowseLimitations()">Continue</button>
+        </div>
+    </div>
+</div>
+
 {# Quick-add option picker (Standard + variants) #}
 <div class="qa-overlay" id="qaOverlay" onclick="closeQuickAddPicker()" aria-hidden="true"></div>
 <div class="qa-picker" id="qaPicker" role="dialog" aria-modal="true" aria-labelledby="qaPickerTitle" hidden>
@@ -3484,10 +3577,88 @@
         window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
     }
 
+    var BROWSE_OUTSIDE_DISMISS_KEY = 'eflora_browse_outside_limitations_dismissed';
+
+    function applyBrowseMode(enabled) {
+        var mode = enabled ? '1' : '0';
+        window.location.href = "{{ url_for('templates.index', browse_all=0) }}".replace('0', mode);
+    }
+
+    function isBrowseLimitationsDismissed() {
+        try {
+            return localStorage.getItem(BROWSE_OUTSIDE_DISMISS_KEY) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function rememberBrowseLimitationsDismissed() {
+        try {
+            localStorage.setItem(BROWSE_OUTSIDE_DISMISS_KEY, '1');
+        } catch (e) { /* ignore private mode */ }
+    }
+
+    function openBrowseLimitationsModal() {
+        var modal = document.getElementById('browseLimitationsModal');
+        var dontShow = document.getElementById('browseDontShowAgain');
+        if (dontShow) dontShow.checked = false;
+        if (modal) modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeBrowseLimitationsModal() {
+        var modal = document.getElementById('browseLimitationsModal');
+        if (modal) modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function onBrowseOutsideChange(event) {
+        var checkbox = event.target;
+        var turningOn = checkbox.checked;
+
+        if (!turningOn) {
+            applyBrowseMode(false);
+            return;
+        }
+
+        if (isBrowseLimitationsDismissed()) {
+            applyBrowseMode(true);
+            return;
+        }
+
+        // Keep checkbox off until the customer confirms in the modal.
+        checkbox.checked = false;
+        openBrowseLimitationsModal();
+    }
+
+    function cancelBrowseLimitations() {
+        var checkbox = document.getElementById('browseAllMode');
+        if (checkbox) checkbox.checked = false;
+        closeBrowseLimitationsModal();
+    }
+
+    function confirmBrowseLimitations() {
+        var dontShow = document.getElementById('browseDontShowAgain');
+        if (dontShow && dontShow.checked) {
+            rememberBrowseLimitationsDismissed();
+        }
+        closeBrowseLimitationsModal();
+        var checkbox = document.getElementById('browseAllMode');
+        if (checkbox) checkbox.checked = true;
+        applyBrowseMode(true);
+    }
+
+    function onBrowseLimitationsBackdrop(event) {
+        if (event.target === event.currentTarget) {
+            cancelBrowseLimitations();
+        }
+    }
+
+    // Legacy name kept in case anything else still calls it.
     function toggleBrowseMode() {
-        const checkbox = document.getElementById('browseAllMode');
-        const newMode = checkbox.checked ? '1' : '0';
-        window.location.href = "{{ url_for('templates.index', browse_all=0) }}".replace('0', newMode);
+        var checkbox = document.getElementById('browseAllMode');
+        if (!checkbox) return;
+        onBrowseOutsideChange({ target: checkbox });
     }
 
     function syncHomeTestimonialStars(rating) {
