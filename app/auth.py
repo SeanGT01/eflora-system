@@ -402,6 +402,328 @@ def customer_register():
 # app/auth.py - Replace your login function with this
 # app/auth.py - Update login function
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# FORGOT PASSWORD — OTP-VERIFIED RESET (same Gmail OTP pipeline as registration)
+# ═══════════════════════════════════════════════════════════════════════════════
+#   POST /api/v1/auth/forgot-password/send-otp
+#   POST /api/v1/auth/forgot-password/resend-otp
+#   POST /api/v1/auth/forgot-password/verify-otp
+#   POST /api/v1/auth/forgot-password/reset
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _ensure_password_reset_otps_table():
+    """Create password_reset_otps from ORM if migration wasn't applied yet."""
+    from sqlalchemy import inspect as sa_inspect
+    from app.models import PasswordResetOTP
+
+    try:
+        if sa_inspect(db.engine).has_table('password_reset_otps'):
+            return True
+        PasswordResetOTP.__table__.create(db.engine, checkfirst=True)
+        try:
+            current_app.logger.info('Created missing table password_reset_otps from model')
+        except RuntimeError:
+            pass
+        return True
+    except Exception as exc:
+        try:
+            current_app.logger.warning('Could not ensure password_reset_otps table: %s', exc)
+        except RuntimeError:
+            pass
+        return False
+
+
+def _upsert_password_reset_otp(email):
+    """Create/refresh a PasswordResetOTP row and return (plain_code, record) or error tuple."""
+    from app.models import PasswordResetOTP
+    from app.utils.otp_service import (
+        DEFAULT_EXPIRY_MINUTES,
+        RESEND_COOLDOWN_SECONDS,
+        can_resend,
+        new_otp_pair,
+    )
+
+    _ensure_password_reset_otps_table()
+    plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+    record = PasswordResetOTP.query.filter_by(email=email).first()
+    if record:
+        allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+        if not allowed and not record.is_verified:
+            return None, ({
+                'success': False,
+                'error': 'Please wait before requesting another code.',
+                'retry_after_seconds': retry_after,
+            }, 429)
+        record.otp_hash = otp_hash
+        record.expires_at = expires_at
+        record.last_sent_at = datetime.utcnow()
+        record.attempts = 0
+        record.is_verified = False
+        record.verified_at = None
+    else:
+        record = PasswordResetOTP(
+            email=email,
+            otp_hash=otp_hash,
+            expires_at=expires_at,
+            last_sent_at=datetime.utcnow(),
+        )
+        db.session.add(record)
+    db.session.commit()
+    return (plain_code, record), None
+
+
+@auth_bp.route('/forgot-password/send-otp', methods=['POST'])
+def forgot_password_send_otp():
+    """
+    Start forgot-password. Emails a 6-digit OTP if the account exists.
+
+    Request JSON: { "email": str }
+    """
+    from app.utils.otp_service import DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS
+    from app.utils.email_helper import (
+        send_password_reset_otp_email,
+        EMAIL_SERVICE_UNAVAILABLE_CODE,
+        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+    )
+
+    data = request.get_json(silent=True) or {}
+    email = _normalize_email(data.get('email'))
+    if not email or not EMAIL_REGEX.match(email):
+        return jsonify({'success': False, 'error': 'A valid email is required'}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({
+            'success': False,
+            'error': 'No account found with this email. Please check and try again.',
+        }), 404
+    if user.status != 'active':
+        return jsonify({
+            'success': False,
+            'error': 'This account is not active. Please contact support.',
+        }), 403
+
+    result, err = _upsert_password_reset_otp(email)
+    if err:
+        return jsonify(err[0]), err[1]
+
+    plain_code, _record = result
+    sent = send_password_reset_otp_email(
+        recipient_email=email,
+        otp_code=plain_code,
+        full_name=user.full_name,
+        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+    )
+    if not sent:
+        return jsonify({
+            'success': False,
+            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
+        }), 503
+
+    return jsonify({
+        'success': True,
+        'message': f'A 6-digit verification code has been sent to {email}.',
+        'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
+        'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
+    }), 200
+
+
+@auth_bp.route('/forgot-password/resend-otp', methods=['POST'])
+def forgot_password_resend_otp():
+    """Re-issue a password-reset OTP. Request JSON: { "email": str }"""
+    from app.models import PasswordResetOTP
+    from app.utils.otp_service import (
+        DEFAULT_EXPIRY_MINUTES,
+        RESEND_COOLDOWN_SECONDS,
+        can_resend,
+        new_otp_pair,
+    )
+    from app.utils.email_helper import (
+        send_password_reset_otp_email,
+        EMAIL_SERVICE_UNAVAILABLE_CODE,
+        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+    )
+
+    data = request.get_json(silent=True) or {}
+    email = _normalize_email(data.get('email'))
+    if not email or not EMAIL_REGEX.match(email):
+        return jsonify({'success': False, 'error': 'A valid email is required'}), 400
+
+    _ensure_password_reset_otps_table()
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({
+            'success': False,
+            'error': 'No account found with this email.',
+        }), 404
+
+    record = PasswordResetOTP.query.filter_by(email=email).first()
+    if not record:
+        return jsonify({
+            'success': False,
+            'error': 'No password reset request found. Please start again.',
+        }), 404
+
+    allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+    if not allowed:
+        return jsonify({
+            'success': False,
+            'error': 'Please wait before requesting another code.',
+            'retry_after_seconds': retry_after,
+        }), 429
+
+    plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+    record.otp_hash = otp_hash
+    record.expires_at = expires_at
+    record.last_sent_at = datetime.utcnow()
+    record.attempts = 0
+    record.is_verified = False
+    record.verified_at = None
+    db.session.commit()
+
+    sent = send_password_reset_otp_email(
+        recipient_email=email,
+        otp_code=plain_code,
+        full_name=user.full_name,
+        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+    )
+    if not sent:
+        return jsonify({
+            'success': False,
+            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
+        }), 503
+
+    return jsonify({
+        'success': True,
+        'message': f'A new verification code has been sent to {email}.',
+        'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
+    }), 200
+
+
+@auth_bp.route('/forgot-password/verify-otp', methods=['POST'])
+def forgot_password_verify_otp():
+    """Verify the password-reset OTP. Request JSON: { "email": str, "otp_code": str }"""
+    from app.models import PasswordResetOTP
+    from app.utils.otp_service import (
+        MAX_VERIFY_ATTEMPTS,
+        attempts_remaining,
+        verify_otp,
+    )
+
+    data = request.get_json(silent=True) or {}
+    email = _normalize_email(data.get('email'))
+    otp_code = (data.get('otp_code') or '').strip()
+
+    if not email or not otp_code:
+        return jsonify({'success': False, 'error': 'Email and OTP code are required'}), 400
+
+    _ensure_password_reset_otps_table()
+    record = PasswordResetOTP.query.filter_by(email=email).first()
+    if not record:
+        return jsonify({
+            'success': False,
+            'error': 'No password reset request found for this email.',
+        }), 404
+
+    if record.is_verified:
+        return jsonify({
+            'success': True,
+            'message': 'Code already verified. You can set a new password.',
+            'verified': True,
+        }), 200
+
+    if record.is_expired():
+        return jsonify({
+            'success': False,
+            'error': 'OTP has expired. Please request a new code.',
+            'expired': True,
+        }), 400
+
+    if (record.attempts or 0) >= MAX_VERIFY_ATTEMPTS:
+        return jsonify({
+            'success': False,
+            'error': 'Too many incorrect attempts. Please request a new code.',
+            'locked': True,
+        }), 429
+
+    if not verify_otp(otp_code, record.otp_hash):
+        record.attempts = (record.attempts or 0) + 1
+        db.session.commit()
+        return jsonify({
+            'success': False,
+            'error': 'Invalid OTP code. Please try again.',
+            'attempts_remaining': attempts_remaining(record.attempts, MAX_VERIFY_ATTEMPTS),
+        }), 400
+
+    record.is_verified = True
+    record.verified_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Code verified. You can now set a new password.',
+        'verified': True,
+    }), 200
+
+
+@auth_bp.route('/forgot-password/reset', methods=['POST'])
+def forgot_password_reset():
+    """
+    Set a new password after OTP verification.
+
+    Request JSON:
+        { "email": str, "new_password": str, "confirm_password": str }
+    """
+    from app.models import PasswordResetOTP
+
+    data = request.get_json(silent=True) or {}
+    email = _normalize_email(data.get('email'))
+    new_password = data.get('new_password') or ''
+    confirm_password = data.get('confirm_password') or ''
+
+    if not email:
+        return jsonify({'success': False, 'error': 'Email is required'}), 400
+    if not new_password or not confirm_password:
+        return jsonify({'success': False, 'error': 'New password and confirmation are required'}), 400
+    if new_password != confirm_password:
+        return jsonify({'success': False, 'error': 'Passwords do not match'}), 400
+    pw_error = _validate_password_strength(new_password)
+    if pw_error:
+        return jsonify({'success': False, 'error': pw_error}), 400
+
+    _ensure_password_reset_otps_table()
+    record = PasswordResetOTP.query.filter_by(email=email).first()
+    if not record or not record.is_verified:
+        return jsonify({
+            'success': False,
+            'error': 'Please verify the email code before resetting your password.',
+        }), 403
+    if record.is_expired():
+        return jsonify({
+            'success': False,
+            'error': 'Your verification has expired. Please request a new code.',
+            'expired': True,
+        }), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'success': False, 'error': 'Account not found.'}), 404
+    if user.status != 'active':
+        return jsonify({'success': False, 'error': 'This account is not active.'}), 403
+
+    user.set_password(new_password)
+    user.updated_at = datetime.utcnow()
+    db.session.delete(record)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Password updated successfully. You can sign in with your new password.',
+    }), 200
+
+
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()

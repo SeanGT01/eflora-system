@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting, Conversation
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting, Conversation, PasswordResetOTP
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -1574,14 +1574,272 @@ def login():
             )
 
     verified = request.args.get('verified') == '1'
+    reset_ok = request.args.get('reset') == '1'
     prefill_email = (request.args.get('email') or '').strip().lower()
     form_data = {'email': prefill_email} if prefill_email else None
     return render_template(
         'login.html',
         verified=verified,
+        reset_ok=reset_ok,
         form_data=form_data,
         login_next=request.args.get('next'),
     )
+
+
+def _ensure_password_reset_otps_table_web():
+    from sqlalchemy import inspect as sa_inspect
+    try:
+        if sa_inspect(db.engine).has_table('password_reset_otps'):
+            return True
+        PasswordResetOTP.__table__.create(db.engine, checkfirst=True)
+        return True
+    except Exception as exc:
+        current_app.logger.warning('Could not ensure password_reset_otps: %s', exc)
+        return False
+
+
+@templates_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """Step 1 — enter email (prefills from login) and send Gmail OTP."""
+    if session.get('user_id'):
+        return redirect(url_for('templates.index'))
+
+    prefill = (request.args.get('email') or '').strip().lower()
+
+    if request.method == 'POST':
+        from app.utils.otp_service import (
+            DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
+            can_resend, new_otp_pair,
+        )
+        from app.utils.email_helper import (
+            send_password_reset_otp_email,
+            EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+        )
+
+        email = (request.form.get('email') or '').strip().lower()
+        if not email or '@' not in email:
+            return render_template('forgot_password.html',
+                                   error='Please enter a valid email address.',
+                                   form_data={'email': email})
+
+        _ensure_password_reset_otps_table_web()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return render_template('forgot_password.html',
+                                   error='No account found with this email.',
+                                   form_data={'email': email})
+        if user.status != 'active':
+            return render_template('forgot_password.html',
+                                   error='This account is not active. Please contact support.',
+                                   form_data={'email': email})
+
+        plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+        record = PasswordResetOTP.query.filter_by(email=email).first()
+        if record:
+            allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+            if not allowed:
+                session['pending_reset_email'] = email
+                return redirect(url_for('templates.forgot_password_verify', cooldown=retry_after))
+            record.otp_hash = otp_hash
+            record.expires_at = expires_at
+            record.last_sent_at = datetime.utcnow()
+            record.attempts = 0
+            record.is_verified = False
+            record.verified_at = None
+        else:
+            record = PasswordResetOTP(
+                email=email,
+                otp_hash=otp_hash,
+                expires_at=expires_at,
+                last_sent_at=datetime.utcnow(),
+            )
+            db.session.add(record)
+        db.session.commit()
+
+        sent = send_password_reset_otp_email(
+            recipient_email=email,
+            otp_code=plain_code,
+            full_name=user.full_name,
+            expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        )
+        if not sent:
+            return render_template('forgot_password.html',
+                                   error=EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+                                   form_data={'email': email})
+
+        session['pending_reset_email'] = email
+        return redirect(url_for('templates.forgot_password_verify'))
+
+    return render_template(
+        'forgot_password.html',
+        form_data={'email': prefill} if prefill else None,
+    )
+
+
+@templates_bp.route('/forgot-password/verify', methods=['GET', 'POST'])
+def forgot_password_verify():
+    """Step 2 — enter the 6-digit Gmail OTP."""
+    if session.get('user_id'):
+        return redirect(url_for('templates.index'))
+
+    email = session.get('pending_reset_email')
+    if not email:
+        flash('Please enter your email to reset your password.', 'warning')
+        return redirect(url_for('templates.forgot_password'))
+
+    cooldown = request.args.get('cooldown', type=int) or 60
+
+    if request.method == 'POST':
+        from app.utils.otp_service import MAX_VERIFY_ATTEMPTS, attempts_remaining, verify_otp
+
+        _ensure_password_reset_otps_table_web()
+        otp_code = (request.form.get('otp_code') or '').strip()
+        record = PasswordResetOTP.query.filter_by(email=email).first()
+        if not record:
+            return render_template('forgot_password_verify.html',
+                                   email=email, cooldown=0,
+                                   error='No reset request found. Please start again.')
+
+        if record.is_verified:
+            session['reset_verified_email'] = email
+            return redirect(url_for('templates.forgot_password_reset'))
+
+        if record.is_expired():
+            return render_template('forgot_password_verify.html',
+                                   email=email, cooldown=0,
+                                   error='OTP has expired. Please request a new code.')
+
+        if (record.attempts or 0) >= MAX_VERIFY_ATTEMPTS:
+            return render_template('forgot_password_verify.html',
+                                   email=email, cooldown=0,
+                                   error='Too many incorrect attempts. Please request a new code.')
+
+        if not verify_otp(otp_code, record.otp_hash):
+            record.attempts = (record.attempts or 0) + 1
+            db.session.commit()
+            remaining = attempts_remaining(record.attempts, MAX_VERIFY_ATTEMPTS)
+            return render_template(
+                'forgot_password_verify.html',
+                email=email, cooldown=0,
+                error=f'Invalid code. {remaining} attempt{"s" if remaining != 1 else ""} left.',
+            )
+
+        record.is_verified = True
+        record.verified_at = datetime.utcnow()
+        db.session.commit()
+        session['reset_verified_email'] = email
+        return redirect(url_for('templates.forgot_password_reset'))
+
+    return render_template('forgot_password_verify.html', email=email, cooldown=cooldown)
+
+
+@templates_bp.route('/forgot-password/resend-otp', methods=['POST'])
+def forgot_password_resend_otp_web():
+    """AJAX resend for the forgot-password verify page."""
+    from app.utils.otp_service import (
+        DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
+        can_resend, new_otp_pair,
+    )
+    from app.utils.email_helper import (
+        send_password_reset_otp_email,
+        EMAIL_SERVICE_UNAVAILABLE_CODE,
+        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+    )
+
+    email = session.get('pending_reset_email')
+    if not email:
+        return jsonify({'success': False, 'error': 'Session expired. Please start again.'}), 400
+
+    _ensure_password_reset_otps_table_web()
+    user = User.query.filter_by(email=email).first()
+    record = PasswordResetOTP.query.filter_by(email=email).first()
+    if not user or not record:
+        return jsonify({'success': False, 'error': 'No reset request found.'}), 404
+
+    allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
+    if not allowed:
+        return jsonify({
+            'success': False,
+            'error': 'Please wait before requesting another code.',
+            'retry_after_seconds': retry_after,
+        }), 429
+
+    plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
+    record.otp_hash = otp_hash
+    record.expires_at = expires_at
+    record.last_sent_at = datetime.utcnow()
+    record.attempts = 0
+    record.is_verified = False
+    record.verified_at = None
+    db.session.commit()
+
+    sent = send_password_reset_otp_email(
+        recipient_email=email,
+        otp_code=plain_code,
+        full_name=user.full_name,
+        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+    )
+    if not sent:
+        return jsonify({
+            'success': False,
+            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
+        }), 503
+
+    return jsonify({
+        'success': True,
+        'message': f'A new code has been sent to {email}.',
+        'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
+    }), 200
+
+
+@templates_bp.route('/forgot-password/reset', methods=['GET', 'POST'])
+def forgot_password_reset():
+    """Step 3 — set a new password after OTP verification."""
+    if session.get('user_id'):
+        return redirect(url_for('templates.index'))
+
+    email = session.get('reset_verified_email') or session.get('pending_reset_email')
+    if not email:
+        flash('Please verify your email first.', 'warning')
+        return redirect(url_for('templates.forgot_password'))
+
+    _ensure_password_reset_otps_table_web()
+    record = PasswordResetOTP.query.filter_by(email=email).first()
+    if not record or not record.is_verified:
+        flash('Please verify the code sent to your email first.', 'warning')
+        return redirect(url_for('templates.forgot_password_verify'))
+
+    if request.method == 'POST':
+        new_password = request.form.get('new_password') or ''
+        confirm_password = request.form.get('confirm_password') or ''
+
+        if not new_password or not confirm_password:
+            return render_template('forgot_password_reset.html',
+                                   email=email, error='Both password fields are required.')
+        if new_password != confirm_password:
+            return render_template('forgot_password_reset.html',
+                                   email=email, error='Passwords do not match.')
+        pw_error = _password_strength_error(new_password)
+        if pw_error:
+            return render_template('forgot_password_reset.html',
+                                   email=email, error=pw_error)
+
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return render_template('forgot_password_reset.html',
+                                   email=email, error='Account not found.')
+
+        user.set_password(new_password)
+        user.updated_at = datetime.utcnow()
+        db.session.delete(record)
+        db.session.commit()
+        session.pop('pending_reset_email', None)
+        session.pop('reset_verified_email', None)
+        return redirect(url_for('templates.login', reset=1, email=email))
+
+    return render_template('forgot_password_reset.html', email=email)
+
 
 @templates_bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -8383,11 +8641,97 @@ def delete_product_image(product_id, image_id):
 '''
 
 
-# ─── REPLACE the existing store_detail route with this ───────────────────────
 @templates_bp.route('/stores')
 def stores():
-    """Redirect /stores back to homepage stores section — stores.html is not needed."""
-    return redirect(url_for('templates.index') + '#featured-stores')
+    """Public store directory — all active partner stores."""
+    try:
+        from sqlalchemy import func
+
+        current_user_id = session.get('user_id')
+        is_customer = session.get('role') == 'customer' and current_user_id
+        customer_address = _get_default_customer_address(current_user_id) if is_customer else None
+
+        browse_all_arg = request.args.get('browse_all')
+        if browse_all_arg is not None:
+            session['storefront_browse_all'] = browse_all_arg == '1'
+        browse_all_mode = bool(session.get('storefront_browse_all', False))
+
+        active_stores = (
+            Store.query
+            .filter_by(status='active')
+            .order_by(Store.created_at.desc())
+            .all()
+        )
+
+        product_counts = dict(
+            db.session.query(Product.store_id, func.count(Product.id))
+            .filter(
+                Product.is_available == True,
+                Product.is_archived == False,
+            )
+            .group_by(Product.store_id)
+            .all()
+        )
+
+        now = datetime.utcnow()
+        store_list = []
+        for store in active_stores:
+            store_data = store.to_dict()
+            store_data['can_deliver_to_customer'] = True
+            store_data['delivery_block_reason'] = None
+
+            if is_customer:
+                delivery = _store_delivery_match(store, customer_address)
+                store_data['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
+                store_data['delivery_block_reason'] = delivery.get('reason')
+
+            order_counts = (
+                db.session.query(Order.status, func.count(Order.id))
+                .filter(Order.store_id == store.id)
+                .group_by(Order.status)
+                .all()
+            )
+            status_counts = {status: count for status, count in order_counts}
+            total_orders = sum(status_counts.values())
+            delivered_or_completed = (
+                status_counts.get('delivered', 0) + status_counts.get('completed', 0)
+            )
+            fulfillment_score = (
+                (delivered_or_completed / total_orders) * 5.0 if total_orders > 0 else 0.0
+            )
+            store_data['performance_score'] = max(0.0, min(5.0, round(fulfillment_score, 1)))
+            store_data['product_count'] = int(product_counts.get(store.id, 0))
+            store_data['is_newly_approved'] = bool(
+                store.approved_at and (now - store.approved_at).days < 7
+            )
+            store_data['created_at_sort'] = (
+                store.created_at.isoformat() if store.created_at else ''
+            )
+            store_list.append(store_data)
+
+        if is_customer and customer_address and not browse_all_mode:
+            store_list = [s for s in store_list if s.get('can_deliver_to_customer')]
+
+        return render_template(
+            'stores.html',
+            stores=store_list,
+            now=datetime.now(),
+            browse_all_mode=browse_all_mode,
+            customer_has_default_address=bool(customer_address),
+        )
+    except Exception as e:
+        current_app.logger.exception('stores directory: %s', e)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return render_template(
+            'stores.html',
+            stores=[],
+            now=datetime.now(),
+            browse_all_mode=False,
+            customer_has_default_address=False,
+        )
 
 
 @templates_bp.route('/store/<int:store_id>')

@@ -2003,6 +2003,36 @@ class CustomerOTP(db.Model):
         }
 
 
+class PasswordResetOTP(db.Model):
+    """Email OTP for forgot-password / reset flows (any existing User)."""
+
+    __tablename__ = 'password_reset_otps'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    otp_hash = db.Column(db.String(255), nullable=False)
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    last_sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    verified_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'is_verified': self.is_verified,
+            'attempts': self.attempts,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class SellerSignupOTP(db.Model):
     """Email OTP for standalone seller registration (seller portal)."""
 

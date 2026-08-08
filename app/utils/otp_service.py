@@ -3,6 +3,7 @@ Reusable OTP service for email-based verification flows.
 
 Used by:
 - Customer self-registration (see app/auth.py)
+- Forgot-password / reset (see app/auth.py)
 - Rider account creation initiated by sellers (see app/seller.py)
 
 Design notes
