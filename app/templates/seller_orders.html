@@ -70,10 +70,10 @@
         box-shadow: var(--shadow-md);
     }
 
-    .orders-stat.is-active {
-        border-color: var(--deep-rose);
-        box-shadow: 0 0 0 2px rgba(181, 68, 90, 0.12), var(--shadow-md);
-        background: rgba(181, 68, 90, 0.03);
+    .orders-table tbody tr.is-highlighted {
+        outline: 2px solid rgba(181, 68, 90, 0.45);
+        outline-offset: -2px;
+        background: rgba(181, 68, 90, 0.06);
     }
 
     .orders-stat::before {
@@ -1534,43 +1534,49 @@
     });
 
     document.querySelectorAll('.seller-view-order').forEach(button => {
-        button.addEventListener('click', async () => {
-            const body = document.getElementById('sellerOrderDetailsBody');
-            const titleEl = document.getElementById('sellerOrderDetailsModalTitle');
-            let loadedOrder = null;
-            if (titleEl) titleEl.textContent = 'Order';
-            body.innerHTML = '<div class="text-center py-4 text-muted">Loading...</div>';
-            openModal(sellerOrderDetailsModal);
-            try {
-                const response = await sellerFetch(`/api/seller/orders/${button.dataset.orderId}`);
-                const order = await response.json();
-                if (!response.ok) throw new Error(order.error || 'Failed to load order');
-                loadedOrder = order;
+        button.addEventListener('click', () => {
+            openSellerOrderDetails(button.dataset.orderId);
+        });
+    });
 
-                const itemsHtml = (order.items || []).map(item => `
-                    <tr>
-                        <td class="sdm-line-thumb-cell">${lineItemThumb(item.product_image_url)}</td>
-                        <td>${item.product_name || 'Product'}${item.variant_name ? ` <span style="color:var(--deep-rose)">(${item.variant_name})</span>` : ''}</td>
-                        <td>${item.quantity || 0}</td>
-                        <td>Php ${formatAmount(item.price || 0)}</td>
-                        <td>Php ${formatAmount((item.quantity || 0) * (item.price || 0))}</td>
-                    </tr>
-                `).join('');
-                const proofHtml = [
-                    { label: 'Finished product', url: order.done_preparing_proof_url },
-                    { label: 'Rider proof 1', url: order.delivery_proof_url },
-                    { label: 'Rider proof 2', url: order.delivery_proof_2_url }
-                ].filter(p => !!p.url).map(p => `
-                    <figure class="sdm-proof-fig">
-                        <img src="${p.url}" alt="${p.label}" loading="lazy">
-                        <figcaption class="sdm-proof-cap">${p.label}</figcaption>
-                    </figure>
-                `).join('');
+    async function openSellerOrderDetails(orderId) {
+        if (!orderId) return;
+        const body = document.getElementById('sellerOrderDetailsBody');
+        const titleEl = document.getElementById('sellerOrderDetailsModalTitle');
+        let loadedOrder = null;
+        if (titleEl) titleEl.textContent = 'Order';
+        body.innerHTML = '<div class="text-center py-4 text-muted">Loading...</div>';
+        openModal(sellerOrderDetailsModal);
+        try {
+            const response = await sellerFetch(`/api/seller/orders/${orderId}`);
+            const order = await response.json();
+            if (!response.ok) throw new Error(order.error || 'Failed to load order');
+            loadedOrder = order;
 
-                const mt = document.getElementById('sellerOrderDetailsModalTitle');
-                if (mt) mt.textContent = `Order #${order.id}`;
+            const itemsHtml = (order.items || []).map(item => `
+                <tr>
+                    <td class="sdm-line-thumb-cell">${lineItemThumb(item.product_image_url)}</td>
+                    <td>${item.product_name || 'Product'}${item.variant_name ? ` <span style="color:var(--deep-rose)">(${item.variant_name})</span>` : ''}</td>
+                    <td>${item.quantity || 0}</td>
+                    <td>Php ${formatAmount(item.price || 0)}</td>
+                    <td>Php ${formatAmount((item.quantity || 0) * (item.price || 0))}</td>
+                </tr>
+            `).join('');
+            const proofHtml = [
+                { label: 'Finished product', url: order.done_preparing_proof_url },
+                { label: 'Rider proof 1', url: order.delivery_proof_url },
+                { label: 'Rider proof 2', url: order.delivery_proof_2_url }
+            ].filter(p => !!p.url).map(p => `
+                <figure class="sdm-proof-fig">
+                    <img src="${p.url}" alt="${p.label}" loading="lazy">
+                    <figcaption class="sdm-proof-cap">${p.label}</figcaption>
+                </figure>
+            `).join('');
 
-                body.innerHTML = `
+            const mt = document.getElementById('sellerOrderDetailsModalTitle');
+            if (mt) mt.textContent = `Order #${order.id}`;
+
+            body.innerHTML = `
                     <div class="sdm">
                         <header class="sdm-topbar">
                             <div class="sdm-topbar-left">
@@ -1664,8 +1670,30 @@
                     footer.innerHTML = '';
                 }
             }
-        });
-    });
+    }
+
+    // Deep-link from seller notifications: /seller/orders?order_id=123
+    (function openOrderFromQuery() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const orderId = params.get('order_id');
+            if (!orderId) return;
+            // Highlight / scroll to the row if present
+            const safeId = String(orderId).replace(/"/g, '');
+            const row = document.querySelector(`tr[data-order-id="${safeId}"]`);
+            if (row && row.scrollIntoView) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                row.classList.add('is-highlighted');
+            }
+            openSellerOrderDetails(safeId);
+            // Clean URL without reload
+            params.delete('order_id');
+            const clean = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}${window.location.hash || ''}`;
+            window.history.replaceState({}, '', clean);
+        } catch (e) {
+            console.warn('Could not open order from notification link', e);
+        }
+    })();
 
     async function markDonePreparingWithProof(orderId) {
         const selectedFile = await pickFinishedProductImage();

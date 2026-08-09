@@ -47,14 +47,22 @@ class Config:
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(basedir, 'dev.db')}"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    # Railway/proxy Postgres closes idle sockets; ping + recycle avoids
-    # "server closed the connection unexpectedly" on the next request.
+    # Railway/proxy Postgres closes idle sockets; ping + recycle + TCP keepalives
+    # avoid "server closed the connection unexpectedly" on the next request.
     if DATABASE_URL and str(DATABASE_URL).startswith(('postgres://', 'postgresql://')):
         SQLALCHEMY_ENGINE_OPTIONS = {
             'pool_pre_ping': True,
-            'pool_recycle': 280,
+            'pool_recycle': 180,
             'pool_size': 5,
             'max_overflow': 10,
+            'pool_reset_on_return': 'rollback',
+            'connect_args': {
+                'connect_timeout': 10,
+                'keepalives': 1,
+                'keepalives_idle': 30,
+                'keepalives_interval': 10,
+                'keepalives_count': 5,
+            },
         }
 
     # =============================

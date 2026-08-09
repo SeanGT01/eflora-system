@@ -1063,6 +1063,22 @@ const chatWidget = (() => {
                     if (_userId) _syncBadgeFromInbox();
                 });
             }
+
+            // Deep-link from seller notification panel: ?open_chat=<conversation_id>
+            try {
+                const params = new URLSearchParams(window.location.search || '');
+                const openChatId = parseInt(params.get('open_chat') || '', 10);
+                if (openChatId) {
+                    setTimeout(function () {
+                        open();
+                        openConvo(openChatId);
+                        params.delete('open_chat');
+                        const qs = params.toString();
+                        const next = window.location.pathname + (qs ? '?' + qs : '') + (window.location.hash || '');
+                        window.history.replaceState({}, '', next);
+                    }, 400);
+                }
+            } catch (e) {}
         }
     }
 

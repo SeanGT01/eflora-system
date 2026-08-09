@@ -168,7 +168,20 @@ def get_products():
     if store_id:
         q = q.filter(Product.store_id == store_id)
     if search:
-        q = q.filter(Product.name.ilike(f'%{search}%'))
+        from sqlalchemy import or_
+        from app.models import Category, StoreCategory
+        term = f'%{search.strip()}%'
+        q = (
+            q.outerjoin(Category, Product.main_category_id == Category.id)
+             .outerjoin(StoreCategory, Product.store_category_id == StoreCategory.id)
+             .filter(or_(
+                 Product.name.ilike(term),
+                 Category.name.ilike(term),
+                 Category.slug.ilike(term),
+                 StoreCategory.name.ilike(term),
+                 StoreCategory.slug.ilike(term),
+             ))
+        )
 
     # Over-fetch when location-filtering so a page still has enough cards
     # after out-of-range products are dropped (same idea as web limit=40).
@@ -720,6 +733,14 @@ def complete_order(order_id):
             return jsonify({'success': False, 'message': 'Only delivered orders can be marked as completed.'}), 400
 
         order.set_status('completed')
+        from app.utils.seller_notifications import notify_store_seller
+        notify_store_seller(
+            store_id=order.store_id,
+            title='Order completed',
+            message=f'Customer confirmed delivery for Order #{order.id}.',
+            type='order_completed',
+            reference_id=order.id,
+        )
         db.session.commit()
         return jsonify({'success': True, 'message': 'Order marked as completed.'})
     except Exception as e:
@@ -746,6 +767,14 @@ def cancel_order(order_id):
         order.status = 'cancelled'
         if hasattr(order, 'updated_at'):
             order.updated_at = datetime.utcnow()
+        from app.utils.seller_notifications import notify_store_seller
+        notify_store_seller(
+            store_id=order.store_id,
+            title='Order cancelled',
+            message=f'Customer cancelled Order #{order.id}.',
+            type='order_cancelled',
+            reference_id=order.id,
+        )
         db.session.commit()
         return jsonify({'success': True, 'message': 'Order cancelled successfully'})
     except Exception as e:
@@ -858,6 +887,26 @@ def submit_order_ratings(order_id):
 
         if not ratings_data and not created_store:
             return jsonify({'error': 'No ratings provided'}), 400
+
+        if created or created_store:
+            parts = []
+            if created_store and store_payload:
+                try:
+                    sr = int(store_payload.get('rating'))
+                    parts.append(f'store {sr}/5')
+                except (TypeError, ValueError):
+                    parts.append('store')
+            if created:
+                parts.append(f'{created} product rating(s)')
+            summary = ', '.join(parts) if parts else 'new ratings'
+            from app.utils.seller_notifications import notify_store_seller
+            notify_store_seller(
+                store_id=order.store_id,
+                title='New rating received',
+                message=f'Customer rated Order #{order.id} ({summary}).',
+                type='new_rating',
+                reference_id=order.id,
+            )
 
         db.session.commit()
 

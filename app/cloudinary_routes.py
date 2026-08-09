@@ -368,6 +368,19 @@ def upload_payment_proof_endpoint(order_id):
     order.payment_proof_public_id = result['public_id']
     order.payment_proof_url = result['url']
     order.payment_proof = secure_filename(file.filename)
+    if hasattr(order, 'payment_status'):
+        order.payment_status = 'pending_verification'
+    from app.utils.seller_notifications import notify_store_seller
+    notify_store_seller(
+        store_id=order.store_id,
+        title='Payment proof uploaded',
+        message=(
+            f'Customer uploaded GCash proof for Order #{order.id}. '
+            'Please verify payment.'
+        ),
+        type='payment_proof',
+        reference_id=order.id,
+    )
     db.session.commit()
     
     return jsonify({

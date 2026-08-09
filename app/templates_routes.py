@@ -25,7 +25,7 @@ from app.models import UserAddress
 from app.utils.cloudinary_helper import upload_to_cloudinary, delete_from_cloudinary
 # app/templates_routes.py - Add these imports at the top
 from flask_wtf.csrf import generate_csrf
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 # Import the extensions from app (they're initialized in __init__.py)
 from app import limiter
@@ -33,6 +33,36 @@ templates_bp = Blueprint('templates', __name__)
 
 PH_MOBILE_REGEX = re.compile(r'^(?:\+63|0)9\d{9}$')
 PHT = pytz.timezone('Asia/Manila')
+
+
+def _recover_db_session():
+    """Drop a dead pooled connection so the next query gets a fresh one."""
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    try:
+        db.session.remove()
+    except Exception:
+        pass
+
+
+def _with_db_retry(fn, attempts=2):
+    """Retry once on Railway/proxy 'server closed the connection' errors."""
+    last_exc = None
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except OperationalError as exc:
+            last_exc = exc
+            current_app.logger.warning(
+                'DB OperationalError (attempt %s/%s): %s',
+                attempt + 1, attempts, exc,
+            )
+            _recover_db_session()
+            if attempt + 1 >= attempts:
+                raise
+    raise last_exc
 
 
 def _password_strength_error(password):
@@ -2937,6 +2967,14 @@ def cancel_order(order_id):
         order.restore_stock_on_cancel(user_id)
         order.status = 'cancelled'
         order.updated_at = datetime.utcnow()
+        from app.utils.seller_notifications import notify_store_seller
+        notify_store_seller(
+            store_id=order.store_id,
+            title='Order cancelled',
+            message=f'Customer cancelled Order #{order.id}.',
+            type='order_cancelled',
+            reference_id=order.id,
+        )
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -2960,6 +2998,14 @@ def complete_order(order_id):
         return jsonify({'success': False, 'message': 'Only delivered orders can be marked as completed.'}), 400
 
     order.set_status('completed')
+    from app.utils.seller_notifications import notify_store_seller
+    notify_store_seller(
+        store_id=order.store_id,
+        title='Order completed',
+        message=f'Customer confirmed delivery for Order #{order.id}.',
+        type='order_completed',
+        reference_id=order.id,
+    )
     db.session.commit()
     return jsonify({'success': True, 'message': 'Order marked as completed.'})
 
@@ -3068,6 +3114,26 @@ def submit_order_ratings(order_id):
 
     if not ratings_data and not created_store:
         return jsonify({'error': 'No ratings provided'}), 400
+
+    if created or created_store:
+        parts = []
+        if created_store and store_payload:
+            try:
+                sr = int(store_payload.get('rating'))
+                parts.append(f'store {sr}/5')
+            except (TypeError, ValueError):
+                parts.append('store')
+        if created:
+            parts.append(f'{len(created)} product rating(s)')
+        summary = ', '.join(parts) if parts else 'new ratings'
+        from app.utils.seller_notifications import notify_store_seller
+        notify_store_seller(
+            store_id=order.store_id,
+            title='New rating received',
+            message=f'Customer rated Order #{order.id} ({summary}).',
+            type='new_rating',
+            reference_id=order.id,
+        )
 
     db.session.commit()
 
@@ -3259,10 +3325,21 @@ def search():
     query = request.args.get('q', '')
     products = []
     if query:
+        from sqlalchemy import or_
+        from app.models import Category, StoreCategory
+        term = f'%{query.strip()}%'
         raw = Product.query\
             .join(Store, Product.store_id == Store.id)\
+            .outerjoin(Category, Product.main_category_id == Category.id)\
+            .outerjoin(StoreCategory, Product.store_category_id == StoreCategory.id)\
             .filter(
-                Product.name.ilike(f'%{query}%'),
+                or_(
+                    Product.name.ilike(term),
+                    Category.name.ilike(term),
+                    Category.slug.ilike(term),
+                    StoreCategory.name.ilike(term),
+                    StoreCategory.slug.ilike(term),
+                ),
                 Product.is_available == True,
                 Product.is_archived == False,
                 Store.status == 'active'
@@ -6239,75 +6316,101 @@ def seller_orders():
         return redirect(url_for('templates.dashboard'))
     _ensure_order_fulfillment_columns()
 
-    # Get seller's store
-    store = Store.query.filter_by(seller_id=session['user_id']).first()
-    if not store:
+    def _load_page():
+        # Get seller's store
+        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        if not store:
+            return None
+
+        # Eager-load related rows — avoids N+1 lazy loads that often hit a
+        # stale Railway connection mid-page render.
+        orders = (
+            Order.query
+            .options(
+                selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
+                selectinload(Order.items).joinedload(OrderItem.variant),
+                joinedload(Order.customer),
+                joinedload(Order.assigned_rider).joinedload(Rider.user),
+            )
+            .filter_by(store_id=store.id)
+            .order_by(Order.created_at.desc())
+            .all()
+        )
+
+        available_riders = (
+            Rider.query
+            .options(joinedload(Rider.user))
+            .filter_by(store_id=store.id, is_active=True)
+            .order_by(Rider.created_at.desc())
+            .all()
+        )
+
+        orders_data = []
+        for order in orders:
+            order_dict = order.to_dict()
+            order_dict['items'] = [item.to_dict() for item in order.items]
+            order_dict['items_count'] = sum(item.quantity for item in order.items)
+            order_dict['customer_phone'] = order.customer.phone if order.customer else None
+            order_dict['payment_proof'] = order.payment_proof
+            order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
+
+            if order.created_at:
+                order_dict['date_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d')
+                order_dict['time_formatted'] = _fmt_pht(order.created_at, '%H:%M')
+                order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d %H:%M')
+            else:
+                order_dict['date_formatted'] = ''
+                order_dict['time_formatted'] = ''
+                order_dict['datetime_formatted'] = ''
+
+            orders_data.append(order_dict)
+
+        today = datetime.now(PHT).date()
+        order_stats = {
+            'total': len(orders),
+            'today': sum(
+                1
+                for order in orders
+                if order.created_at and _fmt_pht(order.created_at, '%Y-%m-%d') == today.strftime('%Y-%m-%d')
+            ),
+            'pending': sum(1 for order in orders if order.status == 'pending'),
+            'payment_review': sum(1 for order in orders if order.payment_status == 'pending_verification'),
+            'preparing': sum(1 for order in orders if order.status in ['accepted', 'preparing']),
+            'on_delivery': sum(1 for order in orders if order.status == 'on_delivery'),
+            'delivered': sum(1 for order in orders if order.status == 'delivered'),
+            'completed': sum(1 for order in orders if order.status == 'completed'),
+            'cancelled': sum(1 for order in orders if order.status == 'cancelled'),
+            'revenue': float(sum((order.total_amount or 0) for order in orders if order.status in ['delivered', 'completed']))
+        }
+
+        riders_data = []
+        for rider in available_riders:
+            riders_data.append({
+                'id': rider.id,
+                'name': rider.user.full_name if rider.user else 'Rider',
+                'vehicle': rider.vehicle_type,
+                'is_active': rider.is_active
+            })
+
+        return {
+            'orders': orders_data,
+            'store': store.to_dict(),
+            'order_stats': order_stats,
+            'today_str': today.strftime('%Y-%m-%d'),
+            'available_riders': riders_data,
+        }
+
+    try:
+        page_data = _with_db_retry(_load_page)
+    except OperationalError:
+        current_app.logger.exception('seller_orders failed after DB retry')
+        flash('Could not load orders — database connection dropped. Please try again.', 'error')
+        return redirect(url_for('templates.seller_dashboard'))
+
+    if not page_data:
         return redirect(url_for('templates.dashboard'))
-    
-    # Get orders for this store
-    orders = Order.query.filter_by(store_id=store.id)\
-                       .order_by(Order.created_at.desc()).all()
 
-    available_riders = Rider.query.filter_by(store_id=store.id, is_active=True)\
-                                  .order_by(Rider.created_at.desc()).all()
-    
-    # Format dates for template
-    orders_data = []
-    for order in orders:
-        order_dict = order.to_dict()
-        order_dict['items'] = [item.to_dict() for item in order.items]
-        order_dict['items_count'] = sum(item.quantity for item in order.items)
-        order_dict['customer_phone'] = order.customer.phone if order.customer else None
-        order_dict['payment_proof'] = order.payment_proof
-        order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
-        
-        # Always render seller order timestamps in Philippine Time.
-        if order.created_at:
-            order_dict['date_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d')
-            order_dict['time_formatted'] = _fmt_pht(order.created_at, '%H:%M')
-            order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d %H:%M')
-        else:
-            order_dict['date_formatted'] = ''
-            order_dict['time_formatted'] = ''
-            order_dict['datetime_formatted'] = ''
-        
-        orders_data.append(order_dict)
-
-    today = datetime.now(PHT).date()
-    order_stats = {
-        'total': len(orders),
-        'today': sum(
-            1
-            for order in orders
-            if order.created_at and _fmt_pht(order.created_at, '%Y-%m-%d') == today.strftime('%Y-%m-%d')
-        ),
-        'pending': sum(1 for order in orders if order.status == 'pending'),
-        'payment_review': sum(1 for order in orders if order.payment_status == 'pending_verification'),
-        'preparing': sum(1 for order in orders if order.status in ['accepted', 'preparing']),
-        'on_delivery': sum(1 for order in orders if order.status == 'on_delivery'),
-        'delivered': sum(1 for order in orders if order.status == 'delivered'),
-        'completed': sum(1 for order in orders if order.status == 'completed'),
-        'cancelled': sum(1 for order in orders if order.status == 'cancelled'),
-        'revenue': float(sum((order.total_amount or 0) for order in orders if order.status in ['delivered', 'completed']))
-    }
-
-    riders_data = []
-    for rider in available_riders:
-        riders_data.append({
-            'id': rider.id,
-            'name': rider.user.full_name if rider.user else 'Rider',
-            'vehicle': rider.vehicle_type,
-            'is_active': rider.is_active
-        })
-
-    return render_template(
-        'seller_orders.html',
-        orders=orders_data,
-        store=store.to_dict(),
-        order_stats=order_stats,
-        today_str=today.strftime('%Y-%m-%d'),
-        available_riders=riders_data
-    )
+    return render_template('seller_orders.html', **page_data)
 
 
 def _serialize_seller_order_for_template(order):

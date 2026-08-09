@@ -167,12 +167,27 @@ def _collect_stock_issues(stock_lookup):
     return issues
 
 
-def _reduce_stock_lookup(stock_lookup, user_id, reason_notes):
-    """Reduce stock with audit trail after an order has been created."""
+def _reduce_stock_lookup(stock_lookup, user_id, reason_notes, store_id=None):
+    """Reduce stock with audit trail after an order has been created.
+
+    When store_id is provided, emit low_stock seller notifications for products
+    that cross into the low-stock threshold.
+    """
+    from app.utils.seller_notifications import (
+        LOW_STOCK_THRESHOLD,
+        notify_low_stock_if_crossed,
+    )
+
     for entry in stock_lookup.values():
         product = entry["product"]
         variant = entry["variant"]
         quantity = entry["quantity"]
+
+        if variant is not None:
+            before = int(variant.stock_quantity or 0)
+        else:
+            before = int(product.stock_quantity or 0)
+
         product.reduce_stock(
             quantity,
             "other",
@@ -180,6 +195,21 @@ def _reduce_stock_lookup(stock_lookup, user_id, reason_notes):
             reason_notes=reason_notes,
             variant=variant,
         )
+
+        if variant is not None:
+            after = int(variant.stock_quantity or 0)
+        else:
+            after = int(product.stock_quantity or 0)
+
+        sid = store_id or getattr(product, 'store_id', None)
+        if sid is not None:
+            notify_low_stock_if_crossed(
+                store_id=sid,
+                product=product,
+                stock_before=before,
+                stock_after=after,
+                threshold=LOW_STOCK_THRESHOLD,
+            )
 
 
 def _generate_store_time_slots_for_date(store, target_date):
@@ -1357,6 +1387,17 @@ def upload_payment_proof(order_id):
             order.payment_proof_public_id = result["public_id"]
             order.payment_proof_url = result["url"]
             order.payment_status = "pending_verification"
+            from app.utils.seller_notifications import notify_store_seller
+            notify_store_seller(
+                store_id=order.store_id,
+                title='Payment proof uploaded',
+                message=(
+                    f'Customer uploaded GCash proof for Order #{order.id}. '
+                    'Please verify payment.'
+                ),
+                type='payment_proof',
+                reference_id=order.id,
+            )
             db.session.commit()
 
             return jsonify({
@@ -1369,6 +1410,17 @@ def upload_payment_proof(order_id):
         except ImportError:
             order.payment_proof = file.filename
             order.payment_status = "pending_verification"
+            from app.utils.seller_notifications import notify_store_seller
+            notify_store_seller(
+                store_id=order.store_id,
+                title='Payment proof uploaded',
+                message=(
+                    f'Customer uploaded GCash proof for Order #{order.id}. '
+                    'Please verify payment.'
+                ),
+                type='payment_proof',
+                reference_id=order.id,
+            )
             db.session.commit()
 
             return jsonify({
@@ -1659,12 +1711,30 @@ def buy_now_create_order():
         db.session.flush()
 
         # Reduce stock
+        if variant is not None:
+            stock_before = int(variant.stock_quantity or 0)
+        else:
+            stock_before = int(product.stock_quantity or 0)
+
         product.reduce_stock(
             quantity,
             "other",
             user_id,
             reason_notes=f"Buy Now order #{order.id} by customer #{user_id}",
             variant=variant,
+        )
+
+        if variant is not None:
+            stock_after = int(variant.stock_quantity or 0)
+        else:
+            stock_after = int(product.stock_quantity or 0)
+
+        from app.utils.seller_notifications import notify_low_stock_if_crossed
+        notify_low_stock_if_crossed(
+            store_id=store.id,
+            product=product,
+            stock_before=stock_before,
+            stock_after=stock_after,
         )
 
         _customer = User.query.get(user_id)

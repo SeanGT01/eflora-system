@@ -503,13 +503,18 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-lg);
-            width: 340px;
+            width: min(360px, 92vw);
+            max-height: min(70vh, 520px);
             z-index: 300;
             display: none;
             overflow: hidden;
+            flex-direction: column;
         }
 
-        .notif-panel.show { display: block; animation: dropIn 0.18s ease; }
+        .notif-panel.show {
+            display: flex;
+            animation: dropIn 0.18s ease;
+        }
 
         .notif-panel-header {
             padding: 1rem 1.25rem;
@@ -517,12 +522,31 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
+            gap: 0.5rem;
         }
 
         .notif-panel-title {
             font-family: var(--font-display);
             font-size: 17px;
             font-weight: 500;
+        }
+
+        .notif-list {
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex: 1 1 auto;
+            max-height: min(55vh, 420px);
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+        }
+
+        .notif-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .notif-list::-webkit-scrollbar-thumb {
+            background: rgba(107, 76, 59, 0.25);
+            border-radius: 999px;
         }
 
         .notif-item {
@@ -538,6 +562,9 @@
         .notif-item:last-child { border-bottom: none; }
         .notif-item:hover { background: var(--cream); }
         .notif-item.unread { background: rgba(181, 68, 90, 0.03); }
+        .notif-item.is-clickable:hover .notif-body-title {
+            color: var(--deep-rose);
+        }
 
         .notif-dot-indicator {
             width: 8px;
@@ -547,10 +574,26 @@
             margin-top: 5px;
         }
 
-        .notif-body { flex: 1; }
+        .notif-body { flex: 1; min-width: 0; }
         .notif-body-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-        .notif-body-sub { font-size: 12px; color: var(--muted); line-height: 1.4; }
+        .notif-body-sub {
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.45;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
+        }
         .notif-time { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+        .notif-chevron {
+            flex-shrink: 0;
+            color: var(--muted);
+            font-size: 16px;
+            margin-top: 2px;
+            opacity: 0.55;
+        }
 
         /* ─── Page Content ─── */
         .page-content {
@@ -1706,7 +1749,7 @@
                             <span class="notif-panel-title">Notifications</span>
                             <button class="btn btn-outline btn-sm" id="markAllReadBtn" onclick="markAllNotifsRead()">Mark all read</button>
                         </div>
-                        <div id="notifList"></div>
+                        <div class="notif-list" id="notifList"></div>
                         <div id="notifEmpty" style="display:none; padding:1.5rem 1rem; text-align:center; color:var(--muted); font-size:13px;">
                             <i class="ri-notification-off-line" style="font-size:24px; display:block; margin-bottom:6px;"></i>
                             No notifications yet
@@ -1782,6 +1825,11 @@
     const NOTIF_TYPE_COLOR = {
         new_order: 'var(--deep-rose)',
         payment_verified: 'var(--sage)',
+        payment_proof: 'var(--terracotta)',
+        order_cancelled: 'var(--terracotta)',
+        order_completed: 'var(--sage)',
+        new_rating: 'var(--deep-rose)',
+        new_chat: 'var(--sage)',
         low_stock: 'var(--terracotta)',
         seller_app_approved: 'var(--sage)',
         seller_app_rejected: 'var(--terracotta)',
@@ -1789,6 +1837,11 @@
     const NOTIF_TYPE_ICON = {
         new_order: 'ri-shopping-bag-3-line',
         payment_verified: 'ri-check-double-line',
+        payment_proof: 'ri-image-line',
+        order_cancelled: 'ri-close-circle-line',
+        order_completed: 'ri-checkbox-circle-line',
+        new_rating: 'ri-star-line',
+        new_chat: 'ri-chat-3-line',
         low_stock: 'ri-alert-line',
         seller_app_approved: 'ri-store-2-line',
         seller_app_rejected: 'ri-close-circle-line',
@@ -1806,9 +1859,44 @@
 
     function getNotifTargetUrl(n) {
         const sellerOrdersUrl = "{{ url_for('templates.seller_orders') }}";
+        const sellerProductsUrl = "{{ url_for('templates.seller_products') }}";
+        const sellerStatusUrl = "{{ url_for('templates.seller_signup_status') }}";
+        const sellerDashboardUrl = "{{ url_for('templates.seller_dashboard') }}";
         if (!n) return '';
-        if (n.type === 'new_order' || n.type === 'payment_verified') {
-            return n.reference_id ? `${sellerOrdersUrl}?order_id=${n.reference_id}` : sellerOrdersUrl;
+
+        if (
+            n.type === 'new_order'
+            || n.type === 'payment_verified'
+            || n.type === 'payment_proof'
+            || n.type === 'order_cancelled'
+            || n.type === 'order_completed'
+            || n.type === 'new_rating'
+        ) {
+            return n.reference_id
+                ? `${sellerOrdersUrl}?order_id=${encodeURIComponent(n.reference_id)}`
+                : sellerOrdersUrl;
+        }
+        if (n.type === 'new_chat') {
+            return n.reference_id
+                ? `${sellerDashboardUrl}?open_chat=${encodeURIComponent(n.reference_id)}`
+                : sellerDashboardUrl;
+        }
+        if (n.type === 'low_stock') {
+            return n.reference_id
+                ? `${sellerProductsUrl}?highlight=${encodeURIComponent(n.reference_id)}`
+                : sellerProductsUrl;
+        }
+        if (n.type === 'seller_app_approved') {
+            return sellerDashboardUrl;
+        }
+        if (n.type === 'seller_app_rejected') {
+            return sellerStatusUrl;
+        }
+        // Fallback: if message mentions an order id, try orders page
+        const msg = String(n.message || n.title || '');
+        const orderMatch = msg.match(/Order\s*#?\s*(\d+)/i);
+        if (orderMatch) {
+            return `${sellerOrdersUrl}?order_id=${encodeURIComponent(orderMatch[1])}`;
         }
         return '';
     }
@@ -1817,13 +1905,22 @@
         const color = NOTIF_TYPE_COLOR[n.type] || 'var(--muted)';
         const unreadClass = n.is_read ? '' : ' unread';
         const targetUrl = getNotifTargetUrl(n);
-        return `<div class="notif-item${unreadClass}" data-notif-id="${n.id}" onclick="handleNotifClick(${n.id}, this, '${targetUrl}')">
+        const clickableClass = targetUrl ? ' is-clickable' : '';
+        const chevron = targetUrl
+            ? '<i class="ri-arrow-right-s-line notif-chevron"></i>'
+            : '';
+        return `<div class="notif-item${unreadClass}${clickableClass}"
+                     data-notif-id="${n.id}"
+                     data-target-url="${escapeHtml(targetUrl)}"
+                     role="button"
+                     tabindex="0">
             <div class="notif-dot-indicator" style="background:${color};"></div>
             <div class="notif-body">
                 <div class="notif-body-title">${escapeHtml(n.title)}</div>
                 <div class="notif-body-sub">${escapeHtml(n.message)}</div>
                 <div class="notif-time">${timeAgo(n.created_at)}</div>
             </div>
+            ${chevron}
         </div>`;
     }
 
@@ -1846,6 +1943,7 @@
             if (loading) loading.style.display = 'none';
             const notifs = data.notifications || [];
             if (notifs.length === 0) {
+                list.innerHTML = '';
                 if (empty) empty.style.display = 'block';
                 if (dot) dot.style.display = 'none';
                 if (markBtn) markBtn.style.display = 'none';
@@ -1855,6 +1953,8 @@
                 const unread = data.unread_count || 0;
                 if (dot) dot.style.display = unread > 0 ? 'block' : 'none';
                 if (markBtn) markBtn.style.display = unread > 0 ? '' : 'none';
+                // Keep the latest messages visible at the top of the scroll area
+                list.scrollTop = 0;
             }
         } catch (e) {
             if (loading) loading.style.display = 'none';
@@ -1874,12 +1974,28 @@
         }
     }
 
-    async function handleNotifClick(id, el, targetUrl) {
-        await markNotifRead(id, el);
+    async function handleNotifClick(el) {
+        if (!el) return;
+        const id = Number(el.dataset.notifId);
+        const targetUrl = el.dataset.targetUrl || '';
+        if (id) await markNotifRead(id, el);
         if (targetUrl) {
             window.location.href = targetUrl;
         }
     }
+
+    document.getElementById('notifList')?.addEventListener('click', function (e) {
+        const item = e.target.closest('.notif-item');
+        if (!item || !this.contains(item)) return;
+        handleNotifClick(item);
+    });
+    document.getElementById('notifList')?.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const item = e.target.closest('.notif-item');
+        if (!item || !this.contains(item)) return;
+        e.preventDefault();
+        handleNotifClick(item);
+    });
 
     async function markAllNotifsRead() {
         if (CURRENT_ROLE !== 'seller') return;

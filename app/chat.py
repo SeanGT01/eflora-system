@@ -189,6 +189,38 @@ def _conversation_payload(convo, user, preferred_order_id=None):
     return data
 
 
+def _maybe_notify_seller_new_chat(convo, user, preview_text):
+    """Notify store seller when a customer sends a message on a store thread."""
+    try:
+        if not convo or not user:
+            return
+        if user.id != convo.customer_id:
+            return
+        if not convo.store_id:
+            return
+
+        store = Store.query.get(convo.store_id)
+        if not store or store.seller_id != convo.seller_id:
+            # Rider / support / admin threads — skip
+            return
+
+        snippet = (preview_text or '').strip()
+        if len(snippet) > 120:
+            snippet = snippet[:117] + '...'
+        customer_name = (user.full_name or 'Customer').strip() or 'Customer'
+        from app.utils.seller_notifications import notify_store_seller
+        notify_store_seller(
+            store_id=convo.store_id,
+            seller_id=store.seller_id,
+            title='New chat message',
+            message=f'{customer_name}: {snippet}' if snippet else f'{customer_name} sent a message.',
+            type='new_chat',
+            reference_id=convo.id,
+        )
+    except Exception:
+        pass
+
+
 def _support_store_for_chat(customer_id, admin_user_id=None):
     """
     Pick a store_id for a new support thread.
@@ -638,6 +670,8 @@ def send_message(convo_id):
     # Increment unread for the OTHER participant (atomic)
     _bump_other_unread(convo, user.id)
 
+    _maybe_notify_seller_new_chat(convo, user, text or '[Image]')
+
     db.session.commit()
 
     return jsonify({'message': msg.to_dict()}), 201
@@ -699,6 +733,8 @@ def send_image_message(convo_id):
     convo.updated_at = now
 
     _bump_other_unread(convo, user.id)
+
+    _maybe_notify_seller_new_chat(convo, user, caption if caption else '[Image]')
 
     db.session.commit()
 
