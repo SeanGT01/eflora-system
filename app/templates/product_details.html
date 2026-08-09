@@ -2838,27 +2838,30 @@ async function addToCartWithVariant() {
             console.log('🔄 Adding MAIN PRODUCT to cart:', product);
         }
         
-        if (typeof window.addToCart === 'function') {
-            await window.addToCart(product);
-
-            if (selectedAddons.size > 0) {
-                for (const addon of selectedAddons.values()) {
-                    const addonItem = buildAddonCartItem(addon);
-                    await window.addToCart(addonItem);
-                }
-            }
-
-            const addonSuffix = selectedAddons.size > 0
-                ? ` (+${selectedAddons.size} add-on${selectedAddons.size > 1 ? 's' : ''})`
-                : '';
-            showToast(`${product.name} added to basket${addonSuffix}`);
-        } else {
+        if (typeof window.addToCart !== 'function') {
             console.error('❌ addToCart function not found');
             showToast('Error adding to cart. Please try again.', 'error');
+            return;
         }
+
+        const added = await window.addToCart(product);
+        if (!added) return;
+
+        if (selectedAddons.size > 0) {
+            for (const addon of selectedAddons.values()) {
+                const addonItem = buildAddonCartItem(addon);
+                const addonAdded = await window.addToCart(addonItem);
+                if (!addonAdded) return;
+            }
+        }
+        // Success toast is shown by addToCart itself
     } catch (error) {
         console.error('❌ Error adding to cart:', error);
-        showToast('Network error — please try again');
+        if (typeof showCartActionError === 'function') {
+            showCartActionError(error.message || error);
+        } else {
+            showToast('Network error — please try again', 'error');
+        }
     } finally {
         setTimeout(() => {
             button.innerHTML = originalHtml;

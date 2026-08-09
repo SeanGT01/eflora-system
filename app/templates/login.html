@@ -808,12 +808,13 @@
               {% endif %}
 
             <div class="form-group">
-                <label class="form-label">Email Address</label>
+                <label class="form-label">Email or Mobile Number</label>
                 <div class="input-wrap">
-                    <i class="ri-mail-line input-icon"></i>
-                    <input class="form-control" type="email" name="email" id="loginEmail"
-                           placeholder="your@email.com" required autofocus
-                           value="{{ form_data.email if form_data else '' }}">
+                    <i class="ri-user-line input-icon"></i>
+                    <input class="form-control" type="text" name="identifier" id="loginEmail"
+                           placeholder="you@email.com or 09171234567" required autofocus
+                           autocomplete="username"
+                           value="{{ form_data.identifier if form_data and form_data.identifier is defined else (form_data.email if form_data else '') }}">
                 </div>
             </div>
 
@@ -861,7 +862,7 @@
 <div class="verify-modal-overlay" id="verifyModal">
     <div class="verify-modal-card">
         <div class="verify-modal-icon"><i class="ri-checkbox-circle-fill"></i></div>
-        <h3 class="verify-modal-title">Email verified!</h3>
+        <h3 class="verify-modal-title">Account verified!</h3>
         <p class="verify-modal-text">
             Your account is ready. Sign in now with your credentials.
         </p>
@@ -882,26 +883,30 @@
 {% endif %}
 
 <script>
-    /* ── Email: accept uppercase, normalize to lowercase (match register) ── */
+    /* ── Identifier: lowercase emails only (phones stay as typed) ── */
     (function () {
         const el = document.getElementById('loginEmail');
         if (!el) return;
         el.addEventListener('input', function () {
-            const lo = (el.value || '').toLowerCase();
-            if (el.value !== lo) el.value = lo;
+            const v = el.value || '';
+            if (v.includes('@')) {
+                const lo = v.toLowerCase();
+                if (el.value !== lo) el.value = lo;
+            }
         });
     })();
 
-    /* ── Forgot password: carry email query when present ── */
+    /* ── Forgot password: carry identifier when present ── */
     (function () {
         const link = document.getElementById('forgotPasswordLink');
         if (!link) return;
         link.addEventListener('click', function (e) {
             e.preventDefault();
             const base = link.getAttribute('href') || '/forgot-password';
-            const email = (document.getElementById('loginEmail')?.value || '').trim().toLowerCase();
-            if (email) {
-                window.location.href = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'email=' + encodeURIComponent(email);
+            let id = (document.getElementById('loginEmail')?.value || '').trim();
+            if (id.includes('@')) id = id.toLowerCase();
+            if (id) {
+                window.location.href = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'email=' + encodeURIComponent(id);
             } else {
                 window.location.href = base;
             }
@@ -924,7 +929,11 @@
     /* ── Submit loading state ── */
     document.getElementById('loginForm').addEventListener('submit', function() {
         const em = document.getElementById('loginEmail');
-        if (em) em.value = (em.value || '').trim().toLowerCase();
+        if (em) {
+            let v = (em.value || '').trim();
+            if (v.includes('@')) v = v.toLowerCase();
+            em.value = v;
+        }
         const btn = document.getElementById('loginSubmit');
         btn.innerHTML = '<i class="spin ri-loader-4-line"></i> Signing in…';
         btn.disabled  = true;

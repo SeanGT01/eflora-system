@@ -317,9 +317,18 @@ def invite_rider():
     phone = (data.get('phone') or '').strip()
     vehicle_type = data.get('vehicle_type', '')
     license_plate = (data.get('license_plate') or '').strip()
+    from app.utils.otp_delivery import deliver_otp
+    from app.utils.phone_utils import normalize_ph_mobile, is_valid_ph_mobile
+    phone = normalize_ph_mobile(phone) if phone else None
     
     if not email or not full_name:
         return jsonify({'error': 'Email and full name are required'}), 400
+
+    if data.get('phone') and (not phone or not is_valid_ph_mobile(phone)):
+        return jsonify({'error': 'Please enter a valid Philippine mobile number (e.g., 09171234567).'}), 400
+
+    # Smart channel: phone present → SMS, else email
+    channel = 'sms' if phone else 'email'
     
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
@@ -346,7 +355,8 @@ def invite_rider():
             'full_name': full_name,
             'phone': phone,
             'vehicle_type': vehicle_type,
-            'license_plate': license_plate
+            'license_plate': license_plate,
+            'otp_channel': channel,
         },
         store_id=store.id,
         created_by=user_id,
@@ -355,20 +365,29 @@ def invite_rider():
     db.session.add(rider_otp)
     db.session.commit()
     
-    email_sent = send_rider_otp_email(
-        recipient_email=email,
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=otp_code,
-        store_name=store.name,
-        seller_name=user.full_name
+        email=email,
+        phone=phone,
+        email_sender_fn=send_rider_otp_email,
+        email_sender_kwargs={
+            'store_name': store.name,
+            'seller_name': user.full_name,
+        },
+        expiry_minutes=10,
+        sms_purpose='rider verification',
     )
+    if not ok:
+        return jsonify({'error': (fail or {}).get('error') or 'Failed to send OTP.'}), 500
     
-    if not email_sent:
-        return jsonify({'error': 'Failed to send OTP email.'}), 500
-    
+    dest = meta.get('destination_masked') or email
     return jsonify({
         'success': True,
-        'message': f'OTP sent to {email}. Ask the rider for the 6-digit code.',
-        'otp_id': rider_otp.id
+        'message': f'OTP sent to {dest}. Ask the rider for the 6-digit code.',
+        'otp_id': rider_otp.id,
+        'otp_channel': channel,
+        'destination_masked': dest,
     }), 201
 
 
@@ -396,24 +415,37 @@ def resend_rider_invitation():
         return jsonify({'error': 'Invitation not found'}), 404
     
     from app.utils.email_helper import generate_otp_code, send_rider_otp_email
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
     new_otp = generate_otp_code()
     rider_otp.verification_token = new_otp
     rider_otp.expires_at = datetime.utcnow() + timedelta(minutes=10)
     db.session.commit()
-    
-    email_sent = send_rider_otp_email(
-        recipient_email=rider_otp.email,
+
+    pending = rider_otp.rider_data or {}
+    channel = normalize_otp_channel(pending.get('otp_channel'), default='email') or 'email'
+    phone = pending.get('phone')
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=new_otp,
-        store_name=store.name,
-        seller_name=user.full_name
+        email=rider_otp.email,
+        phone=phone,
+        email_sender_fn=send_rider_otp_email,
+        email_sender_kwargs={
+            'store_name': store.name,
+            'seller_name': user.full_name,
+        },
+        expiry_minutes=10,
+        sms_purpose='rider verification',
     )
-    
-    if not email_sent:
-        return jsonify({'error': 'Failed to resend OTP email'}), 500
-    
+    if not ok:
+        return jsonify({'error': (fail or {}).get('error') or 'Failed to resend OTP'}), 500
+
+    dest = meta.get('destination_masked') or rider_otp.email
     return jsonify({
         'success': True,
-        'message': f'New OTP sent to {rider_otp.email}'
+        'message': f'New OTP sent to {dest}',
+        'otp_channel': channel,
+        'destination_masked': dest,
     }), 200
 
 

@@ -875,7 +875,7 @@
             <div class="modal-body">
                 <div class="info-hint">
                     <i class="ri-information-line"></i>
-                    <span>Enter the rider's details. A verification link will be sent to their email. The rider clicks the link to activate their account.</span>
+                    <span>Enter the rider's details. If a mobile number is provided, the OTP is sent by SMS; otherwise by email.</span>
                 </div>
 
                 <div class="form-group">
@@ -885,13 +885,13 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Email Address (Gmail) <span style="color: var(--deep-rose);">*</span></label>
+                    <label class="form-label">Email Address <span style="color: var(--deep-rose);">*</span></label>
                     <input type="email" class="form-control" name="email" id="inviteEmail"
                            placeholder="rider@gmail.com" required>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Phone Number</label>
+                    <label class="form-label">Phone Number <span style="color:var(--muted);font-weight:400;">(optional — SMS if provided)</span></label>
                     <input type="tel" class="form-control" name="phone" id="invitePhone"
                            placeholder="09xxxxxxxxx or +639xxxxxxxxx" inputmode="numeric" maxlength="13">
                 </div>
@@ -1408,17 +1408,19 @@ document.getElementById('inviteRiderForm').addEventListener('submit', async func
         email: document.getElementById('inviteEmail').value.trim(),
         phone: document.getElementById('invitePhone').value.trim(),
         vehicle_type: document.getElementById('inviteVehicle').value,
-        license_plate: document.getElementById('inviteLicensePlate').value.trim()
+        license_plate: document.getElementById('inviteLicensePlate').value.trim(),
     };
 
     const invitePhoneValidation = validatePhMobile(payload.phone);
-    if (!invitePhoneValidation.ok) {
+    if (payload.phone && !invitePhoneValidation.ok) {
         errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${invitePhoneValidation.message}`;
         errorDiv.style.display = 'flex';
         document.getElementById('invitePhone').focus();
         return;
     }
-    payload.phone = invitePhoneValidation.normalized;
+    if (invitePhoneValidation.ok && invitePhoneValidation.normalized) {
+        payload.phone = invitePhoneValidation.normalized;
+    }
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Sending OTP…';

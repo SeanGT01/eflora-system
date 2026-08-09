@@ -3936,11 +3936,11 @@ window.inspectCart = inspectCart;
 function addToCart(product) {
     if (SHOPPING_DISABLED) {
         showToast('Cart and checkout are disabled for seller/admin accounts', 'error');
-        return false;
+        return Promise.resolve(false);
     }
     if (!product || !product.id) {
         showToast('Error: Invalid product', 'error');
-        return false;
+        return Promise.resolve(false);
     }
 
     // Normalise price to always use the effective (sale) price
@@ -3959,7 +3959,7 @@ function addToCart(product) {
         cartPayload.variant_id = product.variant_id;
     }
     
-    fetch('/api/cart/items', {
+    return fetch('/api/cart/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cartPayload)
@@ -3969,17 +3969,25 @@ function addToCart(product) {
         if (data.success) {
             loadCart();
             showToast(`Added to basket — ${displayName}`);
-        } else {
-            showToast('Error: ' + (data.error || 'Could not add item'), 'error');
+            return true;
         }
+        const errMsg = data.error || 'Could not add item';
+        if (typeof showCartActionError === 'function') {
+            showCartActionError(errMsg);
+        } else {
+            showToast('Error: ' + errMsg, 'error');
+        }
+        return false;
     })
     .catch(error => {
         console.error('Fetch error:', error);
         addToCartLocalStorage(product);
+        return true;
     });
     {% else %}
     addToCartLocalStorage(product);
     showToast(`Added to basket — ${displayName}`);
+    return Promise.resolve(true);
     {% endif %}
 }
 
@@ -4774,7 +4782,10 @@ function renderCheckoutAddresses() {
 
 function selectCheckoutAddress(addressId) {
     if (!isCheckoutAddressDeliverable(addressId)) {
-        showToast('Outside delivery area');
+        showDeliveryUnavailableModal({
+            reason: 'Outside delivery area',
+            tip: 'Choose a different saved address that falls within this shop’s delivery coverage.',
+        });
         return;
     }
     selectedCheckoutAddressId = addressId;
@@ -4813,7 +4824,10 @@ async function proceedCheckout() {
             return;
         }
         if (!isCheckoutAddressDeliverable(selectedCheckoutAddressId)) {
-            showToast('Outside delivery area');
+            showDeliveryUnavailableModal({
+                reason: 'Outside delivery area',
+                tip: 'Choose a different saved address that falls within this shop’s delivery coverage.',
+            });
             selectedCheckoutAddressId = pickDeliverableCheckoutAddress();
             renderCheckoutAddresses();
             renderCheckoutDeliveryIssues(getCheckoutAddressDeliveryIssues(
@@ -4901,14 +4915,20 @@ async function proceedCheckout() {
                 // Show more helpful error message
                 if (result.undeliverable_stores && result.undeliverable_stores.length > 0) {
                     const issue = result.undeliverable_stores[0];
-                    showToast(`${issue.store_name}: Outside delivery area`);
+                    showDeliveryUnavailableModal({
+                        title: 'Cannot deliver here',
+                        reason: issue.reason || `${issue.store_name || 'This shop'} can’t deliver to your selected address.`,
+                        tip: 'Deselect those items, or choose a different delivery address that falls within each shop’s coverage area.',
+                    });
+                } else if (isDeliveryUnavailableError(result.error)) {
+                    showDeliveryUnavailableModal({ reason: result.error });
                 } else {
-                    showToast(result.error || 'Failed to validate delivery');
+                    showToast(result.error || 'Failed to validate delivery', 'error');
                 }
             }
         } catch (error) {
             console.error('Checkout error:', error);
-            showToast('Error: ' + error.message);
+            showCartActionError(error.message || error);
         }
     }
     else if (checkoutStep === 2) {
@@ -5652,6 +5672,115 @@ function showToast(message, type = 'success') {
     }
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
+
+/** True when an API/cart error is about store delivery coverage. */
+function isDeliveryUnavailableError(message) {
+    if (!message || !String(message).trim()) return false;
+    const m = String(message).toLowerCase();
+    return m.includes("can't deliver") ||
+        m.includes('cannot deliver') ||
+        m.includes('cannot be delivered') ||
+        m.includes('does not deliver') ||
+        (m.includes('outside') &&
+            (m.includes('delivery') || m.includes('distance') || m.includes('radius') || m.includes('area'))) ||
+        m.includes('delivery distance') ||
+        m.includes('delivery radius') ||
+        m.includes('delivery area') ||
+        m.includes('delivery coverage') ||
+        m.includes('maximum delivery') ||
+        m.includes('missing map coordinates') ||
+        m.includes('undeliverable');
+}
+
+function humanizeDeliveryReason(reason) {
+    const raw = (reason || '').trim();
+    const lower = raw.toLowerCase();
+    if (!raw || lower.includes('outside delivery distance') || lower.includes('outside delivery area')) {
+        return 'This shop can’t deliver to your saved address — it’s outside their delivery coverage.';
+    }
+    return raw;
+}
+
+/**
+ * Friendly modal for delivery-coverage failures (mirrors Flutter delivery_unavailable_dialog).
+ * opts: { title?, reason?, tip? }
+ */
+function showDeliveryUnavailableModal(opts) {
+    const options = opts || {};
+    const title = options.title || 'Outside delivery area';
+    const detail = humanizeDeliveryReason(options.reason);
+    const tip = options.tip ||
+        'You can still browse this shop, but you won’t be able to add items to your cart or check out unless you use an address inside their coverage — or turn on “Browse outside area” only for browsing.';
+
+    let overlay = document.getElementById('deliveryUnavailableModal');
+    if (!overlay) {
+        const style = document.createElement('style');
+        style.textContent = `
+            .delivery-unavail-overlay{position:fixed;inset:0;background:rgba(42,35,30,.55);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1.25rem;z-index:12050}
+            .delivery-unavail-overlay.show{display:flex}
+            .delivery-unavail-card{width:min(440px,100%);background:rgba(255,255,255,.96);border:1px solid rgba(255,255,255,.75);border-radius:20px;box-shadow:0 20px 60px rgba(90,40,80,.18);padding:1.35rem 1.4rem 1.15rem}
+            .delivery-unavail-head{display:flex;align-items:center;gap:.85rem;margin-bottom:.9rem}
+            .delivery-unavail-icon{width:42px;height:42px;border-radius:50%;background:rgba(216,120,160,.14);color:#c24e68;display:flex;align-items:center;justify-content:center;font-size:1.25rem;flex-shrink:0}
+            .delivery-unavail-title{font-family:var(--font-display),Georgia,serif;font-size:1.35rem;font-weight:500;color:#2c2520;line-height:1.2;margin:0}
+            .delivery-unavail-detail{font-size:.95rem;color:#2c2520;line-height:1.5;margin:0 0 .75rem;opacity:.9}
+            .delivery-unavail-tip{font-size:.8rem;color:#9a8d85;line-height:1.45;margin:0 0 1rem}
+            .delivery-unavail-actions{display:flex;justify-content:flex-end}
+            .delivery-unavail-btn{border:none;border-radius:10px;background:#c24e68;color:#fff;padding:.55rem 1.1rem;font-weight:600;font-size:.9rem;cursor:pointer;font-family:inherit}
+            .delivery-unavail-btn:hover{background:#a83a4e}
+        `;
+        document.head.appendChild(style);
+
+        overlay = document.createElement('div');
+        overlay.id = 'deliveryUnavailableModal';
+        overlay.className = 'delivery-unavail-overlay';
+        overlay.innerHTML = `
+            <div class="delivery-unavail-card" role="dialog" aria-modal="true" aria-labelledby="deliveryUnavailTitle">
+                <div class="delivery-unavail-head">
+                    <div class="delivery-unavail-icon" aria-hidden="true"><i class="ri-map-pin-off-line"></i></div>
+                    <h3 class="delivery-unavail-title" id="deliveryUnavailTitle"></h3>
+                </div>
+                <p class="delivery-unavail-detail" id="deliveryUnavailDetail"></p>
+                <p class="delivery-unavail-tip" id="deliveryUnavailTip"></p>
+                <div class="delivery-unavail-actions">
+                    <button type="button" class="delivery-unavail-btn" id="deliveryUnavailOk">Got it</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    overlay.querySelector('#deliveryUnavailTitle').textContent = title;
+    overlay.querySelector('#deliveryUnavailDetail').textContent = detail;
+    overlay.querySelector('#deliveryUnavailTip').textContent = tip;
+    overlay.classList.add('show');
+
+    const close = function () {
+        overlay.classList.remove('show');
+        overlay.removeEventListener('click', onBackdrop);
+        okBtn.removeEventListener('click', close);
+        document.removeEventListener('keydown', onKey);
+    };
+    const onBackdrop = function (e) { if (e.target === overlay) close(); };
+    const onKey = function (e) { if (e.key === 'Escape' || e.key === 'Enter') close(); };
+    const okBtn = overlay.querySelector('#deliveryUnavailOk');
+    okBtn.addEventListener('click', close);
+    overlay.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKey);
+    okBtn.focus();
+}
+
+/** Cart/action failures: delivery coverage → modal, otherwise toast. */
+function showCartActionError(error) {
+    const msg = (error && error.message) ? error.message : String(error || 'Something went wrong');
+    if (isDeliveryUnavailableError(msg)) {
+        showDeliveryUnavailableModal({ reason: msg });
+    } else {
+        showToast(msg.startsWith('Error:') ? msg : ('Error: ' + msg), 'error');
+    }
+}
+window.isDeliveryUnavailableError = isDeliveryUnavailableError;
+window.showDeliveryUnavailableModal = showDeliveryUnavailableModal;
+window.showCartActionError = showCartActionError;
 
 // Unified confirmation modal helper
 (function setupUnifiedConfirmModal() {

@@ -33,6 +33,125 @@ EMAIL_REGEX = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
 PASSWORD_SPECIAL_REGEX = re.compile(r'[^A-Za-z0-9]')
 
 
+def _normalize_email(value):
+    return (value or '').strip().lower()
+
+
+def _find_user_by_phone(normalized_09):
+    """Find User whose phone matches any common PH format of normalized_09."""
+    from app.utils.phone_utils import phone_lookup_variants
+
+    if not normalized_09:
+        return None
+    variants = phone_lookup_variants(normalized_09)
+    return User.query.filter(User.phone.in_(variants)).first()
+
+
+def _find_user_by_login_identifier(raw):
+    """Resolve login / session lookup by email or PH mobile."""
+    from app.utils.phone_utils import (
+        is_synthetic_account_email,
+        is_valid_ph_mobile,
+        normalize_ph_mobile,
+        phone_to_account_email,
+    )
+
+    raw = (raw or '').strip()
+    if not raw:
+        return None
+
+    if '@' in raw:
+        email = _normalize_email(raw)
+        if is_synthetic_account_email(email):
+            local, _, _ = email.partition('@')
+            phone = normalize_ph_mobile(local)
+            if phone:
+                return _find_user_by_phone(phone) or User.query.filter_by(email=email).first()
+        return User.query.filter_by(email=email).first()
+
+    if is_valid_ph_mobile(raw):
+        phone = normalize_ph_mobile(raw)
+        user = _find_user_by_phone(phone)
+        if user:
+            return user
+        return User.query.filter_by(email=phone_to_account_email(phone)).first()
+
+    return None
+
+
+def _phone_taken(normalized_09, exclude_email=None):
+    if not normalized_09:
+        return False
+    user = _find_user_by_phone(normalized_09)
+    if not user:
+        from app.utils.phone_utils import phone_to_account_email
+        # Phone-only accounts may only have the synthetic email set
+        synth = phone_to_account_email(normalized_09)
+        user = User.query.filter_by(email=synth).first()
+        if not user:
+            return False
+    if exclude_email and user.email == exclude_email:
+        return False
+    return True
+
+
+def _parse_forgot_identifier(data):
+    """
+    Resolve forgot-password identifier to (user, channel, phone_or_none) or error.
+
+    Accepts identifier (preferred) or legacy email field.
+    Email → Gmail OTP; PH phone → SMS OTP.
+    """
+    from app.utils.phone_utils import (
+        is_synthetic_account_email,
+        is_valid_ph_mobile,
+        normalize_ph_mobile,
+    )
+
+    raw = (data.get('identifier') if data.get('identifier') is not None else data.get('email'))
+    raw = (raw or '').strip()
+    if not raw:
+        return None, ({
+            'success': False,
+            'error': 'Enter your email address or Philippine mobile number.',
+        }, 400)
+
+    if '@' in raw:
+        email = _normalize_email(raw)
+        if is_synthetic_account_email(email):
+            return None, ({
+                'success': False,
+                'error': 'Enter a valid email or Philippine mobile number (e.g. 09171234567).',
+            }, 400)
+        if not EMAIL_REGEX.match(email):
+            return None, ({
+                'success': False,
+                'error': 'A valid email is required',
+            }, 400)
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return None, ({
+                'success': False,
+                'error': 'No account found with this email. Please check and try again.',
+            }, 404)
+        return {'user': user, 'channel': 'email', 'phone': None}, None
+
+    if not is_valid_ph_mobile(raw):
+        return None, ({
+            'success': False,
+            'error': 'Enter a valid email or Philippine mobile number (e.g. 09171234567).',
+        }, 400)
+
+    phone = normalize_ph_mobile(raw)
+    user = _find_user_by_phone(phone) or _find_user_by_login_identifier(phone)
+    if not user:
+        return None, ({
+            'success': False,
+            'error': 'No account found with this phone number. Please check and try again.',
+        }, 404)
+    return {'user': user, 'channel': 'sms', 'phone': phone}, None
+
+
 def _validate_password_strength(password):
     pw = password or ''
     if len(pw) < 8:
@@ -46,21 +165,42 @@ def _validate_password_strength(password):
     return None
 
 
-def _normalize_email(value):
-    return (value or '').strip().lower()
-
-
 def _validate_registration_payload(data, require_password=True):
-    """Shared validation for send-otp + register payloads."""
+    """Shared validation for send-otp payloads.
+
+    One login identity: email OR PH mobile (not both).
+    Channel: email → Gmail OTP; phone → SMS OTP (account email is synthetic).
+    """
+    from app.utils.phone_utils import (
+        is_synthetic_account_email,
+        is_valid_ph_mobile,
+        normalize_ph_mobile,
+        phone_to_account_email,
+    )
+
     full_name = (data.get('full_name') or '').strip()
-    email = _normalize_email(data.get('email'))
     password = data.get('password') or ''
-    phone = (data.get('phone') or '').strip() or None
+
+    # Prefer single identifier; fall back to legacy email/phone pair.
+    raw_id = (data.get('identifier') if data.get('identifier') is not None else None)
+    if raw_id is None or str(raw_id).strip() == '':
+        legacy_email = _normalize_email(data.get('email'))
+        legacy_phone = (data.get('phone') or '').strip() or None
+        if legacy_email and legacy_phone:
+            return None, (
+                'Use either an email or a phone number to create your account — not both.',
+                400,
+            )
+        if legacy_phone and not legacy_email:
+            raw_id = legacy_phone
+        else:
+            raw_id = legacy_email or ''
+    raw_id = (raw_id or '').strip()
 
     if not full_name:
         return None, ('full_name is required', 400)
-    if not email or not EMAIL_REGEX.match(email):
-        return None, ('A valid email is required', 400)
+    if not raw_id:
+        return None, ('Enter your email address or Philippine mobile number.', 400)
     if require_password:
         if not password:
             return None, ('password is required', 400)
@@ -68,28 +208,45 @@ def _validate_registration_payload(data, require_password=True):
         if pw_error:
             return None, (pw_error, 400)
 
+    if '@' in raw_id:
+        email = _normalize_email(raw_id)
+        if is_synthetic_account_email(email) or not EMAIL_REGEX.match(email):
+            return None, ('A valid email is required', 400)
+        return {
+            'full_name': full_name,
+            'email': email,
+            'password': password,
+            'phone': None,
+            'otp_channel': 'email',
+        }, None
+
+    if not is_valid_ph_mobile(raw_id):
+        return None, (
+            'Enter a valid email or Philippine mobile number (e.g. 09171234567).',
+            400,
+        )
+
+    phone = normalize_ph_mobile(raw_id)
+    email = phone_to_account_email(phone)
     return {
         'full_name': full_name,
         'email': email,
         'password': password,
         'phone': phone,
+        'otp_channel': 'sms',
     }, None
 
 
 @auth_bp.route('/customer/send-otp', methods=['POST'])
 def customer_send_otp():
     """
-    Begin customer registration. Stores pending account data + emails a 6-digit OTP.
+    Begin customer registration. Stores pending account data + sends a 6-digit OTP.
 
-    Request JSON:
-        { "full_name": str, "email": str, "password": str (>=6), "phone": str? }
+    One login identity — email OR PH mobile:
+        { "full_name": str, "identifier": str, "password": str }
 
-    Responses:
-        200  { "success": true, "message": str, "expires_in_seconds": int }
-        400  validation error
-        409  email already belongs to an active account
-        429  resend cooldown not yet elapsed
-        500  email delivery failed
+    Legacy email (+ optional phone) is still accepted but phone-only or email-only
+    is required (not both).
     """
     from app.utils.otp_service import (
         DEFAULT_EXPIRY_MINUTES,
@@ -97,11 +254,9 @@ def customer_send_otp():
         can_resend,
         new_otp_pair,
     )
-    from app.utils.email_helper import (
-        send_customer_otp_email,
-        EMAIL_SERVICE_UNAVAILABLE_CODE,
-        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-    )
+    from app.utils.email_helper import send_customer_otp_email
+    from app.utils.otp_delivery import deliver_otp
+    from app.utils.phone_utils import display_login_id
 
     data = request.get_json(silent=True) or {}
     fields, err = _validate_registration_payload(data, require_password=True)
@@ -109,11 +264,20 @@ def customer_send_otp():
         return jsonify({'success': False, 'error': err[0]}), err[1]
 
     email = fields['email']
+    channel = fields['otp_channel']
+    phone = fields['phone']
 
     if User.query.filter_by(email=email).first():
+        kind = 'phone number' if channel == 'sms' else 'email'
         return jsonify({
             'success': False,
-            'error': 'This email is already registered. Please log in instead.',
+            'error': f'This {kind} is already registered. Please log in instead.',
+        }), 409
+
+    if phone and _phone_taken(phone, exclude_email=email):
+        return jsonify({
+            'success': False,
+            'error': 'This phone number is already registered to another account.',
         }), 409
 
     plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
@@ -121,7 +285,8 @@ def customer_send_otp():
     pending = {
         'full_name': fields['full_name'],
         'password_hash': generate_password_hash(fields['password']),
-        'phone': fields['phone'],
+        'phone': phone,
+        'otp_channel': channel,
     }
 
     record = CustomerOTP.query.filter_by(email=email).first()
@@ -153,22 +318,27 @@ def customer_send_otp():
 
     db.session.commit()
 
-    sent = send_customer_otp_email(
-        recipient_email=email,
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=plain_code,
-        full_name=fields['full_name'],
+        email=email,
+        phone=phone,
+        email_sender_fn=send_customer_otp_email,
+        email_sender_kwargs={'full_name': fields['full_name'], 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
         expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        sms_purpose='verification',
     )
-    if not sent:
-        return jsonify({
-            'success': False,
-            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
-        }), 503
+    if not ok:
+        return jsonify(fail), 503
 
+    dest = meta.get('destination_masked') or (phone if channel == 'sms' else email)
     return jsonify({
         'success': True,
-        'message': f'A 6-digit verification code has been sent to {email}.',
+        'message': f'A 6-digit verification code has been sent to {dest}.',
+        'otp_channel': channel,
+        'destination_masked': dest,
+        'email': email,
+        'login_id': display_login_id(email=email, phone=phone),
         'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
         'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
     }), 200
@@ -178,7 +348,7 @@ def customer_send_otp():
 def customer_resend_otp():
     """
     Re-issue an OTP for an existing pending registration without requiring the
-    full payload again. Cooldown applies.
+    full payload again. Uses the otp_channel stored on the pending row.
 
     Request JSON: { "email": str }
     """
@@ -188,11 +358,8 @@ def customer_resend_otp():
         can_resend,
         new_otp_pair,
     )
-    from app.utils.email_helper import (
-        send_customer_otp_email,
-        EMAIL_SERVICE_UNAVAILABLE_CODE,
-        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-    )
+    from app.utils.email_helper import send_customer_otp_email
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
 
     data = request.get_json(silent=True) or {}
     email = _normalize_email(data.get('email'))
@@ -214,6 +381,10 @@ def customer_resend_otp():
             'retry_after_seconds': retry_after,
         }), 429
 
+    pending = record.customer_data or {}
+    channel = normalize_otp_channel(pending.get('otp_channel'), default='email') or 'email'
+    phone = pending.get('phone')
+
     plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
     record.otp_hash = otp_hash
     record.expires_at = expires_at
@@ -221,23 +392,26 @@ def customer_resend_otp():
     record.attempts = 0
     db.session.commit()
 
-    pending = record.customer_data or {}
-    sent = send_customer_otp_email(
-        recipient_email=email,
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=plain_code,
-        full_name=pending.get('full_name'),
+        email=email,
+        phone=phone,
+        email_sender_fn=send_customer_otp_email,
+        email_sender_kwargs={'full_name': pending.get('full_name'), 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
         expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        sms_purpose='verification',
     )
-    if not sent:
-        return jsonify({
-            'success': False,
-            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
-        }), 503
+    if not ok:
+        return jsonify(fail), 503
 
+    dest = meta.get('destination_masked') or (phone if channel == 'sms' else email)
     return jsonify({
         'success': True,
-        'message': f'A new verification code has been sent to {email}.',
+        'message': f'A new verification code has been sent to {dest}.',
+        'otp_channel': channel,
+        'destination_masked': dest,
+        'email': email,
         'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
     }), 200
 
@@ -413,17 +587,24 @@ def customer_register():
 
 def _ensure_password_reset_otps_table():
     """Create password_reset_otps from ORM if migration wasn't applied yet."""
-    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy import inspect as sa_inspect, text
     from app.models import PasswordResetOTP
 
     try:
-        if sa_inspect(db.engine).has_table('password_reset_otps'):
-            return True
-        PasswordResetOTP.__table__.create(db.engine, checkfirst=True)
-        try:
-            current_app.logger.info('Created missing table password_reset_otps from model')
-        except RuntimeError:
-            pass
+        if not sa_inspect(db.engine).has_table('password_reset_otps'):
+            PasswordResetOTP.__table__.create(db.engine, checkfirst=True)
+            try:
+                current_app.logger.info('Created missing table password_reset_otps from model')
+            except RuntimeError:
+                pass
+        # Ensure otp_channel exists on older DBs
+        cols = {c['name'] for c in sa_inspect(db.engine).get_columns('password_reset_otps')}
+        if 'otp_channel' not in cols:
+            with db.engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE password_reset_otps "
+                    "ADD COLUMN IF NOT EXISTS otp_channel VARCHAR(10) DEFAULT 'email' NOT NULL"
+                ))
         return True
     except Exception as exc:
         try:
@@ -433,7 +614,7 @@ def _ensure_password_reset_otps_table():
         return False
 
 
-def _upsert_password_reset_otp(email):
+def _upsert_password_reset_otp(email, otp_channel='email'):
     """Create/refresh a PasswordResetOTP row and return (plain_code, record) or error tuple."""
     from app.models import PasswordResetOTP
     from app.utils.otp_service import (
@@ -442,7 +623,9 @@ def _upsert_password_reset_otp(email):
         can_resend,
         new_otp_pair,
     )
+    from app.utils.otp_delivery import normalize_otp_channel
 
+    channel = normalize_otp_channel(otp_channel, default='email') or 'email'
     _ensure_password_reset_otps_table()
     plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
     record = PasswordResetOTP.query.filter_by(email=email).first()
@@ -455,6 +638,7 @@ def _upsert_password_reset_otp(email):
                 'retry_after_seconds': retry_after,
             }, 429)
         record.otp_hash = otp_hash
+        record.otp_channel = channel
         record.expires_at = expires_at
         record.last_sent_at = datetime.utcnow()
         record.attempts = 0
@@ -464,6 +648,7 @@ def _upsert_password_reset_otp(email):
         record = PasswordResetOTP(
             email=email,
             otp_hash=otp_hash,
+            otp_channel=channel,
             expires_at=expires_at,
             last_sent_at=datetime.utcnow(),
         )
@@ -475,55 +660,62 @@ def _upsert_password_reset_otp(email):
 @auth_bp.route('/forgot-password/send-otp', methods=['POST'])
 def forgot_password_send_otp():
     """
-    Start forgot-password. Emails a 6-digit OTP if the account exists.
+    Start forgot-password. Identifier is email (Gmail OTP) or PH phone (SMS OTP).
 
-    Request JSON: { "email": str }
+    Request JSON: { "identifier": str }  (or legacy "email")
     """
     from app.utils.otp_service import DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS
-    from app.utils.email_helper import (
-        send_password_reset_otp_email,
-        EMAIL_SERVICE_UNAVAILABLE_CODE,
-        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-    )
+    from app.utils.email_helper import send_password_reset_otp_email
+    from app.utils.otp_delivery import deliver_otp
+    from app.utils.phone_utils import normalize_ph_mobile
 
     data = request.get_json(silent=True) or {}
-    email = _normalize_email(data.get('email'))
-    if not email or not EMAIL_REGEX.match(email):
-        return jsonify({'success': False, 'error': 'A valid email is required'}), 400
+    parsed, err = _parse_forgot_identifier(data)
+    if err:
+        return jsonify(err[0]), err[1]
 
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        return jsonify({
-            'success': False,
-            'error': 'No account found with this email. Please check and try again.',
-        }), 404
+    user = parsed['user']
+    channel = parsed['channel']
+    phone = parsed['phone'] or normalize_ph_mobile(user.phone)
+
     if user.status != 'active':
         return jsonify({
             'success': False,
             'error': 'This account is not active. Please contact support.',
         }), 403
 
-    result, err = _upsert_password_reset_otp(email)
-    if err:
-        return jsonify(err[0]), err[1]
-
-    plain_code, _record = result
-    sent = send_password_reset_otp_email(
-        recipient_email=email,
-        otp_code=plain_code,
-        full_name=user.full_name,
-        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
-    )
-    if not sent:
+    if channel == 'sms' and not phone:
         return jsonify({
             'success': False,
-            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
-        }), 503
+            'error': 'This account has no mobile number on file for SMS reset.',
+        }), 400
 
+    email = user.email
+    result, upsert_err = _upsert_password_reset_otp(email, otp_channel=channel)
+    if upsert_err:
+        return jsonify(upsert_err[0]), upsert_err[1]
+
+    plain_code, _record = result
+    ok, fail, meta = deliver_otp(
+        channel,
+        otp_code=plain_code,
+        email=email,
+        phone=phone,
+        email_sender_fn=send_password_reset_otp_email,
+        email_sender_kwargs={'full_name': user.full_name, 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
+        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        sms_purpose='password reset',
+    )
+    if not ok:
+        return jsonify(fail), 503
+
+    dest = meta.get('destination_masked')
     return jsonify({
         'success': True,
-        'message': f'A 6-digit verification code has been sent to {email}.',
+        'message': f'A 6-digit verification code has been sent to {dest}.',
+        'email': email,
+        'otp_channel': channel,
+        'destination_masked': dest,
         'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
         'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
     }), 200
@@ -531,7 +723,7 @@ def forgot_password_send_otp():
 
 @auth_bp.route('/forgot-password/resend-otp', methods=['POST'])
 def forgot_password_resend_otp():
-    """Re-issue a password-reset OTP. Request JSON: { "email": str }"""
+    """Re-issue a password-reset OTP. Request JSON: { "email": str } (account email)."""
     from app.models import PasswordResetOTP
     from app.utils.otp_service import (
         DEFAULT_EXPIRY_MINUTES,
@@ -539,11 +731,9 @@ def forgot_password_resend_otp():
         can_resend,
         new_otp_pair,
     )
-    from app.utils.email_helper import (
-        send_password_reset_otp_email,
-        EMAIL_SERVICE_UNAVAILABLE_CODE,
-        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-    )
+    from app.utils.email_helper import send_password_reset_otp_email
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.phone_utils import normalize_ph_mobile
 
     data = request.get_json(silent=True) or {}
     email = _normalize_email(data.get('email'))
@@ -573,8 +763,17 @@ def forgot_password_resend_otp():
             'retry_after_seconds': retry_after,
         }), 429
 
+    channel = normalize_otp_channel(getattr(record, 'otp_channel', None), default='email') or 'email'
+    phone = normalize_ph_mobile(user.phone)
+    if channel == 'sms' and not phone:
+        return jsonify({
+            'success': False,
+            'error': 'This account has no mobile number on file for SMS reset.',
+        }), 400
+
     plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
     record.otp_hash = otp_hash
+    record.otp_channel = channel
     record.expires_at = expires_at
     record.last_sent_at = datetime.utcnow()
     record.attempts = 0
@@ -582,22 +781,26 @@ def forgot_password_resend_otp():
     record.verified_at = None
     db.session.commit()
 
-    sent = send_password_reset_otp_email(
-        recipient_email=email,
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=plain_code,
-        full_name=user.full_name,
+        email=email,
+        phone=phone,
+        email_sender_fn=send_password_reset_otp_email,
+        email_sender_kwargs={'full_name': user.full_name, 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
         expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        sms_purpose='password reset',
     )
-    if not sent:
-        return jsonify({
-            'success': False,
-            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
-        }), 503
+    if not ok:
+        return jsonify(fail), 503
 
+    dest = meta.get('destination_masked')
     return jsonify({
         'success': True,
-        'message': f'A new verification code has been sent to {email}.',
+        'message': f'A new verification code has been sent to {dest}.',
+        'email': email,
+        'otp_channel': channel,
+        'destination_masked': dest,
         'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
     }), 200
 
@@ -730,10 +933,11 @@ def login():
     if not data:
         return jsonify({'error': 'Invalid request'}), 400
 
-    user = User.query.filter_by(email=data.get('email', '').lower()).first()
+    raw = data.get('identifier') if data.get('identifier') is not None else data.get('email')
+    user = _find_user_by_login_identifier(raw)
 
     if not user or not user.check_password(data.get('password', '')):
-        return jsonify({'error': 'Invalid email or password'}), 401
+        return jsonify({'error': 'Invalid email/phone or password'}), 401
 
     if user.status != 'active':
         return jsonify({'error': 'Account is not active'}), 403

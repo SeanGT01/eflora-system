@@ -92,13 +92,17 @@ class User(db.Model):
     
     def to_dict(self):
         # Split on last space: everything before = first name, last word = last name
+        from app.utils.phone_utils import display_login_id, is_synthetic_account_email
+
         _name_parts = self.full_name.rsplit(' ', 1) if ' ' in self.full_name else [self.full_name]
+        public_email = '' if is_synthetic_account_email(self.email) else self.email
         return {
             'id': self.id,
             'full_name': self.full_name,
             'first_name': _name_parts[0] if len(_name_parts) > 0 else self.full_name,
             'last_name': _name_parts[1] if len(_name_parts) > 1 else '',
-            'email': self.email,
+            'email': public_email,
+            'login_id': display_login_id(email=self.email, phone=self.phone),
             'role': self.role,
             'status': self.status,
             'phone': self.phone,
@@ -2004,13 +2008,14 @@ class CustomerOTP(db.Model):
 
 
 class PasswordResetOTP(db.Model):
-    """Email OTP for forgot-password / reset flows (any existing User)."""
+    """OTP for forgot-password / reset flows (any existing User)."""
 
     __tablename__ = 'password_reset_otps'
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), nullable=False, unique=True, index=True)
     otp_hash = db.Column(db.String(255), nullable=False)
+    otp_channel = db.Column(db.String(10), nullable=False, default='email')  # email | sms
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
     attempts = db.Column(db.Integer, default=0, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)

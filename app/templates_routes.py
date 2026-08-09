@@ -1513,11 +1513,11 @@ def login():
         return redirect(url_for('templates.index'))
 
     if request.method == 'POST':
-        email = request.form.get('email')
+        raw_id = (request.form.get('identifier') or request.form.get('email') or '').strip()
         password = request.form.get('password')
         
-        # Find user by email
-        user = User.query.filter_by(email=email).first()
+        # Find user by email or PH mobile
+        user = _find_user_by_login_identifier_web(raw_id)
         
         # Check if user exists and password is correct
         if user and user.check_password(password):
@@ -1535,7 +1535,7 @@ def login():
                 return render_template(
                     'login.html',
                     error='This account is inactive. Please contact support.',
-                    form_data={'email': email or ''},
+                    form_data={'identifier': raw_id or ''},
                     login_next=request.form.get('next') or request.args.get('next'),
                 )
 
@@ -1568,15 +1568,15 @@ def login():
         else:
             return render_template(
                 'login.html',
-                error='Invalid email or password',
-                form_data={'email': email or ''},
+                error='Invalid email/phone or password',
+                form_data={'identifier': raw_id or ''},
                 login_next=request.form.get('next') or request.args.get('next'),
             )
 
     verified = request.args.get('verified') == '1'
     reset_ok = request.args.get('reset') == '1'
-    prefill_email = (request.args.get('email') or '').strip().lower()
-    form_data = {'email': prefill_email} if prefill_email else None
+    prefill = (request.args.get('email') or request.args.get('identifier') or '').strip()
+    form_data = {'identifier': prefill} if prefill else None
     return render_template(
         'login.html',
         verified=verified,
@@ -1587,60 +1587,164 @@ def login():
 
 
 def _ensure_password_reset_otps_table_web():
-    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy import inspect as sa_inspect, text
     try:
-        if sa_inspect(db.engine).has_table('password_reset_otps'):
-            return True
-        PasswordResetOTP.__table__.create(db.engine, checkfirst=True)
+        if not sa_inspect(db.engine).has_table('password_reset_otps'):
+            PasswordResetOTP.__table__.create(db.engine, checkfirst=True)
+        cols = {c['name'] for c in sa_inspect(db.engine).get_columns('password_reset_otps')}
+        if 'otp_channel' not in cols:
+            with db.engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE password_reset_otps "
+                    "ADD COLUMN IF NOT EXISTS otp_channel VARCHAR(10) DEFAULT 'email' NOT NULL"
+                ))
         return True
     except Exception as exc:
         current_app.logger.warning('Could not ensure password_reset_otps: %s', exc)
         return False
 
 
+def _find_user_by_phone_web(normalized_09):
+    from app.utils.phone_utils import phone_lookup_variants
+    if not normalized_09:
+        return None
+    variants = phone_lookup_variants(normalized_09)
+    return User.query.filter(User.phone.in_(variants)).first()
+
+
+def _find_user_by_login_identifier_web(raw):
+    from app.utils.phone_utils import (
+        is_synthetic_account_email,
+        is_valid_ph_mobile,
+        normalize_ph_mobile,
+        phone_to_account_email,
+    )
+
+    raw = (raw or '').strip()
+    if not raw:
+        return None
+    if '@' in raw:
+        email = raw.lower()
+        if is_synthetic_account_email(email):
+            local, _, _ = email.partition('@')
+            phone = normalize_ph_mobile(local)
+            if phone:
+                return _find_user_by_phone_web(phone) or User.query.filter_by(email=email).first()
+        return User.query.filter_by(email=email).first()
+    if is_valid_ph_mobile(raw):
+        phone = normalize_ph_mobile(raw)
+        return (
+            _find_user_by_phone_web(phone)
+            or User.query.filter_by(email=phone_to_account_email(phone)).first()
+        )
+    return None
+
+
+def _phone_taken_web(normalized_09, exclude_email=None):
+    from app.utils.phone_utils import phone_to_account_email
+
+    user = _find_user_by_phone_web(normalized_09)
+    if not user:
+        user = User.query.filter_by(email=phone_to_account_email(normalized_09)).first()
+    if not user:
+        return False
+    if exclude_email and user.email == exclude_email:
+        return False
+    return True
+
+
 @templates_bp.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    """Step 1 — enter email (prefills from login) and send Gmail OTP."""
+    """Step 1 — email → Gmail OTP, or PH phone → SMS OTP."""
     if session.get('user_id'):
         return redirect(url_for('templates.index'))
 
-    prefill = (request.args.get('email') or '').strip().lower()
+    prefill = (request.args.get('email') or request.args.get('identifier') or '').strip()
 
     if request.method == 'POST':
         from app.utils.otp_service import (
             DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
             can_resend, new_otp_pair,
         )
-        from app.utils.email_helper import (
-            send_password_reset_otp_email,
-            EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
+        from app.utils.email_helper import send_password_reset_otp_email
+        from app.utils.otp_delivery import deliver_otp
+        from app.utils.phone_utils import (
+            normalize_ph_mobile, is_valid_ph_mobile, mask_email, mask_phone,
         )
 
-        email = (request.form.get('email') or '').strip().lower()
-        if not email or '@' not in email:
-            return render_template('forgot_password.html',
-                                   error='Please enter a valid email address.',
-                                   form_data={'email': email})
+        identifier = (request.form.get('identifier') or request.form.get('email') or '').strip()
+        if not identifier:
+            return render_template(
+                'forgot_password.html',
+                error='Enter your email address or Philippine mobile number.',
+                form_data={'identifier': identifier},
+            )
+
+        channel = None
+        phone = None
+        user = None
+        email = None
+
+        if '@' in identifier:
+            email = identifier.lower()
+            if '@' not in email or '.' not in email.split('@')[-1]:
+                return render_template(
+                    'forgot_password.html',
+                    error='Please enter a valid email address.',
+                    form_data={'identifier': identifier},
+                )
+            user = User.query.filter_by(email=email).first()
+            if not user:
+                return render_template(
+                    'forgot_password.html',
+                    error='No account found with this email.',
+                    form_data={'identifier': identifier},
+                )
+            channel = 'email'
+        else:
+            if not is_valid_ph_mobile(identifier):
+                return render_template(
+                    'forgot_password.html',
+                    error='Enter a valid email or Philippine mobile (e.g. 09171234567).',
+                    form_data={'identifier': identifier},
+                )
+            phone = normalize_ph_mobile(identifier)
+            user = _find_user_by_phone_web(phone)
+            if not user:
+                return render_template(
+                    'forgot_password.html',
+                    error='No account found with this phone number.',
+                    form_data={'identifier': identifier},
+                )
+            email = user.email
+            channel = 'sms'
+
+        if user.status != 'active':
+            return render_template(
+                'forgot_password.html',
+                error='This account is not active. Please contact support.',
+                form_data={'identifier': identifier},
+            )
+
+        if channel == 'sms' and not phone:
+            return render_template(
+                'forgot_password.html',
+                error='This account has no mobile number on file for SMS reset.',
+                form_data={'identifier': identifier},
+            )
 
         _ensure_password_reset_otps_table_web()
-        user = User.query.filter_by(email=email).first()
-        if not user:
-            return render_template('forgot_password.html',
-                                   error='No account found with this email.',
-                                   form_data={'email': email})
-        if user.status != 'active':
-            return render_template('forgot_password.html',
-                                   error='This account is not active. Please contact support.',
-                                   form_data={'email': email})
-
         plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
         record = PasswordResetOTP.query.filter_by(email=email).first()
         if record:
             allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
             if not allowed:
                 session['pending_reset_email'] = email
+                session['pending_reset_channel'] = channel
+                session['pending_reset_dest'] = mask_phone(phone) if channel == 'sms' else mask_email(email)
                 return redirect(url_for('templates.forgot_password_verify', cooldown=retry_after))
             record.otp_hash = otp_hash
+            record.otp_channel = channel
             record.expires_at = expires_at
             record.last_sent_at = datetime.utcnow()
             record.attempts = 0
@@ -1650,44 +1754,56 @@ def forgot_password():
             record = PasswordResetOTP(
                 email=email,
                 otp_hash=otp_hash,
+                otp_channel=channel,
                 expires_at=expires_at,
                 last_sent_at=datetime.utcnow(),
             )
             db.session.add(record)
         db.session.commit()
 
-        sent = send_password_reset_otp_email(
-            recipient_email=email,
+        ok, fail, meta = deliver_otp(
+            channel,
             otp_code=plain_code,
-            full_name=user.full_name,
+            email=email,
+            phone=phone,
+            email_sender_fn=send_password_reset_otp_email,
+            email_sender_kwargs={'full_name': user.full_name, 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
             expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+            sms_purpose='password reset',
         )
-        if not sent:
-            return render_template('forgot_password.html',
-                                   error=EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-                                   form_data={'email': email})
+        if not ok:
+            return render_template(
+                'forgot_password.html',
+                error=(fail or {}).get('error') or 'Failed to send verification code.',
+                error_code=(fail or {}).get('error_code'),
+                form_data={'identifier': identifier},
+            )
 
         session['pending_reset_email'] = email
+        session['pending_reset_channel'] = channel
+        session['pending_reset_dest'] = meta.get('destination_masked')
         return redirect(url_for('templates.forgot_password_verify'))
 
     return render_template(
         'forgot_password.html',
-        form_data={'email': prefill} if prefill else None,
+        form_data={'identifier': prefill} if prefill else None,
     )
 
 
 @templates_bp.route('/forgot-password/verify', methods=['GET', 'POST'])
 def forgot_password_verify():
-    """Step 2 — enter the 6-digit Gmail OTP."""
+    """Step 2 — enter the 6-digit OTP (email or SMS)."""
     if session.get('user_id'):
         return redirect(url_for('templates.index'))
 
     email = session.get('pending_reset_email')
     if not email:
-        flash('Please enter your email to reset your password.', 'warning')
+        flash('Please enter your email or phone to reset your password.', 'warning')
         return redirect(url_for('templates.forgot_password'))
 
     cooldown = request.args.get('cooldown', type=int) or 60
+    channel = session.get('pending_reset_channel') or 'email'
+    dest = session.get('pending_reset_dest') or email
 
     if request.method == 'POST':
         from app.utils.otp_service import MAX_VERIFY_ATTEMPTS, attempts_remaining, verify_otp
@@ -1698,6 +1814,7 @@ def forgot_password_verify():
         if not record:
             return render_template('forgot_password_verify.html',
                                    email=email, cooldown=0,
+                                   otp_channel=channel, destination_masked=dest,
                                    error='No reset request found. Please start again.')
 
         if record.is_verified:
@@ -1707,11 +1824,13 @@ def forgot_password_verify():
         if record.is_expired():
             return render_template('forgot_password_verify.html',
                                    email=email, cooldown=0,
+                                   otp_channel=channel, destination_masked=dest,
                                    error='OTP has expired. Please request a new code.')
 
         if (record.attempts or 0) >= MAX_VERIFY_ATTEMPTS:
             return render_template('forgot_password_verify.html',
                                    email=email, cooldown=0,
+                                   otp_channel=channel, destination_masked=dest,
                                    error='Too many incorrect attempts. Please request a new code.')
 
         if not verify_otp(otp_code, record.otp_hash):
@@ -1721,6 +1840,7 @@ def forgot_password_verify():
             return render_template(
                 'forgot_password_verify.html',
                 email=email, cooldown=0,
+                otp_channel=channel, destination_masked=dest,
                 error=f'Invalid code. {remaining} attempt{"s" if remaining != 1 else ""} left.',
             )
 
@@ -1730,7 +1850,13 @@ def forgot_password_verify():
         session['reset_verified_email'] = email
         return redirect(url_for('templates.forgot_password_reset'))
 
-    return render_template('forgot_password_verify.html', email=email, cooldown=cooldown)
+    return render_template(
+        'forgot_password_verify.html',
+        email=email,
+        cooldown=cooldown,
+        otp_channel=channel,
+        destination_masked=dest,
+    )
 
 
 @templates_bp.route('/forgot-password/resend-otp', methods=['POST'])
@@ -1740,11 +1866,9 @@ def forgot_password_resend_otp_web():
         DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
         can_resend, new_otp_pair,
     )
-    from app.utils.email_helper import (
-        send_password_reset_otp_email,
-        EMAIL_SERVICE_UNAVAILABLE_CODE,
-        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-    )
+    from app.utils.email_helper import send_password_reset_otp_email
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.phone_utils import normalize_ph_mobile
 
     email = session.get('pending_reset_email')
     if not email:
@@ -1764,8 +1888,20 @@ def forgot_password_resend_otp_web():
             'retry_after_seconds': retry_after,
         }), 429
 
+    channel = normalize_otp_channel(
+        getattr(record, 'otp_channel', None) or session.get('pending_reset_channel'),
+        default='email',
+    ) or 'email'
+    phone = normalize_ph_mobile(user.phone)
+    if channel == 'sms' and not phone:
+        return jsonify({
+            'success': False,
+            'error': 'This account has no mobile number on file for SMS reset.',
+        }), 400
+
     plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
     record.otp_hash = otp_hash
+    record.otp_channel = channel
     record.expires_at = expires_at
     record.last_sent_at = datetime.utcnow()
     record.attempts = 0
@@ -1773,22 +1909,26 @@ def forgot_password_resend_otp_web():
     record.verified_at = None
     db.session.commit()
 
-    sent = send_password_reset_otp_email(
-        recipient_email=email,
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=plain_code,
-        full_name=user.full_name,
+        email=email,
+        phone=phone,
+        email_sender_fn=send_password_reset_otp_email,
+        email_sender_kwargs={'full_name': user.full_name, 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
         expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        sms_purpose='password reset',
     )
-    if not sent:
-        return jsonify({
-            'success': False,
-            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
-        }), 503
+    if not ok:
+        return jsonify(fail), 503
 
+    session['pending_reset_channel'] = channel
+    session['pending_reset_dest'] = meta.get('destination_masked')
     return jsonify({
         'success': True,
-        'message': f'A new code has been sent to {email}.',
+        'message': f'A new verification code has been sent to {meta.get("destination_masked")}.',
+        'otp_channel': channel,
+        'destination_masked': meta.get('destination_masked'),
         'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
     }), 200
 
@@ -1860,19 +2000,17 @@ def register():
                 DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
                 can_resend, new_otp_pair,
             )
-            from app.utils.email_helper import (
-                send_customer_otp_email,
-                EMAIL_SERVICE_UNAVAILABLE_CODE,
-                EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-            )
+            from app.utils.email_helper import send_customer_otp_email
+            from app.utils.otp_delivery import deliver_otp
+            from app.utils.phone_utils import mask_email, mask_phone
 
             full_name        = (request.form.get('full_name')        or '').strip()
-            email            = (request.form.get('email')            or '').strip().lower()
+            identifier       = (request.form.get('identifier') or request.form.get('email') or '').strip()
             password         = (request.form.get('password')         or '')
             confirm_password = (request.form.get('confirm_password') or '')
 
             # ── Validation ────────────────────────────────────────────────
-            if not all([full_name, email, password, confirm_password]):
+            if not all([full_name, identifier, password, confirm_password]):
                 return render_template('register.html',
                                        error='All fields are required',
                                        form_data=request.form)
@@ -1888,25 +2026,68 @@ def register():
                                        error=pw_error,
                                        form_data=request.form)
 
+            from app.utils.phone_utils import (
+                is_synthetic_account_email,
+                is_valid_ph_mobile,
+                normalize_ph_mobile,
+                phone_to_account_email,
+                display_login_id,
+            )
+
+            email = None
+            phone = None
+            channel = 'email'
+            if '@' in identifier:
+                email = identifier.lower()
+                if is_synthetic_account_email(email) or '@' not in email or '.' not in email.split('@')[-1]:
+                    return render_template(
+                        'register.html',
+                        error='Enter a valid email address or Philippine mobile number.',
+                        form_data=request.form,
+                    )
+                channel = 'email'
+            elif is_valid_ph_mobile(identifier):
+                phone = normalize_ph_mobile(identifier)
+                email = phone_to_account_email(phone)
+                channel = 'sms'
+            else:
+                return render_template(
+                    'register.html',
+                    error='Enter a valid email address or Philippine mobile number (e.g. 09171234567).',
+                    form_data=request.form,
+                )
+
             if User.query.filter_by(email=email).first():
-                return render_template('register.html',
-                                       error='This email is already registered. Please sign in instead.',
-                                       form_data=request.form)
+                kind = 'phone number' if channel == 'sms' else 'email'
+                return render_template(
+                    'register.html',
+                    error=f'This {kind} is already registered. Please sign in instead.',
+                    form_data=request.form,
+                )
+
+            if phone and _phone_taken_web(phone, exclude_email=email):
+                return render_template(
+                    'register.html',
+                    error='This phone number is already registered to another account.',
+                    form_data=request.form,
+                )
 
             # ── Generate / refresh OTP ────────────────────────────────────
             plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
             pending_data = {
                 'full_name':     full_name,
                 'password_hash': generate_password_hash(password),
-                'phone':         None,
+                'phone':         phone,
+                'otp_channel':   channel,
             }
 
             record = CustomerOTP.query.filter_by(email=email).first()
             if record:
                 allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
                 if not allowed:
-                    # Still within cooldown — redirect to verify page as-is
                     session['pending_reg_email'] = email
+                    session['pending_reg_channel'] = channel
+                    session['pending_reg_dest'] = mask_phone(phone) if channel == 'sms' else mask_email(email)
                     return redirect(url_for('templates.register_verify',
                                            cooldown=retry_after))
                 record.otp_hash      = otp_hash
@@ -1928,30 +2109,46 @@ def register():
 
             db.session.commit()
 
-            # ── Send the email ────────────────────────────────────────────
-            sent = send_customer_otp_email(
-                recipient_email = email,
-                otp_code        = plain_code,
-                full_name       = full_name,
-                expiry_minutes  = DEFAULT_EXPIRY_MINUTES,
+            ok, fail, meta = deliver_otp(
+                channel,
+                otp_code=plain_code,
+                email=email,
+                phone=phone,
+                email_sender_fn=send_customer_otp_email,
+                email_sender_kwargs={'full_name': full_name, 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
+                expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+                sms_purpose='verification',
             )
-            if not sent:
+            if not ok:
                 return render_template(
                     'register.html',
-                    error=EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-                    error_code=EMAIL_SERVICE_UNAVAILABLE_CODE,
+                    error=(fail or {}).get('error') or 'Failed to send verification code.',
+                    error_code=(fail or {}).get('error_code'),
                     form_data=request.form,
                 )
 
-            # ── Store email in session and redirect ───────────────────────
             session['pending_reg_email'] = email
+            session['pending_reg_channel'] = channel
+            session['pending_reg_dest'] = meta.get('destination_masked')
+            session['pending_reg_login_id'] = display_login_id(email=email, phone=phone)
             return redirect(url_for('templates.register_verify'))
 
         except Exception as e:
-            db.session.rollback()
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
             current_app.logger.error(f"Registration error: {e}")
+            # Stale DB sockets are common on Railway; ask user to retry once.
+            err_text = str(e).lower()
+            if 'server closed the connection' in err_text or 'operationalerror' in err_text:
+                return render_template(
+                    'register.html',
+                    error='Connection to the database was interrupted. Please try again.',
+                    form_data=request.form,
+                )
             return render_template('register.html',
-                                   error=f'Registration failed. Please try again.',
+                                   error='Registration failed. Please try again.',
                                    form_data=request.form)
 
     return render_template('register.html')
@@ -1971,18 +2168,25 @@ def register_verify():
     if not email:
         return redirect(url_for('templates.register'))
 
+    channel = session.get('pending_reg_channel') or 'email'
+    dest = session.get('pending_reg_dest') or email
+
     # GET — just render the form
     if request.method == 'GET':
         cooldown = request.args.get('cooldown', 0, type=int)
         return render_template('register_verify.html',
                                email=email,
-                               cooldown=cooldown)
+                               cooldown=cooldown,
+                               otp_channel=channel,
+                               destination_masked=dest)
 
     # POST — verify OTP and create account
     otp_code = (request.form.get('otp_code') or '').strip()
     if not otp_code or len(otp_code) != 6 or not otp_code.isdigit():
         return render_template('register_verify.html',
                                email=email,
+                               otp_channel=channel,
+                               destination_masked=dest,
                                error='Please enter the 6-digit code.')
 
     record = CustomerOTP.query.filter_by(email=email).first()
@@ -1997,12 +2201,16 @@ def register_verify():
     if record.is_expired():
         return render_template('register_verify.html',
                                email=email,
+                               otp_channel=channel,
+                               destination_masked=dest,
                                error='Your code has expired. Please request a new one.',
                                expired=True)
 
     if (record.attempts or 0) >= MAX_VERIFY_ATTEMPTS:
         return render_template('register_verify.html',
                                email=email,
+                               otp_channel=channel,
+                               destination_masked=dest,
                                error='Too many incorrect attempts. Please request a new code.',
                                locked=True)
 
@@ -2012,6 +2220,8 @@ def register_verify():
         left = attempts_remaining(record.attempts, MAX_VERIFY_ATTEMPTS)
         return render_template('register_verify.html',
                                email=email,
+                               otp_channel=channel,
+                               destination_masked=dest,
                                error=f'Invalid code. {left} attempt{"s" if left != 1 else ""} remaining.')
 
     # OTP correct — mark verified, create the user
@@ -2023,11 +2233,16 @@ def register_verify():
 
 def _finalise_customer_registration(record, email):
     """Create the User row from the pending OTP data and send user to login."""
+    from app.utils.phone_utils import display_login_id
+
     # Guard against duplicate registration (race condition or replay)
     if User.query.filter_by(email=email).first():
         db.session.delete(record)
         db.session.commit()
         session.pop('pending_reg_email', None)
+        session.pop('pending_reg_channel', None)
+        session.pop('pending_reg_dest', None)
+        session.pop('pending_reg_login_id', None)
         return redirect(url_for('templates.login'))
 
     pending = record.customer_data or {}
@@ -2043,10 +2258,15 @@ def _finalise_customer_registration(record, email):
     db.session.delete(record)  # single-use: consume the OTP row
     db.session.commit()
 
+    login_id = session.pop('pending_reg_login_id', None) or display_login_id(
+        email=user.email, phone=user.phone,
+    )
     session.pop('pending_reg_email', None)
+    session.pop('pending_reg_channel', None)
+    session.pop('pending_reg_dest', None)
     # One-time UX flag: prompt address modal right after first login.
     session['prompt_address_after_login'] = True
-    return redirect(url_for('templates.login', verified='1', email=user.email, prompt_address='1'))
+    return redirect(url_for('templates.login', verified='1', email=login_id, prompt_address='1'))
 
 
 @templates_bp.route('/register/resend-otp', methods=['POST'])
@@ -2059,11 +2279,8 @@ def register_resend_otp():
         DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS,
         can_resend, new_otp_pair,
     )
-    from app.utils.email_helper import (
-        send_customer_otp_email,
-        EMAIL_SERVICE_UNAVAILABLE_CODE,
-        EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-    )
+    from app.utils.email_helper import send_customer_otp_email
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
 
     email = session.get('pending_reg_email')
     if not email:
@@ -2081,6 +2298,13 @@ def register_resend_otp():
             'retry_after_seconds': retry_after,
         }), 429
 
+    pending = record.customer_data or {}
+    channel = normalize_otp_channel(
+        pending.get('otp_channel') or session.get('pending_reg_channel'),
+        default='email',
+    ) or 'email'
+    phone = pending.get('phone')
+
     plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
     record.otp_hash   = otp_hash
     record.expires_at = expires_at
@@ -2088,23 +2312,26 @@ def register_resend_otp():
     record.attempts   = 0
     db.session.commit()
 
-    pending = record.customer_data or {}
-    sent = send_customer_otp_email(
-        recipient_email = email,
-        otp_code        = plain_code,
-        full_name       = pending.get('full_name'),
-        expiry_minutes  = DEFAULT_EXPIRY_MINUTES,
+    ok, fail, meta = deliver_otp(
+        channel,
+        otp_code=plain_code,
+        email=email,
+        phone=phone,
+        email_sender_fn=send_customer_otp_email,
+        email_sender_kwargs={'full_name': pending.get('full_name'), 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
+        expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        sms_purpose='verification',
     )
-    if not sent:
-        return jsonify({
-            'success': False,
-            'error': EMAIL_SERVICE_UNAVAILABLE_MESSAGE,
-            'error_code': EMAIL_SERVICE_UNAVAILABLE_CODE,
-        }), 503
+    if not ok:
+        return jsonify(fail), 503
 
+    session['pending_reg_channel'] = channel
+    session['pending_reg_dest'] = meta.get('destination_masked')
     return jsonify({
         'success': True,
-        'message': f'A new code has been sent to {email}.',
+        'message': f'A new code has been sent to {meta.get("destination_masked")}.',
+        'otp_channel': channel,
+        'destination_masked': meta.get('destination_masked'),
         'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
     }), 200
 
@@ -2239,10 +2466,13 @@ def seller_signup_start():
             new_otp_pair,
         )
         from app.utils.email_helper import send_seller_signup_otp_email
+        from app.utils.otp_delivery import deliver_otp
+        from app.utils.phone_utils import is_valid_ph_mobile, mask_email, mask_phone
 
         full_name = (request.form.get('full_name') or '').strip()
         email = (request.form.get('email') or '').strip().lower()
-        phone = _normalize_ph_mobile(request.form.get('phone'))
+        phone_raw = (request.form.get('phone') or '').strip()
+        phone = _normalize_ph_mobile(phone_raw) if phone_raw else None
         password = request.form.get('password') or ''
         confirm_password = request.form.get('confirm_password') or ''
 
@@ -2265,6 +2495,23 @@ def seller_signup_start():
             return render_template(
                 'seller_signup_landing.html',
                 error=pw_error,
+                form_data=request.form,
+            )
+
+        if phone_raw and (not phone or not is_valid_ph_mobile(phone_raw)):
+            return render_template(
+                'seller_signup_landing.html',
+                error='Please enter a valid Philippine mobile number (e.g., 09171234567).',
+                form_data=request.form,
+            )
+
+        # Smart channel: phone present → SMS, else email
+        channel = 'sms' if phone else 'email'
+
+        if phone and _phone_taken_web(phone, exclude_email=email):
+            return render_template(
+                'seller_signup_landing.html',
+                error='This phone number is already registered to another account.',
                 form_data=request.form,
             )
 
@@ -2291,6 +2538,7 @@ def seller_signup_start():
             'full_name': full_name,
             'password_hash': generate_password_hash(password),
             'phone': phone,
+            'otp_channel': channel,
         }
 
         record = SellerSignupOTP.query.filter_by(email=email).first()
@@ -2298,6 +2546,8 @@ def seller_signup_start():
             allowed, retry_after = can_resend(record.last_sent_at, RESEND_COOLDOWN_SECONDS)
             if not allowed:
                 session['pending_seller_reg_email'] = email
+                session['pending_seller_reg_channel'] = channel
+                session['pending_seller_reg_dest'] = mask_phone(phone) if channel == 'sms' else mask_email(email)
                 return redirect(
                     url_for('templates.seller_signup_verify', cooldown=retry_after)
                 )
@@ -2320,21 +2570,28 @@ def seller_signup_start():
 
         db.session.commit()
 
-        sent = send_seller_signup_otp_email(
-            recipient_email=email,
+        ok, fail, meta = deliver_otp(
+            channel,
             otp_code=plain_code,
-            full_name=full_name,
+            email=email,
+            phone=phone,
+            email_sender_fn=send_seller_signup_otp_email,
+            email_sender_kwargs={'full_name': full_name, 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
             expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+            sms_purpose='verification',
         )
-        if not sent:
+        if not ok:
             db.session.rollback()
             return render_template(
                 'seller_signup_landing.html',
-                error='Failed to send verification email. Please try again.',
+                error=(fail or {}).get('error') or 'Failed to send verification code.',
+                error_code=(fail or {}).get('error_code'),
                 form_data=request.form,
             )
 
         session['pending_seller_reg_email'] = email
+        session['pending_seller_reg_channel'] = channel
+        session['pending_seller_reg_dest'] = meta.get('destination_masked')
         return redirect(url_for('templates.seller_signup_verify'))
 
     except Exception as e:
@@ -2355,12 +2612,17 @@ def seller_signup_verify():
     if not email:
         return redirect(url_for('templates.seller_signup_landing'))
 
+    channel = session.get('pending_seller_reg_channel') or 'email'
+    dest = session.get('pending_seller_reg_dest') or email
+
     if request.method == 'GET':
         cooldown = request.args.get('cooldown', 0, type=int)
         return render_template(
             'seller_signup_verify.html',
             email=email,
             cooldown=cooldown,
+            otp_channel=channel,
+            destination_masked=dest,
         )
 
     otp_code = (request.form.get('otp_code') or '').strip()
@@ -2368,6 +2630,8 @@ def seller_signup_verify():
         return render_template(
             'seller_signup_verify.html',
             email=email,
+            otp_channel=channel,
+            destination_masked=dest,
             error='Please enter the 6-digit code.',
         )
 
@@ -2383,6 +2647,8 @@ def seller_signup_verify():
         return render_template(
             'seller_signup_verify.html',
             email=email,
+            otp_channel=channel,
+            destination_masked=dest,
             error='Your code has expired. Please request a new one.',
             expired=True,
         )
@@ -2391,6 +2657,8 @@ def seller_signup_verify():
         return render_template(
             'seller_signup_verify.html',
             email=email,
+            otp_channel=channel,
+            destination_masked=dest,
             error='Too many incorrect attempts. Please request a new code.',
             locked=True,
         )
@@ -2402,6 +2670,8 @@ def seller_signup_verify():
         return render_template(
             'seller_signup_verify.html',
             email=email,
+            otp_channel=channel,
+            destination_masked=dest,
             error=f'Invalid code. {left} attempt{"s" if left != 1 else ""} remaining.',
         )
 
@@ -2420,6 +2690,7 @@ def seller_signup_resend_otp():
         new_otp_pair,
     )
     from app.utils.email_helper import send_seller_signup_otp_email
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
 
     email = session.get('pending_seller_reg_email')
     if not email:
@@ -2439,6 +2710,13 @@ def seller_signup_resend_otp():
             }
         ), 429
 
+    pending = record.signup_data or {}
+    channel = normalize_otp_channel(
+        pending.get('otp_channel') or session.get('pending_seller_reg_channel'),
+        default='email',
+    ) or 'email'
+    phone = pending.get('phone')
+
     plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
     record.otp_hash = otp_hash
     record.expires_at = expires_at
@@ -2446,20 +2724,27 @@ def seller_signup_resend_otp():
     record.attempts = 0
     db.session.commit()
 
-    pending = record.signup_data or {}
-    sent = send_seller_signup_otp_email(
-        recipient_email=email,
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=plain_code,
-        full_name=pending.get('full_name'),
+        email=email,
+        phone=phone,
+        email_sender_fn=send_seller_signup_otp_email,
+        email_sender_kwargs={'full_name': pending.get('full_name'), 'expiry_minutes': DEFAULT_EXPIRY_MINUTES},
         expiry_minutes=DEFAULT_EXPIRY_MINUTES,
+        sms_purpose='verification',
     )
-    if not sent:
-        return jsonify({'success': False, 'error': 'Failed to resend email.'}), 500
+    if not ok:
+        return jsonify(fail), 503
 
+    session['pending_seller_reg_channel'] = channel
+    session['pending_seller_reg_dest'] = meta.get('destination_masked')
     return jsonify(
         {
             'success': True,
-            'message': f'A new code has been sent to {email}.',
+            'message': f'A new code has been sent to {meta.get("destination_masked")}.',
+            'otp_channel': channel,
+            'destination_masked': meta.get('destination_masked'),
             'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
         }
     ), 200
@@ -6318,12 +6603,16 @@ def seller_invite_rider_api():
     phone = _normalize_ph_mobile(data.get('phone'))
     vehicle_type = data.get('vehicle_type', '')
     license_plate = (data.get('license_plate') or '').strip()
+    from app.utils.otp_delivery import deliver_otp
 
     if not email or not full_name:
         return jsonify({'error': 'Email and full name are required'}), 400
 
-    if phone and not PH_MOBILE_REGEX.fullmatch(phone):
+    if data.get('phone') and (not phone or not PH_MOBILE_REGEX.fullmatch(phone)):
         return jsonify({'error': 'Please enter a valid Philippine mobile number (e.g., 09171234567 or +639171234567).'}), 400
+
+    # Smart channel: phone present → SMS, else email
+    channel = 'sms' if phone else 'email'
 
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
@@ -6347,7 +6636,8 @@ def seller_invite_rider_api():
             'full_name': full_name,
             'phone': phone,
             'vehicle_type': vehicle_type,
-            'license_plate': license_plate
+            'license_plate': license_plate,
+            'otp_channel': channel,
         },
         store_id=store.id,
         created_by=user_id,
@@ -6356,20 +6646,29 @@ def seller_invite_rider_api():
     db.session.add(rider_otp)
     db.session.commit()
 
-    email_sent = send_rider_otp_email(
-        recipient_email=email,
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=otp_code,
-        store_name=store.name,
-        seller_name=user.full_name
+        email=email,
+        phone=phone,
+        email_sender_fn=send_rider_otp_email,
+        email_sender_kwargs={
+            'store_name': store.name,
+            'seller_name': user.full_name,
+        },
+        expiry_minutes=10,
+        sms_purpose='rider verification',
     )
+    if not ok:
+        return jsonify({'error': (fail or {}).get('error') or 'Failed to send OTP.'}), 500
 
-    if not email_sent:
-        return jsonify({'error': 'Failed to send OTP email.'}), 500
-
+    dest = meta.get('destination_masked') or email
     return jsonify({
         'success': True,
-        'message': f'OTP sent to {email}. Ask the rider for the 6-digit code.',
-        'otp_id': rider_otp.id
+        'message': f'OTP sent to {dest}. Ask the rider for the 6-digit code.',
+        'otp_id': rider_otp.id,
+        'otp_channel': channel,
+        'destination_masked': dest,
     }), 201
 
 
@@ -6394,22 +6693,38 @@ def seller_resend_rider_invitation_api():
         return jsonify({'error': 'Invitation not found'}), 404
 
     from app.utils.email_helper import generate_otp_code, send_rider_otp_email
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
     new_otp = generate_otp_code()
     rider_otp.verification_token = new_otp
     rider_otp.expires_at = datetime.utcnow() + timedelta(minutes=10)
     db.session.commit()
 
-    email_sent = send_rider_otp_email(
-        recipient_email=rider_otp.email,
+    pending = rider_otp.rider_data or {}
+    channel = normalize_otp_channel(pending.get('otp_channel'), default='email') or 'email'
+    phone = pending.get('phone')
+    ok, fail, meta = deliver_otp(
+        channel,
         otp_code=new_otp,
-        store_name=store.name,
-        seller_name=user.full_name
+        email=rider_otp.email,
+        phone=phone,
+        email_sender_fn=send_rider_otp_email,
+        email_sender_kwargs={
+            'store_name': store.name,
+            'seller_name': user.full_name,
+        },
+        expiry_minutes=10,
+        sms_purpose='rider verification',
     )
+    if not ok:
+        return jsonify({'error': (fail or {}).get('error') or 'Failed to resend OTP'}), 500
 
-    if not email_sent:
-        return jsonify({'error': 'Failed to resend OTP email'}), 500
-
-    return jsonify({'success': True, 'message': f'New OTP sent to {rider_otp.email}'}), 200
+    dest = meta.get('destination_masked') or rider_otp.email
+    return jsonify({
+        'success': True,
+        'message': f'New OTP sent to {dest}',
+        'otp_channel': channel,
+        'destination_masked': dest,
+    }), 200
 
 
 @templates_bp.route('/api/seller/riders/verify-otp', methods=['POST'])

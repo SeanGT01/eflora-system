@@ -360,7 +360,7 @@
             };
             if (typeof window.addToCart === 'function') {
                 await window.addToCart(product);
-                showToast(productName + ' added to basket');
+                // Success/error UI is handled inside addToCart / showCartActionError
             } else {
                 const response = await fetch('/api/cart/items', {
                     method: 'POST',
@@ -372,6 +372,8 @@
                     showToast(productName + ' added to basket');
                     if (typeof window.updateCartCount === 'function') window.updateCartCount();
                     if (typeof window.loadCart === 'function') window.loadCart();
+                } else if (typeof showCartActionError === 'function') {
+                    showCartActionError(data.error || 'Could not add to cart');
                 } else {
                     showToast(data.error || 'Could not add to cart');
                 }
