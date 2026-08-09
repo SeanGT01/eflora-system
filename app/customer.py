@@ -168,19 +168,52 @@ def get_products():
     if store_id:
         q = q.filter(Product.store_id == store_id)
     if search:
-        from sqlalchemy import or_
+        from sqlalchemy import or_, func
         from app.models import Category, StoreCategory
-        term = f'%{search.strip()}%'
+        import re
+        raw = (search or '').strip()
+        # Normalize spaces/hyphens so "fresh flower(s)" matches "Fresh Flowers"
+        # and slug "fresh-flowers".
+        compact = re.sub(r'[\s\-]+', '', raw.lower())
+        spaced = re.sub(r'[\s\-]+', ' ', raw.lower()).strip()
+        hyphen = spaced.replace(' ', '-')
+        variants = {v for v in (raw, spaced, hyphen) if v}
+
+        name_norm = func.replace(func.lower(Product.name), '-', '')
+        name_norm = func.replace(name_norm, ' ', '')
+        cat_name_norm = func.replace(func.lower(Category.name), '-', '')
+        cat_name_norm = func.replace(cat_name_norm, ' ', '')
+        cat_slug_norm = func.replace(func.lower(Category.slug), '-', '')
+        cat_slug_norm = func.replace(cat_slug_norm, ' ', '')
+        sc_name_norm = func.replace(func.lower(StoreCategory.name), '-', '')
+        sc_name_norm = func.replace(sc_name_norm, ' ', '')
+        sc_slug_norm = func.replace(func.lower(StoreCategory.slug), '-', '')
+        sc_slug_norm = func.replace(sc_slug_norm, ' ', '')
+
+        clauses = []
+        for v in variants:
+            term = f'%{v}%'
+            clauses.extend([
+                Product.name.ilike(term),
+                Category.name.ilike(term),
+                Category.slug.ilike(term),
+                StoreCategory.name.ilike(term),
+                StoreCategory.slug.ilike(term),
+            ])
+        if compact:
+            cterm = f'%{compact}%'
+            clauses.extend([
+                name_norm.ilike(cterm),
+                cat_name_norm.ilike(cterm),
+                cat_slug_norm.ilike(cterm),
+                sc_name_norm.ilike(cterm),
+                sc_slug_norm.ilike(cterm),
+            ])
+
         q = (
             q.outerjoin(Category, Product.main_category_id == Category.id)
              .outerjoin(StoreCategory, Product.store_category_id == StoreCategory.id)
-             .filter(or_(
-                 Product.name.ilike(term),
-                 Category.name.ilike(term),
-                 Category.slug.ilike(term),
-                 StoreCategory.name.ilike(term),
-                 StoreCategory.slug.ilike(term),
-             ))
+             .filter(or_(*clauses))
         )
 
     # Over-fetch when location-filtering so a page still has enough cards
