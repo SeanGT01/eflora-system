@@ -667,7 +667,7 @@ def forgot_password_send_otp():
     from app.utils.otp_service import DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS
     from app.utils.email_helper import send_password_reset_otp_email
     from app.utils.otp_delivery import deliver_otp
-    from app.utils.phone_utils import normalize_ph_mobile
+    from app.utils.phone_utils import normalize_ph_mobile, display_login_id
 
     data = request.get_json(silent=True) or {}
     parsed, err = _parse_forgot_identifier(data)
@@ -714,6 +714,7 @@ def forgot_password_send_otp():
         'success': True,
         'message': f'A 6-digit verification code has been sent to {dest}.',
         'email': email,
+        'login_id': display_login_id(email=email, phone=phone or user.phone),
         'otp_channel': channel,
         'destination_masked': dest,
         'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
@@ -1166,7 +1167,7 @@ def debug_token_check():
 @auth_bp.route('/profile/update', methods=['POST'])
 @jwt_required()
 def update_profile():
-    """Update name and phone for the logged-in user (JWT auth)."""
+    """Update profile fields for the logged-in user (JWT auth). Login identity is not editable."""
     try:
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
@@ -1174,16 +1175,20 @@ def update_profile():
             return jsonify({'error': 'User not found'}), 404
 
         data = request.get_json(silent=True) or {}
-        first_name = data.get('first_name', '').strip()
-        last_name  = data.get('last_name', '').strip()
-        phone      = data.get('phone', '').strip()
+        first_name = (data.get('first_name') or '').strip()
+        last_name  = (data.get('last_name') or '').strip()
+        birthday   = (data.get('birthday') or '').strip()
+        gender     = (data.get('gender') or '').strip()
 
         if first_name or last_name:
             user.full_name = f"{first_name} {last_name}".strip()
-        if phone:
-            user.phone = phone
-        elif 'phone' in data:
-            user.phone = None  # allow clearing phone
+        if birthday:
+            try:
+                user.birthday = datetime.strptime(birthday, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'Invalid birthday format. Use YYYY-MM-DD.'}), 400
+        if gender:
+            user.gender = gender
 
         user.updated_at = datetime.utcnow()
         db.session.commit()

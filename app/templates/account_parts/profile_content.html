@@ -1387,7 +1387,7 @@
         </div>
         <div class="avatar-info">
             <div class="avatar-name">{{ user.full_name if user else 'Your Name' }}</div>
-            <div class="avatar-meta">{{ user.email if user else '' }}</div>
+            <div class="avatar-meta">{{ user.login_id or user.email if user else '' }}</div>
             <div class="avatar-actions">
                 <input type="file" id="avatarInput" name="avatar" accept="image/*" style="display:none;">
                 <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('avatarInput').click()">
@@ -1424,21 +1424,10 @@
                 </div>
 
                 <div class="form-group form-group-full">
-                    <label class="form-label">Email Address</label>
-                    <input type="email" class="form-control" name="email" id="profileEmail"
-                           value="{{ user.email if user else '' }}" readonly>
-                    <div class="form-hint">Email address cannot be changed</div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Phone Number</label>
-                    <input type="tel" class="form-control" name="phone"
-                           value="{{ user.phone if user else '' }}"
-                           placeholder="09xxxxxxxxx"
-                           inputmode="numeric"
-                           maxlength="11"
-                           pattern="09[0-9]{9}"
-                           oninput="this.value = this.value.replace(/\D/g, '').slice(0, 11);">
+                    <label class="form-label">Email or Mobile Number</label>
+                    <input type="text" class="form-control" name="email" id="profileEmail"
+                           value="{{ user.login_id or user.email if user else '' }}" readonly>
+                    <div class="form-hint">This is your login identity and cannot be changed</div>
                 </div>
 
                 <div class="form-group">
@@ -1826,6 +1815,65 @@
     document.head.appendChild(style);
 </script>
 
+<!-- ─── Post-registration: Gender → Birthday (required) ─── -->
+<div id="onboardingProfileModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:10050;align-items:center;justify-content:center;overflow-y:auto;padding:1rem;">
+    <div style="background:var(--warm-white);border-radius:var(--radius-xl);width:90%;max-width:440px;box-shadow:var(--shadow-petal);margin:auto;overflow:hidden;">
+        <div class="card-header" style="border-bottom:1px solid var(--border);">
+            <div class="card-header-left">
+                <div class="card-header-icon"><i class="ri-user-heart-line" id="onboardingModalIcon"></i></div>
+                <div>
+                    <div class="card-title" id="onboardingModalTitle">Complete your profile</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="onboardingModalStepLabel">Step 1 of 2</div>
+                </div>
+            </div>
+        </div>
+        <div class="card-body" style="padding:1.25rem 1.35rem 1.5rem;">
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 1.1rem;line-height:1.45;" id="onboardingModalHint">
+                Tell us your gender so we can personalize your experience.
+            </p>
+
+            <!-- Step 1: Gender -->
+            <div id="onboardingStepGender">
+                <div class="radio-group" style="flex-direction:column;align-items:stretch;gap:0.55rem;">
+                    <label class="radio-option" style="padding:0.75rem 0.9rem;border:1px solid var(--border);border-radius:var(--radius-md);">
+                        <input type="radio" name="onboarding_gender" value="male">
+                        <span class="radio-dot"></span>
+                        <span>Male</span>
+                    </label>
+                    <label class="radio-option" style="padding:0.75rem 0.9rem;border:1px solid var(--border);border-radius:var(--radius-md);">
+                        <input type="radio" name="onboarding_gender" value="female">
+                        <span class="radio-dot"></span>
+                        <span>Female</span>
+                    </label>
+                    <label class="radio-option" style="padding:0.75rem 0.9rem;border:1px solid var(--border);border-radius:var(--radius-md);">
+                        <input type="radio" name="onboarding_gender" value="other">
+                        <span class="radio-dot"></span>
+                        <span>Other</span>
+                    </label>
+                </div>
+                <div id="onboardingGenderOtherWrap" style="display:none;margin-top:0.85rem;">
+                    <label class="form-label" for="onboardingGenderOther">Please specify</label>
+                    <input type="text" id="onboardingGenderOther" class="form-control" placeholder="e.g., Non-binary" maxlength="40">
+                </div>
+                <p id="onboardingGenderError" style="display:none;color:var(--deep-rose);font-size:12.5px;margin:0.75rem 0 0;"></p>
+                <button type="button" class="btn btn-rose" style="width:100%;margin-top:1.25rem;" id="onboardingGenderNextBtn" onclick="submitOnboardingGender()">
+                    Continue <i class="ri-arrow-right-line"></i>
+                </button>
+            </div>
+
+            <!-- Step 2: Birthday -->
+            <div id="onboardingStepBirthday" style="display:none;">
+                <label class="form-label" for="onboardingBirthday">Date of birth <span style="color:var(--deep-rose)">*</span></label>
+                <input type="date" id="onboardingBirthday" class="form-control" required>
+                <p id="onboardingBirthdayError" style="display:none;color:var(--deep-rose);font-size:12.5px;margin:0.75rem 0 0;"></p>
+                <button type="button" class="btn btn-rose" style="width:100%;margin-top:1.25rem;" id="onboardingBirthdayNextBtn" onclick="submitOnboardingBirthday()">
+                    Continue <i class="ri-arrow-right-line"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ─── Add/Edit Address Modal ─── -->
 <div id="addressModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;overflow-y:auto;padding:1rem;">
     <div style="background:var(--warm-white);border-radius:var(--radius-xl);width:90%;max-width:700px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-petal);margin:auto;">
@@ -1834,7 +1882,7 @@
                 <div class="card-header-icon"><i class="ri-map-pin-add-line"></i></div>
                 <div class="card-title" id="addressModalTitle">Add Delivery Address</div>
             </div>
-            <button onclick="closeAddressModal()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;">
+            <button type="button" id="addressModalCloseBtn" onclick="closeAddressModal()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;">
                 <i class="ri-close-line"></i>
             </button>
         </div>
@@ -1950,7 +1998,7 @@
                 </div>
 
                 <div class="form-actions">
-                    <button type="button" class="btn btn-outline" onclick="closeAddressModal()">Cancel</button>
+                    <button type="button" class="btn btn-outline" id="addressModalCancelBtn" onclick="closeAddressModal()">Cancel</button>
                     <button type="submit" class="btn btn-rose" id="saveAddressBtn">
                         <i class="ri-save-line"></i> Save Address
                     </button>
@@ -2103,7 +2151,7 @@ function setupAvatarUpload() {
             
             const pf = document.getElementById('profileForm');
             if (pf) {
-                ['first_name','last_name','phone','birthday'].forEach(k => {
+                ['first_name','last_name','birthday'].forEach(k => {
                     const val = pf.querySelector(`[name="${k}"]`)?.value;
                     if (val) fd.append(k, val);
                 });
@@ -2437,6 +2485,13 @@ function getLagunaMapCenter() {
 let __lastValidPin = null;
 let __pinAtDragStart = null;
 let __initialAddressPrompt = false;
+let __onboardingAddressRequired = false;
+let __onboardingGenderValue = '';
+
+const __profileBoot = {
+    gender: {{ (user.gender if user else '')|tojson }},
+    birthday: {{ (user.birthday if user else '')|tojson }},
+};
 
 try {
     const __bootParams = new URLSearchParams(window.location.search);
@@ -2462,6 +2517,208 @@ function consumeAutoAddressPromptParam() {
     } catch (_) {
         // no-op
     }
+}
+
+function _hasGender(value) {
+    return !!(value && String(value).trim());
+}
+
+function _hasBirthday(value) {
+    return !!(value && String(value).trim());
+}
+
+function showOnboardingProfileModal(step) {
+    const modal = document.getElementById('onboardingProfileModal');
+    const genderStep = document.getElementById('onboardingStepGender');
+    const birthdayStep = document.getElementById('onboardingStepBirthday');
+    const title = document.getElementById('onboardingModalTitle');
+    const stepLabel = document.getElementById('onboardingModalStepLabel');
+    const hint = document.getElementById('onboardingModalHint');
+    const icon = document.getElementById('onboardingModalIcon');
+    if (!modal) return;
+
+    document.getElementById('onboardingGenderError').style.display = 'none';
+    document.getElementById('onboardingBirthdayError').style.display = 'none';
+
+    if (step === 'gender') {
+        genderStep.style.display = 'block';
+        birthdayStep.style.display = 'none';
+        title.textContent = 'What’s your gender?';
+        stepLabel.textContent = 'Step 1 of 2';
+        hint.textContent = 'This helps us personalize your experience. Required to continue.';
+        if (icon) icon.className = 'ri-user-heart-line';
+    } else {
+        genderStep.style.display = 'none';
+        birthdayStep.style.display = 'block';
+        title.textContent = 'When’s your birthday?';
+        stepLabel.textContent = 'Step 2 of 2';
+        hint.textContent = 'We’ll use this for age-appropriate offers. Required to continue.';
+        if (icon) icon.className = 'ri-cake-2-line';
+        const bday = document.getElementById('onboardingBirthday');
+        if (bday && !bday.max) {
+            const today = new Date();
+            bday.max = today.toISOString().slice(0, 10);
+            // Must be at least 13 years old
+            const min = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+            bday.min = min.toISOString().slice(0, 10);
+        }
+    }
+    modal.style.display = 'flex';
+}
+
+function closeOnboardingProfileModal() {
+    const modal = document.getElementById('onboardingProfileModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveOnboardingProfileFields(fields) {
+    const fd = new FormData();
+    Object.keys(fields).forEach((k) => {
+        if (fields[k] != null && fields[k] !== '') fd.append(k, fields[k]);
+    });
+    // Keep existing name so the update endpoint still has context if needed
+    const pf = document.getElementById('profileForm');
+    if (pf) {
+        const first = pf.querySelector('[name="first_name"]')?.value;
+        const last = pf.querySelector('[name="last_name"]')?.value;
+        if (first) fd.append('first_name', first);
+        if (last) fd.append('last_name', last);
+    }
+    const r = await fetch('/api/account/profile/update', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!d.success) {
+        throw new Error(d.error || 'Failed to save profile');
+    }
+    if (d.user && typeof syncProfileUI === 'function') {
+        syncProfileUI(d.user);
+    }
+    return d.user;
+}
+
+function startPostRegistrationOnboarding() {
+    consumeAutoAddressPromptParam();
+    __onboardingAddressRequired = true;
+
+    document.querySelectorAll('input[name="onboarding_gender"]').forEach((el) => {
+        el.addEventListener('change', function () {
+            const wrap = document.getElementById('onboardingGenderOtherWrap');
+            if (wrap) wrap.style.display = this.value === 'other' ? 'block' : 'none';
+            document.getElementById('onboardingGenderError').style.display = 'none';
+        });
+    });
+
+    if (!_hasGender(__profileBoot.gender)) {
+        showOnboardingProfileModal('gender');
+        return;
+    }
+    if (!_hasBirthday(__profileBoot.birthday)) {
+        showOnboardingProfileModal('birthday');
+        return;
+    }
+    openRequiredAddressModal();
+}
+
+async function submitOnboardingGender() {
+    const selected = document.querySelector('input[name="onboarding_gender"]:checked');
+    const err = document.getElementById('onboardingGenderError');
+    err.style.display = 'none';
+
+    if (!selected) {
+        err.textContent = 'Please select your gender to continue.';
+        err.style.display = 'block';
+        return;
+    }
+
+    let gender = selected.value;
+    if (gender === 'other') {
+        const other = (document.getElementById('onboardingGenderOther')?.value || '').trim();
+        if (!other) {
+            err.textContent = 'Please specify your gender.';
+            err.style.display = 'block';
+            return;
+        }
+        gender = other;
+    }
+
+    const btn = document.getElementById('onboardingGenderNextBtn');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ri-loader-4-line"></i> Saving…';
+    try {
+        await saveOnboardingProfileFields({ gender });
+        __onboardingGenderValue = gender;
+        __profileBoot.gender = gender;
+        showOnboardingProfileModal('birthday');
+    } catch (e) {
+        err.textContent = e.message || 'Could not save. Please try again.';
+        err.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function submitOnboardingBirthday() {
+    const input = document.getElementById('onboardingBirthday');
+    const err = document.getElementById('onboardingBirthdayError');
+    err.style.display = 'none';
+    const value = (input?.value || '').trim();
+
+    if (!value) {
+        err.textContent = 'Please enter your birthday to continue.';
+        err.style.display = 'block';
+        return;
+    }
+
+    const picked = new Date(value + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (Number.isNaN(picked.getTime()) || picked > today) {
+        err.textContent = 'Please enter a valid birthday.';
+        err.style.display = 'block';
+        return;
+    }
+    const age = today.getFullYear() - picked.getFullYear()
+        - ((today.getMonth() < picked.getMonth() || (today.getMonth() === picked.getMonth() && today.getDate() < picked.getDate())) ? 1 : 0);
+    if (age < 13) {
+        err.textContent = 'You must be at least 13 years old.';
+        err.style.display = 'block';
+        return;
+    }
+
+    const btn = document.getElementById('onboardingBirthdayNextBtn');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ri-loader-4-line"></i> Saving…';
+    try {
+        await saveOnboardingProfileFields({ birthday: value });
+        __profileBoot.birthday = value;
+        closeOnboardingProfileModal();
+        openRequiredAddressModal();
+    } catch (e) {
+        err.textContent = e.message || 'Could not save. Please try again.';
+        err.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+function openRequiredAddressModal() {
+    showToast('Please verify and save your current/default delivery address.', 'info');
+    showAddAddressModal(true);
+    const closeBtn = document.getElementById('addressModalCloseBtn');
+    const cancelBtn = document.getElementById('addressModalCancelBtn');
+    if (closeBtn) closeBtn.style.display = 'none';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+}
+
+function clearRequiredAddressOnboarding() {
+    __onboardingAddressRequired = false;
+    const closeBtn = document.getElementById('addressModalCloseBtn');
+    const cancelBtn = document.getElementById('addressModalCancelBtn');
+    if (closeBtn) closeBtn.style.display = '';
+    if (cancelBtn) cancelBtn.style.display = '';
 }
 
 async function loadAddresses() {
@@ -2512,12 +2769,10 @@ async function loadAddresses() {
                 </div>
             `;
 
-            // Panel-required UX: show add-address modal right after registration.
+            // Panel-required UX: gender → birthday → address right after registration.
             if (shouldAutoPromptAddress()) {
-                consumeAutoAddressPromptParam();
                 setTimeout(() => {
-                    showAddAddressModal(true);
-                    showToast('Please verify and save your current/default delivery address.', 'info');
+                    startPostRegistrationOnboarding();
                 }, 250);
             }
         }
@@ -3066,6 +3321,10 @@ function showAddAddressModal(autoDetect = true) {
 }
 
 function closeAddressModal() {
+    if (__onboardingAddressRequired) {
+        showToast('Please save your delivery address to continue.', 'info');
+        return;
+    }
     document.getElementById('addressModal').style.display = 'none';
     
     // Clean up map
@@ -3200,6 +3459,7 @@ document.getElementById('addressForm')?.addEventListener('submit', async functio
         
         if (d.success) {
             showToast(`Address ${isEdit ? 'updated' : 'added'} successfully`, 'success');
+            clearRequiredAddressOnboarding();
             closeAddressModal();
             loadAddresses();
         } else {
@@ -3214,9 +3474,15 @@ document.getElementById('addressForm')?.addEventListener('submit', async functio
     }
 });
 
-// Close modal when clicking outside
+// Close modal when clicking outside (blocked during required onboarding)
 document.getElementById('addressModal')?.addEventListener('click', function(e) {
     if (e.target === this) closeAddressModal();
+});
+document.getElementById('onboardingProfileModal')?.addEventListener('click', function(e) {
+    // Required — ignore outside clicks
+    if (e.target === this) {
+        showToast('Please complete this step to continue.', 'info');
+    }
 });
 
 // ═════ OTHER PROFILE FUNCTIONS ═════
@@ -3244,7 +3510,7 @@ function syncProfileUI(user) {
     const profileForm = document.getElementById('profileForm');
 
     if (avatarName) avatarName.textContent = user.full_name || 'Your Name';
-    if (avatarMeta) avatarMeta.textContent = user.email || '';
+    if (avatarMeta) avatarMeta.textContent = user.login_id || user.email || '';
 
     if (avatarCircle) {
         if (user.avatar_url) {
@@ -3263,8 +3529,7 @@ function syncProfileUI(user) {
 
     setValue('first_name', user.first_name);
     setValue('last_name', user.last_name);
-    setValue('email', user.email);
-    setValue('phone', user.phone);
+    setValue('email', user.login_id || user.email);
     setValue('birthday', user.birthday);
 
     const genderValue = user.gender || '';
@@ -3328,12 +3593,6 @@ function setupProfileForm() {
 
     wireNameValidation(firstNameInput);
     wireNameValidation(lastNameInput);
-    if (emailInput) {
-        emailInput.addEventListener('input', function () {
-            emailInput.value = (emailInput.value || '').toLowerCase();
-            emailInput.setCustomValidity('');
-        });
-    }
     
     // Enable button on any input change
     const inputs = profileForm.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="radio"], select, textarea');
@@ -3346,7 +3605,6 @@ function setupProfileForm() {
         e.preventDefault();
         if (firstNameInput) firstNameInput.value = sanitizeName(firstNameInput.value).trim();
         if (lastNameInput) lastNameInput.value = sanitizeName(lastNameInput.value).trim();
-        if (emailInput) emailInput.value = (emailInput.value || '').trim().toLowerCase();
 
         if (firstNameInput && !isValidName(firstNameInput.value)) {
             firstNameInput.setCustomValidity('First name must contain letters only, with single spaces.');
@@ -3618,16 +3876,20 @@ function checkApplicationStatus() {
 }
 
 function getSellerProfileRequirements() {
+    const loginId = {{ (user.login_id or user.email if user else '')|tojson }};
     const phone = {{ (user.phone if user and user.phone else '')|tojson }};
     const birthday = {{ (user.birthday if user and user.birthday else '')|tojson }};
     const gender = {{ (user.gender if user and user.gender else '')|tojson }};
     const missing = [];
 
-    if (!String(phone || '').trim()) missing.push('phone number');
+    // Phone-only accounts store the number as login identity / phone.
+    const contact = String(phone || '').trim() || String(loginId || '').trim();
+    const looksLikePhone = /^09\d{9}$/.test(contact.replace(/[\s\-()]/g, '').replace(/^\+?63/, '0'));
+    if (!looksLikePhone) missing.push('phone number');
     if (!String(birthday || '').trim()) missing.push('birthday');
     if (!String(gender || '').trim()) missing.push('gender');
 
-    return { phone, birthday, gender, missing };
+    return { phone: contact, birthday, gender, missing };
 }
 
 function showSellerApplication() {

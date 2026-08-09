@@ -1305,19 +1305,16 @@ def update_profile():
         # Get form data
         first_name = request.form.get('first_name', '').strip()
         last_name = request.form.get('last_name', '').strip()
-        phone = request.form.get('phone', '').strip()
         birthday = request.form.get('birthday', '')
         gender = request.form.get('gender', '')
         
-        print(f"📝 Form data: first_name={first_name}, last_name={last_name}, phone={phone}, birthday={birthday}, gender={gender}")
+        print(f"📝 Form data: first_name={first_name}, last_name={last_name}, birthday={birthday}, gender={gender}")
         
         # Update full_name
         if first_name or last_name:
             user.full_name = f"{first_name} {last_name}".strip()
         
-        # Update other fields
-        if phone:
-            user.phone = phone
+        # Login identity (email or phone) is set at registration and is not editable here.
         if birthday:
             try:
                 user.birthday = datetime.strptime(birthday, '%Y-%m-%d').date()
@@ -1576,6 +1573,11 @@ def login():
     verified = request.args.get('verified') == '1'
     reset_ok = request.args.get('reset') == '1'
     prefill = (request.args.get('email') or request.args.get('identifier') or '').strip()
+    if prefill:
+        from app.utils.phone_utils import display_login_id, is_synthetic_account_email
+        if is_synthetic_account_email(prefill):
+            local, _, _ = prefill.partition('@')
+            prefill = display_login_id(email=prefill, phone=local)
     form_data = {'identifier': prefill} if prefill else None
     return render_template(
         'login.html',
@@ -1670,6 +1672,7 @@ def forgot_password():
         from app.utils.otp_delivery import deliver_otp
         from app.utils.phone_utils import (
             normalize_ph_mobile, is_valid_ph_mobile, mask_email, mask_phone,
+            display_login_id, is_synthetic_account_email,
         )
 
         identifier = (request.form.get('identifier') or request.form.get('email') or '').strip()
@@ -1687,10 +1690,10 @@ def forgot_password():
 
         if '@' in identifier:
             email = identifier.lower()
-            if '@' not in email or '.' not in email.split('@')[-1]:
+            if is_synthetic_account_email(email) or '@' not in email or '.' not in email.split('@')[-1]:
                 return render_template(
                     'forgot_password.html',
-                    error='Please enter a valid email address.',
+                    error='Please enter a valid email address or Philippine mobile number.',
                     form_data={'identifier': identifier},
                 )
             user = User.query.filter_by(email=email).first()
@@ -1709,7 +1712,7 @@ def forgot_password():
                     form_data={'identifier': identifier},
                 )
             phone = normalize_ph_mobile(identifier)
-            user = _find_user_by_phone_web(phone)
+            user = _find_user_by_phone_web(phone) or _find_user_by_login_identifier_web(phone)
             if not user:
                 return render_template(
                     'forgot_password.html',
@@ -1717,6 +1720,7 @@ def forgot_password():
                     form_data={'identifier': identifier},
                 )
             email = user.email
+            phone = phone or normalize_ph_mobile(user.phone)
             channel = 'sms'
 
         if user.status != 'active':
@@ -1733,6 +1737,8 @@ def forgot_password():
                 form_data={'identifier': identifier},
             )
 
+        login_id = display_login_id(email=user.email, phone=phone or user.phone)
+
         _ensure_password_reset_otps_table_web()
         plain_code, otp_hash, expires_at = new_otp_pair(DEFAULT_EXPIRY_MINUTES)
         record = PasswordResetOTP.query.filter_by(email=email).first()
@@ -1742,6 +1748,7 @@ def forgot_password():
                 session['pending_reset_email'] = email
                 session['pending_reset_channel'] = channel
                 session['pending_reset_dest'] = mask_phone(phone) if channel == 'sms' else mask_email(email)
+                session['pending_reset_login_id'] = login_id
                 return redirect(url_for('templates.forgot_password_verify', cooldown=retry_after))
             record.otp_hash = otp_hash
             record.otp_channel = channel
@@ -1782,6 +1789,7 @@ def forgot_password():
         session['pending_reset_email'] = email
         session['pending_reset_channel'] = channel
         session['pending_reset_dest'] = meta.get('destination_masked')
+        session['pending_reset_login_id'] = login_id
         return redirect(url_for('templates.forgot_password_verify'))
 
     return render_template(
@@ -1944,11 +1952,22 @@ def forgot_password_reset():
         flash('Please verify your email first.', 'warning')
         return redirect(url_for('templates.forgot_password'))
 
+    from app.utils.phone_utils import display_login_id
+
     _ensure_password_reset_otps_table_web()
     record = PasswordResetOTP.query.filter_by(email=email).first()
     if not record or not record.is_verified:
         flash('Please verify the code sent to your email first.', 'warning')
         return redirect(url_for('templates.forgot_password_verify'))
+
+    user_for_display = User.query.filter_by(email=email).first()
+    login_id = (
+        session.get('pending_reset_login_id')
+        or display_login_id(
+            email=email,
+            phone=user_for_display.phone if user_for_display else None,
+        )
+    )
 
     if request.method == 'POST':
         new_password = request.form.get('new_password') or ''
@@ -1956,19 +1975,22 @@ def forgot_password_reset():
 
         if not new_password or not confirm_password:
             return render_template('forgot_password_reset.html',
-                                   email=email, error='Both password fields are required.')
+                                   email=email, login_id=login_id,
+                                   error='Both password fields are required.')
         if new_password != confirm_password:
             return render_template('forgot_password_reset.html',
-                                   email=email, error='Passwords do not match.')
+                                   email=email, login_id=login_id,
+                                   error='Passwords do not match.')
         pw_error = _password_strength_error(new_password)
         if pw_error:
             return render_template('forgot_password_reset.html',
-                                   email=email, error=pw_error)
+                                   email=email, login_id=login_id, error=pw_error)
 
         user = User.query.filter_by(email=email).first()
         if not user:
             return render_template('forgot_password_reset.html',
-                                   email=email, error='Account not found.')
+                                   email=email, login_id=login_id,
+                                   error='Account not found.')
 
         user.set_password(new_password)
         user.updated_at = datetime.utcnow()
@@ -1976,9 +1998,12 @@ def forgot_password_reset():
         db.session.commit()
         session.pop('pending_reset_email', None)
         session.pop('reset_verified_email', None)
-        return redirect(url_for('templates.login', reset=1, email=email))
+        session.pop('pending_reset_login_id', None)
+        session.pop('pending_reset_channel', None)
+        session.pop('pending_reset_dest', None)
+        return redirect(url_for('templates.login', reset=1, email=login_id))
 
-    return render_template('forgot_password_reset.html', email=email)
+    return render_template('forgot_password_reset.html', email=email, login_id=login_id)
 
 
 @templates_bp.route('/register', methods=['GET', 'POST'])
