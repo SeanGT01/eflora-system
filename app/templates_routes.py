@@ -6962,28 +6962,46 @@ def seller_verify_rider_otp_api():
     db.session.delete(rider_otp)
     db.session.commit()
 
-    if is_synthetic_account_email(account_email) and rider_data.get('phone'):
-        send_rider_credentials_sms(
+    credentials_channel = 'sms' if (
+        is_synthetic_account_email(account_email) and rider_data.get('phone')
+    ) else 'email'
+    credentials_delivered = False
+    if credentials_channel == 'sms':
+        credentials_delivered = bool(send_rider_credentials_sms(
             phone=rider_data.get('phone'),
             full_name=rider_data['full_name'],
             default_password=default_password,
             store_name=store.name,
             login_id=login_id,
-        )
+        ))
     else:
-        send_rider_credentials_email(
+        credentials_delivered = bool(send_rider_credentials_email(
             recipient_email=account_email,
             full_name=rider_data['full_name'],
             default_password=default_password,
             store_name=store.name
+        ))
+
+    if credentials_delivered:
+        message = (
+            f'Rider account created for {rider_data["full_name"]}! '
+            f'Credentials also sent to {login_id}.'
+        )
+    else:
+        message = (
+            f'Rider account created for {rider_data["full_name"]}! '
+            f'Share the temporary password below with the rider '
+            f'(auto-send to {login_id} failed).'
         )
 
     return jsonify({
         'success': True,
-        'message': (
-            f'Rider account created for {rider_data["full_name"]}! '
-            f'Credentials sent to {login_id}.'
-        ),
+        'message': message,
+        'full_name': rider_data['full_name'],
+        'login_id': login_id,
+        'temporary_password': default_password,
+        'credentials_channel': credentials_channel,
+        'credentials_delivered': credentials_delivered,
     }), 201
 
 

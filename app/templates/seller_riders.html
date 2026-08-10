@@ -997,6 +997,43 @@
     </div>
 </div>
 
+<!-- ═══════════ CREDENTIALS MODAL (after OTP verify) ═══════════ -->
+<div class="riders-overlay" id="credentialsOverlay">
+    <div class="riders-modal sm">
+        <div class="modal-header">
+            <div class="modal-title">Rider Account Ready</div>
+            <button class="modal-close" onclick="closeModal('credentialsOverlay')"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="info-hint" id="credentialsHint">
+                <i class="ri-key-2-line"></i>
+                <span>Share these login details with the rider. Ask them to change the password after first login.</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Rider</label>
+                <div class="form-control" id="credentialsName" style="background:var(--surface-2, #f7f5f3);"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Login (email or phone)</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <div class="form-control" id="credentialsLogin" style="flex:1; background:var(--surface-2, #f7f5f3); font-family: ui-monospace, monospace;"></div>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="copyCredentialsField('credentialsLogin')"><i class="ri-file-copy-line"></i></button>
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Temporary password</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <div class="form-control" id="credentialsPassword" style="flex:1; background:var(--surface-2, #f7f5f3); font-family: ui-monospace, monospace; letter-spacing:1px;"></div>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="copyCredentialsField('credentialsPassword')"><i class="ri-file-copy-line"></i></button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-rose" onclick="closeModal('credentialsOverlay')">Done</button>
+        </div>
+    </div>
+</div>
+
 <!-- Toast Stack -->
 <div class="riders-toast-stack" id="toastStack"></div>
 {% endblock %}
@@ -1479,13 +1516,42 @@ async function verifyOtp(otpId) {
             method: 'POST',
             body: JSON.stringify({ otp_id: otpId, otp_code: code })
         });
-        showToast('success', data.message);
+        showToast('success', data.message || 'Rider account created');
+        if (data.login_id && data.temporary_password) {
+            showCredentialsModal(data);
+        }
         loadRiders();
     } catch (err) {
         showToast('error', err.error || 'OTP verification failed');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="ri-check-line"></i> Verify';
+    }
+}
+
+function showCredentialsModal(data) {
+    document.getElementById('credentialsName').textContent = data.full_name || 'Rider';
+    document.getElementById('credentialsLogin').textContent = data.login_id || '';
+    document.getElementById('credentialsPassword').textContent = data.temporary_password || '';
+
+    const hint = document.getElementById('credentialsHint');
+    const channel = data.credentials_channel === 'sms' ? 'SMS' : 'email';
+    if (data.credentials_delivered) {
+        hint.innerHTML = `<i class="ri-check-line"></i> <span>Credentials were also sent by ${channel} to <strong>${escapeHtml(data.login_id || '')}</strong>. You can still copy them below.</span>`;
+    } else {
+        hint.innerHTML = `<i class="ri-error-warning-line"></i> <span>Could not auto-send by ${channel}. Copy and share these details with the rider.</span>`;
+    }
+    openModal('credentialsOverlay');
+}
+
+async function copyCredentialsField(elementId) {
+    const text = (document.getElementById(elementId)?.textContent || '').trim();
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('success', 'Copied');
+    } catch (_) {
+        showToast('error', 'Could not copy');
     }
 }
 
