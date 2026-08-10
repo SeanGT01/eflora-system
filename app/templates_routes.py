@@ -1702,7 +1702,7 @@ def forgot_password():
         from app.utils.otp_delivery import deliver_otp, sync_hashed_otp_record
         from app.utils.phone_utils import (
             normalize_ph_mobile, is_valid_ph_mobile, mask_email, mask_phone,
-            display_login_id, is_synthetic_account_email,
+            display_login_id, is_synthetic_account_email, phone_to_account_email,
         )
 
         identifier = (request.form.get('identifier') or request.form.get('email') or '').strip()
@@ -1742,7 +1742,11 @@ def forgot_password():
                     form_data={'identifier': identifier},
                 )
             phone = normalize_ph_mobile(identifier)
-            user = _find_user_by_phone_web(phone) or _find_user_by_login_identifier_web(phone)
+            user = (
+                User.query.filter_by(email=phone_to_account_email(phone)).first()
+                or _find_user_by_phone_web(phone)
+                or _find_user_by_login_identifier_web(phone)
+            )
             if not user:
                 return render_template(
                     'forgot_password.html',
@@ -1751,6 +1755,9 @@ def forgot_password():
                 )
             email = user.email
             phone = phone or normalize_ph_mobile(user.phone)
+            if not phone and is_synthetic_account_email(user.email):
+                local, _, _ = user.email.partition('@')
+                phone = normalize_ph_mobile(local)
             channel = 'sms'
 
         if user.status != 'active':

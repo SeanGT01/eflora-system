@@ -108,6 +108,7 @@ def _parse_forgot_identifier(data):
         is_synthetic_account_email,
         is_valid_ph_mobile,
         normalize_ph_mobile,
+        phone_to_account_email,
     )
 
     raw = (data.get('identifier') if data.get('identifier') is not None else data.get('email'))
@@ -145,13 +146,42 @@ def _parse_forgot_identifier(data):
         }, 400)
 
     phone = normalize_ph_mobile(raw)
-    user = _find_user_by_phone(phone) or _find_user_by_login_identifier(phone)
+    # Prefer phone-only (SMS) accounts — same as login — so a customer profile
+    # that happens to store this number does not steal the reset flow.
+    user = (
+        User.query.filter_by(email=phone_to_account_email(phone)).first()
+        or _find_user_by_phone(phone)
+        or _find_user_by_login_identifier(phone)
+    )
     if not user:
         return None, ({
             'success': False,
             'error': 'No account found with this phone number. Please check and try again.',
         }, 404)
     return {'user': user, 'channel': 'sms', 'phone': phone}, None
+
+
+def _resolve_password_reset_email(raw):
+    """
+    Map login id / account email / phone to the users.email key used by PasswordResetOTP.
+    Accepts synthetic account emails (internal) for mid-flow verify/resend/reset.
+    """
+    from app.utils.phone_utils import is_synthetic_account_email
+
+    raw = (raw or '').strip()
+    if not raw:
+        return None
+
+    if '@' in raw:
+        email = _normalize_email(raw)
+        if is_synthetic_account_email(email):
+            return email
+        if EMAIL_REGEX.match(email):
+            return email
+        return None
+
+    user = _find_user_by_login_identifier(raw)
+    return user.email if user else None
 
 
 def _validate_password_strength(password):
@@ -682,6 +712,13 @@ def forgot_password_send_otp():
     channel = parsed['channel']
     phone = parsed['phone'] or normalize_ph_mobile(user.phone)
 
+    # Phone-only accounts: recover mobile from synthetic email if phone column empty
+    if channel == 'sms' and not phone:
+        from app.utils.phone_utils import is_synthetic_account_email
+        if is_synthetic_account_email(user.email):
+            local, _, _ = user.email.partition('@')
+            phone = normalize_ph_mobile(local)
+
     if user.status != 'active':
         return jsonify({
             'success': False,
@@ -729,7 +766,7 @@ def forgot_password_send_otp():
 
 @auth_bp.route('/forgot-password/resend-otp', methods=['POST'])
 def forgot_password_resend_otp():
-    """Re-issue a password-reset OTP. Request JSON: { "email": str } (account email)."""
+    """Re-issue a password-reset OTP. Request JSON: { "email"|"identifier": str }."""
     from app.models import PasswordResetOTP
     from app.utils.otp_service import (
         DEFAULT_EXPIRY_MINUTES,
@@ -742,9 +779,13 @@ def forgot_password_resend_otp():
     from app.utils.phone_utils import normalize_ph_mobile
 
     data = request.get_json(silent=True) or {}
-    email = _normalize_email(data.get('email'))
-    if not email or not EMAIL_REGEX.match(email):
-        return jsonify({'success': False, 'error': 'A valid email is required'}), 400
+    raw = data.get('identifier') if data.get('identifier') is not None else data.get('email')
+    email = _resolve_password_reset_email(raw)
+    if not email:
+        return jsonify({
+            'success': False,
+            'error': 'Enter your email address or Philippine mobile number.',
+        }), 400
 
     _ensure_password_reset_otps_table()
     user = User.query.filter_by(email=email).first()
@@ -771,6 +812,11 @@ def forgot_password_resend_otp():
 
     channel = normalize_otp_channel(getattr(record, 'otp_channel', None), default='email') or 'email'
     phone = normalize_ph_mobile(user.phone)
+    if channel == 'sms' and not phone:
+        from app.utils.phone_utils import is_synthetic_account_email
+        if is_synthetic_account_email(user.email):
+            local, _, _ = user.email.partition('@')
+            phone = normalize_ph_mobile(local)
     if channel == 'sms' and not phone:
         return jsonify({
             'success': False,
@@ -809,12 +855,13 @@ def forgot_password_resend_otp():
         'otp_channel': channel,
         'destination_masked': dest,
         'expires_in_seconds': DEFAULT_EXPIRY_MINUTES * 60,
+        'resend_cooldown_seconds': RESEND_COOLDOWN_SECONDS,
     }), 200
 
 
 @auth_bp.route('/forgot-password/verify-otp', methods=['POST'])
 def forgot_password_verify_otp():
-    """Verify the password-reset OTP. Request JSON: { "email": str, "otp_code": str }"""
+    """Verify the password-reset OTP. Request JSON: { "email"|"identifier": str, "otp_code": str }"""
     from app.models import PasswordResetOTP
     from app.utils.otp_service import (
         MAX_VERIFY_ATTEMPTS,
@@ -823,18 +870,19 @@ def forgot_password_verify_otp():
     )
 
     data = request.get_json(silent=True) or {}
-    email = _normalize_email(data.get('email'))
+    raw = data.get('identifier') if data.get('identifier') is not None else data.get('email')
+    email = _resolve_password_reset_email(raw)
     otp_code = (data.get('otp_code') or '').strip()
 
     if not email or not otp_code:
-        return jsonify({'success': False, 'error': 'Email and OTP code are required'}), 400
+        return jsonify({'success': False, 'error': 'Email/phone and OTP code are required'}), 400
 
     _ensure_password_reset_otps_table()
     record = PasswordResetOTP.query.filter_by(email=email).first()
     if not record:
         return jsonify({
             'success': False,
-            'error': 'No password reset request found for this email.',
+            'error': 'No password reset request found for this account.',
         }), 404
 
     if record.is_verified:
@@ -884,17 +932,18 @@ def forgot_password_reset():
     Set a new password after OTP verification.
 
     Request JSON:
-        { "email": str, "new_password": str, "confirm_password": str }
+        { "email"|"identifier": str, "new_password": str, "confirm_password": str }
     """
     from app.models import PasswordResetOTP
 
     data = request.get_json(silent=True) or {}
-    email = _normalize_email(data.get('email'))
+    raw = data.get('identifier') if data.get('identifier') is not None else data.get('email')
+    email = _resolve_password_reset_email(raw)
     new_password = data.get('new_password') or ''
     confirm_password = data.get('confirm_password') or ''
 
     if not email:
-        return jsonify({'success': False, 'error': 'Email is required'}), 400
+        return jsonify({'success': False, 'error': 'Email or phone is required'}), 400
     if not new_password or not confirm_password:
         return jsonify({'success': False, 'error': 'New password and confirmation are required'}), 400
     if new_password != confirm_password:
@@ -908,7 +957,7 @@ def forgot_password_reset():
     if not record or not record.is_verified:
         return jsonify({
             'success': False,
-            'error': 'Please verify the email code before resetting your password.',
+            'error': 'Please verify the code before resetting your password.',
         }), 403
     if record.is_expired():
         return jsonify({
