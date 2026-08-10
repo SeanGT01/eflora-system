@@ -1699,7 +1699,7 @@ def forgot_password():
             can_resend, new_otp_pair,
         )
         from app.utils.email_helper import send_password_reset_otp_email
-        from app.utils.otp_delivery import deliver_otp
+        from app.utils.otp_delivery import deliver_otp, sync_hashed_otp_record
         from app.utils.phone_utils import (
             normalize_ph_mobile, is_valid_ph_mobile, mask_email, mask_phone,
             display_login_id, is_synthetic_account_email,
@@ -1815,6 +1815,7 @@ def forgot_password():
                 error_code=(fail or {}).get('error_code'),
                 form_data={'identifier': identifier},
             )
+        sync_hashed_otp_record(record, meta, plain_code)
 
         session['pending_reset_email'] = email
         session['pending_reset_channel'] = channel
@@ -1905,7 +1906,7 @@ def forgot_password_resend_otp_web():
         can_resend, new_otp_pair,
     )
     from app.utils.email_helper import send_password_reset_otp_email
-    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel, sync_hashed_otp_record
     from app.utils.phone_utils import normalize_ph_mobile
 
     email = session.get('pending_reset_email')
@@ -1959,6 +1960,7 @@ def forgot_password_resend_otp_web():
     )
     if not ok:
         return jsonify(fail), 503
+    sync_hashed_otp_record(record, meta, plain_code)
 
     session['pending_reset_channel'] = channel
     session['pending_reset_dest'] = meta.get('destination_masked')
@@ -2056,7 +2058,7 @@ def register():
                 can_resend, new_otp_pair,
             )
             from app.utils.email_helper import send_customer_otp_email
-            from app.utils.otp_delivery import deliver_otp
+            from app.utils.otp_delivery import deliver_otp, sync_hashed_otp_record
             from app.utils.phone_utils import mask_email, mask_phone
 
             full_name        = (request.form.get('full_name')        or '').strip()
@@ -2181,6 +2183,7 @@ def register():
                     error_code=(fail or {}).get('error_code'),
                     form_data=request.form,
                 )
+            sync_hashed_otp_record(record, meta, plain_code)
 
             session['pending_reg_email'] = email
             session['pending_reg_channel'] = channel
@@ -2335,7 +2338,7 @@ def register_resend_otp():
         can_resend, new_otp_pair,
     )
     from app.utils.email_helper import send_customer_otp_email
-    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel, sync_hashed_otp_record
 
     email = session.get('pending_reg_email')
     if not email:
@@ -2379,6 +2382,7 @@ def register_resend_otp():
     )
     if not ok:
         return jsonify(fail), 503
+    sync_hashed_otp_record(record, meta, plain_code)
 
     session['pending_reg_channel'] = channel
     session['pending_reg_dest'] = meta.get('destination_masked')
@@ -2521,7 +2525,7 @@ def seller_signup_start():
             new_otp_pair,
         )
         from app.utils.email_helper import send_seller_signup_otp_email
-        from app.utils.otp_delivery import deliver_otp
+        from app.utils.otp_delivery import deliver_otp, sync_hashed_otp_record
         from app.utils.phone_utils import is_valid_ph_mobile, mask_email, mask_phone
 
         full_name = (request.form.get('full_name') or '').strip()
@@ -2643,6 +2647,7 @@ def seller_signup_start():
                 error_code=(fail or {}).get('error_code'),
                 form_data=request.form,
             )
+        sync_hashed_otp_record(record, meta, plain_code)
 
         session['pending_seller_reg_email'] = email
         session['pending_seller_reg_channel'] = channel
@@ -2745,7 +2750,7 @@ def seller_signup_resend_otp():
         new_otp_pair,
     )
     from app.utils.email_helper import send_seller_signup_otp_email
-    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel, sync_hashed_otp_record
 
     email = session.get('pending_seller_reg_email')
     if not email:
@@ -2791,6 +2796,7 @@ def seller_signup_resend_otp():
     )
     if not ok:
         return jsonify(fail), 503
+    sync_hashed_otp_record(record, meta, plain_code)
 
     session['pending_seller_reg_channel'] = channel
     session['pending_seller_reg_dest'] = meta.get('destination_masked')
@@ -6769,6 +6775,7 @@ def seller_invite_rider_api():
         return jsonify({'error': 'An invitation is already pending for this contact.'}), 409
 
     from app.utils.email_helper import generate_otp_code, send_rider_otp_email
+    from app.utils.otp_delivery import sync_plain_otp_record
     otp_code = generate_otp_code()
 
     rider_otp = RiderOTP(
@@ -6804,6 +6811,7 @@ def seller_invite_rider_api():
     )
     if not ok:
         return jsonify({'error': (fail or {}).get('error') or 'Failed to send OTP.'}), 500
+    sync_plain_otp_record(rider_otp, meta, otp_code)
 
     dest = meta.get('destination_masked') or login_id
     return jsonify({
@@ -6836,7 +6844,7 @@ def seller_resend_rider_invitation_api():
         return jsonify({'error': 'Invitation not found'}), 404
 
     from app.utils.email_helper import generate_otp_code, send_rider_otp_email
-    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel, sync_plain_otp_record
     new_otp = generate_otp_code()
     rider_otp.verification_token = new_otp
     rider_otp.expires_at = datetime.utcnow() + timedelta(minutes=10)
@@ -6860,6 +6868,7 @@ def seller_resend_rider_invitation_api():
     )
     if not ok:
         return jsonify({'error': (fail or {}).get('error') or 'Failed to resend OTP'}), 500
+    sync_plain_otp_record(rider_otp, meta, new_otp)
 
     dest = meta.get('destination_masked') or rider_otp.email
     return jsonify({

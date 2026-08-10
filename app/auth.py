@@ -255,7 +255,7 @@ def customer_send_otp():
         new_otp_pair,
     )
     from app.utils.email_helper import send_customer_otp_email
-    from app.utils.otp_delivery import deliver_otp
+    from app.utils.otp_delivery import deliver_otp, sync_hashed_otp_record
     from app.utils.phone_utils import display_login_id
 
     data = request.get_json(silent=True) or {}
@@ -330,6 +330,7 @@ def customer_send_otp():
     )
     if not ok:
         return jsonify(fail), 503
+    sync_hashed_otp_record(record, meta, plain_code)
 
     dest = meta.get('destination_masked') or (phone if channel == 'sms' else email)
     return jsonify({
@@ -359,7 +360,7 @@ def customer_resend_otp():
         new_otp_pair,
     )
     from app.utils.email_helper import send_customer_otp_email
-    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel, sync_hashed_otp_record
 
     data = request.get_json(silent=True) or {}
     email = _normalize_email(data.get('email'))
@@ -404,6 +405,7 @@ def customer_resend_otp():
     )
     if not ok:
         return jsonify(fail), 503
+    sync_hashed_otp_record(record, meta, plain_code)
 
     dest = meta.get('destination_masked') or (phone if channel == 'sms' else email)
     return jsonify({
@@ -666,7 +668,7 @@ def forgot_password_send_otp():
     """
     from app.utils.otp_service import DEFAULT_EXPIRY_MINUTES, RESEND_COOLDOWN_SECONDS
     from app.utils.email_helper import send_password_reset_otp_email
-    from app.utils.otp_delivery import deliver_otp
+    from app.utils.otp_delivery import deliver_otp, sync_hashed_otp_record
     from app.utils.phone_utils import normalize_ph_mobile, display_login_id
 
     data = request.get_json(silent=True) or {}
@@ -695,7 +697,7 @@ def forgot_password_send_otp():
     if upsert_err:
         return jsonify(upsert_err[0]), upsert_err[1]
 
-    plain_code, _record = result
+    plain_code, record = result
     ok, fail, meta = deliver_otp(
         channel,
         otp_code=plain_code,
@@ -708,6 +710,7 @@ def forgot_password_send_otp():
     )
     if not ok:
         return jsonify(fail), 503
+    sync_hashed_otp_record(record, meta, plain_code)
 
     dest = meta.get('destination_masked')
     return jsonify({
@@ -733,7 +736,7 @@ def forgot_password_resend_otp():
         new_otp_pair,
     )
     from app.utils.email_helper import send_password_reset_otp_email
-    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel, sync_hashed_otp_record
     from app.utils.phone_utils import normalize_ph_mobile
 
     data = request.get_json(silent=True) or {}
@@ -794,6 +797,7 @@ def forgot_password_resend_otp():
     )
     if not ok:
         return jsonify(fail), 503
+    sync_hashed_otp_record(record, meta, plain_code)
 
     dest = meta.get('destination_masked')
     return jsonify({

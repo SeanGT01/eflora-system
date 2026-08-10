@@ -358,6 +358,7 @@ def invite_rider():
         return jsonify({'error': 'An invitation is already pending for this contact.'}), 409
     
     from app.utils.email_helper import generate_otp_code, send_rider_otp_email
+    from app.utils.otp_delivery import sync_plain_otp_record
     otp_code = generate_otp_code()
     
     rider_otp = RiderOTP(
@@ -393,7 +394,8 @@ def invite_rider():
     )
     if not ok:
         return jsonify({'error': (fail or {}).get('error') or 'Failed to send OTP.'}), 500
-    
+    sync_plain_otp_record(rider_otp, meta, otp_code)
+
     dest = meta.get('destination_masked') or login_id
     return jsonify({
         'success': True,
@@ -428,7 +430,7 @@ def resend_rider_invitation():
         return jsonify({'error': 'Invitation not found'}), 404
     
     from app.utils.email_helper import generate_otp_code, send_rider_otp_email
-    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel
+    from app.utils.otp_delivery import deliver_otp, normalize_otp_channel, sync_plain_otp_record
     new_otp = generate_otp_code()
     rider_otp.verification_token = new_otp
     rider_otp.expires_at = datetime.utcnow() + timedelta(minutes=10)
@@ -452,6 +454,7 @@ def resend_rider_invitation():
     )
     if not ok:
         return jsonify({'error': (fail or {}).get('error') or 'Failed to resend OTP'}), 500
+    sync_plain_otp_record(rider_otp, meta, new_otp)
 
     dest = meta.get('destination_masked') or rider_otp.email
     return jsonify({
