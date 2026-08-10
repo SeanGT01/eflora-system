@@ -1361,6 +1361,9 @@ function renderRidersTable(riders) {
                     <button class="action-btn success" onclick="editRider(${rider.id})" title="Edit">
                         <i class="ri-edit-line"></i>
                     </button>
+                    <button class="action-btn" onclick="resetRiderPassword(${rider.id}, '${escapeHtml(rider.full_name || '')}')" title="Reset password" style="color: var(--terracotta);">
+                        <i class="ri-key-2-line"></i>
+                    </button>
                     <button class="action-btn warning" onclick="toggleRiderStatus(${rider.id}, ${!rider.is_active})" title="${rider.is_active ? 'Deactivate' : 'Activate'}">
                         <i class="ri-${rider.is_active ? 'forbid-line' : 'checkbox-circle-line'}"></i>
                     </button>
@@ -1720,6 +1723,25 @@ async function toggleRiderStatus(riderId, newActive) {
         loadRiders();
     } catch (err) {
         showToast('error', err.error || 'Failed to update status');
+    }
+}
+
+async function resetRiderPassword(riderId, name) {
+    const confirmed = await showConfirmModal(
+        `Reset temporary password for "${name}"? The new password will be shown once — share it with the rider.`
+    );
+    if (!confirmed) return;
+    try {
+        const data = await apiFetch(`${API_BASE}/riders/${riderId}/reset-password`, {
+            method: 'POST',
+            body: JSON.stringify({}),
+        });
+        showToast('success', data.message || 'Password reset');
+        if (data.login_id && data.temporary_password) {
+            showCredentialsModal(data);
+        }
+    } catch (err) {
+        showToast('error', err.error || 'Failed to reset password');
     }
 }
 

@@ -1665,10 +1665,10 @@ def _find_user_by_login_identifier_web(raw):
         return User.query.filter_by(email=email).first()
     if is_valid_ph_mobile(raw):
         phone = normalize_ph_mobile(raw)
-        return (
-            _find_user_by_phone_web(phone)
-            or User.query.filter_by(email=phone_to_account_email(phone)).first()
-        )
+        synth_user = User.query.filter_by(email=phone_to_account_email(phone)).first()
+        if synth_user:
+            return synth_user
+        return _find_user_by_phone_web(phone)
     return None
 
 
@@ -7089,6 +7089,60 @@ def seller_update_rider_api(rider_id):
     db.session.commit()
 
     return jsonify({'success': True, 'message': 'Rider updated successfully', 'rider': rider.to_dict()}), 200
+
+
+@templates_bp.route('/api/seller/riders/<int:rider_id>/reset-password', methods=['POST'])
+def seller_reset_rider_password_api(rider_id):
+    if session.get('role') != 'seller':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+
+    rider = Rider.query.filter_by(id=rider_id, store_id=store.id).first()
+    if not rider or not rider.user:
+        return jsonify({'error': 'Rider not found'}), 404
+
+    from app.utils.email_helper import generate_default_password, send_rider_credentials_email
+    from app.utils.phone_utils import display_login_id, is_synthetic_account_email
+    from app.utils.sms_helper import send_rider_credentials_sms
+
+    default_password = generate_default_password()
+    rider.user.set_password(default_password)
+    rider.user.status = 'active'
+    db.session.commit()
+
+    login_id = display_login_id(email=rider.user.email, phone=rider.user.phone)
+    credentials_channel = 'sms' if (
+        is_synthetic_account_email(rider.user.email) and rider.user.phone
+    ) else 'email'
+    credentials_delivered = False
+    if credentials_channel == 'sms':
+        credentials_delivered = bool(send_rider_credentials_sms(
+            phone=rider.user.phone,
+            full_name=rider.user.full_name,
+            default_password=default_password,
+            store_name=store.name,
+            login_id=login_id,
+        ))
+    else:
+        credentials_delivered = bool(send_rider_credentials_email(
+            recipient_email=rider.user.email,
+            full_name=rider.user.full_name,
+            default_password=default_password,
+            store_name=store.name,
+        ))
+
+    return jsonify({
+        'success': True,
+        'message': 'Temporary password reset. Share it with the rider.',
+        'full_name': rider.user.full_name,
+        'login_id': login_id,
+        'temporary_password': default_password,
+        'credentials_channel': credentials_channel,
+        'credentials_delivered': credentials_delivered,
+    }), 200
 
 
 @templates_bp.route('/api/seller/riders/<int:rider_id>/status', methods=['PUT'])

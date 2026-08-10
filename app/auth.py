@@ -71,10 +71,12 @@ def _find_user_by_login_identifier(raw):
 
     if is_valid_ph_mobile(raw):
         phone = normalize_ph_mobile(raw)
-        user = _find_user_by_phone(phone)
-        if user:
-            return user
-        return User.query.filter_by(email=phone_to_account_email(phone)).first()
+        # Prefer the phone-only account (synthetic email) over another user
+        # who happens to have the same number on their profile.
+        synth_user = User.query.filter_by(email=phone_to_account_email(phone)).first()
+        if synth_user:
+            return synth_user
+        return _find_user_by_phone(phone)
 
     return None
 
@@ -940,8 +942,11 @@ def login():
 
     raw = data.get('identifier') if data.get('identifier') is not None else data.get('email')
     user = _find_user_by_login_identifier(raw)
+    password = data.get('password', '')
+    if isinstance(password, str):
+        password = password.strip()
 
-    if not user or not user.check_password(data.get('password', '')):
+    if not user or not user.check_password(password):
         return jsonify({'error': 'Invalid email/phone or password'}), 401
 
     if user.status != 'active':
