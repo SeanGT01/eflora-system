@@ -6726,33 +6726,47 @@ def seller_invite_rider_api():
     if not data:
         return jsonify({'error': 'Invalid request'}), 400
 
-    email = (data.get('email') or '').lower().strip()
     full_name = (data.get('full_name') or '').strip()
-    phone = _normalize_ph_mobile(data.get('phone'))
     vehicle_type = data.get('vehicle_type', '')
     license_plate = (data.get('license_plate') or '').strip()
     from app.utils.otp_delivery import deliver_otp
+    from app.utils.phone_utils import parse_email_or_phone_identifier
 
-    if not email or not full_name:
-        return jsonify({'error': 'Email and full name are required'}), 400
+    if not full_name:
+        return jsonify({'error': 'Full name is required'}), 400
 
-    if data.get('phone') and (not phone or not PH_MOBILE_REGEX.fullmatch(phone)):
-        return jsonify({'error': 'Please enter a valid Philippine mobile number (e.g., 09171234567 or +639171234567).'}), 400
+    raw_id = data.get('identifier')
+    if raw_id is None or str(raw_id).strip() == '':
+        legacy_email = (data.get('email') or '').strip()
+        legacy_phone = (data.get('phone') or '').strip()
+        if legacy_email and legacy_phone:
+            return jsonify({
+                'error': 'Use either an email or a phone number — not both.',
+            }), 400
+        raw_id = legacy_phone or legacy_email or ''
 
-    # Smart channel: phone present → SMS, else email
-    channel = 'sms' if phone else 'email'
+    parsed, parse_err = parse_email_or_phone_identifier(raw_id)
+    if parse_err:
+        return jsonify({'error': parse_err}), 400
+
+    email = parsed['email']
+    phone = parsed['phone']
+    channel = parsed['otp_channel']
+    login_id = parsed['login_id']
 
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
         existing_rider = Rider.query.filter_by(user_id=existing_user.id, store_id=store.id).first()
         if existing_rider:
-            return jsonify({'error': 'This email is already registered as a rider for your store'}), 409
+            return jsonify({
+                'error': 'This contact is already registered as a rider for your store',
+            }), 409
 
     existing_otp = RiderOTP.query.filter_by(
         email=email, store_id=store.id, is_verified=False
     ).filter(RiderOTP.expires_at > datetime.utcnow()).first()
     if existing_otp:
-        return jsonify({'error': 'An invitation is already pending for this email.'}), 409
+        return jsonify({'error': 'An invitation is already pending for this contact.'}), 409
 
     from app.utils.email_helper import generate_otp_code, send_rider_otp_email
     otp_code = generate_otp_code()
@@ -6766,6 +6780,7 @@ def seller_invite_rider_api():
             'vehicle_type': vehicle_type,
             'license_plate': license_plate,
             'otp_channel': channel,
+            'login_id': login_id,
         },
         store_id=store.id,
         created_by=user_id,
@@ -6790,7 +6805,7 @@ def seller_invite_rider_api():
     if not ok:
         return jsonify({'error': (fail or {}).get('error') or 'Failed to send OTP.'}), 500
 
-    dest = meta.get('destination_masked') or email
+    dest = meta.get('destination_masked') or login_id
     return jsonify({
         'success': True,
         'message': f'OTP sent to {dest}. Ask the rider for the 6-digit code.',
@@ -6888,17 +6903,23 @@ def seller_verify_rider_otp_api():
 
     # OTP is correct — create the rider account with a default password
     from app.utils.email_helper import generate_default_password, send_rider_credentials_email
+    from app.utils.phone_utils import display_login_id, is_synthetic_account_email
+    from app.utils.sms_helper import send_rider_credentials_sms
 
-    rider_data = rider_otp.rider_data
+    rider_data = rider_otp.rider_data or {}
+    account_email = rider_otp.email
     default_password = generate_default_password()
+    login_id = rider_data.get('login_id') or display_login_id(
+        email=account_email, phone=rider_data.get('phone')
+    )
 
     # Find or create the User
-    user_account = User.query.filter_by(email=rider_otp.email).first()
+    user_account = User.query.filter_by(email=account_email).first()
 
     if not user_account:
         user_account = User(
             full_name=rider_data['full_name'],
-            email=rider_otp.email,
+            email=account_email,
             phone=rider_data.get('phone'),
             role='rider',
             status='active'
@@ -6932,17 +6953,28 @@ def seller_verify_rider_otp_api():
     db.session.delete(rider_otp)
     db.session.commit()
 
-    # Send credentials email to the rider
-    send_rider_credentials_email(
-        recipient_email=rider_otp.email,
-        full_name=rider_data['full_name'],
-        default_password=default_password,
-        store_name=store.name
-    )
+    if is_synthetic_account_email(account_email) and rider_data.get('phone'):
+        send_rider_credentials_sms(
+            phone=rider_data.get('phone'),
+            full_name=rider_data['full_name'],
+            default_password=default_password,
+            store_name=store.name,
+            login_id=login_id,
+        )
+    else:
+        send_rider_credentials_email(
+            recipient_email=account_email,
+            full_name=rider_data['full_name'],
+            default_password=default_password,
+            store_name=store.name
+        )
 
     return jsonify({
         'success': True,
-        'message': f'Rider account created for {rider_data["full_name"]}! Credentials sent to {rider_otp.email}.'
+        'message': (
+            f'Rider account created for {rider_data["full_name"]}! '
+            f'Credentials sent to {login_id}.'
+        ),
     }), 201
 
 

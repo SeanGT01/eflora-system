@@ -811,7 +811,7 @@
         <div id="noRiders" class="riders-empty" style="display: none;">
             <i class="ri-motorbike-line riders-empty-icon"></i>
             <div class="riders-empty-title">No riders yet</div>
-            <div class="riders-empty-sub">Invite riders by sending them an email verification link.</div>
+            <div class="riders-empty-sub">Invite riders with their email or mobile number — we'll send a verification OTP.</div>
             <button class="btn btn-rose" onclick="openInviteModal()">
                 <i class="ri-user-add-line"></i> Invite Your First Rider
             </button>
@@ -875,7 +875,7 @@
             <div class="modal-body">
                 <div class="info-hint">
                     <i class="ri-information-line"></i>
-                    <span>Enter the rider's details. If a mobile number is provided, the OTP is sent by SMS; otherwise by email.</span>
+                    <span>Enter one contact: email (OTP by email) or Philippine mobile (OTP by SMS).</span>
                 </div>
 
                 <div class="form-group">
@@ -885,15 +885,9 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Email Address <span style="color: var(--deep-rose);">*</span></label>
-                    <input type="email" class="form-control" name="email" id="inviteEmail"
-                           placeholder="rider@gmail.com" required>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Phone Number <span style="color:var(--muted);font-weight:400;">(optional — SMS if provided)</span></label>
-                    <input type="tel" class="form-control" name="phone" id="invitePhone"
-                           placeholder="09xxxxxxxxx or +639xxxxxxxxx" inputmode="numeric" maxlength="13">
+                    <label class="form-label">Email or Phone <span style="color: var(--deep-rose);">*</span></label>
+                    <input type="text" class="form-control" name="identifier" id="inviteIdentifier"
+                           placeholder="email@gmail.com or 09xxxxxxxxx" required autocomplete="username">
                 </div>
 
                 <div class="form-row">
@@ -1229,9 +1223,9 @@ function renderPendingInvitations(invitations) {
         return `
         <div class="pending-card">
             <div class="pending-info">
-                <div class="pending-icon"><i class="ri-mail-line"></i></div>
+                <div class="pending-icon"><i class="ri-${inv.otp_channel === 'sms' ? 'smartphone-line' : 'mail-line'}"></i></div>
                 <div>
-                    <div class="pending-email">${escapeHtml(inv.email)}</div>
+                    <div class="pending-email">${escapeHtml(inv.contact || inv.email)}</div>
                     <div class="pending-time">
                         Sent ${formatDate(inv.created_at)} · 
                         <span class="status-badge ${expiresMins > 0 ? 'badge-pending' : 'badge-cancelled'}">
@@ -1397,30 +1391,48 @@ function renderRidersTable(riders) {
 // ───────────────────────────────────────────────────
 // INVITE RIDER (sends verification email)
 // ───────────────────────────────────────────────────
+function parseInviteIdentifier(raw) {
+    const value = (raw || '').trim();
+    if (!value) {
+        return { ok: false, message: 'Enter an email address or Philippine mobile number.' };
+    }
+    if (value.includes('@')) {
+        const email = value.toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.endsWith('@sms.eflora.internal')) {
+            return { ok: false, message: 'Enter a valid email address.' };
+        }
+        return { ok: true, identifier: email };
+    }
+    const phoneValidation = validatePhMobile(value);
+    if (!phoneValidation.ok || !phoneValidation.normalized) {
+        return {
+            ok: false,
+            message: 'Enter a valid email or Philippine mobile number (e.g. 09171234567).',
+        };
+    }
+    return { ok: true, identifier: phoneValidation.normalized };
+}
+
 document.getElementById('inviteRiderForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const btn = document.getElementById('inviteSubmitBtn');
     const errorDiv = document.getElementById('inviteError');
     errorDiv.style.display = 'none';
 
+    const parsed = parseInviteIdentifier(document.getElementById('inviteIdentifier').value);
+    if (!parsed.ok) {
+        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${parsed.message}`;
+        errorDiv.style.display = 'flex';
+        document.getElementById('inviteIdentifier').focus();
+        return;
+    }
+
     const payload = {
         full_name: document.getElementById('inviteFullName').value.trim(),
-        email: document.getElementById('inviteEmail').value.trim(),
-        phone: document.getElementById('invitePhone').value.trim(),
+        identifier: parsed.identifier,
         vehicle_type: document.getElementById('inviteVehicle').value,
         license_plate: document.getElementById('inviteLicensePlate').value.trim(),
     };
-
-    const invitePhoneValidation = validatePhMobile(payload.phone);
-    if (payload.phone && !invitePhoneValidation.ok) {
-        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${invitePhoneValidation.message}`;
-        errorDiv.style.display = 'flex';
-        document.getElementById('invitePhone').focus();
-        return;
-    }
-    if (invitePhoneValidation.ok && invitePhoneValidation.normalized) {
-        payload.phone = invitePhoneValidation.normalized;
-    }
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Sending OTP…';
@@ -1662,7 +1674,6 @@ async function deleteRider(riderId, name) {
 // ───────────────────────────────────────────────────
 document.getElementById('searchInput').addEventListener('input', () => loadRiders());
 document.getElementById('statusFilter').addEventListener('change', () => loadRiders());
-document.getElementById('invitePhone')?.addEventListener('input', enforcePhoneInputLimit);
 document.getElementById('editPhone')?.addEventListener('input', enforcePhoneInputLimit);
 
 // ───────────────────────────────────────────────────

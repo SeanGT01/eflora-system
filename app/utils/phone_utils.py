@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 PH_MOBILE_REGEX = re.compile(r'^(?:\+63|0)9\d{9}$')
+EMAIL_REGEX = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
 
 # Phone-only accounts still need a unique users.email (NOT NULL).
 # Store a non-deliverable placeholder; login/OTP use the real phone.
@@ -85,3 +86,40 @@ def mask_email(email: str) -> str:
     else:
         masked_local = local[:2] + '***'
     return f'{masked_local}@{domain}'
+
+
+def parse_email_or_phone_identifier(raw):
+    """
+    Resolve one contact field to account email + optional phone + OTP channel.
+
+    Returns (result, error_message). On success, result has:
+      email, phone (or None), otp_channel ('email'|'sms'), login_id
+    """
+    raw_id = (raw or '').strip()
+    if not raw_id:
+        return None, 'Enter an email address or Philippine mobile number.'
+
+    if '@' in raw_id:
+        email = raw_id.lower()
+        if is_synthetic_account_email(email) or not EMAIL_REGEX.match(email):
+            return None, 'Enter a valid email address.'
+        return {
+            'email': email,
+            'phone': None,
+            'otp_channel': 'email',
+            'login_id': email,
+        }, None
+
+    if not is_valid_ph_mobile(raw_id):
+        return None, (
+            'Enter a valid email or Philippine mobile number '
+            '(e.g. 09171234567 or +639171234567).'
+        )
+
+    phone = normalize_ph_mobile(raw_id)
+    return {
+        'email': phone_to_account_email(phone),
+        'phone': phone,
+        'otp_channel': 'sms',
+        'login_id': phone,
+    }, None

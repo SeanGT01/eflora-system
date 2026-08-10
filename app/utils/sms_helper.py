@@ -95,3 +95,69 @@ def send_otp_sms(phone, otp_code, expiry_minutes=5, purpose='verification'):
     except Exception as exc:
         current_app.logger.error('SMS: request error %s: %s', type(exc).__name__, exc)
         return False
+
+
+def send_sms_message(phone, message):
+    """Send a free-form SMS via iProg. Returns True on success."""
+    try:
+        import requests
+    except ImportError:
+        current_app.logger.error('SMS: requests package not available')
+        return False
+
+    token, base = _iprog_config()
+    if not token:
+        current_app.logger.error('SMS: IPROG_API_TOKEN is not configured')
+        return False
+
+    normalized = normalize_ph_mobile(phone)
+    if not normalized:
+        current_app.logger.error('SMS: invalid phone number')
+        return False
+
+    text = (message or '').strip()
+    if not text:
+        return False
+
+    url = f'{base}/sms_messages'
+    payload = {
+        'api_token': token,
+        'phone_number': normalized,
+        'message': text,
+    }
+
+    try:
+        response = requests.post(url, json=payload, timeout=15)
+        data = {}
+        try:
+            data = response.json() if response.content else {}
+        except Exception:
+            data = {}
+
+        status = data.get('status')
+        ok = response.status_code in (200, 201) and (
+            status in (200, '200', 'success', True) or
+            (isinstance(status, int) and 200 <= status < 300) or
+            ('successfully' in str(data.get('message') or '').lower()) or
+            bool(data.get('message_id'))
+        )
+        if not ok:
+            current_app.logger.error(
+                'SMS: message send failed status=%s body=%s',
+                response.status_code,
+                str(data)[:300] if data else (response.text or '')[:300],
+            )
+        return bool(ok)
+    except Exception as exc:
+        current_app.logger.error('SMS: request error %s: %s', type(exc).__name__, exc)
+        return False
+
+
+def send_rider_credentials_sms(phone, full_name, default_password, store_name, login_id=None):
+    """SMS login credentials after rider OTP verification (phone-only accounts)."""
+    login = (login_id or normalize_ph_mobile(phone) or phone or '').strip()
+    message = (
+        f'E-Flora: Hi {full_name}, your rider account for {store_name} is ready. '
+        f'Login: {login} Password: {default_password}. Change password after login.'
+    )
+    return send_sms_message(phone, message)

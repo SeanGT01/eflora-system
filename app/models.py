@@ -595,14 +595,18 @@ class Rider(db.Model):
     locations = db.relationship('RiderLocation', backref='rider', lazy=True)
     
     def to_dict(self):
+        from app.utils.phone_utils import display_login_id
+
+        u = self.user
+        login_id = display_login_id(email=u.email if u else None, phone=u.phone if u else None) if u else None
         return {
             'id': self.id,
             'user_id': self.user_id,
             'store_id': self.store_id,
-            'full_name': self.user.full_name if self.user else None,
-            'email': self.user.email if self.user else None,
-            'phone': self.user.phone if self.user else None,
-            'avatar_url': self.user.avatar_url if self.user else None,  # Cloudinary only
+            'full_name': u.full_name if u else None,
+            'email': login_id,
+            'phone': u.phone if u else None,
+            'avatar_url': u.avatar_url if u else None,  # Cloudinary only
             'store_name': self.store.name if self.store else None,
             'vehicle_type': self.vehicle_type,
             'license_plate': self.license_plate,
@@ -1962,9 +1966,18 @@ class RiderOTP(db.Model):
         return datetime.utcnow() > self.expires_at
     
     def to_dict(self):
+        from app.utils.phone_utils import display_login_id
+
+        data = self.rider_data or {}
+        login_id = data.get('login_id') or display_login_id(
+            email=self.email, phone=data.get('phone')
+        )
         return {
             'id': self.id,
-            'email': self.email,
+            'email': login_id,
+            'contact': login_id,
+            'otp_channel': data.get('otp_channel') or ('sms' if data.get('phone') else 'email'),
+            'full_name': data.get('full_name'),
             'store_id': self.store_id,
             'is_verified': self.is_verified,
             'expires_at': self.expires_at.isoformat() if self.expires_at else None,
