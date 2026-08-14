@@ -341,20 +341,50 @@ class Store(db.Model):
             self.delivery_area = self.zone_delivery_area
             
         elif self.delivery_method == 'municipality':
-            # Use the saved municipality polygon
-            self.delivery_area = self.municipality_delivery_area
+            # municipality_delivery_area is MULTIPOLYGON; delivery_area is POLYGON.
+            # Never assign MultiPolygon directly — that aborts the DB commit.
+            if self.municipality_delivery_area is None:
+                self.delivery_area = None
+                return
+            try:
+                from geoalchemy2.shape import to_shape, from_shape
+                from shapely.geometry import Polygon, MultiPolygon
+                g = to_shape(self.municipality_delivery_area)
+                if isinstance(g, Polygon):
+                    self.delivery_area = from_shape(g, srid=4326)
+                elif isinstance(g, MultiPolygon):
+                    unified = g.buffer(0)
+                    if isinstance(unified, Polygon):
+                        self.delivery_area = from_shape(unified, srid=4326)
+                    elif isinstance(unified, MultiPolygon) and len(unified.geoms) == 1:
+                        self.delivery_area = from_shape(unified.geoms[0], srid=4326)
+                    else:
+                        # Fallback for delivery_area column type; checks use municipality_delivery_area
+                        self.delivery_area = from_shape(g.convex_hull, srid=4326)
+                else:
+                    self.delivery_area = None
+            except Exception as e:
+                print(f"⚠️ municipality → delivery_area sync skipped: {e}")
+                self.delivery_area = None
     
     def can_deliver_to(self, customer_lat, customer_lng):
         """Check if customer is within delivery area based on selected method"""
-        if not self.delivery_area:
-            return False
-            
         from geoalchemy2.functions import ST_Contains
         from geoalchemy2.shape import from_shape
         from shapely.geometry import Point
-        
+
+        if self.delivery_method == 'municipality':
+            area = self.municipality_delivery_area
+        elif self.delivery_method == 'zone':
+            area = self.zone_delivery_area or self.delivery_area
+        else:
+            area = self.delivery_area
+
+        if not area:
+            return False
+
         point = from_shape(Point(customer_lng, customer_lat), srid=4326)
-        result = db.session.query(ST_Contains(self.delivery_area, point)).scalar()
+        result = db.session.query(ST_Contains(area, point)).scalar()
         return bool(result)
     
     def calculate_distance(self, lat2, lng2):
@@ -2098,6 +2128,54 @@ class MunicipalityBoundary(db.Model):
     max_lng = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @staticmethod
+    def normalize_name(name):
+        """Match 'Calamba' ↔ 'City of Calamba' / 'San Pablo City' ↔ 'San Pablo'."""
+        import re
+        import unicodedata
+        if not name:
+            return ''
+        text = unicodedata.normalize('NFKD', str(name))
+        text = ''.join(c for c in text if not unicodedata.combining(c))
+        text = text.lower().strip()
+        text = re.sub(r'^(city|municipality)\s+of\s+', '', text)
+        text = re.sub(r'\s+city$', '', text)
+        text = re.sub(r"[-']", ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    @classmethod
+    def resolve_by_names(cls, names, province='Laguna'):
+        """Map UI names to boundary rows. Returns (resolved [{requested, boundary}], missing)."""
+        requested = [n for n in (names or []) if n]
+        if not requested:
+            return [], []
+
+        query = cls.query
+        if province:
+            query = query.filter(cls.province.ilike(f'%{province}%'))
+        rows = query.all()
+        by_norm = {}
+        for row in rows:
+            key = cls.normalize_name(row.name)
+            # Prefer exact-ish shorter city names if duplicates ever appear
+            if key not in by_norm:
+                by_norm[key] = row
+
+        resolved = []
+        missing = []
+        seen_ids = set()
+        for name in requested:
+            row = by_norm.get(cls.normalize_name(name))
+            if not row:
+                missing.append(name)
+                continue
+            if row.id in seen_ids:
+                continue
+            seen_ids.add(row.id)
+            resolved.append({'requested': name, 'boundary': row})
+        return resolved, missing
     
     def to_geojson(self):
         from geoalchemy2.shape import to_shape
@@ -2109,6 +2187,7 @@ class MunicipalityBoundary(db.Model):
             'properties': {
                 'id': self.id,
                 'name': self.name,
+                'match_name': self.normalize_name(self.name),
                 'province': self.province,
                 'region': self.region,
                 'psgc': self.psgc_code
@@ -2121,11 +2200,11 @@ class MunicipalityBoundary(db.Model):
         from sqlalchemy import func
         from geoalchemy2.functions import ST_Touches
         
-        query = MunicipalityBoundary.query.filter_by(name=municipality_name)
-        if province:
-            query = query.filter_by(province=province)
-        
-        municipality = query.first()
+        resolved, _missing = MunicipalityBoundary.resolve_by_names(
+            [municipality_name],
+            province=province or 'Laguna'
+        )
+        municipality = resolved[0]['boundary'] if resolved else None
         if not municipality:
             return []
         

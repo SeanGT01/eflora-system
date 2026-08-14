@@ -8,8 +8,9 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet"></noscript>
 
     <style>
         :root {
@@ -67,6 +68,9 @@
             pointer-events: none;
             z-index: 9999;
             opacity: 0.35;
+        }
+        @media (prefers-reduced-transparency: reduce) {
+            body::before { display: none; }
         }
 
         /* ─── Layout ─── */
@@ -904,12 +908,13 @@
         .input-group-pill .form-control:first-child { border-radius: var(--radius-pill) 0 0 var(--radius-pill); }
         .input-group-pill .btn:last-child { border-radius: 0 var(--radius-pill) var(--radius-pill) 0; }
 
-        /* ─── Modal ─── */
+        /* ─── Modal (customer-side visual language) ─── */
         .modal-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(42, 35, 30, 0.55);
+            background: rgba(42, 35, 30, 0.5);
             backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
             z-index: 500;
             display: none;
             align-items: center;
@@ -922,13 +927,21 @@
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         .modal {
-            background: var(--warm-white);
+            background: rgba(255, 255, 255, 0.92);
             border-radius: var(--radius-xl);
             width: 100%;
-            max-height: 90vh;
+            max-width: 600px;
+            max-height: 85vh;
             overflow-y: auto;
-            box-shadow: var(--shadow-deep);
+            box-shadow:
+                0 20px 60px rgba(90, 40, 80, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.75);
             animation: slideUp 0.25s ease;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(18px) saturate(1.25);
+            -webkit-backdrop-filter: blur(18px) saturate(1.25);
         }
 
         @keyframes slideUp {
@@ -941,49 +954,122 @@
         .modal-lg { max-width: 800px; }
 
         .modal-header {
-            padding: 1.5rem 1.75rem;
-            border-bottom: 1px solid var(--border);
+            padding: 1.5rem 1.75rem 1.15rem;
+            border-bottom: 1px solid rgba(194, 78, 104, 0.12);
             display: flex;
             align-items: center;
             justify-content: space-between;
             position: sticky;
             top: 0;
-            background: var(--warm-white);
+            background:
+                linear-gradient(90deg, rgba(194, 78, 104, 0.08), rgba(255, 255, 255, 0.88));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             z-index: 1;
         }
 
-        .modal-title {
+        .modal-title,
+        .modal-header h3 {
             font-family: var(--font-display);
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 500;
+            color: var(--charcoal);
+            letter-spacing: -0.02em;
+            margin: 0;
         }
 
         .modal-close {
-            width: 32px;
-            height: 32px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
-            border: 1.5px solid var(--border-strong);
-            background: none;
-            display: flex;
+            border: none;
+            background: rgba(194, 78, 104, 0.08);
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 17px;
+            font-size: 18px;
             color: var(--muted);
             cursor: pointer;
             transition: var(--transition);
+            flex-shrink: 0;
         }
 
-        .modal-close:hover { background: var(--cream); color: var(--charcoal); }
+        .modal-close:hover {
+            background: rgba(194, 78, 104, 0.14);
+            color: var(--deep-rose);
+        }
 
-        .modal-body { padding: 1.75rem; }
+        .modal-body {
+            padding: 1.5rem 1.75rem;
+            flex: 1;
+            overflow-y: auto;
+            background: transparent;
+        }
 
         .modal-footer {
-            padding: 1.25rem 1.75rem;
-            border-top: 1px solid var(--border);
+            padding: 1.1rem 1.75rem 1.5rem;
+            border-top: 1px solid rgba(194, 78, 104, 0.12);
             display: flex;
             gap: 0.75rem;
             justify-content: flex-end;
-            background: var(--cream);
+            background: linear-gradient(180deg, rgba(255, 252, 248, 0.55), rgba(255, 245, 248, 0.7));
+            flex-shrink: 0;
+        }
+
+        .modal-footer .btn-outline,
+        .modal .btn-outline {
+            background: rgba(255, 255, 255, 0.85);
+            border: 1.5px solid rgba(194, 78, 104, 0.22);
+            color: var(--charcoal);
+            border-radius: var(--radius-pill);
+        }
+
+        .modal-footer .btn-outline:hover,
+        .modal .btn-outline:hover {
+            border-color: var(--deep-rose);
+            color: var(--deep-rose);
+            background: rgba(255, 245, 248, 0.95);
+        }
+
+        .modal-footer .btn-rose,
+        .modal .btn-rose,
+        .modal-footer .btn-primary,
+        .modal .btn-primary {
+            background: linear-gradient(135deg, #c24e68 0%, #d878a0 55%, #b070c8 100%);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: var(--radius-pill);
+            box-shadow: 0 6px 18px rgba(181, 68, 90, 0.25);
+        }
+
+        .modal-footer .btn-rose:hover,
+        .modal .btn-rose:hover,
+        .modal-footer .btn-primary:hover,
+        .modal .btn-primary:hover {
+            background: linear-gradient(135deg, #b04058 0%, #c86890 55%, #9f60b8 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 22px rgba(181, 68, 90, 0.35);
+        }
+
+        .modal .form-control,
+        .modal .form-select,
+        .modal textarea,
+        .modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+        .modal select {
+            background: #ffffff;
+            border: 1.5px solid rgba(107, 76, 59, 0.18);
+            border-radius: var(--radius-md);
+            box-shadow: 0 1px 2px rgba(80, 40, 70, 0.04);
+        }
+
+        .modal .form-control:focus,
+        .modal .form-select:focus,
+        .modal textarea:focus,
+        .modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+        .modal select:focus {
+            outline: none;
+            border-color: rgba(194, 78, 104, 0.55);
+            box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.12);
         }
 
         /* ─── Section Headers ─── */
@@ -1549,6 +1635,7 @@
     </style>
 
     {% block extra_css %}{% endblock %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
 </head>
 <body>
 
@@ -1779,9 +1866,6 @@
                         {% if session.get('role') != 'admin' %}
                         <a href="{{ url_for('templates.my_account') }}?page=profile" class="dropdown-item">
                             <i class="ri-user-3-line"></i> Profile
-                        </a>
-                        <a href="{{ url_for('templates.my_account', page='settings') }}" class="dropdown-item">
-                            <i class="ri-settings-4-line"></i> Settings
                         </a>
                         {% endif %}
                         <a href="{{ url_for('templates.logout') }}" class="dropdown-item dropdown-item-danger">
@@ -2089,16 +2173,16 @@
 
         const style = document.createElement('style');
         style.textContent = `
-            .app-confirm-overlay{position:fixed;inset:0;background:rgba(15,18,22,.5);display:none;align-items:center;justify-content:center;padding:1rem;z-index:12000}
+            .app-confirm-overlay{position:fixed;inset:0;background:rgba(42,35,30,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1.25rem;z-index:12000}
             .app-confirm-overlay.show{display:flex}
-            .app-confirm-card{width:min(440px,100%);background:#fff;border-radius:16px;box-shadow:0 20px 45px rgba(0,0,0,.24);padding:1.1rem 1.1rem 1rem}
-            .app-confirm-title{font-size:1rem;font-weight:700;color:#1f2937;margin-bottom:.45rem}
-            .app-confirm-message{font-size:.93rem;color:#475569;line-height:1.55;margin-bottom:1rem;white-space:pre-line}
-            .app-confirm-actions{display:flex;justify-content:flex-end;gap:.55rem}
-            .app-confirm-btn{border:1px solid #e2e8f0;border-radius:10px;background:#fff;color:#334155;padding:.48rem .9rem;font-weight:600;cursor:pointer}
-            .app-confirm-btn:hover{background:#f8fafc}
-            .app-confirm-btn.primary{background:#b5445a;border-color:#b5445a;color:#fff}
-            .app-confirm-btn.primary:hover{background:#9f3a4f;border-color:#9f3a4f}
+            .app-confirm-card{width:min(440px,100%);background:rgba(255,255,255,.92);border:1px solid rgba(255,255,255,.7);border-radius:20px;box-shadow:0 20px 60px rgba(90,40,80,.18),inset 0 1px 0 rgba(255,255,255,.75);backdrop-filter:blur(18px) saturate(1.25);-webkit-backdrop-filter:blur(18px) saturate(1.25);padding:1.35rem 1.35rem 1.2rem}
+            .app-confirm-title{font-family:var(--font-display);font-size:1.35rem;font-weight:500;color:var(--charcoal);margin-bottom:.5rem;letter-spacing:-0.02em}
+            .app-confirm-message{font-size:.93rem;color:var(--muted);line-height:1.55;margin-bottom:1.1rem;white-space:pre-line}
+            .app-confirm-actions{display:flex;justify-content:flex-end;gap:.6rem}
+            .app-confirm-btn{border:1.5px solid rgba(194,78,104,.22);border-radius:999px;background:rgba(255,255,255,.9);color:var(--charcoal);padding:.5rem 1rem;font-weight:600;cursor:pointer;font-family:var(--font-sans);transition:var(--transition)}
+            .app-confirm-btn:hover{background:rgba(255,245,248,.95);border-color:var(--deep-rose);color:var(--deep-rose)}
+            .app-confirm-btn.primary{background:linear-gradient(135deg,#c24e68 0%,#d878a0 55%,#b070c8 100%);border-color:rgba(255,255,255,.35);color:#fff;box-shadow:0 6px 18px rgba(181,68,90,.25)}
+            .app-confirm-btn.primary:hover{background:linear-gradient(135deg,#b04058 0%,#c86890 55%,#9f60b8 100%);border-color:rgba(255,255,255,.35);color:#fff}
         `;
         document.head.appendChild(style);
 

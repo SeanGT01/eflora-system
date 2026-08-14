@@ -62,16 +62,11 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 
-    <!-- Mapbox GL JS -->
-    <script src='https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.js'></script>
-    <link href='https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.css' rel='stylesheet' />
-
-    <!-- Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <!-- Icons (non-blocking) -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet"></noscript>
     
    <style>
         :root {
@@ -170,6 +165,9 @@
                 0 8px 28px rgba(181, 68, 90, 0.06),
                 inset 0 1px 0 rgba(255, 255, 255, 0.65);
             transition: transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+        }
+
+        .main-header.header-hidden {
             will-change: transform;
         }
 
@@ -2377,13 +2375,6 @@
             }
         }
         
-        .bag{
-            margin-top: 5px;
-        }
-        #bag{
-            margin-top: 5px;
-        }
-        
         /* ─── FOOTER (SMALL SCREENS) ─── */
         @media (max-width: 720px) {
             /* Footer */
@@ -2456,6 +2447,15 @@
         html.perf-lite #chat-fab.pulse {
             animation: none !important;
         }
+        html.fx-lite body::before,
+        html.perf-lite body::before {
+            display: none !important;
+        }
+        /* Keep paint work bounded on constrained devices without changing layout. */
+        html.fx-lite body *,
+        html.perf-lite body * {
+            scroll-behavior: auto;
+        }
 
         @media (prefers-reduced-motion: reduce) {
             #chat-fab.pulse {
@@ -2494,6 +2494,7 @@
     </style>
     
     {% block extra_css %}{% endblock %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
 </head>
 <body>
 
@@ -3125,7 +3126,25 @@ async function fetchStoreOpenDays(storeId, scheduleHint = null) {
     };
 }
 
+function ensureFlatpickr() {
+    if (typeof flatpickr === 'function') return Promise.resolve();
+    if (window.__flatpickrLoading) return window.__flatpickrLoading;
+    window.__flatpickrLoading = new Promise(function (resolve, reject) {
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
+        document.head.appendChild(css);
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/flatpickr';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+    return window.__flatpickrLoading;
+}
+
 async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
+    try { await ensureFlatpickr(); } catch (e) {}
     const input = document.getElementById('storeDeliveryDate_' + order.temp_id);
     if (!input) return initialDateStr;
 

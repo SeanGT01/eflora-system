@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating
 from app.extensions import db
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from functools import wraps
 from datetime import datetime
 from app.checkout_routes import _check_store_delivery
@@ -85,6 +85,13 @@ def _resolve_optional_customer_address():
         return None, None
 
 
+def _normalize_place_name(value):
+    import unicodedata
+    text = unicodedata.normalize('NFKD', str(value or ''))
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    return ' '.join(text.casefold().split())
+
+
 def _listing_delivery_match(store, address):
     """
     Storefront coverage check — aligned with templates_routes._store_delivery_match
@@ -93,22 +100,51 @@ def _listing_delivery_match(store, address):
     if not store or not address:
         return {'can_deliver': False, 'reason': 'Set your default address to check delivery coverage.'}
 
-    address_municipality = (address.municipality or '').strip().casefold()
+    address_municipality = _normalize_place_name(address.municipality)
     has_coords = address.latitude is not None and address.longitude is not None
+    method = (store.delivery_method or 'radius').strip().casefold()
 
     try:
-        if store.delivery_method == 'municipality':
+        if method == 'municipality':
             selected = store.selected_municipalities or []
-            if selected and address_municipality:
+            if selected:
+                if not address_municipality:
+                    return {
+                        'can_deliver': False,
+                        'reason': 'Your address is missing a municipality.',
+                    }
                 matched = any(
-                    str(name).strip().casefold() == address_municipality for name in selected
+                    _normalize_place_name(name) == address_municipality
+                    for name in selected
                 )
                 if not matched:
                     return {
                         'can_deliver': False,
                         'reason': f"{store.name} does not deliver to {address.municipality}.",
                     }
-            return {'can_deliver': True, 'reason': None}
+                return {'can_deliver': True, 'reason': None}
+
+            if has_coords and (
+                store.municipality_delivery_area is not None
+                or store.delivery_area is not None
+            ):
+                try:
+                    if store.can_deliver_to(address.latitude, address.longitude):
+                        return {'can_deliver': True, 'reason': None}
+                    return {
+                        'can_deliver': False,
+                        'reason': 'Outside this store delivery zone.',
+                    }
+                except Exception:
+                    return {
+                        'can_deliver': False,
+                        'reason': 'Could not validate delivery coverage right now.',
+                    }
+
+            return {
+                'can_deliver': False,
+                'reason': 'Store has no delivery municipalities configured.',
+            }
 
         if not has_coords:
             return {
@@ -118,7 +154,44 @@ def _listing_delivery_match(store, address):
 
         # Reuse checkout geo/fee helper when coordinates exist
         baseline = 1.0
-        return _check_store_delivery(store, address, baseline)
+        check = _check_store_delivery(store, address, baseline)
+
+        # Checkout helper can still pass stores with missing zone polygons.
+        # For listing filters, require explicit coverage when method is zone.
+        if check.get('can_deliver') and method == 'zone':
+            has_area = (
+                store.zone_delivery_area is not None
+                or store.delivery_area is not None
+            )
+            if not has_area and not float(store.max_delivery_distance or 0):
+                return {
+                    'can_deliver': False,
+                    'reason': 'Store has no delivery area configured.',
+                }
+            if has_area:
+                try:
+                    if not store.can_deliver_to(address.latitude, address.longitude):
+                        return {
+                            'can_deliver': False,
+                            'reason': 'Outside this store delivery zone.',
+                        }
+                except Exception:
+                    return {
+                        'can_deliver': False,
+                        'reason': 'Could not validate delivery coverage right now.',
+                    }
+
+        if check.get('can_deliver') and method == 'radius':
+            radius_limit = float(
+                store.delivery_radius_km or store.max_delivery_distance or 0
+            )
+            if not radius_limit:
+                return {
+                    'can_deliver': False,
+                    'reason': 'Store has no delivery radius configured.',
+                }
+
+        return check
     except Exception:
         return {
             'can_deliver': False,
@@ -366,44 +439,38 @@ def get_cart():
     """Get or create cart for the logged-in customer."""
     try:
         user_id = int(get_jwt_identity())
-        print(f"🛒 Getting cart for user: {user_id}")
         
         cart = Cart.query.filter_by(user_id=user_id).first()
         if not cart:
-            print(f"🆕 Creating new cart for user: {user_id}")
             cart = Cart(user_id=user_id)
             db.session.add(cart)
             db.session.commit()
         
-        # Custom serialization to ensure images are included
+        items = (
+            CartItem.query
+            .filter_by(cart_id=cart.id)
+            .options(
+                joinedload(CartItem.product).joinedload(Product.store),
+                joinedload(CartItem.product).joinedload(Product.main_category),
+                joinedload(CartItem.product).joinedload(Product.store_category),
+                joinedload(CartItem.product).selectinload(Product.images),
+                joinedload(CartItem.product).selectinload(Product.variants),
+                joinedload(CartItem.variant),
+            )
+            .all()
+        )
+
         cart_data = {
             'id': cart.id,
             'user_id': cart.user_id,
             'created_at': cart.created_at.isoformat() if cart.created_at else None,
             'updated_at': cart.updated_at.isoformat() if cart.updated_at else None,
-            'items': []
+            'items': [item.to_dict() for item in items],
         }
-        
-        for item in cart.items:
-            # Use item.to_dict() which properly handles variants and all cart item fields
-            item_data = item.to_dict()
-            cart_data['items'].append(item_data)
-        
-        print(f"✅ Cart retrieved: {len(cart_data['items'])} items")
-        
-        # Debug: Print first item's image info
-        if cart_data['items']:
-            first_item = cart_data['items'][0]
-            print(f"🔍 First item: {first_item['product']['name']}")
-            print(f"📸 Images count: {len(first_item['product'].get('images', []))}")
-            if first_item['product'].get('images'):
-                print(f"📸 First image filename: {first_item['product']['images'][0].get('filename')}")
         
         return jsonify({'success': True, 'cart': cart_data})
     except Exception as e:
-        print(f"❌ Error in get_cart: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        current_app.logger.exception('get_cart: %s', e)
         return jsonify({'error': str(e)}), 500
 
 # app/customer.py - Update the return part of add_to_cart
@@ -666,9 +733,17 @@ def get_orders():
         status = request.args.get('status', '')
         page = request.args.get('page', 1, type=int)
 
-        print(f"📦 Getting orders for user: {user_id}, status: {status}, page: {page}")
-
-        q = Order.query.filter_by(customer_id=user_id)
+        q = (
+            Order.query
+            .filter_by(customer_id=user_id)
+            .options(
+                selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
+                selectinload(Order.items).joinedload(OrderItem.variant),
+                joinedload(Order.store),
+                joinedload(Order.customer),
+                joinedload(Order.assigned_rider).joinedload(Rider.user),
+            )
+        )
         if status:
             q = q.filter_by(status=status)
         orders = q.order_by(Order.created_at.desc()).paginate(
@@ -689,15 +764,12 @@ def get_orders():
         result = []
         for o in orders.items:
             d = o.to_dict()
-            items = OrderItem.query.filter_by(order_id=o.id).all()
+            items = list(o.items or [])
             d['items'] = [i.to_dict() for i in items]
-            if o.store_id:
-                store = Store.query.get(o.store_id)
-                d['store_name'] = store.name if store else None
-            if o.rider_id:
-                rider = Rider.query.get(o.rider_id)
-                if rider and rider.user:
-                    d['rider_name'] = rider.user.full_name
+            if o.store:
+                d['store_name'] = o.store.name
+            elif o.store_id:
+                d['store_name'] = None
             n_items = len(items)
             if o.status in ('delivered', 'completed'):
                 rid = rated_by_order.get(o.id, set())
@@ -710,8 +782,6 @@ def get_orders():
                 d['all_rated'] = True
             result.append(d)
 
-        print(f"✅ Found {len(result)} orders")
-        
         return jsonify({
             'orders': result,
             'total': orders.total,
@@ -720,7 +790,7 @@ def get_orders():
             'has_next': orders.has_next,
         })
     except Exception as e:
-        print(f"❌ Error in get_orders: {str(e)}")
+        current_app.logger.exception('get_orders: %s', e)
         return jsonify({'error': str(e)}), 500
 
 
@@ -729,27 +799,24 @@ def get_orders():
 def get_order(order_id):
     """Return a single order with full item detail."""
     try:
-        user_id = int(get_jwt_identity())
-        print(f"📦 Getting order: {order_id} for user: {user_id}")
-        
-        order = Order.query.filter_by(id=order_id, customer_id=user_id).first_or_404()
+        user_id = int(get_jwt_identity()) 
+        order = (
+            Order.query
+            .filter_by(id=order_id, customer_id=user_id)
+            .options(
+                selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
+                selectinload(Order.items).joinedload(OrderItem.variant),
+                joinedload(Order.store),
+                joinedload(Order.customer),
+                joinedload(Order.assigned_rider).joinedload(Rider.user),
+            )
+            .first_or_404()
+        )
         d = order.to_dict()
-
-        items = OrderItem.query.filter_by(order_id=order.id).all()
-        d['items'] = [i.to_dict() for i in items]
-
-        if order.store_id:
-            store = Store.query.get(order.store_id)
-            d['store_name'] = store.name if store else None
-
-        if order.rider_id:
-            rider = Rider.query.get(order.rider_id)
-            if rider and rider.user:
-                d['rider_name'] = rider.user.full_name
-
+        d['items'] = [i.to_dict() for i in (order.items or [])]
         return jsonify(d)
     except Exception as e:
-        print(f"❌ Error in get_order: {str(e)}")
+        current_app.logger.exception('get_order: %s', e)
         return jsonify({'error': str(e)}), 500
 
 

@@ -379,6 +379,13 @@ def create_app(config_class='default'):
         if not app.debug:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
 
+        # Static files are versioned by deployment and do not contain session
+        # data. Allow browsers to reuse them instead of re-downloading CSS,
+        # scripts, and local assets on every navigation.
+        if request.path.startswith('/static/'):
+            response.headers['Cache-Control'] = 'public, max-age=86400'
+            return response
+
         # Avoid stale auth/session pages being shown from browser history cache.
         if request.path in ('/login', '/register') or session.get('user_id'):
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'

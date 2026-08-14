@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 import pytz
 
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
@@ -331,7 +331,11 @@ def list_conversations():
                     Conversation.seller_deleted_at.is_(None),
                 ),
             )
-        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
+        ).order_by(Conversation.last_message_at.desc().nullslast()).options(
+            joinedload(Conversation.customer),
+            joinedload(Conversation.seller),
+            joinedload(Conversation.store),
+        ).all()
     else:
         convos = Conversation.query.filter(
             or_(
@@ -344,7 +348,11 @@ def list_conversations():
                     Conversation.seller_deleted_at.is_(None),
                 ),
             )
-        ).order_by(Conversation.last_message_at.desc().nullslast()).all()
+        ).order_by(Conversation.last_message_at.desc().nullslast()).options(
+            joinedload(Conversation.customer),
+            joinedload(Conversation.seller),
+            joinedload(Conversation.store),
+        ).all()
 
     return jsonify({
         'conversations': [c.to_dict(current_user_id=user.id) for c in convos]
@@ -843,40 +851,42 @@ def total_unread_count():
 
     if user.role == 'admin':
         admin_ids = _admin_user_ids() or [user.id]
-        convos = Conversation.query.filter(
-            or_(
-                db.and_(
-                    Conversation.customer_id == user.id,
-                    Conversation.customer_deleted_at.is_(None),
-                ),
-                db.and_(
-                    Conversation.seller_id.in_(admin_ids),
-                    Conversation.seller_deleted_at.is_(None),
-                ),
-            )
-        ).all()
+        convo_filter = or_(
+            db.and_(
+                Conversation.customer_id == user.id,
+                Conversation.customer_deleted_at.is_(None),
+            ),
+            db.and_(
+                Conversation.seller_id.in_(admin_ids),
+                Conversation.seller_deleted_at.is_(None),
+            ),
+        )
     else:
-        convos = Conversation.query.filter(
-            or_(
-                db.and_(
-                    Conversation.customer_id == user.id,
-                    Conversation.customer_deleted_at.is_(None),
-                ),
-                db.and_(
-                    Conversation.seller_id == user.id,
-                    Conversation.seller_deleted_at.is_(None),
-                ),
-            )
-        ).all()
+        convo_filter = or_(
+            db.and_(
+                Conversation.customer_id == user.id,
+                Conversation.customer_deleted_at.is_(None),
+            ),
+            db.and_(
+                Conversation.seller_id == user.id,
+                Conversation.seller_deleted_at.is_(None),
+            ),
+        )
 
-    total = 0
-    for c in convos:
-        try:
-            total += int(c.unread_for(user.id) or 0)
-        except (TypeError, ValueError):
-            pass
+    unread_expr = func.coalesce(
+        case(
+            (Conversation.customer_id == user.id, Conversation.customer_unread),
+            else_=Conversation.seller_unread,
+        ),
+        0,
+    )
+    total = (
+        db.session.query(func.coalesce(func.sum(unread_expr), 0))
+        .filter(convo_filter)
+        .scalar()
+    )
 
-    return jsonify({'unread_count': total}), 200
+    return jsonify({'unread_count': int(total or 0)}), 200
 
 
 # ═══════════════════════════════════════════════════════════════════════

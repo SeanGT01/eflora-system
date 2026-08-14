@@ -1559,13 +1559,48 @@
                 </button>
                 <div class="gallery-accordion-body">
                     <div class="gallery-accordion-content">
+                        {% set store_sched = product.store.store_schedule if product.store and product.store.store_schedule else none %}
+                        {% set delivery_start = store_sched.delivery_start if store_sched and store_sched.delivery_start else none %}
+                        {% set delivery_cutoff = store_sched.delivery_cutoff if store_sched and store_sched.delivery_cutoff else none %}
+                        {% set schedule_entries = store_sched.schedules if store_sched and store_sched.schedules else [] %}
+                        {% set day_order = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+                        {% set od = namespace(days=[]) %}
+                        {% for entry in schedule_entries %}
+                            {% for day in (entry.days or []) %}
+                                {% set d = day|lower %}
+                                {% if d not in od.days %}
+                                    {% set od.days = od.days + [d] %}
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+                        {% set sorted_days = namespace(list=[]) %}
+                        {% for d in day_order if d in od.days %}
+                            {% set sorted_days.list = sorted_days.list + [d] %}
+                        {% endfor %}
+
                         <p><strong>Same-Day Delivery</strong><br>
-                        Orders placed before 2:00 PM are eligible for same-day delivery within our service area.</p>
+                        {% if delivery_start and delivery_cutoff %}
+                            Same-day delivery is available from
+                            <span data-store-time="{{ delivery_start }}">{{ delivery_start }}</span>
+                            to
+                            <span data-store-time="{{ delivery_cutoff }}">{{ delivery_cutoff }}</span>
+                            on this store’s open days{% if sorted_days.list %}
+                            ({{ sorted_days.list|map('capitalize')|join(', ') }}){% endif %},
+                            while delivery slots remain.
+                        {% elif delivery_cutoff %}
+                            Orders placed before
+                            <span data-store-time="{{ delivery_cutoff }}">{{ delivery_cutoff }}</span>
+                            are eligible for same-day delivery within our service area, while delivery slots remain.
+                        {% elif sorted_days.list %}
+                            Same-day delivery is available on this store’s open days
+                            ({{ sorted_days.list|map('capitalize')|join(', ') }}), based on remaining delivery time slots.
+                        {% else %}
+                            Same-day delivery may be available depending on remaining delivery slots for today.
+                        {% endif %}
+                        </p>
                         <p><strong>Delivery Radius</strong><br>
                         We deliver within a {{ product.store.delivery_radius_km if product.store and product.store.delivery_radius_km else 5 }}km radius from our partner store.
                         {% if product.store %} Located at {{ product.store.address }}.{% endif %}</p>
-                        <p><strong>Packaging</strong><br>
-                        All flowers are wrapped in premium tissue paper and secured in a moisture-retaining sleeve to ensure freshness during transit.</p>
                     </div>
                 </div>
             </div>
@@ -1812,8 +1847,15 @@
 
         <!-- Trust badges -->
         <div style="display:flex;gap:1.25rem;flex-wrap:wrap;">
+            {% set store_sched_badge = product.store.store_schedule if product.store and product.store.store_schedule else none %}
+            {% set has_same_day_info = store_sched_badge and (store_sched_badge.delivery_cutoff or store_sched_badge.schedules) %}
             <div style="display:flex;align-items:center;gap:0.4rem;font-size:12px;color:var(--muted);">
-                <i class="ri-truck-line" style="color:var(--sage);"></i> Same-day delivery
+                <i class="ri-truck-line" style="color:var(--sage);"></i>
+                {% if has_same_day_info or not store_sched_badge %}
+                    Same-day delivery
+                {% else %}
+                    Scheduled delivery
+                {% endif %}
             </div>
             <div style="display:flex;align-items:center;gap:0.4rem;font-size:12px;color:var(--muted);">
                 <i class="ri-leaf-line" style="color:var(--sage);"></i> Farm fresh
@@ -2467,6 +2509,21 @@ function filterAddons(cat, btn) {
    let selectedTime = null;
    let storeIsOpen = true;
    const storeSchedule = {{ product.store.store_schedule | tojson if product.store and product.store.store_schedule else 'null' }};
+
+   function formatStoreTimeLabel(value) {
+       if (!value || typeof value !== 'string' || !value.includes(':')) return value || '';
+       const [hRaw, mRaw] = value.split(':');
+       let h = parseInt(hRaw, 10);
+       const m = String(mRaw || '00').padStart(2, '0');
+       if (!Number.isFinite(h)) return value;
+       const suffix = h >= 12 ? 'PM' : 'AM';
+       h = h % 12 || 12;
+       return `${h}:${m} ${suffix}`;
+   }
+
+   document.querySelectorAll('[data-store-time]').forEach((el) => {
+       el.textContent = formatStoreTimeLabel(el.getAttribute('data-store-time'));
+   });
    
    // Get current time in Philippine timezone (UTC+8)
    function getPhilippineTime() {

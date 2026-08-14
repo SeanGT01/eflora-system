@@ -17,7 +17,12 @@
                 rgba(196, 214, 198, 0.16) 100%
             ),
             #fffcf8;
-        background-attachment: fixed;
+        background-attachment: scroll;
+    }
+    @media (min-width: 769px) {
+        html:not(.fx-lite):not(.perf-lite) body:has(.landing-atmosphere) {
+            background-attachment: fixed;
+        }
     }
 
     body:has(.landing-atmosphere)::after {
@@ -53,6 +58,11 @@
             drop-shadow(0 2px 4px rgba(90, 70, 80, 0.16));
         animation: whiteFloralDrift 22s ease-in-out infinite;
         will-change: transform;
+    }
+    html.fx-lite .landing-white-florals__flower,
+    html.perf-lite .landing-white-florals__flower {
+        filter: drop-shadow(0 6px 10px rgba(120, 90, 100, 0.18));
+        will-change: auto;
     }
 
     .landing-white-florals__flower svg {
@@ -244,6 +254,14 @@
     .landing-atmosphere > *:not(.landing-white-florals) {
         position: relative;
         z-index: 1;
+    }
+
+    /* Sections below the fold do not need layout or paint work until approached. */
+    @supports (content-visibility: auto) {
+        .landing-atmosphere > section:not(.hero-section) {
+            content-visibility: auto;
+            contain-intrinsic-size: auto 620px;
+        }
     }
 
     .landing-atmosphere .featured-section {
@@ -500,6 +518,11 @@
         transform: translateX(-35%) scale(0.65) rotateY(-15deg);
         filter: drop-shadow(0 20px 40px rgba(0,0,0,0.18)) blur(3px);
     }
+    html.fx-lite .hero-slide.prev img,
+    html.perf-lite .hero-slide.prev img {
+        filter: none;
+        opacity: 0.85;
+    }
 
     /* Active slide - center, large and clear */
     .hero-slide.active {
@@ -520,6 +543,11 @@
     .hero-slide.next img {
         transform: translateX(35%) scale(0.65) rotateY(15deg);
         filter: drop-shadow(0 20px 40px rgba(0,0,0,0.18)) blur(3px);
+    }
+    html.fx-lite .hero-slide.next img,
+    html.perf-lite .hero-slide.next img {
+        filter: none;
+        opacity: 0.85;
     }
 
     .hero-slide img {
@@ -775,7 +803,10 @@
 
     /* Browse-outside limitations modal (mirrors Flutter app) */
     #browseLimitationsModal.modal-overlay {
-        z-index: 1100;
+        z-index: 13050;
+    }
+    #browseLimitationsModal.modal-overlay.active {
+        display: flex;
     }
     #browseLimitationsModal .modal {
         max-width: 440px;
@@ -1128,16 +1159,22 @@
         gap: 1rem;
     }
 
+    /* Featured: max 2 rows (cols × 2) at each breakpoint */
+    .featured-section .product-card:nth-child(n+13) { display: none; }
+
     @media (max-width: 1399px) {
         .product-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        .featured-section .product-card:nth-child(n+11) { display: none; }
     }
 
     @media (max-width: 1199px) {
         .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.875rem; }
+        .featured-section .product-card:nth-child(n+9) { display: none; }
     }
 
     @media (max-width: 899px) {
         .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+        .featured-section .product-card:nth-child(n+7) { display: none; }
     }
 
     .product-card {
@@ -2060,6 +2097,7 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.75rem;
         }
+        .featured-section .product-card:nth-child(n+5) { display: none; }
         
         .categories-grid {
             grid-template-columns: repeat(2, 1fr);
@@ -3052,16 +3090,28 @@
         <!-- Thumbnail strip -->
         <div class="hero-thumbs" id="heroThumbs">
             <div class="hero-thumb active" onclick="heroGoTo(0)" data-idx="0">
-                <img src="/static/images/category_images/fresh_flowers.png" alt="Fresh Flowers">
+                <picture>
+                    <source srcset="/static/images/category_images/fresh_flowers.webp" type="image/webp">
+                    <img src="/static/images/category_images/fresh_flowers.png" alt="Fresh Flowers" decoding="async" fetchpriority="high">
+                </picture>
             </div>
             <div class="hero-thumb" onclick="heroGoTo(1)" data-idx="1">
-                <img src="/static/images/category_images/potted_plants.png" alt="Potted Plants">
+                <picture>
+                    <source srcset="/static/images/category_images/potted_plants.webp" type="image/webp">
+                    <img src="/static/images/category_images/potted_plants.png" alt="Potted Plants" loading="lazy" decoding="async">
+                </picture>
             </div>
             <div class="hero-thumb" onclick="heroGoTo(2)" data-idx="2">
-                <img src="/static/images/category_images/bouquets.png" alt="Bouquets">
+                <picture>
+                    <source srcset="/static/images/category_images/bouquets.webp" type="image/webp">
+                    <img src="/static/images/category_images/bouquets.png" alt="Bouquets" loading="lazy" decoding="async">
+                </picture>
             </div>
             <div class="hero-thumb" onclick="heroGoTo(3)" data-idx="3">
-                <img src="/static/images/category_images/succulents.png" alt="Succulents">
+                <picture>
+                    <source srcset="/static/images/category_images/succulents.webp" type="image/webp">
+                    <img src="/static/images/category_images/succulents.png" alt="Succulents" loading="lazy" decoding="async">
+                </picture>
             </div>
         </div>
 
@@ -3076,22 +3126,34 @@
         <!-- Slide 0: Fresh Flowers -->
         <div class="hero-slide active" data-idx="0">
             <span class="hero-slide-label">Fresh Flowers</span>
-            <img src="/static/images/category_images/fresh_flowers.png" alt="Fresh Flowers">
+            <picture>
+                <source srcset="/static/images/category_images/fresh_flowers.webp" type="image/webp">
+                <img src="/static/images/category_images/fresh_flowers.png" alt="Fresh Flowers" decoding="async" fetchpriority="high">
+            </picture>
         </div>
         <!-- Slide 1: Potted Plants -->
         <div class="hero-slide" data-idx="1">
             <span class="hero-slide-label">Potted Plants</span>
-            <img src="/static/images/category_images/potted_plants.png" alt="Potted Plants">
+            <picture>
+                <source srcset="/static/images/category_images/potted_plants.webp" type="image/webp">
+                <img src="/static/images/category_images/potted_plants.png" alt="Potted Plants" loading="lazy" decoding="async">
+            </picture>
         </div>
         <!-- Slide 2: Bouquets -->
         <div class="hero-slide" data-idx="2">
             <span class="hero-slide-label">Bouquets</span>
-            <img src="/static/images/category_images/bouquets.png" alt="Bouquets">
+            <picture>
+                <source srcset="/static/images/category_images/bouquets.webp" type="image/webp">
+                <img src="/static/images/category_images/bouquets.png" alt="Bouquets" loading="lazy" decoding="async">
+            </picture>
         </div>
         <!-- Slide 3: Succulents -->
         <div class="hero-slide" data-idx="3">
             <span class="hero-slide-label">Succulents</span>
-            <img src="/static/images/category_images/succulents.png" alt="Succulents">
+            <picture>
+                <source srcset="/static/images/category_images/succulents.webp" type="image/webp">
+                <img src="/static/images/category_images/succulents.png" alt="Succulents" loading="lazy" decoding="async">
+            </picture>
         </div>
 
         <!-- Nav arrows -->
@@ -3119,7 +3181,7 @@
     <div class="category-item">
        <a href="{{ url_for('templates.category', category_identifier='fresh-flowers') }}" class="category-card">
             <div class="category-image-wrap icon-pink">
-                <img src="../static/images/category_images/fresh_flowers.png" alt="Fresh Flowers" class="category-image">
+                <img src="{{ url_for('static', filename='images/category_images/fresh_flowers.webp') }}" alt="Fresh Flowers" class="category-image" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='{{ url_for('static', filename='images/category_images/fresh_flowers.png') }}'">
             </div>
         </a>
         <div class="category-text">
@@ -3132,7 +3194,7 @@
     <div class="category-item">
       <a href="{{ url_for('templates.category', category_identifier='potted-plants') }}" class="category-card">
             <div class="category-image-wrap icon-green">
-                <img src="../static/images/category_images/potted_plants.png" alt="Potted Plants" class="category-image" onerror="this.parentElement.innerHTML='<i class=\'ri-plant-line\'></i>'">
+                <img src="/static/images/category_images/potted_plants.webp" alt="Potted Plants" class="category-image" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/static/images/category_images/potted_plants.png'">
             </div>
         </a>
         <div class="category-text">
@@ -3145,7 +3207,7 @@
     <div class="category-item">
       <a href="{{ url_for('templates.category', category_identifier='bouquets') }}" class="category-card">
             <div class="category-image-wrap icon-rose">
-                <img src="../static/images/category_images/bouquets.png" alt="Bouquets" class="category-image" onerror="this.parentElement.innerHTML='<i class=\'ri-heart-line\'></i>'">
+                <img src="/static/images/category_images/bouquets.webp" alt="Bouquets" class="category-image" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/static/images/category_images/bouquets.png'">
             </div>
         </a>
         <div class="category-text">
@@ -3158,7 +3220,7 @@
     <div class="category-item">
   <a href="{{ url_for('templates.category', category_identifier='succulents') }}" class="category-card">
             <div class="category-image-wrap icon-lavender">
-                <img src="../static/images/category_images/succulents.png" alt="Succulents" class="category-image" onerror="this.parentElement.innerHTML='<i class=\'ri-seedling-line\'></i>'">
+                <img src="/static/images/category_images/succulents.webp" alt="Succulents" class="category-image" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/static/images/category_images/succulents.png'">
             </div>
         </a>
         <div class="category-text">
@@ -3582,6 +3644,15 @@
     }
 
     var BROWSE_OUTSIDE_DISMISS_KEY = 'eflora_browse_outside_limitations_dismissed';
+    var BROWSE_OUTSIDE_USER_ID = {{ (session.get('user_id') or 0)|tojson }};
+
+    function browseLimitationsStorageKey() {
+        // Scope "don't show again" per account so a new signup still sees the modal.
+        if (BROWSE_OUTSIDE_USER_ID) {
+            return BROWSE_OUTSIDE_DISMISS_KEY + '_u' + BROWSE_OUTSIDE_USER_ID;
+        }
+        return BROWSE_OUTSIDE_DISMISS_KEY;
+    }
 
     function applyBrowseMode(enabled) {
         var mode = enabled ? '1' : '0';
@@ -3590,7 +3661,7 @@
 
     function isBrowseLimitationsDismissed() {
         try {
-            return localStorage.getItem(BROWSE_OUTSIDE_DISMISS_KEY) === '1';
+            return localStorage.getItem(browseLimitationsStorageKey()) === '1';
         } catch (e) {
             return false;
         }
@@ -3598,7 +3669,7 @@
 
     function rememberBrowseLimitationsDismissed() {
         try {
-            localStorage.setItem(BROWSE_OUTSIDE_DISMISS_KEY, '1');
+            localStorage.setItem(browseLimitationsStorageKey(), '1');
         } catch (e) { /* ignore private mode */ }
     }
 
@@ -3606,7 +3677,12 @@
         var modal = document.getElementById('browseLimitationsModal');
         var dontShow = document.getElementById('browseDontShowAgain');
         if (dontShow) dontShow.checked = false;
-        if (modal) modal.classList.add('active');
+        if (!modal) return;
+        // Avoid clipping/stacking issues inside page sections.
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+        modal.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
 
@@ -3617,8 +3693,9 @@
     }
 
     function onBrowseOutsideChange(event) {
-        var checkbox = event.target;
-        var turningOn = checkbox.checked;
+        var checkbox = event && event.target;
+        if (!checkbox) return;
+        var turningOn = !!checkbox.checked;
 
         if (!turningOn) {
             applyBrowseMode(false);
@@ -3664,6 +3741,14 @@
         if (!checkbox) return;
         onBrowseOutsideChange({ target: checkbox });
     }
+
+    // Expose for inline handlers
+    window.onBrowseOutsideChange = onBrowseOutsideChange;
+    window.cancelBrowseLimitations = cancelBrowseLimitations;
+    window.confirmBrowseLimitations = confirmBrowseLimitations;
+    window.onBrowseLimitationsBackdrop = onBrowseLimitationsBackdrop;
+    window.toggleBrowseMode = toggleBrowseMode;
+    window.openBrowseLimitationsModal = openBrowseLimitationsModal;
 
     function syncHomeTestimonialStars(rating) {
         const r = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
@@ -3780,7 +3865,9 @@
                 // Enforce 3 visible cards immediately on first load.
                 renderPage(pageIndex);
 
-                setInterval(function() {
+                let rotateTimer = setInterval(function() {
+                    if (document.hidden) return;
+                    if (testimonialsGrid.getAttribute('data-offscreen') === '1') return;
                     testimonialsGrid.classList.add('testimonial-rotating');
                     setTimeout(function() {
                         pageIndex = (pageIndex + 1) % pageCount;
@@ -3788,6 +3875,12 @@
                         testimonialsGrid.classList.remove('testimonial-rotating');
                     }, 180);
                 }, 4500);
+                if ('IntersectionObserver' in window) {
+                    const io = new IntersectionObserver(function (entries) {
+                        testimonialsGrid.setAttribute('data-offscreen', entries[0] && entries[0].isIntersecting ? '0' : '1');
+                    }, { threshold: 0.1 });
+                    io.observe(testimonialsGrid);
+                }
             }
         }
     });
@@ -3860,7 +3953,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let progressTimer = null;
     let progressVal = 0;
     const DURATION = 5000;
-    const TICK = 60;
+    const TICK = 250;
 
     const slides = document.querySelectorAll('.hero-slide');
     const thumbs = document.querySelectorAll('.hero-thumb');
@@ -3971,17 +4064,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const richFx = window.__eflowersRichFx !== false;
         const decorFx = window.__eflowersDecorFx !== false && !reduceMotion;
-        if (!reduceMotion) startAuto();
+        if (!reduceMotion && richFx) startAuto();
 
         // Pause on hover / when tab is hidden
         const heroEl = document.getElementById('heroSection');
-        if (heroEl && !reduceMotion) {
+        if (heroEl && !reduceMotion && richFx) {
             heroEl.addEventListener('mouseenter', stopAuto);
             heroEl.addEventListener('mouseleave', startAuto);
         }
         document.addEventListener('visibilitychange', function () {
             if (document.hidden) stopAuto();
-            else if (!reduceMotion) startAuto();
+            else if (!reduceMotion && richFx) startAuto();
         });
 
         // Falling petals — desktop + iPhone (unless OS reduce-motion / fx-lite)
@@ -4005,6 +4098,7 @@ let storesStepPx = 252;
 let storesManualAnimating = false;
 let storesRafId = null;
 let storesLastTs = 0;
+let storesOffscreen = false;
 
 function setupStoresCarousel() {
     const container = document.getElementById('storesContainer');
@@ -4101,16 +4195,21 @@ function setupStoresCarousel() {
     updateArrowState();
 
     // Re-evaluate when viewport changes (small screens, 2 cards, etc.)
+    let resizeFrame = null;
     window.addEventListener('resize', () => {
-        computeStepPx();
-        updateArrowState();
-        if (!hasOverflow()) {
-            container.scrollLeft = 0;
-            stopAutoScroll();
-        } else if (!storesRafId) {
-            storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
-        }
-    });
+        if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = window.requestAnimationFrame(() => {
+            resizeFrame = null;
+            computeStepPx();
+            updateArrowState();
+            if (!hasOverflow()) {
+                container.scrollLeft = 0;
+                stopAutoScroll();
+            } else if (!storesRafId && !document.hidden && window.__eflowersRichFx !== false) {
+                storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
+            }
+        });
+    }, { passive: true });
 
     function autoScrollTick() {
         if (storesAutoScrollPaused || storesManualAnimating) return;
@@ -4126,8 +4225,8 @@ function setupStoresCarousel() {
     }
 
     function autoScrollTickRaf(ts) {
-        if (document.hidden) {
-            storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
+        if (document.hidden || storesOffscreen) {
+            storesRafId = null;
             return;
         }
         if (!storesLastTs) storesLastTs = ts;
@@ -4135,13 +4234,12 @@ function setupStoresCarousel() {
         storesLastTs = ts;
 
         if (!storesAutoScrollPaused && !storesManualAnimating && hasOverflow()) {
-            // Desktop + iPhone keep full speed; only fx-lite devices are slower/off
-            const speed = document.documentElement.classList.contains('fx-lite') ? 0.012 : 0.02;
+            const speed = 0.02;
             const px = Math.max(0.35, delta * speed);
             container.scrollLeft += px;
             
             // Portal loop: when a card exits left, it reappears on the right
-            const stepPx = getStepPx();
+            const stepPx = Math.max(1, storesStepPx || 1);
             
             // Check if we've scrolled past one card width
             if (container.scrollLeft >= stepPx) {
@@ -4171,10 +4269,30 @@ function setupStoresCarousel() {
             storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
         }
     }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopAutoScroll();
+        } else if (window.__eflowersRichFx !== false && hasOverflow() && !storesRafId && !storesOffscreen) {
+            storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
+        }
+    });
+
+    if ('IntersectionObserver' in window) {
+        const storesIo = new IntersectionObserver(function (entries) {
+            storesOffscreen = !(entries[0] && entries[0].isIntersecting);
+            if (storesOffscreen) {
+                stopAutoScroll();
+            } else if (window.__eflowersRichFx !== false && hasOverflow() && !storesRafId && !document.hidden) {
+                storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
+            }
+        }, { threshold: 0.05 });
+        storesIo.observe(container);
+    }
     
     // Fallback: If no scroll happens after 2 seconds, ensure animation starts
     setTimeout(() => {
-        if (container && hasOverflow() && container.scrollLeft === 0 && (window.__eflowersRichFx !== false)) {
+        if (container && hasOverflow() && container.scrollLeft === 0 && (window.__eflowersRichFx !== false) && !storesOffscreen) {
             storesAutoScrollPaused = false;
             storesManualAnimating = false;
             if (!storesRafId) {
@@ -4185,7 +4303,7 @@ function setupStoresCarousel() {
     
     // Health check: ensure carousel is always running (skip when hidden / fx-lite)
     setInterval(() => {
-        if (document.hidden || window.__eflowersRichFx === false) return;
+        if (document.hidden || window.__eflowersRichFx === false || storesOffscreen) return;
         if (container && hasOverflow() && !storesRafId) {
             storesRafId = window.requestAnimationFrame(autoScrollTickRaf);
         }

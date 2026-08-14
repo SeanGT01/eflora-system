@@ -47,6 +47,7 @@ class Config:
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(basedir, 'dev.db')}"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SEND_FILE_MAX_AGE_DEFAULT = 86400
     # Railway/proxy Postgres closes idle sockets; ping + recycle + TCP keepalives
     # avoid "server closed the connection unexpectedly" on the next request.
     if DATABASE_URL and str(DATABASE_URL).startswith(('postgres://', 'postgresql://')):

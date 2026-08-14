@@ -571,11 +571,6 @@
                         <i class="ri-shopping-bag-3-line"></i> Purchase History
                     </a>
                 </li>
-                <li class="menu-item" data-page="settings">
-                    <a href="#" class="menu-link" onclick="loadAccountPage('settings'); return false;">
-                        <i class="ri-settings-4-line"></i> Settings
-                    </a>
-                </li>
             </ul>
 
             <hr class="sidebar-divider">
@@ -596,8 +591,6 @@
             {% include 'account_parts/profile_content.html' with context %}
         {% elif initial_page == 'orders' %}
             {% include 'account_parts/orders_content.html' with context %}
-        {% elif initial_page == 'settings' %}
-            {% include 'account_parts/settings_content.html' with context %}
         {% else %}
             {% include 'account_parts/profile_content.html' with context %}
         {% endif %}
@@ -625,11 +618,11 @@
 
     const pageInfo = {
         profile:  { title: 'My Profile',        breadcrumb: 'My Profile' },
-        orders:   { title: 'Purchase History',   breadcrumb: 'Purchase History' },
-        settings: { title: 'Account Settings',   breadcrumb: 'Settings' }
+        orders:   { title: 'Purchase History',   breadcrumb: 'Purchase History' }
     };
 
     async function loadAccountPage(page) {
+        if (page === 'settings') page = 'profile';
         if (currentPage === page) return;
 
         document.getElementById('accountContent').innerHTML = `
@@ -708,7 +701,6 @@
         switch (page) {
             case 'profile':  initProfilePage();  break;
             case 'orders':   initOrdersPage();   break;
-            case 'settings': initSettingsPage(); break;
         }
     }
 
@@ -1191,9 +1183,6 @@
     }
 
     function closeModal(id) { document.getElementById(id)?.remove(); }
-
-    // ── Settings ──
-    function initSettingsPage() { console.log('Settings initialized'); }
 
     // ── History ──
     window.addEventListener('popstate', function(e) {

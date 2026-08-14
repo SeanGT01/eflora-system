@@ -456,6 +456,44 @@ def debug_test_email():
     return jsonify(result), 200
 
 
+def _store_fulfillment_stats(store_ids):
+    """One grouped query for delivered/completed vs total orders per store."""
+    stats = {int(sid): (0, 0) for sid in store_ids or []}
+    if not store_ids:
+        return stats
+    rows = (
+        db.session.query(
+            Order.store_id,
+            Order.status,
+            db.func.count(Order.id),
+        )
+        .filter(Order.store_id.in_(list(store_ids)))
+        .group_by(Order.store_id, Order.status)
+        .all()
+    )
+    totals = defaultdict(int)
+    fulfilled = defaultdict(int)
+    for store_id, status, count in rows:
+        count = int(count or 0)
+        totals[store_id] += count
+        if status in ('delivered', 'completed'):
+            fulfilled[store_id] += count
+    for sid in list(stats):
+        stats[sid] = (totals.get(sid, 0), fulfilled.get(sid, 0))
+    return stats
+
+
+def _apply_store_performance(store_data, total_orders, delivered_or_completed):
+    fulfillment_score = (
+        (delivered_or_completed / total_orders) * 5.0
+        if total_orders > 0 else 0.0
+    )
+    store_data['performance_score'] = max(0.0, min(5.0, round(fulfillment_score, 1)))
+    store_data['performance_fulfilled_count'] = int(delivered_or_completed)
+    store_data['performance_order_count'] = int(total_orders)
+    return store_data
+
+
 def _public_storefront_product_base_query():
     """Products eligible for the public storefront: active store, not archived, in stock (product or variant)."""
     variant_in_stock_exists = db.session.query(ProductVariant.id).filter(
@@ -466,6 +504,13 @@ def _public_storefront_product_base_query():
     return (
         Product.query
         .join(Store, Product.store_id == Store.id)
+        .options(
+            joinedload(Product.store),
+            joinedload(Product.main_category),
+            joinedload(Product.store_category),
+            selectinload(Product.images),
+            selectinload(Product.variants),
+        )
         .filter(
             Product.is_archived == False,
             Product.is_available == True,
@@ -525,6 +570,14 @@ def _product_list_for_storefront(orm_products):
     return product_list
 
 
+def _normalize_place_name(value):
+    """Case/accent-insensitive place comparison for municipality matching."""
+    import unicodedata
+    text = unicodedata.normalize('NFKD', str(value or ''))
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    return ' '.join(text.casefold().split())
+
+
 def _get_default_customer_address(user_id):
     if not user_id:
         return None
@@ -536,24 +589,60 @@ def _get_default_customer_address(user_id):
 
 
 def _store_delivery_match(store, address):
-    """Evaluate whether a store can deliver to the given user address."""
+    """Evaluate whether a store can deliver to the given user address.
+
+    Used for storefront filtering: when Browse outside area is off, only
+    stores that truly cover the customer's default address should appear.
+    """
     if not store or not address:
         return {'can_deliver': False, 'reason': 'Set your default address to check delivery coverage.'}
 
-    address_municipality = (address.municipality or '').strip().casefold()
+    address_municipality = _normalize_place_name(address.municipality)
     has_coords = address.latitude is not None and address.longitude is not None
+    method = (store.delivery_method or 'radius').strip().casefold()
 
     try:
-        if store.delivery_method == 'municipality':
+        if method == 'municipality':
             selected = store.selected_municipalities or []
-            if selected and address_municipality:
-                matched = any(str(name).strip().casefold() == address_municipality for name in selected)
+            if selected:
+                if not address_municipality:
+                    return {
+                        'can_deliver': False,
+                        'reason': 'Your address is missing a municipality.',
+                    }
+                matched = any(
+                    _normalize_place_name(name) == address_municipality
+                    for name in selected
+                )
                 if not matched:
                     return {
                         'can_deliver': False,
                         'reason': f"{store.name} does not deliver to {address.municipality}.",
                     }
-            return {'can_deliver': True, 'reason': None}
+                return {'can_deliver': True, 'reason': None}
+
+            # No municipality list — fall back to polygon coverage when available.
+            if has_coords and (
+                store.municipality_delivery_area is not None
+                or store.delivery_area is not None
+            ):
+                try:
+                    if store.can_deliver_to(address.latitude, address.longitude):
+                        return {'can_deliver': True, 'reason': None}
+                    return {
+                        'can_deliver': False,
+                        'reason': 'Outside this store delivery zone.',
+                    }
+                except Exception:
+                    return {
+                        'can_deliver': False,
+                        'reason': 'Could not validate delivery coverage right now.',
+                    }
+
+            return {
+                'can_deliver': False,
+                'reason': 'Store has no delivery municipalities configured.',
+            }
 
         if not has_coords:
             return {'can_deliver': False, 'reason': 'Your default address is missing map coordinates.'}
@@ -566,21 +655,45 @@ def _store_delivery_match(store, address):
         if max_distance and distance > max_distance:
             return {'can_deliver': False, 'reason': 'Outside delivery distance.'}
 
-        if store.delivery_method == 'radius':
+        if method == 'radius':
             radius_limit = float(store.delivery_radius_km or max_distance or 0)
-            if radius_limit and distance > radius_limit:
+            if not radius_limit:
+                return {
+                    'can_deliver': False,
+                    'reason': 'Store has no delivery radius configured.',
+                }
+            if distance > radius_limit:
                 return {'can_deliver': False, 'reason': 'Outside delivery distance.'}
             return {'can_deliver': True, 'reason': None}
 
-        if store.delivery_area is not None:
+        # Zone / custom polygon coverage
+        has_area = (
+            store.zone_delivery_area is not None
+            or store.delivery_area is not None
+            or store.municipality_delivery_area is not None
+        )
+        if has_area:
             try:
                 if not store.can_deliver_to(address.latitude, address.longitude):
-                    return {'can_deliver': False, 'reason': 'Outside this store delivery zone.'}
+                    return {
+                        'can_deliver': False,
+                        'reason': 'Outside this store delivery zone.',
+                    }
+                return {'can_deliver': True, 'reason': None}
             except Exception:
-                # Fallback to distance-based decision only when geometry check fails.
-                pass
+                return {
+                    'can_deliver': False,
+                    'reason': 'Could not validate delivery coverage right now.',
+                }
 
-        return {'can_deliver': True, 'reason': None}
+        # No geometry configured — only allow if a max distance already passed above.
+        if max_distance:
+            return {'can_deliver': True, 'reason': None}
+
+        return {
+            'can_deliver': False,
+            'reason': 'Store has no delivery area configured.',
+        }
     except Exception:
         return {'can_deliver': False, 'reason': 'Could not validate delivery coverage right now.'}
 
@@ -602,61 +715,61 @@ def index():
         if browse_all_arg is not None:
             session['storefront_browse_all'] = browse_all_arg == '1'
         browse_all_mode = bool(session.get('storefront_browse_all', False))
+        location_filter_on = bool(is_customer and customer_address and not browse_all_mode)
 
-        # Get extra pool so filtering still yields enough cards.
+        # Over-fetch when filtering so the featured strip still fills with in-range items.
+        product_fetch_limit = 200 if location_filter_on else 40
         products = (
             _public_storefront_product_base_query()
             .order_by(Product.created_at.desc())
-            .limit(40)
+            .limit(product_fetch_limit)
             .all()
         )
-        
-        print("=== DEBUGGING PRODUCTS ===")
-        print(f"Raw products count: {len(products)}")
-        for p in products:
-            print(f"Product ID: {p.id}, Name: {p.name}, Store ID: {p.store_id}, Store: {p.store.name if p.store else 'None'}")
-            if p.main_category:
-                print(f"  Main Category: {p.main_category.name}")
-            if p.store_category:
-                print(f"  Store Category: {p.store_category.name}")
-        
-        product_list = _product_list_for_storefront(products)
         product_delivery_map = {}
-        if is_customer:
+        if is_customer and customer_address:
             for product in products:
                 delivery = _store_delivery_match(product.store, customer_address)
                 product_delivery_map[product.id] = delivery
 
-        if is_customer and customer_address and not browse_all_mode:
-            products = [p for p in products if product_delivery_map.get(p.id, {}).get('can_deliver')]
-            product_list = _product_list_for_storefront(products)
-        elif is_customer:
-            for pd in product_list:
-                delivery = product_delivery_map.get(pd.get('id'), {'can_deliver': False, 'reason': 'Delivery coverage unavailable.'})
+        if location_filter_on:
+            products = [
+                p for p in products
+                if product_delivery_map.get(p.id, {}).get('can_deliver')
+            ]
+
+        # Only the featured grid is rendered on this route.  Serializing the
+        # full over-fetch here loaded every image and variant before discarding
+        # most of them.
+        products = products[:12]
+        product_list = _product_list_for_storefront(products)
+        for pd in product_list:
+            delivery = product_delivery_map.get(
+                pd.get('id'),
+                {'can_deliver': True, 'reason': None},
+            )
+            if is_customer and customer_address:
                 pd['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
                 pd['delivery_block_reason'] = delivery.get('reason')
-
-        # Keep featured strip concise after filtering.
-        product_list = product_list[:8]
-        for product in products:
-            if product.store:
-                print(f"Added store name '{product.store.name}' to product '{product.name}'")
             else:
-                print(f"WARNING: Product '{product.name}' has no associated store!")
-        
+                pd['can_deliver_to_customer'] = True
+                pd['delivery_block_reason'] = None
+
         # Get active stores - logo_url property now handles seller_application lookup by seller_id
+        store_fetch_limit = 80 if location_filter_on else 40
         stores = Store.query\
             .filter_by(status='active')\
             .order_by(Store.created_at.desc())\
-            .limit(40)\
+            .limit(store_fetch_limit)\
             .all()
-        
-        print(f"\n=== DEBUG STORES & LOGOS ===")
-        print(f"Total stores found: {len(stores)}")
-        for s in stores:
-            print(f"Store: {s.id} - {s.name} - Seller ID: {s.seller_id} - Logo URL: {s.logo_url}")
-        print(f"=== END DEBUG ===\n")
-        
+
+        if location_filter_on:
+            stores = [
+                store for store in stores
+                if _store_delivery_match(store, customer_address).get('can_deliver')
+            ]
+        stores = stores[:12]
+        fulfillment_map = _store_fulfillment_stats([store.id for store in stores])
+
         store_list = []
         for store in stores:
             store_data = store.to_dict()
@@ -668,39 +781,10 @@ def index():
                 store_data['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
                 store_data['delivery_block_reason'] = delivery.get('reason')
 
-            # Overall store performance (1-5) for featured carousel.
-            # Pure fulfillment performance based on delivered/completed ratio.
-            order_counts = (
-                db.session.query(
-                    Order.status,
-                    db.func.count(Order.id)
-                )
-                .filter(Order.store_id == store.id)
-                .group_by(Order.status)
-                .all()
-            )
-            status_counts = {status: count for status, count in order_counts}
-            total_orders = sum(status_counts.values())
-            delivered_or_completed = (
-                status_counts.get('delivered', 0) +
-                status_counts.get('completed', 0)
-            )
-
-            fulfillment_score = (
-                (delivered_or_completed / total_orders) * 5.0
-                if total_orders > 0 else 0.0
-            )
-            performance_score = max(0.0, min(5.0, round(fulfillment_score, 1)))
-
-            store_data['performance_score'] = performance_score
-            store_data['performance_fulfilled_count'] = int(delivered_or_completed)
-            store_data['performance_order_count'] = int(total_orders)
+            total_orders, delivered_or_completed = fulfillment_map.get(store.id, (0, 0))
+            _apply_store_performance(store_data, total_orders, delivered_or_completed)
             store_list.append(store_data)
 
-        if is_customer and customer_address and not browse_all_mode:
-            store_list = [s for s in store_list if s.get('can_deliver_to_customer')]
-        store_list = store_list[:12]
-        
         # Format categories for the template (for featured categories section)
         featured_categories = []
         for cat in main_categories:
@@ -712,12 +796,6 @@ def index():
                 'description': cat.description,
                 'image_url': cat.image_url
             })
-        
-        print(f"\nFinal product_list count: {len(product_list)}")
-        print(f"Final store_list count: {len(store_list)}")
-        print(f"Main categories count: {len(main_categories)}")
-        print("=== END DEBUG ===\n")
-
         try:
             _ensure_home_page_testimonials_table()
             _ensure_home_page_testimonials_schema()
@@ -1304,8 +1382,7 @@ def account_content(page):
             return render_template('account_parts/orders_content.html', 
                                  user=user.to_dict() if user else None)
         elif page == 'settings':
-            return render_template('account_parts/settings_content.html', 
-                                 user=user.to_dict() if user else None)
+            return redirect(url_for('templates.my_account', page='profile'))
         else:
             return '', 404
             
@@ -1473,6 +1550,8 @@ def my_account():
 
 #Get the page parameter from URL (default to 'profile')
     page = request.args.get('page', 'profile')
+    if page == 'settings':
+        return redirect(url_for('templates.my_account', page='profile'))
 
 #Get user data from database
     user = User.query.get(session['user_id'])
@@ -1503,7 +1582,7 @@ def catch_api_navigation(path):
     print(f"⚠️ Warning: Someone navigated directly to API URL: /api/account/{path}")
     # Extract the page name
     page = path.split('/')[0]
-    if page in ['profile', 'orders', 'settings']:
+    if page in ['profile', 'orders']:
         return redirect(url_for('templates.my_account', page=page))
     return redirect(url_for('templates.my_account'))
 
@@ -3381,13 +3460,47 @@ def browse_products():
     """Public catalog: search and filters (storefront). Seller inventory uses /seller/products."""
     try:
         main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
+        current_user_id = session.get('user_id')
+        is_customer = session.get('role') == 'customer' and current_user_id
+        customer_address = _get_default_customer_address(current_user_id) if is_customer else None
+        browse_all_arg = request.args.get('browse_all')
+        if browse_all_arg is not None:
+            session['storefront_browse_all'] = browse_all_arg == '1'
+        browse_all_mode = bool(session.get('storefront_browse_all', False))
+        location_filter_on = bool(is_customer and customer_address and not browse_all_mode)
+
         products = (
             _public_storefront_product_base_query()
             .order_by(Product.created_at.desc())
             .limit(500)
             .all()
         )
+
+        product_delivery_map = {}
+        if is_customer and customer_address:
+            for product in products:
+                delivery = _store_delivery_match(product.store, customer_address)
+                product_delivery_map[product.id] = delivery
+
+        if location_filter_on:
+            products = [
+                p for p in products
+                if product_delivery_map.get(p.id, {}).get('can_deliver')
+            ]
+
         product_list = _product_list_for_storefront(products)
+        for pd in product_list:
+            if is_customer and customer_address:
+                delivery = product_delivery_map.get(
+                    pd.get('id'),
+                    {'can_deliver': False, 'reason': 'Delivery coverage unavailable.'},
+                )
+                pd['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
+                pd['delivery_block_reason'] = delivery.get('reason')
+            else:
+                pd['can_deliver_to_customer'] = True
+                pd['delivery_block_reason'] = None
+
         featured_categories = []
         for cat in main_categories:
             featured_categories.append({
@@ -3405,6 +3518,8 @@ def browse_products():
             categories=featured_categories,
             main_categories=main_categories,
             initial_category_filter=initial_category,
+            browse_all_mode=browse_all_mode,
+            customer_has_default_address=bool(customer_address),
         )
     except Exception as e:
         current_app.logger.exception('browse_products: %s', e)
@@ -3418,6 +3533,8 @@ def browse_products():
             categories=[],
             main_categories=[],
             initial_category_filter='',
+            browse_all_mode=False,
+            customer_has_default_address=False,
         )
 
 
@@ -9237,6 +9354,7 @@ def stores():
         )
 
         now = datetime.utcnow()
+        fulfillment_map = _store_fulfillment_stats([store.id for store in active_stores])
         store_list = []
         for store in active_stores:
             store_data = store.to_dict()
@@ -9248,21 +9366,8 @@ def stores():
                 store_data['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
                 store_data['delivery_block_reason'] = delivery.get('reason')
 
-            order_counts = (
-                db.session.query(Order.status, func.count(Order.id))
-                .filter(Order.store_id == store.id)
-                .group_by(Order.status)
-                .all()
-            )
-            status_counts = {status: count for status, count in order_counts}
-            total_orders = sum(status_counts.values())
-            delivered_or_completed = (
-                status_counts.get('delivered', 0) + status_counts.get('completed', 0)
-            )
-            fulfillment_score = (
-                (delivered_or_completed / total_orders) * 5.0 if total_orders > 0 else 0.0
-            )
-            store_data['performance_score'] = max(0.0, min(5.0, round(fulfillment_score, 1)))
+            total_orders, delivered_or_completed = fulfillment_map.get(store.id, (0, 0))
+            _apply_store_performance(store_data, total_orders, delivered_or_completed)
             store_data['product_count'] = int(product_counts.get(store.id, 0))
             store_data['is_newly_approved'] = bool(
                 store.approved_at and (now - store.approved_at).days < 7
@@ -9790,19 +9895,115 @@ def update_store_settings():
             print(f"✅ Saved selected_municipalities: {store.selected_municipalities}")
         
         # ===== MUNICIPALITY DELIVERY AREA (when generated) =====
+        def _coerce_to_multipolygon(geom):
+            from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
+            if geom is None or geom.is_empty:
+                return None
+            if isinstance(geom, MultiPolygon):
+                return geom
+            if isinstance(geom, Polygon):
+                return MultiPolygon([geom])
+            if isinstance(geom, GeometryCollection):
+                polys = []
+                for g in geom.geoms:
+                    if isinstance(g, Polygon):
+                        polys.append(g)
+                    elif isinstance(g, MultiPolygon):
+                        polys.extend(list(g.geoms))
+                return MultiPolygon(polys) if polys else None
+            return None
+
+        def _merge_selected_municipality_geojson(names, province='Laguna'):
+            if not names:
+                return None
+            from sqlalchemy import text
+            from app.extensions import db as _db
+            from app.models import MunicipalityBoundary as _MB
+            resolved, missing = _MB.resolve_by_names(names, province=province)
+            if missing or not resolved:
+                print(f"⚠️ Municipality merge name resolve missing={missing}")
+                return None
+            db_names = [item['boundary'].name for item in resolved]
+            placeholders = ','.join([f":m{i}" for i in range(len(db_names))])
+            params = {f'm{i}': n for i, n in enumerate(db_names)}
+            params['province'] = f'%{province}%'
+            query = text(f"""
+                SELECT ST_AsGeoJSON(ST_Multi(ST_CollectionExtract(ST_Union(boundary), 3))) as geometry
+                FROM municipality_boundaries
+                WHERE name IN ({placeholders})
+                AND province ILIKE :province
+            """)
+            row = _db.session.execute(query, params).fetchone()
+            if not row or not row[0]:
+                return None
+            return json.loads(row[0])
+
+        muni_geo_saved = False
         if 'municipality_delivery_area' in data:
             muni_value = data['municipality_delivery_area']
             if muni_value and muni_value != 'null' and muni_value != 'None':
                 try:
                     from geoalchemy2.shape import from_shape
                     from shapely.geometry import shape
-                    
+
                     muni_geojson = json.loads(muni_value)
-                    polygon = shape(muni_geojson)
+                    if isinstance(muni_geojson, dict) and muni_geojson.get('type') == 'Feature':
+                        muni_geojson = muni_geojson.get('geometry')
+                    polygon = _coerce_to_multipolygon(shape(muni_geojson))
+                    if polygon is None:
+                        raise ValueError('Empty municipality geometry')
                     store.municipality_delivery_area = from_shape(polygon, srid=4326)
+                    muni_geo_saved = True
                     print(f"✅ Saved municipality_delivery_area to database")
                 except Exception as e:
                     print(f"⚠️ Error saving municipality_delivery_area: {e}")
+
+        # Auto-build WKB when municipality method is selected but geo was not posted
+        effective_method = data.get('delivery_method') or store.delivery_method
+        if (
+            effective_method == 'municipality'
+            and store.selected_municipalities
+            and not muni_geo_saved
+        ):
+            try:
+                from geoalchemy2.shape import from_shape
+                from shapely.geometry import shape
+                merged = _merge_selected_municipality_geojson(store.selected_municipalities)
+                if merged:
+                    polygon = _coerce_to_multipolygon(shape(merged))
+                    if polygon is not None:
+                        store.municipality_delivery_area = from_shape(polygon, srid=4326)
+                        print(f"✅ Auto-merged municipality_delivery_area from {store.selected_municipalities}")
+            except Exception as e:
+                print(f"⚠️ Auto-merge municipality_delivery_area failed: {e}")
+
+        # Block non-adjacent municipality coverage from being saved
+        if effective_method == 'municipality':
+            selected_for_check = store.selected_municipalities or []
+            if not selected_for_check:
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': 'Select at least one municipality for delivery coverage.'
+                }), 400
+            try:
+                contig = _evaluate_municipality_contiguity(selected_for_check, province='Laguna')
+                if not contig.get('contiguous'):
+                    disconnected = contig.get('disconnected') or []
+                    detail = f" Non-adjacent: {', '.join(disconnected)}." if disconnected else ''
+                    db.session.rollback()
+                    return jsonify({
+                        'success': False,
+                        'error': f'Selected municipalities must be adjacent (share borders).{detail}',
+                        'disconnected': disconnected,
+                    }), 400
+            except Exception as e:
+                print(f"⚠️ Municipality contiguity validation failed: {e}")
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not validate municipality adjacency. Please try again.'
+                }), 400
         
         # ===== UPDATE ACTIVE DELIVERY AREA BASED ON CURRENT METHOD =====
         store.update_delivery_area_from_method()
@@ -10392,70 +10593,117 @@ def get_province_merged_boundary():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _evaluate_municipality_contiguity(municipalities, province='Laguna'):
+    """Return {contiguous, connected, disconnected, missing, error?} for UI municipality names."""
+    names = [n for n in (municipalities or []) if n]
+    if not names:
+        return {
+            'contiguous': True,
+            'connected': [],
+            'disconnected': [],
+            'missing': [],
+        }
+    if len(names) == 1:
+        return {
+            'contiguous': True,
+            'connected': names,
+            'disconnected': [],
+            'missing': [],
+        }
+
+    resolved, missing = MunicipalityBoundary.resolve_by_names(names, province=province)
+    if missing:
+        return {
+            'contiguous': False,
+            'connected': [],
+            'disconnected': names,
+            'missing': missing,
+            'error': f'Some municipalities not found in database: {", ".join(missing)}',
+        }
+
+    ui_names = [item['requested'] for item in resolved]
+    id_to_ui = {item['boundary'].id: item['requested'] for item in resolved}
+    ids = list(id_to_ui.keys())
+
+    placeholders = ','.join([f':id{i}' for i in range(len(ids))])
+    params = {f'id{i}': i_val for i, i_val in enumerate(ids)}
+    pair_sql = text(f"""
+        SELECT a.id AS id_a, b.id AS id_b
+        FROM municipality_boundaries a
+        JOIN municipality_boundaries b ON a.id < b.id
+        WHERE a.id IN ({placeholders})
+          AND b.id IN ({placeholders})
+          AND (
+            ST_Touches(a.boundary, b.boundary)
+            OR ST_Intersects(a.boundary, b.boundary)
+          )
+    """)
+    edges = db.session.execute(pair_sql, params).fetchall()
+
+    adj = {name: set() for name in ui_names}
+    for row in edges:
+        a = id_to_ui.get(row.id_a)
+        b = id_to_ui.get(row.id_b)
+        if a and b:
+            adj[a].add(b)
+            adj[b].add(a)
+
+    def component_from(start):
+        visited = set()
+        queue = [start]
+        visited.add(start)
+        while queue:
+            current = queue.pop(0)
+            for neighbor in adj.get(current, ()):
+                if neighbor in visited:
+                    continue
+                visited.add(neighbor)
+                queue.append(neighbor)
+        return visited
+
+    remaining = set(ui_names)
+    components = []
+    while remaining:
+        start = next(iter(remaining))
+        comp = component_from(start)
+        components.append(comp)
+        remaining -= comp
+
+    largest = max(components, key=len) if components else set()
+    connected = [name for name in ui_names if name in largest]
+    disconnected = [name for name in ui_names if name not in largest]
+    return {
+        'contiguous': len(disconnected) == 0,
+        'connected': connected,
+        'disconnected': disconnected,
+        'missing': [],
+    }
+
+
 @templates_bp.route('/api/municipality/check-contiguity', methods=['POST'])
 def check_municipality_contiguity():
-    """Check if a list of municipalities are contiguous"""
+    """Check if a list of municipalities are contiguous (single PostGIS adjacency query)."""
     try:
-        from app.models import MunicipalityBoundary
-        from geoalchemy2.functions import ST_Touches
-        
         data = request.get_json()
         municipalities = data.get('municipalities', [])
         province = data.get('province', 'Laguna')
-        
-        if not municipalities:
-            return jsonify({'contiguous': True, 'message': 'No municipalities selected'})
-        
-        if len(municipalities) <= 1:
-            return jsonify({'contiguous': True, 'message': 'Single municipality is always contiguous'})
-        
-        # Get all municipality boundaries for the selected names
-        boundaries = MunicipalityBoundary.query.filter(
-            MunicipalityBoundary.name.in_(municipalities),
-            MunicipalityBoundary.province.ilike(f'%{province}%')
-        ).all()
-        
-        if len(boundaries) != len(municipalities):
+
+        result = _evaluate_municipality_contiguity(municipalities, province=province)
+        if result.get('missing'):
             return jsonify({
-                'contiguous': False, 
-                'error': 'Some municipalities not found in database'
+                'contiguous': False,
+                'connected': result.get('connected') or [],
+                'disconnected': result.get('disconnected') or municipalities,
+                'error': result.get('error') or 'Some municipalities not found in database',
             }), 404
-        
-        # Create name to id mapping
-        name_to_boundary = {b.name: b for b in boundaries}
-        
-        # BFS to check connectivity
-        visited = set()
-        queue = [municipalities[0]]
-        visited.add(municipalities[0])
-        
-        while queue:
-            current = queue.pop(0)
-            current_boundary = name_to_boundary[current]
-            
-            # Find all neighbors that are in our list and not visited
-            for neighbor_name in municipalities:
-                if neighbor_name in visited:
-                    continue
-                
-                neighbor_boundary = name_to_boundary[neighbor_name]
-                
-                # Check if they touch using SQL
-                from app.extensions import db
-                result = db.session.query(
-                    ST_Touches(current_boundary.boundary, neighbor_boundary.boundary)
-                ).scalar()
-                
-                if result:
-                    visited.add(neighbor_name)
-                    queue.append(neighbor_name)
-        
-        is_contiguous = len(visited) == len(municipalities)
-        
+
+        is_contiguous = bool(result.get('contiguous'))
         return jsonify({
             'contiguous': is_contiguous,
-            'selected_count': len(municipalities),
-            'connected_count': len(visited),
+            'selected_count': len(municipalities or []),
+            'connected_count': len(result.get('connected') or []),
+            'connected': result.get('connected') or [],
+            'disconnected': result.get('disconnected') or [],
             'message': 'Municipalities are contiguous' if is_contiguous else 'Municipalities are not contiguous'
         })
         
@@ -10479,18 +10727,30 @@ def merge_municipality_boundaries():
         
         if not municipalities:
             return jsonify({'error': 'No municipalities provided'}), 400
+
+        resolved, missing = MunicipalityBoundary.resolve_by_names(municipalities, province=province)
+        if missing:
+            return jsonify({'error': f'Some municipalities not found: {", ".join(missing)}'}), 404
+        if not resolved:
+            return jsonify({'error': 'No municipalities provided'}), 400
+
+        db_names = [item['boundary'].name for item in resolved]
         
-        # Use PostGIS ST_Union to merge boundaries
-        placeholders = ','.join([f"'{m}'" for m in municipalities])
+        # Use PostGIS ST_Union to merge boundaries (force MultiPolygon for column type)
+        placeholders = ','.join([f':n{i}' for i in range(len(db_names))])
+        params = {f'n{i}': n for i, n in enumerate(db_names)}
+        params['province'] = f'%{province}%'
         query = text(f"""
-            SELECT ST_AsGeoJSON(ST_Union(boundary)) as geometry
+            SELECT ST_AsGeoJSON(
+                ST_Multi(ST_CollectionExtract(ST_Union(boundary), 3))
+            ) as geometry
             FROM municipality_boundaries
             WHERE name IN ({placeholders})
             AND province ILIKE :province
         """)
         
         from app.extensions import db
-        result = db.session.execute(query, {'province': f'%{province}%'}).fetchone()
+        result = db.session.execute(query, params).fetchone()
         
         if not result or not result[0]:
             return jsonify({'error': 'Could not merge boundaries'}), 404
@@ -10502,7 +10762,8 @@ def merge_municipality_boundaries():
             'success': True,
             'type': 'Feature',
             'geometry': geometry,
-            'municipalities': municipalities
+            'municipalities': [item['requested'] for item in resolved],
+            'boundary_names': db_names
         })
         
     except ImportError:

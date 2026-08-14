@@ -374,17 +374,100 @@ def customer_only(f):
     return wrapper
 
 
-def _municipality_matches(store, address):
-    if not store.selected_municipalities or not address or not address.municipality:
-        return True
+def _normalize_place_name(value):
+    """Case/accent-insensitive place comparison for municipality matching."""
+    import unicodedata
+    text = unicodedata.normalize('NFKD', str(value or ''))
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    return ' '.join(text.casefold().split())
 
-    address_name = address.municipality.strip().casefold()
-    return any(str(name).strip().casefold() == address_name for name in store.selected_municipalities)
+
+def _municipality_matches(store, address):
+    """True only when the address municipality is in the store's selected list."""
+    selected = store.selected_municipalities or []
+    if not selected or not address or not address.municipality:
+        return False
+
+    address_name = _normalize_place_name(address.municipality)
+    if not address_name:
+        return False
+    return any(_normalize_place_name(name) == address_name for name in selected)
 
 
 def _check_store_delivery(store, address, subtotal):
-    """Validate delivery eligibility for a store against the customer address."""
-    if not address or address.latitude is None or address.longitude is None:
+    """Validate delivery eligibility for a store against the customer address.
+
+    Coverage rules follow the store's active delivery_method only:
+    - municipality → selected cities/towns (ignore leftover radius/max-distance)
+    - radius → radius / max distance
+    - zone → drawn polygon (optional max distance hard limit)
+    """
+    if not store or not address:
+        return {
+            "can_deliver": False,
+            "reason": "Selected address is missing.",
+            "distance_km": None,
+            "delivery_fee": None,
+        }
+
+    method = (store.delivery_method or 'radius').strip().casefold()
+    has_coords = address.latitude is not None and address.longitude is not None
+    distance = None
+    if has_coords and store.latitude is not None and store.longitude is not None:
+        distance = store.calculate_distance(address.latitude, address.longitude)
+        if distance is not None and math.isinf(distance):
+            distance = None
+
+    # ── Municipality coverage: city/town list only ──
+    if method == 'municipality':
+        selected = store.selected_municipalities or []
+        if not selected:
+            # Fall back to polygon if list missing but geometry exists
+            if has_coords and (
+                store.municipality_delivery_area is not None
+                or store.delivery_area is not None
+            ):
+                try:
+                    if not store.can_deliver_to(address.latitude, address.longitude):
+                        return {
+                            "can_deliver": False,
+                            "reason": "Selected address is outside the store delivery area.",
+                            "distance_km": distance,
+                            "delivery_fee": None,
+                        }
+                except Exception as exc:
+                    print(f"Municipality geometry validation failed for store {store.id}: {exc}")
+                    return {
+                        "can_deliver": False,
+                        "reason": "Could not validate delivery coverage right now.",
+                        "distance_km": distance,
+                        "delivery_fee": None,
+                    }
+            else:
+                return {
+                    "can_deliver": False,
+                    "reason": "Store has no delivery municipalities configured.",
+                    "distance_km": distance,
+                    "delivery_fee": None,
+                }
+        elif not _municipality_matches(store, address):
+            return {
+                "can_deliver": False,
+                "reason": f"{store.name} does not deliver to {address.municipality}.",
+                "distance_km": distance,
+                "delivery_fee": None,
+            }
+
+        delivery_fee = store.calculate_delivery_fee(distance or 0, subtotal)
+        return {
+            "can_deliver": True,
+            "reason": None,
+            "distance_km": distance,
+            "delivery_fee": delivery_fee,
+        }
+
+    # ── Radius / zone need map coordinates ──
+    if not has_coords:
         return {
             "can_deliver": False,
             "reason": "Selected address is missing map coordinates.",
@@ -392,8 +475,7 @@ def _check_store_delivery(store, address, subtotal):
             "delivery_fee": None,
         }
 
-    distance = store.calculate_distance(address.latitude, address.longitude)
-    if distance is None or math.isinf(distance):
+    if distance is None:
         return {
             "can_deliver": False,
             "reason": "Store location is incomplete.",
@@ -402,16 +484,20 @@ def _check_store_delivery(store, address, subtotal):
         }
 
     max_distance = float(store.max_delivery_distance or 0)
-    if max_distance and distance > max_distance:
-        return {
-            "can_deliver": False,
-            "reason": f"This shop can't deliver to your location. Your address exceeds the maximum delivery distance of {max_distance:.1f} km for this store.",
-            "distance_km": distance,
-            "delivery_fee": None,
-        }
 
-    if store.delivery_method == "radius":
+    if method == 'radius':
         radius_limit = float(store.delivery_radius_km or max_distance or 0)
+        hard_limit = max_distance or radius_limit
+        if hard_limit and distance > hard_limit:
+            return {
+                "can_deliver": False,
+                "reason": (
+                    f"This shop can't deliver to your location. Your address exceeds "
+                    f"the maximum delivery distance of {hard_limit:.1f} km for this store."
+                ),
+                "distance_km": distance,
+                "delivery_fee": None,
+            }
         if radius_limit and distance > radius_limit:
             return {
                 "can_deliver": False,
@@ -419,24 +505,48 @@ def _check_store_delivery(store, address, subtotal):
                 "distance_km": distance,
                 "delivery_fee": None,
             }
-    elif store.delivery_method == "municipality" and not _municipality_matches(store, address):
-        return {
-            "can_deliver": False,
-            "reason": f"{store.name} does not deliver to {address.municipality}.",
-            "distance_km": distance,
-            "delivery_fee": None,
-        }
-    elif store.delivery_area is not None:
-        try:
-            if not store.can_deliver_to(address.latitude, address.longitude):
+    else:
+        # Zone / custom polygon — optional max-distance hard limit still applies
+        if max_distance and distance > max_distance:
+            return {
+                "can_deliver": False,
+                "reason": (
+                    f"This shop can't deliver to your location. Your address exceeds "
+                    f"the maximum delivery distance of {max_distance:.1f} km for this store."
+                ),
+                "distance_km": distance,
+                "delivery_fee": None,
+            }
+
+        has_area = (
+            store.zone_delivery_area is not None
+            or store.delivery_area is not None
+            or store.municipality_delivery_area is not None
+        )
+        if has_area:
+            try:
+                if not store.can_deliver_to(address.latitude, address.longitude):
+                    return {
+                        "can_deliver": False,
+                        "reason": "Selected address is outside the store delivery area.",
+                        "distance_km": distance,
+                        "delivery_fee": None,
+                    }
+            except Exception as exc:
+                print(f"Delivery area validation failed for store {store.id}: {exc}")
                 return {
                     "can_deliver": False,
-                    "reason": "Selected address is outside the store delivery area.",
+                    "reason": "Could not validate delivery coverage right now.",
                     "distance_km": distance,
                     "delivery_fee": None,
                 }
-        except Exception as exc:
-            print(f"Delivery area validation failed for store {store.id}: {exc}")
+        elif not max_distance:
+            return {
+                "can_deliver": False,
+                "reason": "Store has no delivery area configured.",
+                "distance_km": distance,
+                "delivery_fee": None,
+            }
 
     delivery_fee = store.calculate_delivery_fee(distance, subtotal)
     return {
