@@ -76,9 +76,13 @@ def rider_dashboard():
     }
     
     if current_order:
+        from app.utils.phone_utils import customer_account_contact
         co = current_order.to_dict()
         co['items'] = [item.to_dict() for item in current_order.items]
-        co['customer_contact'] = current_order.customer.phone if current_order.customer and hasattr(current_order.customer, 'phone') else None
+        contact = customer_account_contact(current_order.customer)
+        co['customer_contact'] = contact['value']
+        co['customer_contact_label'] = contact['label']
+        co['customer_phone'] = current_order.customer.phone if current_order.customer else None
         if current_order.store:
             co['store_latitude'] = current_order.store.latitude
             co['store_longitude'] = current_order.store.longitude
@@ -114,10 +118,14 @@ def get_assigned_orders():
     
     order_data = []
     for order in orders:
+        from app.utils.phone_utils import customer_account_contact
         order_dict = order.to_dict()
         order_dict['items'] = [item.to_dict() for item in order.items]
         order_dict['customer_name'] = order.customer.full_name if order.customer else None
-        order_dict['customer_contact'] = order.customer.phone if hasattr(order.customer, 'phone') else None
+        contact = customer_account_contact(order.customer)
+        order_dict['customer_contact'] = contact['value']
+        order_dict['customer_contact_label'] = contact['label']
+        order_dict['customer_phone'] = order.customer.phone if order.customer else None
         order_dict['delivery_address'] = order.delivery_address
         # Include store coordinates for map routing
         if order.store:

@@ -52,6 +52,25 @@ def display_login_id(email: str = None, phone: str = None) -> str:
     return (email or phone or '').strip()
 
 
+def customer_account_contact(customer) -> dict:
+    """
+    Contact to show for a customer based on how they registered.
+    Phone-only (synthetic email) accounts → phone; otherwise → email.
+    """
+    if not customer:
+        return {'value': None, 'label': 'Contact', 'is_phone': False}
+
+    email = getattr(customer, 'email', None)
+    phone = getattr(customer, 'phone', None)
+    is_phone = bool(is_synthetic_account_email(email or '') and phone)
+    value = display_login_id(email=email, phone=phone) or None
+    return {
+        'value': value,
+        'label': 'Phone' if is_phone else 'Email',
+        'is_phone': is_phone,
+    }
+
+
 def phone_lookup_variants(normalized_09: str):
     """Common stored formats for a normalized 09XXXXXXXXX number."""
     if not normalized_09 or not normalized_09.startswith('0'):

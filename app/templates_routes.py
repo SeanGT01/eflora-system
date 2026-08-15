@@ -6480,14 +6480,14 @@ def seller_orders():
             order_dict = order.to_dict()
             order_dict['items'] = [item.to_dict() for item in order.items]
             order_dict['items_count'] = sum(item.quantity for item in order.items)
-            order_dict['customer_phone'] = order.customer.phone if order.customer else None
+            _attach_seller_order_customer_contact(order_dict, order.customer)
             order_dict['payment_proof'] = order.payment_proof
             order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
 
             if order.created_at:
                 order_dict['date_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d')
-                order_dict['time_formatted'] = _fmt_pht(order.created_at, '%H:%M')
-                order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d %H:%M')
+                order_dict['time_formatted'] = _fmt_pht(order.created_at, '%I:%M %p').lstrip('0')
+                order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%b %d, %Y %I:%M %p')
             else:
                 order_dict['date_formatted'] = ''
                 order_dict['time_formatted'] = ''
@@ -6543,17 +6543,34 @@ def seller_orders():
     return render_template('seller_orders.html', **page_data)
 
 
+def _customer_account_contact(customer):
+    """Return the customer's signup contact (email or phone) for seller UIs."""
+    from app.utils.phone_utils import customer_account_contact
+    return customer_account_contact(customer)
+
+
+def _attach_seller_order_customer_contact(order_dict, customer):
+    contact = _customer_account_contact(customer)
+    order_dict['customer_phone'] = customer.phone if customer else None
+    order_dict['customer_email'] = (
+        None if (not customer or contact['is_phone']) else getattr(customer, 'email', None)
+    )
+    order_dict['customer_contact'] = contact['value']
+    order_dict['customer_contact_label'] = contact['label']
+    return order_dict
+
+
 def _serialize_seller_order_for_template(order):
     order_dict = order.to_dict()
     order_dict['items'] = [item.to_dict() for item in order.items]
     order_dict['items_count'] = sum(item.quantity for item in order.items)
-    order_dict['customer_phone'] = order.customer.phone if order.customer else None
+    _attach_seller_order_customer_contact(order_dict, order.customer)
     order_dict['payment_proof'] = order.payment_proof
     order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
     if order.created_at:
         order_dict['date_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d')
-        order_dict['time_formatted'] = _fmt_pht(order.created_at, '%H:%M')
-        order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d %H:%M')
+        order_dict['time_formatted'] = _fmt_pht(order.created_at, '%I:%M %p').lstrip('0')
+        order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%b %d, %Y %I:%M %p')
     else:
         order_dict['date_formatted'] = ''
         order_dict['time_formatted'] = ''

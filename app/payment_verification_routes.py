@@ -11,6 +11,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_j
 from functools import wraps
 from app.models import Order, Store, User
 from app.extensions import db
+from app.utils.phone_utils import customer_account_contact
 from datetime import datetime
 
 payment_verification_bp = Blueprint('payment_verification', __name__, url_prefix='/api/v1/seller/payments')
@@ -70,6 +71,7 @@ def get_pending_payment_proofs():
         for order in orders:
             customer = order.customer
             store = order.store
+            contact = customer_account_contact(customer)
             
             proof_data = {
                 'id': order.id,
@@ -77,6 +79,8 @@ def get_pending_payment_proofs():
                 'customer_id': customer.id,
                 'customer_name': customer.full_name,
                 'customer_phone': customer.phone,
+                'customer_contact': contact['value'],
+                'customer_contact_label': contact['label'],
                 'customer_avatar': customer.avatar_url,
                 'store_id': store.id,
                 'store_name': store.name,
@@ -343,10 +347,13 @@ def get_payment_history():
         
         history = []
         for order in paginated.items:
+            contact = customer_account_contact(order.customer)
             history.append({
                 'id': order.id,
                 'customer_name': order.customer.full_name if order.customer else 'Unknown',
                 'customer_phone': order.customer.phone if order.customer else None,
+                'customer_contact': contact['value'],
+                'customer_contact_label': contact['label'],
                 'amount': float(order.total_amount),
                 'payment_status': order.payment_status,
                 'order_status': order.status,

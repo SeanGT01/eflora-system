@@ -1526,10 +1526,13 @@ function handleDateChange(sel) {
 }
 
 function applyRange() {
+  if (typeof syncLinkedDatePickers === 'function') {
+    syncLinkedDatePickers(document.getElementById('fromDate'), document.getElementById('toDate'));
+  }
   const from = document.getElementById('fromDate').value;
   const to   = document.getElementById('toDate').value;
   if (!from || !to) { showToast('Please select both dates'); return; }
-  if (new Date(from) > new Date(to)) { showToast('From date must be before To date'); return; }
+  if (new Date(from) >= new Date(to)) { showToast('From date must be before To date'); return; }
   showToast(`Range set: ${from} → ${to}`);
 }
 
@@ -1867,6 +1870,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const week   = new Date(); week.setDate(today.getDate() - 7);
   document.getElementById('fromDate').valueAsDate = week;
   document.getElementById('toDate').valueAsDate   = today;
+  if (typeof bindLinkedDatePickers === 'function') {
+    bindLinkedDatePickers('#fromDate', '#toDate');
+  }
   const schedTime = document.getElementById('schedTime');
   if (schedTime) schedTime.value = '09:00';
   syncAllCheckbox();

@@ -1977,6 +1977,9 @@ function toggleCustom() {
 }
 
 function applyCustomRange() {
+  if (typeof syncLinkedDatePickers === 'function') {
+    syncLinkedDatePickers(document.getElementById('fromDate'), document.getElementById('toDate'));
+  }
   const from = document.getElementById('fromDate')?.value;
   const to = document.getElementById('toDate')?.value;
   if (!from || !to) return;
@@ -1986,6 +1989,12 @@ function applyCustomRange() {
   url.searchParams.set('to', to);
   window.location.href = url.toString();
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof bindLinkedDatePickers === 'function') {
+    bindLinkedDatePickers('#fromDate', '#toDate');
+  }
+});
 
 /* ── Chart data from backend ──────────────────────────── */
 const datasets = {{ chart_data|tojson }};

@@ -2336,6 +2336,82 @@
     });
 })();
 </script>
+<script>
+/* Linked start/end date inputs: end cannot be on/before start (locks prior days & months). */
+(function () {
+    function shiftIsoDate(isoDate, days) {
+        if (!isoDate) return '';
+        var parts = String(isoDate).split('-').map(Number);
+        if (parts.length !== 3 || parts.some(function (n) { return !Number.isFinite(n); })) return '';
+        var dt = new Date(parts[0], parts[1] - 1, parts[2]);
+        dt.setDate(dt.getDate() + days);
+        var y = dt.getFullYear();
+        var m = String(dt.getMonth() + 1).padStart(2, '0');
+        var d = String(dt.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + d;
+    }
+
+    function syncLinkedDatePickers(startEl, endEl) {
+        if (!startEl || !endEl) return;
+
+        if (startEl.value) {
+            var minEnd = shiftIsoDate(startEl.value, 1);
+            endEl.min = minEnd || startEl.value;
+            if (endEl.value && endEl.value < endEl.min) {
+                endEl.value = endEl.min;
+            }
+        } else {
+            endEl.removeAttribute('min');
+        }
+
+        if (endEl.value) {
+            var maxStart = shiftIsoDate(endEl.value, -1);
+            if (maxStart) startEl.max = maxStart;
+            else startEl.removeAttribute('max');
+            if (startEl.value && startEl.max && startEl.value > startEl.max) {
+                startEl.value = startEl.max;
+            }
+        } else {
+            startEl.removeAttribute('max');
+        }
+    }
+
+    function resolveEl(ref) {
+        if (!ref) return null;
+        if (typeof ref === 'string') return document.querySelector(ref);
+        return ref;
+    }
+
+    function bindLinkedDatePickers(startRef, endRef, options) {
+        var startEl = resolveEl(startRef);
+        var endEl = resolveEl(endRef);
+        if (!startEl || !endEl) return null;
+
+        var opts = options || {};
+        var sync = function () { syncLinkedDatePickers(startEl, endEl); };
+        var onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
+
+        startEl.addEventListener('change', function () {
+            sync();
+            if (onChange) onChange('start', startEl, endEl);
+        });
+        endEl.addEventListener('change', function () {
+            sync();
+            if (onChange) onChange('end', startEl, endEl);
+        });
+
+        sync();
+        return { sync: sync, start: startEl, end: endEl, clearLimits: function () {
+            startEl.removeAttribute('max');
+            endEl.removeAttribute('min');
+        }};
+    }
+
+    window.shiftIsoDate = shiftIsoDate;
+    window.syncLinkedDatePickers = syncLinkedDatePickers;
+    window.bindLinkedDatePickers = bindLinkedDatePickers;
+})();
+</script>
 
 {% if session.get('role') in ['seller', 'admin'] %}
 <!-- Seller/Admin Chat Widget -->

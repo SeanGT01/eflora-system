@@ -1351,18 +1351,26 @@
 
         .checkout-proof-wrap {
             margin-bottom: 16px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            border-radius: var(--radius-md);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
         }
 
         .checkout-proof-title {
             font-size: 13px;
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
+            color: var(--charcoal);
         }
 
         .checkout-proof-upload-zone {
-            border: 1.5px dashed var(--border-strong);
-            border-radius: var(--radius-lg);
-            background: var(--cream);
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            background: #fff;
             padding: 1rem 1rem 0.9rem;
             text-align: center;
         }
@@ -1386,7 +1394,7 @@
             width: 100%;
             margin-top: 8px;
             padding: 8px;
-            background: #f4f2ef;
+            background: rgba(255, 255, 255, 0.85);
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
             cursor: pointer;
@@ -1400,11 +1408,12 @@
             max-width: 320px;
             margin: 0 auto;
             padding: 9px 12px;
-            background: var(--warm-white);
+            background: rgba(255, 255, 255, 0.9);
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
             cursor: pointer;
             font-weight: 600;
+            color: var(--charcoal);
         }
 
         .checkout-proof-note {
@@ -1413,6 +1422,36 @@
             color: var(--muted);
             font-size: 12px;
             line-height: 1.4;
+        }
+
+        .checkout-notes-input {
+            width: 100%;
+            min-height: 72px;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #fff;
+            font-size: 13px;
+            color: var(--charcoal);
+            resize: vertical;
+            line-height: 1.45;
+        }
+
+        .checkout-notes-input:focus {
+            outline: none;
+            border-color: var(--deep-rose);
+            box-shadow: 0 0 0 3px rgba(176, 74, 98, 0.12);
+        }
+
+        .checkout-instructions-body {
+            font-size: 12px;
+            color: var(--muted);
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            line-height: 1.6;
+            white-space: pre-wrap;
         }
 
         .checkout-payment-card,
@@ -1450,11 +1489,39 @@
             border-radius: 10px;
         }
 
+        .checkout-items-list > li:last-child {
+            border-bottom: none !important;
+        }
+
+        .checkout-review-totals {
+            margin-bottom: 0;
+        }
+
+        .checkout-review-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .checkout-review-meta strong {
+            color: var(--charcoal);
+            font-weight: 600;
+        }
+
         .checkout-delivery-title {
             font-size: 13px;
             font-weight: 600;
             margin-bottom: 10px;
             color: var(--charcoal);
+        }
+
+        .checkout-delivery-card.checkout-delivery-attention {
+            outline: 2px solid rgba(192, 57, 43, 0.35);
+            box-shadow: 0 0 0 4px rgba(192, 57, 43, 0.08);
+            transition: outline-color 0.2s ease, box-shadow 0.2s ease;
         }
 
         .checkout-delivery-grid {
@@ -1480,6 +1547,40 @@
             background: #fff;
         }
 
+        /* Browser scroll anchoring fights programmatic scrolls after the
+           delivery warning appears, so opt out inside checkout. */
+        #checkoutModal .modal,
+        #checkoutModal .modal-body {
+            overflow-anchor: none;
+        }
+
+        /* Keep the checkout calendar glued to the Date field inside the scrolling modal */
+        #checkoutModal .flatpickr-wrapper {
+            display: block;
+            position: relative;
+            width: 100%;
+        }
+
+        #checkoutModal .flatpickr-calendar.static {
+            min-width: 260px;
+            max-width: 100%;
+            margin-top: 6px;
+        }
+
+        #checkoutModal .flatpickr-calendar.static.open {
+            z-index: 40;
+        }
+
+        /* The payment cards create their own stacking contexts (backdrop-filter),
+           so the delivery card must be lifted while its calendar is open. */
+        #checkoutModal .checkout-delivery-card {
+            position: relative;
+        }
+
+        #checkoutModal .checkout-delivery-card.checkout-calendar-open {
+            z-index: 60;
+        }
+
         /* Flatpickr: make closed / past days visibly grey and unclickable */
         .flatpickr-calendar .flatpickr-day.flatpickr-disabled,
         .flatpickr-calendar .flatpickr-day.prevMonthDay.flatpickr-disabled,
@@ -1502,6 +1603,7 @@
             text-align: center;
             font-size: 13px;
             color: var(--muted);
+            margin-top: 10px;
         }
 
         /* Form Elements */
@@ -2572,21 +2674,22 @@
                     </div>
                     <div id="checkoutDeliveryIssues" style="display:none; margin-bottom: 16px;"></div>
 
-                    <h4 style="font-size: 14px; margin-bottom: 12px; font-weight: 600;">Special Notes (Optional)</h4>
-                    <textarea class="form-control" id="deliveryNotes" rows="2" placeholder="Any special instructions for your order..."></textarea>
+                    <div class="checkout-delivery-card" style="margin-bottom: 0;">
+                        <h5 class="checkout-delivery-title">Special Notes (Optional)</h5>
+                        <textarea class="checkout-notes-input" id="deliveryNotes" rows="2" placeholder="Any special instructions for your order..."></textarea>
+                    </div>
                 </div>
 
                 <div id="checkoutStep2" style="display: none;">
                     <h4 style="font-size: 14px; margin-bottom: 12px; font-weight: 600;">Order Summary</h4>
                     <div id="ordersByStore" style="margin-bottom: 16px;"></div>
-                    <div style="border-top: 1px solid var(--border); padding-top: 12px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span>Subtotal</span>
-                            <span id="step2Subtotal">₱0.00</span>
+                    <div class="checkout-payment-card checkout-review-totals">
+                        <div class="checkout-payment-head">
+                            <span style="color: var(--muted); font-size: 12px;">Order Total</span>
+                            <span style="font-weight: 600;">Total: <span id="step2Total" style="color: var(--deep-rose); font-size: 18px;">₱0.00</span></span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; font-weight: 600; color: var(--deep-rose); font-size: 16px;">
-                            <span>Total</span>
-                            <span id="step2Total">₱0.00</span>
+                        <div class="checkout-payment-summary" style="margin-bottom: 0;">
+                            Subtotal <strong id="step2Subtotal" style="color: var(--charcoal);">₱0.00</strong>
                         </div>
                     </div>
                 </div>
@@ -3130,13 +3233,18 @@ function ensureFlatpickr() {
     if (typeof flatpickr === 'function') return Promise.resolve();
     if (window.__flatpickrLoading) return window.__flatpickrLoading;
     window.__flatpickrLoading = new Promise(function (resolve, reject) {
-        var css = document.createElement('link');
-        css.rel = 'stylesheet';
-        css.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
-        document.head.appendChild(css);
+        var cssReady = new Promise(function (done) {
+            var css = document.createElement('link');
+            css.rel = 'stylesheet';
+            css.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
+            css.onload = done;
+            css.onerror = done;
+            document.head.appendChild(css);
+        });
         var script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/flatpickr';
-        script.onload = resolve;
+        // Wait for CSS too so the first open doesn't measure an unstyled calendar
+        script.onload = function () { cssReady.then(resolve); };
         script.onerror = reject;
         document.head.appendChild(script);
     });
@@ -3205,6 +3313,39 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
         minDate: today,
         maxDate: maxDate,
         allowInput: false,
+        // Render next to the input so nested modal scroll can't fling the
+        // calendar to the top of the viewport.
+        static: true,
+        position: 'below',
+        onOpen: function(selectedDates, dateStr, fp) {
+            const card = input.closest('.checkout-delivery-card');
+            if (card) card.classList.add('checkout-calendar-open');
+
+            if (!fp.calendarContainer) return;
+            requestAnimationFrame(() => {
+                const container = getCheckoutScrollContainer(input);
+                if (!container) return;
+                const containerRect = container.getBoundingClientRect();
+                const calRect = fp.calendarContainer.getBoundingClientRect();
+                const maxTop = container.scrollHeight - container.clientHeight;
+                let desiredTop = null;
+                if (calRect.bottom > containerRect.bottom) {
+                    desiredTop = container.scrollTop + (calRect.bottom - containerRect.bottom) + 12;
+                } else if (calRect.top < containerRect.top) {
+                    desiredTop = container.scrollTop + (calRect.top - containerRect.top) - 12;
+                }
+                if (desiredTop !== null) {
+                    container.scrollTo({
+                        top: Math.max(0, Math.min(maxTop, desiredTop)),
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        },
+        onClose: function() {
+            const card = input.closest('.checkout-delivery-card');
+            if (card) card.classList.remove('checkout-calendar-open');
+        },
         onDayCreate: function(dObj, dStr, fp, dayElem) {
             const isDisabled = dayElem.classList.contains('flatpickr-disabled')
                 || dayElem.classList.contains('notAllowed');
@@ -3253,6 +3394,89 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
 
     setStoreDeliveryPreference(order.temp_id, resolvedDate, storeDeliveryPreferences[order.temp_id]?.selectedTime || '');
     return resolvedDate;
+}
+
+// The checkout modal and its body are both scrollable, so find whichever one
+// is actually carrying the overflow before trying to scroll.
+function getCheckoutScrollContainer(el) {
+    let node = el && el.parentElement;
+    while (node && node !== document.body) {
+        const overflowY = window.getComputedStyle(node).overflowY;
+        const scrolls = (overflowY === 'auto' || overflowY === 'scroll')
+            && node.scrollHeight > node.clientHeight + 1;
+        if (scrolls) return node;
+        node = node.parentElement;
+    }
+    return null;
+}
+
+function scrollCheckoutTargetIntoView(scrollTarget, smooth = true) {
+    if (!scrollTarget) return;
+
+    const container = getCheckoutScrollContainer(scrollTarget);
+    if (!container) {
+        scrollTarget.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
+        return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = scrollTarget.getBoundingClientRect();
+    // Keep the warning lower in view so the date/time controls stay visible
+    const topGap = Math.min(220, Math.max(72, containerRect.height * 0.4));
+    const maxTop = container.scrollHeight - container.clientHeight;
+    const desiredTop = container.scrollTop + (targetRect.top - containerRect.top) - topGap;
+    container.scrollTo({
+        top: Math.max(0, Math.min(maxTop, desiredTop)),
+        behavior: smooth ? 'smooth' : 'auto'
+    });
+}
+
+// Scroll the checkout modal to the delivery warning instead of toasting
+function focusCheckoutDeliveryIssue(tempId, messageHtml = null) {
+    const closedMsg = document.getElementById(`storeClosedMsg_${tempId}`);
+    const dateInput = document.getElementById(`storeDeliveryDate_${tempId}`);
+    const deliveryCard = (closedMsg && closedMsg.closest('.checkout-delivery-card'))
+        || (dateInput && dateInput.closest('.checkout-delivery-card'));
+
+    if (closedMsg) {
+        if (messageHtml) {
+            closedMsg.innerHTML = messageHtml;
+        }
+        closedMsg.style.display = 'block';
+    }
+
+    const scrollTarget = closedMsg || deliveryCard || dateInput;
+
+    if (dateInput) {
+        try { dateInput.focus({ preventScroll: true }); } catch (e) {}
+    }
+
+    // Showing the message reflows the payment step (tall on GCash), so measure
+    // on the next frame and re-check once the smooth scroll has settled.
+    requestAnimationFrame(() => {
+        scrollCheckoutTargetIntoView(scrollTarget, true);
+
+        window.clearTimeout(window.__checkoutIssueScrollTimer);
+        window.__checkoutIssueScrollTimer = window.setTimeout(() => {
+            const container = getCheckoutScrollContainer(scrollTarget);
+            if (!container || !scrollTarget) return;
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = scrollTarget.getBoundingClientRect();
+            const isVisible = targetRect.top >= containerRect.top
+                && targetRect.bottom <= containerRect.bottom;
+            if (!isVisible) {
+                scrollCheckoutTargetIntoView(scrollTarget, false);
+            }
+        }, 450);
+    });
+
+    if (deliveryCard) {
+        deliveryCard.classList.add('checkout-delivery-attention');
+        window.clearTimeout(deliveryCard._attentionTimer);
+        deliveryCard._attentionTimer = window.setTimeout(() => {
+            deliveryCard.classList.remove('checkout-delivery-attention');
+        }, 1800);
+    }
 }
 
 // Fetch time slots from store schedule API for checkout modal
@@ -4561,14 +4785,34 @@ async function checkout() {
     {% endif %}
 }
 
+function hasAnyUploadedCheckoutProofs() {
+    if (Object.values(uploadedProofs || {}).some(url => !!url)) return true;
+    if (Object.values(uploadedProofData || {}).some(data => !!(data && data.url))) return true;
+
+    const sessionId = sessionStorage.getItem('active_checkout');
+    if (!sessionId) return false;
+
+    try {
+        const proofs = JSON.parse(sessionStorage.getItem(`${sessionId}_proofs`) || '{}');
+        return Object.values(proofs).some(data => !!(data && (data.public_id || data.url)));
+    } catch (e) {
+        return false;
+    }
+}
+
 async function closeCheckout() {
     if (checkoutStep > 1) {
-        if (await window.openConfirmModal('You have uploaded payment proofs. Are you sure you want to cancel checkout? Unused uploads will be deleted.')) {
-            cancelCheckout(true);
-            isCreatingOrders = false;
-        } else {
+        const hasProofs = hasAnyUploadedCheckoutProofs();
+        const confirmMessage = hasProofs
+            ? 'You have uploaded payment proofs. Are you sure you want to cancel checkout? Unused uploads will be deleted.'
+            : 'Are you sure you want to cancel checkout?';
+
+        if (!(await window.openConfirmModal(confirmMessage))) {
             return;
         }
+
+        cancelCheckout(true);
+        isCreatingOrders = false;
     }
     document.getElementById('checkoutModal').classList.remove('active');
     cancelCheckout();
@@ -4976,11 +5220,17 @@ async function proceedCheckout() {
         const { today, maxDate } = getCheckoutDateLimitWindow();
 
         if (selectedDateObj < today) {
-            showToast('Past dates are locked. Please choose today or a future open day.', 'error');
+            focusCheckoutDeliveryIssue(
+                currentOrder.temp_id,
+                '<i class="ri-calendar-close-line"></i> Past dates are locked. Please choose today or a future open day.'
+            );
             return;
         }
         if (selectedDateObj > maxDate) {
-            showToast('Please choose a delivery date within the next 14 days.', 'error');
+            focusCheckoutDeliveryIssue(
+                currentOrder.temp_id,
+                '<i class="ri-calendar-close-line"></i> Please choose a delivery date within the next 14 days.'
+            );
             return;
         }
         if (!isCheckoutStoreOpenOnDate(
@@ -4989,21 +5239,41 @@ async function proceedCheckout() {
                 : (currentOrder.store_schedule || null),
             selectedDateObj
         )) {
-            showToast('Store is closed on the selected date. Please pick an open day.', 'error');
+            focusCheckoutDeliveryIssue(
+                currentOrder.temp_id,
+                '<i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.'
+            );
             return;
         }
         if (closedMsg && closedMsg.style.display !== 'none') {
-            showToast('Store is closed on the selected date. Please pick a different date.', 'error');
+            // Keep the existing in-modal message (e.g. all slots passed) and jump to it
+            focusCheckoutDeliveryIssue(currentOrder.temp_id);
             return;
         }
         if (timeSelect) {
             const selectedOption = timeSelect.options[timeSelect.selectedIndex];
             if (!timeSelect.value || timeSelect.disabled || (selectedOption && selectedOption.disabled)) {
-                showToast('Please select a valid open delivery time slot', 'error');
+                const optionText = ((timeSelect.options[0] && timeSelect.options[0].textContent) || '').toLowerCase();
+                if (timeSelect.disabled || optionText.includes('passed') || optionText.includes('closed')) {
+                    focusCheckoutDeliveryIssue(
+                        currentOrder.temp_id,
+                        optionText.includes('passed')
+                            ? '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another open day.'
+                            : '<i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.'
+                    );
+                    return;
+                }
+                focusCheckoutDeliveryIssue(
+                    currentOrder.temp_id,
+                    '<i class="ri-time-line"></i> Please select a valid open delivery time slot.'
+                );
                 return;
             }
         } else {
-            showToast('Please select a valid delivery time slot', 'error');
+            focusCheckoutDeliveryIssue(
+                currentOrder.temp_id,
+                '<i class="ri-time-line"></i> Please select a valid delivery time slot.'
+            );
             return;
         }
 
@@ -5195,6 +5465,17 @@ function displayOrderSummary() {
     const container = document.getElementById('ordersByStore');
     let html = '';
     let total = 0;
+    const cartItemsSafe = (typeof cart !== 'undefined' && Array.isArray(cart)) ? cart : [];
+
+    const escHtml = (val) => {
+        if (val === null || val === undefined) return '';
+        return String(val)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
 
     if (checkoutOrders && Array.isArray(checkoutOrders)) {
         checkoutOrders.forEach((order, index) => {
@@ -5205,14 +5486,25 @@ function displayOrderSummary() {
             const items = order.items || [];
             const grandTotal = order.total || 0;
             total += grandTotal;
+            const totalItemsCount = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
             const itemRows = items.map(item => {
-                let itemName = `Product #${item.product_id}`;
-                if (buyNowMode && buyNowItem && buyNowItem.product_id === item.product_id && (buyNowItem.variant_id || null) === (item.variant_id || null)) {
+                const productId = item.product_id || item.id;
+                const variantId = item.variant_id || null;
+                let itemName = `Product #${productId || ''}`;
+                let itemImage = item.image_url || item.product_image_url || '';
+                let variantLabel = item.variant_name || '';
+
+                if (buyNowMode && buyNowItem && buyNowItem.product_id === productId && (buyNowItem.variant_id || null) === variantId) {
                     itemName = buyNowItem.name || itemName;
+                    itemImage = buyNowItem.image_url || itemImage;
+                    variantLabel = buyNowItem.variant_name || variantLabel;
                 } else {
-                    const cartMatch = cart.find(ci => ci.id === item.product_id && (ci.variant_id || null) === (item.variant_id || null));
-                    if (cartMatch && cartMatch.name) {
-                        itemName = cartMatch.name;
+                    const cartMatch = cartItemsSafe.find(ci => ci.id === productId && (ci.variant_id || null) === variantId);
+                    if (cartMatch) {
+                        if (cartMatch.name) itemName = cartMatch.name;
+                        if (cartMatch.image_url) itemImage = cartMatch.image_url;
+                        if (cartMatch.variant_name) variantLabel = cartMatch.variant_name;
                     }
                 }
 
@@ -5220,27 +5512,40 @@ function displayOrderSummary() {
                 const qty = Number(item.quantity || 0);
                 const lineTotal = unitPrice * qty;
 
-                return `
-                    <div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:6px; font-size:12px; color:var(--charcoal);">
-                        <div style="flex:1;">
-                            <div style="font-weight:500;">${itemName}</div>
-                            <div style="color:var(--muted);">Qty: ${qty} x ₱${unitPrice.toFixed(2)}</div>
+                return `<li style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(107,76,59,0.12);">
+                    <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+                        ${itemImage
+                            ? `<img src="${escHtml(itemImage)}" alt="${escHtml(itemName)}" style="width:32px;height:32px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;">`
+                            : `<div style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--cream);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0;"><i class="ri-flower-line"></i></div>`
+                        }
+                        <div style="min-width:0;">
+                            <div style="color:var(--charcoal);font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(itemName)}</div>
+                            <div style="font-size:11px;color:var(--muted);line-height:1.3;">
+                                Qty: ${qty} × ₱${unitPrice.toFixed(2)}${variantLabel ? ` · ${escHtml(variantLabel)}` : ''}
+                            </div>
                         </div>
-                        <div style="font-weight:600; white-space:nowrap;">₱${lineTotal.toFixed(2)}</div>
                     </div>
-                `;
+                    <strong style="white-space:nowrap;color:var(--deep-rose);">₱${lineTotal.toFixed(2)}</strong>
+                </li>`;
             }).join('');
 
             html += `
-                <div style="margin-bottom: 12px; padding: 12px; background: var(--cream); border-radius: var(--radius-md); border: 1px solid var(--border);">
-                    <div style="font-weight: 600; margin-bottom: 6px;">${order.store_name || 'Store'}</div>
-                    <div style="font-size: 13px; color: var(--muted); margin-bottom: 6px;">${items.length} item${items.length > 1 ? 's' : ''}</div>
-                    <div style="margin: 10px 0; padding: 10px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm);">
-                        ${itemRows || '<div style="font-size:12px; color:var(--muted);">No items found</div>'}
+                <div class="checkout-payment-card">
+                    <div class="checkout-payment-head">
+                        <span style="color: var(--muted); font-size: 12px;">Store Order</span>
+                        <span style="font-weight: 600;">Amount: <span style="color: var(--deep-rose); font-size: 18px;">₱${Number(grandTotal).toFixed(2)}</span></span>
                     </div>
-                    <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Delivery fee: ₱${Number(order.delivery_fee || 0).toFixed(2)}</div>
-                    <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;">Distance: ${Number(order.distance_km || 0).toFixed(2)} km</div>
-                    <div style="text-align: right; font-weight: 600; color: var(--deep-rose);">₱${grandTotal.toFixed(2)}</div>
+                    <div class="checkout-payment-summary">
+                        <strong style="color:var(--charcoal);">${escHtml(order.store_name || 'Store')}</strong>
+                        • ${totalItemsCount} item${totalItemsCount !== 1 ? 's' : ''}
+                    </div>
+                    <ul class="checkout-items-list">
+                        ${itemRows || '<li style="color:var(--muted);">No items found</li>'}
+                    </ul>
+                    <div class="checkout-review-meta">
+                        <span>Delivery fee: <strong>₱${Number(order.delivery_fee || 0).toFixed(2)}</strong></span>
+                        <span>Distance: <strong>${Number(order.distance_km || 0).toFixed(2)} km</strong></span>
+                    </div>
                 </div>
             `;
         });
@@ -5363,8 +5668,8 @@ async function displayGCashPayment() {
 
     const codEnabled = order.allow_cod !== false;
     const paymentSelector = `
-        <div style="margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff;">
-            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Payment Method</div>
+        <div class="checkout-payment-card">
+            <h5 class="checkout-delivery-title">Payment Method</h5>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:999px; cursor:pointer; background:${paymentMethod === 'gcash' ? 'rgba(212,120,138,.12)' : '#fff'};">
                     <input type="radio" name="checkoutPaymentMethod_${order.temp_id}" value="gcash" ${paymentMethod === 'gcash' ? 'checked' : ''} onchange="onCheckoutPaymentMethodChange('${order.temp_id}', this.value)" />
@@ -5381,20 +5686,18 @@ async function displayGCashPayment() {
 
     if (paymentMethod === 'gcash' && order.gcash_instructions) {
         html += `
-            <div style="margin-bottom: 16px;">
-                <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Payment Instructions</div>
-                <div style="font-size: 12px; color: var(--muted); padding: 12px; background: #fff8f6; border: 1px solid var(--border); border-radius: var(--radius-md); line-height: 1.6;">
-                    ${order.gcash_instructions}
-                </div>
+            <div class="checkout-payment-card">
+                <h5 class="checkout-delivery-title">Payment Instructions</h5>
+                <div class="checkout-instructions-body">${order.gcash_instructions}</div>
             </div>
         `;
     }
 
     if (paymentMethod === 'gcash') {
     html += `
-        <div style="margin-bottom: 16px;">
-            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">GCash QR Code</div>
-            <div style="padding: 16px; background: white; border: 1px solid var(--border); border-radius: var(--radius-md); text-align: center;">
+        <div class="checkout-payment-card">
+            <h5 class="checkout-delivery-title">GCash QR Code</h5>
+            <div class="checkout-instructions-body" style="text-align: center; padding: 16px;">
     `;
 
     if (order.gcash_qr_codes && order.gcash_qr_codes.length > 0) {
@@ -5402,7 +5705,7 @@ async function displayGCashPayment() {
         const primaryQR = order.gcash_qr_codes.find(q => q.is_primary) || order.gcash_qr_codes[0];
         html += `<img src="${primaryQR.url}" style="max-width: 200px; height: auto; border-radius: var(--radius-md);">`;
     } else {
-        html += `<div style="padding: 40px; color: var(--muted);"><i class="ri-qr-code-2-line" style="font-size: 48px;"></i><div style="margin-top: 12px;">No QR code available</div></div>`;
+        html += `<div style="padding: 28px 12px; color: var(--muted);"><i class="ri-qr-code-2-line" style="font-size: 48px;"></i><div style="margin-top: 12px;">No QR code available</div></div>`;
     }
 
     html += `
@@ -5424,16 +5727,15 @@ async function displayGCashPayment() {
                 </button>
                 <small class="checkout-proof-note">Select screenshot or photo of your GCash payment</small>
             </div>
-        </div>
-
-        <div id="uploadStatus_${order.temp_id}" class="checkout-proof-status">
-            ${proofState.hasUploaded ? '<span style="color: var(--sage);">Receipt uploaded</span>' : proofState.hasPending ? '<span style="color: var(--muted);">Image selected. Use the button below to upload.</span>' : ''}
+            <div id="uploadStatus_${order.temp_id}" class="checkout-proof-status">
+                ${proofState.hasUploaded ? '<span style="color: var(--sage);">Receipt uploaded</span>' : proofState.hasPending ? '<span style="color: var(--muted);">Image selected. Use the button below to upload.</span>' : ''}
+            </div>
         </div>
     `;
     } else {
     html += `
-        <div style="padding:12px; border:1px solid var(--border); border-radius:var(--radius-md); background:#fff8f6; color:var(--charcoal); margin-bottom:16px;">
-            <div style="font-weight:600; margin-bottom:4px;"><i class="ri-money-dollar-circle-line"></i> Cash on Delivery selected</div>
+        <div class="checkout-payment-card">
+            <div style="font-weight:600; margin-bottom:4px; color:var(--charcoal);"><i class="ri-money-dollar-circle-line"></i> Cash on Delivery selected</div>
             <div style="font-size:12px; color:var(--muted);">No payment receipt required. Please prepare the exact amount upon delivery.</div>
         </div>
     `;

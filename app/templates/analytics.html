@@ -1652,10 +1652,13 @@ function toggleCustom() {
 }
 
 function applyCustom() {
+  if (typeof syncLinkedDatePickers === 'function') {
+    syncLinkedDatePickers(document.getElementById('fromDate'), document.getElementById('toDate'));
+  }
   const from = document.getElementById('fromDate').value;
   const to   = document.getElementById('toDate').value;
   if (!from || !to) { showToast('Please select both dates'); return; }
-  if (new Date(from) > new Date(to)) { showToast('From date must be before To date'); return; }
+  if (new Date(from) >= new Date(to)) { showToast('From date must be before To date'); return; }
   const url = new URL(window.location.href);
   url.searchParams.set('period', 'custom');
   url.searchParams.set('from', from);
@@ -1718,6 +1721,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const weekAgo = new Date(); weekAgo.setDate(today.getDate() - 7);
     fromEl.valueAsDate = weekAgo;
     toEl.valueAsDate   = today;
+  }
+  if (typeof bindLinkedDatePickers === 'function') {
+    bindLinkedDatePickers(fromEl, toEl);
   }
 });
 </script>

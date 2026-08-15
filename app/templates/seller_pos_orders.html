@@ -277,11 +277,11 @@
         </div>
         <div class="filter-group" id="customDateStart" style="display: none;">
             <label>Start Date</label>
-            <input type="date" id="startDate" onchange="applyFilters()">
+            <input type="date" id="startDate">
         </div>
         <div class="filter-group" id="customDateEnd" style="display: none;">
             <label>End Date</label>
-            <input type="date" id="endDate" onchange="applyFilters()">
+            <input type="date" id="endDate">
         </div>
         <div class="filter-group">
             <label>Payment Method</label>
@@ -459,8 +459,14 @@ function setupDateFilterListener() {
         }
     });
 
-    document.getElementById('startDate').addEventListener('change', applyFilters);
-    document.getElementById('endDate').addEventListener('change', applyFilters);
+    if (typeof bindLinkedDatePickers === 'function') {
+        bindLinkedDatePickers('#startDate', '#endDate', {
+            onChange: () => applyFilters()
+        });
+    } else {
+        document.getElementById('startDate').addEventListener('change', applyFilters);
+        document.getElementById('endDate').addEventListener('change', applyFilters);
+    }
 }
 
 /* ═══════════════════════════════════════

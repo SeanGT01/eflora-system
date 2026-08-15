@@ -408,6 +408,8 @@
 
     .payment-pending { background: rgba(148, 163, 184, 0.14); color: #475569; }
     .payment-pending_verification { background: rgba(245, 158, 11, 0.14); color: #9a6700; }
+    .payment-cod_pending { background: rgba(59, 130, 246, 0.14); color: #1d4ed8; }
+    .payment-cod_approved { background: rgba(16, 185, 129, 0.14); color: #047857; }
     .payment-verified { background: rgba(16, 185, 129, 0.14); color: #047857; }
 
     .orders-table select {
@@ -944,7 +946,7 @@
                 <div class="orders-stat-label">Today</div>
                 <div class="orders-stat-icon"><i class="ri-calendar-event-line"></i></div>
             </div>
-            <div class="orders-stat-value">{{ order_stats.today }}</div>
+            <div class="orders-stat-value" data-stat-value="today">{{ order_stats.today }}</div>
             <div class="orders-stat-sub">New orders today</div>
         </div>
         <div class="orders-stat gold" data-filter-type="payment" data-filter-value="pending_verification">
@@ -952,7 +954,7 @@
                 <div class="orders-stat-label">Payment Review</div>
                 <div class="orders-stat-icon"><i class="ri-bank-card-line"></i></div>
             </div>
-            <div class="orders-stat-value">{{ order_stats.payment_review }}</div>
+            <div class="orders-stat-value" data-stat-value="payment_review">{{ order_stats.payment_review }}</div>
             <div class="orders-stat-sub">Receipts to check</div>
         </div>
         <div class="orders-stat terra" data-filter-type="status-group" data-filter-value="accepted,preparing">
@@ -960,7 +962,7 @@
                 <div class="orders-stat-label">Preparing</div>
                 <div class="orders-stat-icon"><i class="ri-box-3-line"></i></div>
             </div>
-            <div class="orders-stat-value">{{ order_stats.preparing }}</div>
+            <div class="orders-stat-value" data-stat-value="preparing">{{ order_stats.preparing }}</div>
             <div class="orders-stat-sub">Accepted and preparing</div>
         </div>
         <div class="orders-stat bark" data-filter-type="status" data-filter-value="on_delivery">
@@ -968,7 +970,7 @@
                 <div class="orders-stat-label">On Delivery</div>
                 <div class="orders-stat-icon"><i class="ri-truck-line"></i></div>
             </div>
-            <div class="orders-stat-value">{{ order_stats.on_delivery }}</div>
+            <div class="orders-stat-value" data-stat-value="on_delivery">{{ order_stats.on_delivery }}</div>
             <div class="orders-stat-sub">Currently out for delivery</div>
         </div>
         <div class="orders-stat sage" data-filter-type="status" data-filter-value="delivered">
@@ -976,7 +978,7 @@
                 <div class="orders-stat-label">Delivered</div>
                 <div class="orders-stat-icon"><i class="ri-checkbox-circle-line"></i></div>
             </div>
-            <div class="orders-stat-value">{{ order_stats.delivered }}</div>
+            <div class="orders-stat-value" data-stat-value="delivered">{{ order_stats.delivered }}</div>
             <div class="orders-stat-sub">Completed orders</div>
         </div>
         <div class="orders-stat rose" data-filter-type="status" data-filter-value="completed">
@@ -984,7 +986,7 @@
                 <div class="orders-stat-label">Completed</div>
                 <div class="orders-stat-icon"><i class="ri-award-line"></i></div>
             </div>
-            <div class="orders-stat-value">{{ order_stats.completed }}</div>
+            <div class="orders-stat-value" data-stat-value="completed">{{ order_stats.completed }}</div>
             <div class="orders-stat-sub">Customer confirmed</div>
         </div>
         <div class="orders-stat rose" data-filter-type="status-group" data-filter-value="delivered,completed">
@@ -992,7 +994,7 @@
                 <div class="orders-stat-label">Revenue</div>
                 <div class="orders-stat-icon"><i class="ri-money-dollar-circle-line"></i></div>
             </div>
-            <div class="orders-stat-value">Php {{ "%.0f"|format(order_stats.revenue) }}</div>
+            <div class="orders-stat-value" data-stat-value="revenue">Php {{ "%.0f"|format(order_stats.revenue) }}</div>
             <div class="orders-stat-sub">Delivered/completed revenue</div>
         </div>
     </div>
@@ -1001,12 +1003,11 @@
         <div class="orders-toolbar">
             <div class="orders-search">
                 <i class="ri-search-line"></i>
-                <input type="text" id="sellerOrderSearch" placeholder="Search order, customer, address, or product">
+                <input type="text" id="sellerOrderSearch" placeholder="Search order, customer, contact, address, or product">
             </div>
             <select id="sellerStatusSelect">
                 <option value="all">All statuses</option>
                 <option value="pending">Pending</option>
-                <option value="accepted">Accepted</option>
                 <option value="preparing">Preparing</option>
                 <option value="done_preparing">Done Preparing</option>
                 <option value="on_delivery">On Delivery</option>
@@ -1016,9 +1017,8 @@
             </select>
             <select id="sellerPaymentSelect">
                 <option value="all">All payments</option>
-                <option value="pending">Pending</option>
-                <option value="pending_verification">Pending Verification</option>
-                <option value="verified">Verified</option>
+                <option value="gcash">GCash</option>
+                <option value="cod">COD</option>
             </select>
             <div class="orders-date-filter">
                 <div class="orders-date-field">
@@ -1085,12 +1085,14 @@
                         data-order-id="{{ order.id }}"
                         data-status="{{ order.status }}"
                         data-payment-status="{{ order.payment_status }}"
+                        data-payment-method="{{ (order.payment_method or '')|lower }}"
                         data-order-date="{{ order.date_formatted }}"
                         data-is-today="{{ 'true' if order.date_formatted == today_str else 'false' }}"
+                        data-total-amount="{{ order.total_amount or 0 }}"
                         data-search="{{ (
                             '#' ~ order.id ~ ' ' ~
                             (order.customer_name or '') ~ ' ' ~
-                            (order.customer_phone or '') ~ ' ' ~
+                            (order.customer_contact or order.customer_phone or '') ~ ' ' ~
                             (order.delivery_address or '') ~ ' ' ~
                             (order['items'] | map(attribute='product_name') | join(' '))
                         )|lower }}"
@@ -1112,7 +1114,7 @@
                         </td>
                         <td data-label="Customer">
                             <div class="order-code" style="font-size:14px;">{{ order.customer_name or 'Customer' }}</div>
-                            <div class="order-subline">{{ order.customer_phone or 'No phone' }}</div>
+                            <div class="order-subline">{{ order.customer_contact or 'No contact' }}</div>
                         </td>
                         <td data-label="Payment">
                             <div>
@@ -1154,6 +1156,11 @@
                                         class="orders-action-btn warning seller-view-payment"
                                         data-order-id="{{ order.id }}"
                                         data-proof-url="{{ order.payment_proof_url }}"
+                                        data-customer-name="{{ order.customer_name or 'Customer' }}"
+                                        data-customer-contact="{{ order.customer_contact or '' }}"
+                                        data-customer-contact-label="{{ order.customer_contact_label or 'Contact' }}"
+                                        data-order-total="{{ '%.2f'|format(order.total_amount or 0) }}"
+                                        data-payment-method="{{ order.payment_method or '' }}"
                                         title="Receipt"
                                         aria-label="View payment receipt">
                                     <i class="ri-file-image-line"></i>
@@ -1232,6 +1239,15 @@
             </button>
         </div>
         <div class="custom-modal-body">
+            <div id="sellerPaymentProofMeta" class="proof-meta" style="display:none; margin-bottom:0.85rem;">
+                <div class="sdm-rows" style="gap:0.35rem;">
+                    <div class="sdm-row"><span class="sdm-k">Order</span><span class="sdm-v" id="sellerPaymentProofOrder">—</span></div>
+                    <div class="sdm-row"><span class="sdm-k">Customer</span><span class="sdm-v" id="sellerPaymentProofCustomer">—</span></div>
+                    <div class="sdm-row"><span class="sdm-k" id="sellerPaymentProofContactLabel">Contact</span><span class="sdm-v" id="sellerPaymentProofContact">—</span></div>
+                    <div class="sdm-row"><span class="sdm-k">Method</span><span class="sdm-v" id="sellerPaymentProofMethod">—</span></div>
+                    <div class="sdm-row"><span class="sdm-k">Amount</span><span class="sdm-v" id="sellerPaymentProofAmount">—</span></div>
+                </div>
+            </div>
             <img id="sellerPaymentProofImage" class="proof-image" alt="Payment proof">
             <div id="sellerPaymentProofEmpty" class="proof-empty">
                 <i class="ri-image-circle-line"></i>
@@ -1421,20 +1437,74 @@
         return `${to12h(m[1], m[2])} - ${to12h(m[3], m[4])}`;
     }
 
+    function getSellerDateRange() {
+        return {
+            startDate: document.getElementById('sellerStartDate')?.value || '',
+            endDate: document.getElementById('sellerEndDate')?.value || ''
+        };
+    }
+
+    function rowMatchesSellerDateRange(row, startDate, endDate) {
+        const rowDate = row.dataset.orderDate || '';
+        const matchesDateStart = !startDate || (rowDate && rowDate >= startDate);
+        const matchesDateEnd = !endDate || (rowDate && rowDate <= endDate);
+        return matchesDateStart && matchesDateEnd;
+    }
+
+    function getSellerDateFilteredRows() {
+        const { startDate, endDate } = getSellerDateRange();
+        return sellerRows.filter(row => rowMatchesSellerDateRange(row, startDate, endDate));
+    }
+
+    function setSellerStatValue(key, value) {
+        const el = document.querySelector(`[data-stat-value="${key}"]`);
+        if (el) el.textContent = value;
+    }
+
+    function updateSellerStatCards() {
+        const rows = getSellerDateFilteredRows();
+        const revenue = rows
+            .filter(row => ['delivered', 'completed'].includes(row.dataset.status))
+            .reduce((sum, row) => sum + (Number(row.dataset.totalAmount) || 0), 0);
+
+        setSellerStatValue('today', rows.filter(row => row.dataset.isToday === 'true').length);
+        setSellerStatValue(
+            'payment_review',
+            rows.filter(row => row.dataset.paymentStatus === 'pending_verification').length
+        );
+        setSellerStatValue(
+            'preparing',
+            rows.filter(row => ['accepted', 'preparing'].includes(row.dataset.status)).length
+        );
+        setSellerStatValue(
+            'on_delivery',
+            rows.filter(row => row.dataset.status === 'on_delivery').length
+        );
+        setSellerStatValue(
+            'delivered',
+            rows.filter(row => row.dataset.status === 'delivered').length
+        );
+        setSellerStatValue(
+            'completed',
+            rows.filter(row => row.dataset.status === 'completed').length
+        );
+        setSellerStatValue(
+            'revenue',
+            `Php ${Math.round(revenue).toLocaleString('en-PH')}`
+        );
+    }
+
     function getFilteredSellerRows() {
         const search = (document.getElementById('sellerOrderSearch').value || '').trim().toLowerCase();
         const status = document.getElementById('sellerStatusSelect').value;
         const payment = document.getElementById('sellerPaymentSelect').value;
-        const startDate = document.getElementById('sellerStartDate').value || '';
-        const endDate = document.getElementById('sellerEndDate').value || '';
+        const { startDate, endDate } = getSellerDateRange();
 
         return sellerRows.filter(row => {
             const matchesSearch = !search || (row.dataset.search || '').includes(search);
             const matchesStatus = status === 'all' || row.dataset.status === status;
-            const matchesPayment = payment === 'all' || row.dataset.paymentStatus === payment;
-            const rowDate = row.dataset.orderDate || '';
-            const matchesDateStart = !startDate || (rowDate && rowDate >= startDate);
-            const matchesDateEnd = !endDate || (rowDate && rowDate <= endDate);
+            const matchesPayment = payment === 'all' || (row.dataset.paymentMethod || '') === payment;
+            const matchesDate = rowMatchesSellerDateRange(row, startDate, endDate);
             let matchesCard = true;
 
             if (sellerCardFilter?.type === 'status') {
@@ -1447,14 +1517,15 @@
                 matchesCard = (row.dataset.isToday || '') === 'true';
             }
 
-            return matchesSearch && matchesStatus && matchesPayment && matchesDateStart && matchesDateEnd && matchesCard;
+            return matchesSearch && matchesStatus && matchesPayment && matchesDate && matchesCard;
         });
     }
 
     function updateSellerPanelSubtitle(totalRows) {
         if (!sellerPanelSub) return;
 
-        const baseText = '{{ store.name }} • {{ order_stats.total }} total orders';
+        const dateFilteredCount = getSellerDateFilteredRows().length;
+        const baseText = `{{ store.name }} • ${dateFilteredCount} total orders`;
         if (!sellerCardFilter) {
             sellerPanelSub.innerHTML = baseText;
             return;
@@ -1511,6 +1582,7 @@
             sellerOrdersNextBtn.disabled = sellerCurrentPage >= totalPages || totalRows === 0;
         }
 
+        updateSellerStatCards();
         updateSellerPanelSubtitle(totalRows);
         updateActiveSellerCard();
     }
@@ -1518,13 +1590,23 @@
     document.getElementById('sellerOrderSearch').addEventListener('input', () => applySellerFilters(true));
     document.getElementById('sellerStatusSelect').addEventListener('change', () => applySellerFilters(true));
     document.getElementById('sellerPaymentSelect').addEventListener('change', () => applySellerFilters(true));
-    document.getElementById('sellerStartDate').addEventListener('change', () => applySellerFilters(true));
-    document.getElementById('sellerEndDate').addEventListener('change', () => applySellerFilters(true));
+
+    const sellerDateRange = (typeof bindLinkedDatePickers === 'function')
+        ? bindLinkedDatePickers('#sellerStartDate', '#sellerEndDate', {
+            onChange: () => applySellerFilters(true)
+        })
+        : null;
+
     document.getElementById('sellerDateResetBtn').addEventListener('click', () => {
         const start = document.getElementById('sellerStartDate');
         const end = document.getElementById('sellerEndDate');
         start.value = '';
         end.value = '';
+        if (sellerDateRange) sellerDateRange.clearLimits();
+        else {
+            start.removeAttribute('max');
+            end.removeAttribute('min');
+        }
         applySellerFilters(true);
     });
     sellerOrdersPrevBtn?.addEventListener('click', () => {
@@ -1625,7 +1707,7 @@
                                 <h4>Customer</h4>
                                 <div class="sdm-rows">
                                     <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${order.customer_name || '—'}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Phone</span><span class="sdm-v">${order.customer_phone || '—'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">${order.customer_contact_label || 'Contact'}</span><span class="sdm-v">${order.customer_contact || '—'}</span></div>
                                 </div>
                             </section>
                             <section class="sdm-block">
@@ -1882,6 +1964,18 @@
             activePaymentOrderId = button.dataset.orderId;
             const proofImage = document.getElementById('sellerPaymentProofImage');
             const proofEmpty = document.getElementById('sellerPaymentProofEmpty');
+            const proofMeta = document.getElementById('sellerPaymentProofMeta');
+            const contactLabel = button.dataset.customerContactLabel || 'Contact';
+            const contactValue = button.dataset.customerContact || '';
+
+            document.getElementById('sellerPaymentProofOrder').textContent = `#${button.dataset.orderId || '—'}`;
+            document.getElementById('sellerPaymentProofCustomer').textContent = button.dataset.customerName || '—';
+            document.getElementById('sellerPaymentProofContactLabel').textContent = contactLabel;
+            document.getElementById('sellerPaymentProofContact').textContent = contactValue || '—';
+            document.getElementById('sellerPaymentProofMethod').textContent = titleCaseStatus(button.dataset.paymentMethod || '');
+            document.getElementById('sellerPaymentProofAmount').textContent = `₱${formatAmount(button.dataset.orderTotal || 0)}`;
+            if (proofMeta) proofMeta.style.display = 'block';
+
             proofEmpty.style.display = 'none';
             proofImage.style.display = 'block';
             proofImage.src = button.dataset.proofUrl;
