@@ -554,11 +554,25 @@
         width: 85%;
         height: 85%;
         object-fit: contain;
+        object-position: center center;
         border-radius: 0;
         display: block;
+        margin: 0 auto;
         transition: transform 0.7s cubic-bezier(0.4,0,0.2,1);
         box-shadow: none;
         transform-style: preserve-3d;
+        transform-origin: center center;
+    }
+
+    /* <picture> must fill the slide so % width/height on img centers correctly */
+    .hero-slide picture {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
     }
 
     /* Category label pill top-right of image */
@@ -672,6 +686,17 @@
         .hero-right { height: 300px; }
         .hero-left { padding: 2rem 2rem 1.5rem; }
         .hero-title { font-size: clamp(30px, 7vw, 52px); }
+
+        .hero-slide-label {
+            top: 0.85rem;
+            right: 0.85rem;
+            font-size: 10px;
+            padding: 5px 11px;
+        }
+        .hero-nav {
+            bottom: 0.85rem;
+            right: 0.85rem;
+        }
     }
     @media (max-width: 600px) {
         .hero-right { height: 240px; }
@@ -679,6 +704,8 @@
         .hero-title { font-size: clamp(26px, 8vw, 44px); }
         .hero-thumbs { gap: 7px; }
         .hero-thumb { width: 50px; height: 50px; }
+
+        .hero-nav-btn { width: 32px; height: 32px; font-size: 16px; }
     }
 
     /* ─── Section Headers ─── */
@@ -984,8 +1011,20 @@
     z-index: 2;
 }
 
+/* Landscape asset (fresh flowers) looks smaller in a square card —
+   scale it up so the subject fills like the taller category images. */
+.category-image.category-image--wide {
+    padding: 0;
+    transform: scale(1.32);
+    transform-origin: center center;
+}
+
 .category-image-wrap:hover .category-image {
     transform: scale(1.05);
+}
+
+.category-image-wrap:hover .category-image.category-image--wide {
+    transform: scale(1.38);
 }
 
 .category-text {
@@ -3181,7 +3220,7 @@
     <div class="category-item">
        <a href="{{ url_for('templates.category', category_identifier='fresh-flowers') }}" class="category-card">
             <div class="category-image-wrap icon-pink">
-                <img src="{{ url_for('static', filename='images/category_images/fresh_flowers.webp') }}" alt="Fresh Flowers" class="category-image" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='{{ url_for('static', filename='images/category_images/fresh_flowers.png') }}'">
+                <img src="{{ url_for('static', filename='images/category_images/fresh_flowers.webp') }}" alt="Fresh Flowers" class="category-image category-image--wide" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='{{ url_for('static', filename='images/category_images/fresh_flowers.png') }}'">
             </div>
         </a>
         <div class="category-text">
