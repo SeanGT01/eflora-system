@@ -3148,6 +3148,7 @@ const ADDRESS_PAGE_SIZE = 4;
 
 // Laguna province boundary (merged municipalities) for pin containment
 let lagunaProvinceFeature = null;
+let lagunaProvincePinFeature = null;
 let __lagunaBoundaryLoadPromise = null;
 
 const LAGUNA_BBOX_FALLBACK = {
@@ -3169,6 +3170,18 @@ function ensureLagunaBoundaryLoaded() {
                     properties: {},
                     geometry: data.geometry,
                 };
+                // Soft shoreline buffer: lake-edge land (e.g. Mayondon tip) is often
+                // outside simplified municipal polygons that cut inland from the lake.
+                lagunaProvincePinFeature = lagunaProvinceFeature;
+                if (typeof turf !== 'undefined' && typeof turf.buffer === 'function') {
+                    try {
+                        lagunaProvincePinFeature = turf.buffer(lagunaProvinceFeature, 0.6, { units: 'kilometers' })
+                            || lagunaProvinceFeature;
+                    } catch (bufferErr) {
+                        console.warn('Laguna pin buffer failed:', bufferErr);
+                        lagunaProvincePinFeature = lagunaProvinceFeature;
+                    }
+                }
             }
         } catch (e) {
             console.warn('Laguna boundary load failed:', e);
@@ -3178,9 +3191,15 @@ function ensureLagunaBoundaryLoaded() {
 }
 
 function isPointInLaguna(lng, lat) {
-    if (lagunaProvinceFeature && typeof turf !== 'undefined') {
+    if (typeof turf !== 'undefined') {
         try {
-            return turf.booleanPointInPolygon(turf.point([lng, lat]), lagunaProvinceFeature);
+            const pt = turf.point([lng, lat]);
+            if (lagunaProvinceFeature && turf.booleanPointInPolygon(pt, lagunaProvinceFeature)) {
+                return true;
+            }
+            if (lagunaProvincePinFeature && turf.booleanPointInPolygon(pt, lagunaProvincePinFeature)) {
+                return true;
+            }
         } catch (e) {
             console.warn('isPointInLaguna:', e);
         }

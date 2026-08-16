@@ -4,6 +4,8 @@
 {% block title %}{{ store.name }} — E-FLOWERS{% endblock %}
 
 {% block extra_css %}
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.css" rel="stylesheet">
+<script defer src="https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.js"></script>
 <style>
     body {
         background:
@@ -18,33 +20,52 @@
         border-radius: 28px;
         overflow: hidden;
         margin-bottom: 3rem;
-        background: transparent;
+        background: #2f3a32;
         min-height: 320px;
         display: flex;
         align-items: flex-end;
-        border: 1px solid rgba(255, 255, 255, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.35);
         box-shadow:
-            0 10px 28px rgba(181, 68, 90, 0.14),
-            0 28px 64px rgba(140, 100, 180, 0.12),
-            inset 0 1px 0 rgba(255, 255, 255, 0.35);
+            0 10px 28px rgba(47, 58, 50, 0.18),
+            0 28px 64px rgba(47, 58, 50, 0.16),
+            inset 0 1px 0 rgba(255, 255, 255, 0.28);
     }
 
     .store-hero-bg {
         position: absolute;
         inset: 0;
         background:
-            radial-gradient(ellipse 90% 80% at 12% 20%, rgba(255, 150, 185, 0.55) 0%, transparent 55%),
-            radial-gradient(ellipse 80% 70% at 90% 85%, rgba(180, 140, 230, 0.5) 0%, transparent 55%),
-            linear-gradient(135deg, #c24e68 0%, #d878a0 45%, #b888d0 100%);
+            {% if store.banner_url %}
+            url("{{ store.banner_url }}") center / cover no-repeat;
+            {% else %}
+            url("{{ url_for('static', filename='images/store-hero-florals.jpg') }}") center / cover no-repeat;
+            {% endif %}
+    }
+
+    .store-hero-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+            linear-gradient(
+                180deg,
+                rgba(16, 20, 18, 0.22) 0%,
+                rgba(16, 20, 18, 0.18) 28%,
+                rgba(16, 20, 18, 0.52) 58%,
+                rgba(12, 16, 14, 0.82) 78%,
+                rgba(10, 14, 12, 0.9) 100%
+            );
+        z-index: 1;
     }
 
     .store-hero-pattern {
         position: absolute;
         inset: 0;
-        opacity: 0.08;
-        background-image:
-            repeating-linear-gradient(45deg, #fff 0, #fff 1px, transparent 0, transparent 50%);
-        background-size: 20px 20px;
+        z-index: 1;
+        opacity: 0.14;
+        background:
+            radial-gradient(ellipse 45% 55% at 88% 18%, rgba(255, 255, 255, 0.16), transparent 70%),
+            radial-gradient(ellipse 35% 40% at 12% 82%, rgba(122, 158, 126, 0.14), transparent 70%);
         pointer-events: none;
     }
 
@@ -59,16 +80,24 @@
         flex-wrap: wrap;
     }
 
+    .store-hero-top {
+        display: flex;
+        align-items: flex-end;
+        gap: 2rem;
+        flex: 1 1 280px;
+        min-width: 0;
+    }
+
     .store-logo-large {
         width: 100px;
         height: 100px;
         border-radius: var(--radius-lg);
         overflow: hidden;
         flex-shrink: 0;
-        border: 2px solid rgba(255, 255, 255, 0.55);
+        border: 2px solid rgba(255, 255, 255, 0.75);
         background:
-            radial-gradient(ellipse at 30% 30%, #f8d0dc, transparent 60%),
-            radial-gradient(ellipse at 80% 80%, #e8d8f4, #f0a0b8);
+            radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.35), transparent 60%),
+            linear-gradient(145deg, #5f7463, #3f4f44);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -77,7 +106,7 @@
         font-size: 40px;
         font-weight: 500;
         box-shadow:
-            0 10px 28px rgba(0, 0, 0, 0.18),
+            0 10px 28px rgba(0, 0, 0, 0.28),
             inset 0 1px 0 rgba(255, 255, 255, 0.45);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
@@ -87,7 +116,7 @@
         width: 100%; height: 100%; object-fit: cover;
     }
 
-    .store-hero-info { flex: 1; min-width: 240px; }
+    .store-hero-info { flex: 1 1 220px; min-width: 0; }
 
     .store-hero-name {
         font-family: var(--font-display);
@@ -96,15 +125,22 @@
         color: #fff;
         line-height: 1.1;
         margin-bottom: 0.75rem;
-        text-shadow: 0 2px 12px rgba(80, 30, 60, 0.2);
+        text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.45);
+        overflow-wrap: anywhere;
     }
 
     .store-hero-desc {
         font-size: 14px;
-        color: rgba(255, 255, 255, 0.78);
-        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.92);
+        line-height: 1.45;
         max-width: 520px;
         margin-bottom: 1.25rem;
+        text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
     }
 
     .store-hero-tags {
@@ -118,17 +154,30 @@
         align-items: center;
         gap: 0.4rem;
         padding: 0.35rem 0.875rem;
-        background: rgba(255, 255, 255, 0.2);
+        background: rgba(18, 22, 20, 0.42);
         border: 1px solid rgba(255, 255, 255, 0.35);
         border-radius: var(--radius-pill);
         font-size: 12px;
-        color: rgba(255, 255, 255, 0.92);
+        color: rgba(255, 255, 255, 0.95);
         font-family: var(--font-sans);
         font-weight: 500;
         letter-spacing: 0.02em;
         backdrop-filter: blur(12px) saturate(1.3);
         -webkit-backdrop-filter: blur(12px) saturate(1.3);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 2px 10px rgba(0, 0, 0, 0.18);
+    }
+
+    .store-tag.store-tag-address {
+        white-space: normal;
+        align-items: flex-start;
+        max-width: min(100%, 560px);
+        line-height: 1.45;
+        border-radius: 14px;
+    }
+
+    .store-tag.store-tag-address i {
+        margin-top: 1px;
+        flex-shrink: 0;
     }
 
     .store-tag i { font-size: 13px; color: #ffe0ec; }
@@ -138,7 +187,9 @@
         flex-direction: column;
         gap: 0.75rem;
         align-items: flex-end;
-        flex-shrink: 0;
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 100%;
     }
 
     .store-hero-actions .btn {
@@ -158,6 +209,363 @@
     .store-hero-actions .btn-message:hover {
         background: rgba(255, 255, 255, 0.35);
         color: #fff;
+    }
+
+    .store-map-preview {
+        position: relative;
+        width: min(220px, 100%);
+        height: 112px;
+        padding: 0;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.58);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.17);
+        color: #fff;
+        cursor: pointer;
+        box-shadow: 0 10px 24px rgba(67, 27, 53, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .store-map-preview:hover,
+    .store-map-preview:focus-visible {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 28px rgba(67, 27, 53, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        outline: none;
+    }
+
+    .store-map-preview img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+        opacity: 0.9;
+    }
+
+    .store-map-preview::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, transparent 25%, rgba(42, 25, 39, 0.65));
+        pointer-events: none;
+    }
+
+    .store-map-preview-label {
+        position: absolute;
+        z-index: 1;
+        right: 0.6rem;
+        bottom: 0.55rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 11px;
+        font-weight: 600;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    }
+
+    .delivery-map-modal[hidden] { display: none; }
+    .delivery-map-modal {
+        position: fixed;
+        /* Above the sticky header (z-index 1200) and cart/chat overlays. */
+        z-index: 12100;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: max(0.75rem, env(safe-area-inset-top, 0px))
+                 max(0.75rem, env(safe-area-inset-right, 0px))
+                 max(0.75rem, env(safe-area-inset-bottom, 0px))
+                 max(0.75rem, env(safe-area-inset-left, 0px));
+    }
+
+    .delivery-map-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(35, 27, 31, 0.58);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+
+    .delivery-map-dialog {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        width: min(880px, 100%);
+        height: min(720px, calc(100dvh - 1.5rem));
+        max-height: calc(100vh - 1.5rem);
+        max-height: calc(100dvh - 1.5rem);
+        overflow: hidden;
+        border: 1px solid rgba(107, 76, 59, 0.16);
+        border-radius: 22px;
+        background: #fffdf9;
+        box-shadow: 0 24px 70px rgba(35, 27, 31, 0.32);
+    }
+
+    .delivery-map-head,
+    .delivery-map-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem 1rem;
+        padding: 0.9rem 1.15rem;
+        min-width: 0;
+    }
+
+    .delivery-map-head {
+        border-bottom: 1px solid rgba(107, 76, 59, 0.12);
+        align-items: flex-start;
+    }
+
+    .delivery-map-head > div:first-child {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .delivery-map-foot {
+        border-top: 1px solid rgba(107, 76, 59, 0.12);
+        flex-wrap: wrap;
+        font-size: 13px;
+        padding-bottom: max(0.9rem, env(safe-area-inset-bottom, 0px));
+    }
+
+    .delivery-map-title {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+        color: var(--charcoal);
+        line-height: 1.2;
+    }
+
+    .delivery-map-subtitle {
+        margin: 0.2rem 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+    }
+
+    .delivery-map-close {
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+        border: 0;
+        border-radius: 50%;
+        background: rgba(181, 68, 90, 0.1);
+        color: var(--deep-rose);
+        cursor: pointer;
+        font-size: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #storeDeliveryMap {
+        min-height: 220px;
+        height: 100%;
+        width: 100%;
+        background: #f3eee7;
+    }
+
+    .delivery-map-status {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: 0.4rem;
+        font-weight: 600;
+        color: var(--deep-sage);
+        line-height: 1.35;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .delivery-map-status.is-outside { color: #b65343; }
+    .delivery-map-status.is-neutral { color: var(--muted); }
+    .delivery-map-legend {
+        display: flex;
+        gap: 0.75rem 0.9rem;
+        flex-wrap: wrap;
+        color: var(--muted);
+        flex-shrink: 0;
+    }
+    .delivery-map-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .delivery-map-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--deep-rose); flex-shrink: 0; }
+    .delivery-map-dot.customer { background: #276749; }
+
+    .store-map-marker {
+        position: relative;
+        width: 52px;
+        height: 62px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        filter: drop-shadow(0 6px 12px rgba(28, 24, 22, 0.35));
+        cursor: default;
+    }
+
+    .store-map-marker-avatar {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 3px solid #fff;
+        background: linear-gradient(145deg, #5f7463, #3f4f44);
+        box-shadow: 0 0 0 2px rgba(181, 68, 90, 0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .store-map-marker-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .store-map-marker-tip {
+        width: 14px;
+        height: 14px;
+        margin-top: -7px;
+        background: #fff;
+        border-radius: 2px;
+        transform: rotate(45deg);
+        box-shadow: 2px 2px 0 rgba(181, 68, 90, 0.12);
+        z-index: -1;
+    }
+
+    .customer-map-marker {
+        width: 18px;
+        height: 18px;
+        border: 3px solid #fff;
+        border-radius: 50%;
+        background: #276749;
+        box-shadow: 0 2px 8px rgba(30, 60, 40, 0.35), 0 0 0 2px rgba(39, 103, 73, 0.25);
+    }
+
+    body.delivery-map-open { overflow: hidden; }
+
+    @media (max-width: 1100px) {
+        .delivery-map-dialog {
+            width: min(760px, 100%);
+            height: min(640px, calc(100dvh - 1.25rem));
+        }
+    }
+
+    @media (max-width: 900px) {
+        .delivery-map-modal {
+            place-items: end center;
+            padding: 0;
+        }
+
+        .delivery-map-dialog {
+            width: 100%;
+            height: min(88dvh, calc(100dvh - 0.5rem));
+            max-height: none;
+            border-radius: 20px 20px 0 0;
+            border-left: 0;
+            border-right: 0;
+            border-bottom: 0;
+        }
+
+        .delivery-map-head,
+        .delivery-map-foot {
+            padding: 0.85rem 1rem;
+        }
+
+        .delivery-map-foot {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.55rem;
+        }
+    }
+
+    @media (max-width: 600px) {
+        .delivery-map-dialog {
+            height: min(92dvh, 100dvh);
+            border-radius: 16px 16px 0 0;
+        }
+
+        .delivery-map-title { font-size: 1.2rem; }
+        .delivery-map-subtitle { font-size: 11px; }
+        .delivery-map-status,
+        .delivery-map-legend { font-size: 12px; }
+
+        .store-map-marker {
+            width: 42px;
+            height: 50px;
+        }
+
+        .store-map-marker-avatar {
+            width: 38px;
+            height: 38px;
+            font-size: 15px;
+            border-width: 2.5px;
+        }
+
+        .store-map-marker-tip {
+            width: 12px;
+            height: 12px;
+            margin-top: -6px;
+        }
+
+        .customer-map-marker {
+            width: 15px;
+            height: 15px;
+        }
+
+        #storeDeliveryMap .mapboxgl-ctrl-top-right {
+            top: 0.4rem;
+            right: 0.4rem;
+        }
+
+        #storeDeliveryMap .mapboxgl-ctrl-group button {
+            width: 30px;
+            height: 30px;
+        }
+    }
+
+    @media (max-width: 420px) {
+        .delivery-map-head {
+            padding: 0.75rem 0.85rem;
+        }
+
+        .delivery-map-foot {
+            padding: 0.75rem 0.85rem max(0.85rem, env(safe-area-inset-bottom, 0px));
+        }
+
+        .delivery-map-close {
+            width: 34px;
+            height: 34px;
+        }
+    }
+
+    @media (max-height: 560px) and (orientation: landscape) {
+        .delivery-map-modal {
+            place-items: center;
+            padding: 0.4rem;
+        }
+
+        .delivery-map-dialog {
+            width: min(920px, 100%);
+            height: calc(100dvh - 0.8rem);
+            border-radius: 14px;
+        }
+
+        .delivery-map-head,
+        .delivery-map-foot {
+            padding: 0.55rem 0.85rem;
+        }
+
+        .delivery-map-title { font-size: 1.05rem; }
+        .delivery-map-subtitle { display: none; }
+        .delivery-map-foot {
+            flex-direction: row;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.45rem 0.85rem;
+        }
     }
 
     .store-hero-actions .btn-call {
@@ -234,9 +642,30 @@
     /* ─── Layout ─── */
     .store-layout {
         display: grid;
-        grid-template-columns: 1fr 300px;
+        grid-template-columns: minmax(0, 1fr) 300px;
         gap: 2.5rem;
         align-items: start;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .store-main-col {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .store-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .store-toolbar-count {
+        font-size: 13px;
+        color: var(--muted);
     }
 
     /* ─── Filter Bar ─── */
@@ -263,6 +692,7 @@
         gap: 0.5rem;
         flex-wrap: wrap;
         flex: 1;
+        min-width: 0;
     }
 
     .filter-pill {
@@ -312,23 +742,13 @@
         margin-left: 4px;
     }
 
-    /* ─── Products Grid ─── */
+    /* ─── Products Grid ───
+       Fewer columns than the landing page because this grid sits beside the
+       sidebar (~300px). 4-across here ≈ 6-across on the full-width landing. */
     .store-products-grid {
         display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 1rem;
-    }
-
-    @media (max-width: 1399px) {
-        .store-products-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    }
-
-    @media (max-width: 1199px) {
-        .store-products-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.875rem; }
-    }
-
-    @media (max-width: 899px) {
-        .store-products-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
     }
 
     .product-card {
@@ -341,6 +761,7 @@
         display: flex;
         flex-direction: column;
         cursor: pointer;
+        min-width: 0;
         box-shadow:
             0 8px 24px rgba(80, 40, 70, 0.06),
             inset 0 1px 0 rgba(255, 255, 255, 0.75);
@@ -599,6 +1020,7 @@
         font-size: 13px;
         color: var(--charcoal);
         line-height: 1.5;
+        overflow-wrap: anywhere;
     }
 
     .status-open {
@@ -631,6 +1053,34 @@
 
     .mini-review:last-child { border-bottom: none; padding-bottom: 0; }
     .mini-review:first-child { padding-top: 0; }
+
+    .store-reviews-scroll {
+        max-height: 15.5rem; /* ~3 review rows visible */
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        padding-right: 0.25rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(107, 76, 59, 0.25) transparent;
+    }
+
+    .store-reviews-scroll::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .store-reviews-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .store-reviews-scroll::-webkit-scrollbar-thumb {
+        background: rgba(107, 76, 59, 0.25);
+        border-radius: 999px;
+    }
+
+    .store-reviews-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(107, 76, 59, 0.4);
+    }
 
     .mini-review-header {
         display: flex;
@@ -697,35 +1147,219 @@
     }
 
     /* ─── Responsive ─── */
+    @media (max-width: 1399px) {
+        .store-products-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 1279px) {
+        .store-hero {
+            min-height: 300px;
+            margin-bottom: 2.25rem;
+        }
+
+        .store-hero-content {
+            padding: 2rem 2.25rem;
+            gap: 1.5rem;
+        }
+
+        .store-stats-bar { margin-bottom: 2.25rem; }
+
+        .store-layout {
+            grid-template-columns: minmax(0, 1fr) 280px;
+            gap: 2rem;
+        }
+
+        .store-products-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.875rem;
+        }
+
+        .stat-cell { padding: 1.25rem 1rem; }
+        .stat-value { font-size: 24px; }
+    }
+
     @media (max-width: 1100px) {
-        .store-layout { grid-template-columns: 1fr 260px; gap: 2rem; }
+        .store-layout {
+            grid-template-columns: minmax(0, 1fr) 250px;
+            gap: 1.5rem;
+        }
+
+        .store-hero-content { padding: 1.75rem 1.75rem; }
+        .store-logo-large { width: 88px; height: 88px; font-size: 34px; }
+        .store-map-preview { width: min(200px, 100%); height: 100px; }
+        .sidebar-card-header,
+        .sidebar-card-body { padding-left: 1.15rem; padding-right: 1.15rem; }
     }
 
     @media (max-width: 900px) {
-        .store-layout { grid-template-columns: 1fr; }
-        .store-sidebar { position: static; }
-        .store-stats-bar { grid-template-columns: repeat(2, 1fr); }
+        .store-layout { grid-template-columns: 1fr; gap: 1.75rem; }
+        .store-sidebar {
+            position: static;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+        }
+        .store-sidebar > .btn { grid-column: 1 / -1; }
+
+        .store-stats-bar { grid-template-columns: repeat(2, 1fr); margin-bottom: 1.75rem; }
         .stat-cell:nth-child(2n) { border-right: none; }
         .stat-cell:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
-        .store-hero-actions { flex-direction: row; align-items: center; }
+
+        .store-hero {
+            min-height: 0;
+            margin-bottom: 1.75rem;
+        }
+
+        .store-hero-content {
+            flex-direction: column;
+            align-items: stretch;
+            padding: 1.5rem 1.35rem;
+            gap: 1.25rem;
+        }
+
+        .store-hero-top {
+            width: 100%;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+
+        .store-hero-info { flex: 1 1 auto; width: auto; min-width: 0; }
+
+        .store-hero-actions {
+            flex-direction: row;
+            align-items: stretch;
+            flex-wrap: wrap;
+            width: 100%;
+            justify-content: stretch;
+        }
+
+        .store-map-preview {
+            width: min(220px, 100%);
+            height: 96px;
+            flex: 1 1 180px;
+        }
+
+        .store-hero-actions .btn {
+            flex: 1 1 160px;
+            justify-content: center;
+        }
+
+        .store-products-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        /* Touch: overlay actions visible without hover */
+        .product-overlay { background: rgba(80, 40, 70, 0.12); }
+        .overlay-btn {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .store-hero { border-radius: 22px; }
+        .store-hero-desc { max-width: none; margin-bottom: 1rem; }
+        .store-tag { font-size: 11px; padding: 0.3rem 0.7rem; }
+        .store-tag.store-tag-address { max-width: 100%; border-radius: 12px; }
+
+        .store-products-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        .filter-bar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .filter-pills {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            padding-bottom: 0.15rem;
+            margin: 0 -0.15rem;
+            padding-left: 0.15rem;
+            padding-right: 0.15rem;
+        }
+
+        .filter-pills::-webkit-scrollbar { display: none; }
+        .filter-pill { flex: 0 0 auto; }
+
+        .store-sidebar { grid-template-columns: 1fr; }
+        .product-title { font-size: 14px; }
+        .product-price,
+        .product-price .ep-price__sale,
+        .product-price .ep-price__regular { font-size: 15px; }
     }
 
     @media (max-width: 600px) {
-        .store-hero { border-radius: 20px; min-height: 260px; }
-        .store-hero-content { padding: 1.5rem; gap: 1.25rem; }
-        .store-logo-large { width: 72px; height: 72px; font-size: 28px; }
-        .store-hero-name { font-size: clamp(22px, 5vw, 32px); }
-        .store-stats-bar { grid-template-columns: repeat(2, 1fr); }
-        .store-products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
-        .product-image { aspect-ratio: 1 / 1; height: auto; }
-        .product-content { padding: 0.45rem 0.55rem 0.6rem; }
+        .store-hero {
+            border-radius: 18px;
+        }
+
+        .store-hero-content { padding: 1.25rem 1.1rem 1.35rem; gap: 1rem; }
+        .store-logo-large { width: 68px; height: 68px; font-size: 26px; border-radius: 14px; }
+        .store-hero-name { font-size: clamp(22px, 6.5vw, 30px); margin-bottom: 0.5rem; }
+        .store-hero-desc { font-size: 13px; -webkit-line-clamp: 3; line-clamp: 3; }
+
+        .store-hero-actions { gap: 0.55rem; }
+        .store-map-preview { flex: 1 1 100%; width: 100%; height: 100px; }
+        .store-hero-actions .btn {
+            flex: 1 1 100%;
+            width: 100%;
+            min-height: 42px;
+        }
+
+        .store-stats-bar {
+            border-radius: 16px;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-cell { padding: 1rem 0.65rem; }
+        .stat-value { font-size: 22px; }
+        .stat-label { font-size: 10px; letter-spacing: 0.08em; }
+
+        .store-products-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.65rem;
+        }
+
+        .product-content { padding: 0.4rem 0.45rem 0.55rem; }
         .product-title { font-size: 13px; }
+        .product-badge { top: 0.5rem; left: 0.5rem; font-size: 8px; padding: 2px 6px; }
+        .overlay-btn { width: 34px; height: 34px; font-size: 14px; }
+
+        .sidebar-card { border-radius: 16px; }
+        .sidebar-card-header { padding: 1rem 1.1rem 0.75rem; }
+        .sidebar-card-body { padding: 1rem 1.1rem; }
+        .empty-products { padding: 2.5rem 1.25rem; }
+        .empty-products i { font-size: 40px; }
+        .empty-products p { font-size: 17px; }
     }
 
     @media (max-width: 420px) {
-        .store-hero-content { flex-direction: column; align-items: flex-start; }
-        .store-hero-actions { flex-direction: row; width: 100%; }
-        .store-hero-actions .btn { flex: 1; justify-content: center; }
+        .store-hero-content { padding: 1.1rem 0.95rem 1.2rem; }
+        .store-logo-large { width: 60px; height: 60px; font-size: 22px; }
+        .stat-value { font-size: 20px; }
+        .stat-value span { font-size: 14px; }
+        .product-rating { font-size: 11px; }
+        .product-rating i { font-size: 12px; }
+        .product-price,
+        .product-price .ep-price__sale,
+        .product-price .ep-price__regular { font-size: 14px; }
+    }
+
+    @media (hover: none), (pointer: coarse) {
+        .product-overlay { background: rgba(80, 40, 70, 0.12); }
+        .overlay-btn {
+            opacity: 1;
+            transform: none;
+        }
+        .product-card:hover { transform: none; }
     }
 </style>
 {% endblock %}
@@ -735,58 +1369,89 @@
 <!-- ─── Store Hero ─── -->
 <section class="store-hero">
     <div class="store-hero-bg"></div>
+    <div class="store-hero-overlay" aria-hidden="true"></div>
     <div class="store-hero-pattern"></div>
 
     <div class="store-hero-content">
-        <!-- Logo - Using Cloudinary URL if available -->
-        <div class="store-logo-large">
-            {% if store.logo_url %}
-                <img src="{{ store.logo_url }}" alt="{{ store.name }}"
-                     onerror="this.style.display='none'; this.parentElement.innerHTML='{{ store.name[0] if store.name else 'S' }}';">
-            {% else %}
-                {{ store.name[0] if store.name else 'S' }}
-            {% endif %}
-        </div>
-
-        <!-- Info -->
-        <div class="store-hero-info">
-            <h1 class="store-hero-name">{{ store.name }}</h1>
-            {% if store.description %}
-            <p class="store-hero-desc">{{ store.description }}</p>
-            {% endif %}
-            <div class="store-hero-tags">
-                <span class="store-tag">
-                    <i class="ri-map-pin-line"></i>
-                    {{ store.address[:45] + '…' if store.address and store.address|length > 45 else (store.address or 'Location TBA') }}
-                </span>
-                <span class="store-tag">
-                    <i class="ri-truck-line"></i> {{ store.delivery_radius_km or 5 }}km delivery
-                </span>
-                {% if store.contact_number %}
-                <span class="store-tag">
-                    <i class="ri-phone-line"></i> {{ store.contact_number }}
-                </span>
+        <div class="store-hero-top">
+            <!-- Logo - Using Cloudinary URL if available -->
+            <div class="store-logo-large">
+                {% if store.logo_url %}
+                    <img src="{{ store.logo_url }}" alt="{{ store.name }}"
+                         onerror="this.style.display='none'; this.parentElement.innerHTML='{{ store.name[0] if store.name else 'S' }}';">
+                {% else %}
+                    {{ store.name[0] if store.name else 'S' }}
                 {% endif %}
-                <span class="store-tag" style="color:rgba(72,187,120,0.9); border-color:rgba(72,187,120,0.2);">
-                    <i class="ri-checkbox-circle-line" style="color:#48bb78;"></i> Verified Store
-                </span>
+            </div>
+
+            <!-- Info -->
+            <div class="store-hero-info">
+                <h1 class="store-hero-name">{{ store.name }}</h1>
+                {% if store.description %}
+                <p class="store-hero-desc">{{ store.description }}</p>
+                {% endif %}
+                <div class="store-hero-tags">
+                    <span class="store-tag store-tag-address">
+                        <i class="ri-map-pin-line"></i>
+                        {{ store.address or 'Location TBA' }}
+                    </span>
+                    <span class="store-tag">
+                        <i class="ri-truck-line"></i> {{ store.delivery_radius_km or 5 }}km delivery
+                    </span>
+                    {% if store.contact_number %}
+                    <span class="store-tag">
+                        <i class="ri-phone-line"></i> {{ store.contact_number }}
+                    </span>
+                    {% endif %}
+                    <span class="store-tag" style="color:rgba(72,187,120,0.9); border-color:rgba(72,187,120,0.2);">
+                        <i class="ri-checkbox-circle-line" style="color:#48bb78;"></i> Verified Store
+                    </span>
+                </div>
             </div>
         </div>
 
         <!-- Actions -->
         <div class="store-hero-actions">
-            <span class="status-open" id="storeStatusHero">Open Now</span>
+            {% if store.latitude is not none and store.longitude is not none and mapbox_public_token %}
+            <button class="store-map-preview" type="button" onclick="openStoreDeliveryMap()" aria-label="View {{ store.name }} delivery map">
+                <img
+                    src="https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+b5445a({{ store.longitude }},{{ store.latitude }})/{{ store.longitude }},{{ store.latitude }},12/440x224?access_token={{ mapbox_public_token }}"
+                    alt=""
+                    loading="lazy">
+                <span class="store-map-preview-label"><i class="ri-map-2-line"></i> View delivery map</span>
+            </button>
+            {% endif %}
             <button onclick="chatWidget.openWithStore({{ store.id }})" class="btn btn-message" type="button">
                 <i class="ri-chat-3-line"></i> Message Seller
             </button>
-            {% if store.contact_number %}
-            <a href="tel:{{ store.contact_number }}" class="btn btn-call">
-                <i class="ri-phone-line"></i> Call Store
-            </a>
-            {% endif %}
         </div>
     </div>
 </section>
+
+<div class="delivery-map-modal" id="deliveryMapModal" hidden>
+    <div class="delivery-map-backdrop" onclick="closeStoreDeliveryMap()"></div>
+    <section class="delivery-map-dialog" role="dialog" aria-modal="true" aria-labelledby="deliveryMapTitle">
+        <div class="delivery-map-head">
+            <div>
+                <h2 class="delivery-map-title" id="deliveryMapTitle">Delivery map</h2>
+                <p class="delivery-map-subtitle" id="deliveryMapSubtitle">Store location and delivery coverage</p>
+            </div>
+            <button class="delivery-map-close" type="button" onclick="closeStoreDeliveryMap()" aria-label="Close delivery map">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div id="storeDeliveryMap" aria-label="Map showing the store delivery area"></div>
+        <div class="delivery-map-foot">
+            <span class="delivery-map-status is-neutral" id="deliveryMapStatus">
+                <i class="ri-information-line"></i> Loading delivery coverage…
+            </span>
+            <div class="delivery-map-legend" id="deliveryMapLegend">
+                <span><i class="delivery-map-dot"></i> Store</span>
+                <span id="customerMapLegend" hidden><i class="delivery-map-dot customer"></i> Your default address</span>
+            </div>
+        </div>
+    </section>
+</div>
 
 <!-- ─── Stats Bar ─── -->
 <div class="store-stats-bar">
@@ -806,19 +1471,18 @@
         <div class="stat-label">Delivery Area</div>
     </div>
     <div class="stat-cell">
-        <div class="stat-value">{{ testimonials|length }}<span>+</span></div>
+        <div class="stat-value">{{ total_reviews|default(0) }}</div>
         <div class="stat-label">Reviews</div>
     </div>
 </div>
 
-<!-- ─── Main Layout ─── -->
+    <!-- ─── Main Layout ─── -->
 <div class="store-layout">
 
     <!-- ─── Products Column ─── -->
-    <div>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem;">
-
-            <div style="font-size:13px;color:var(--muted);">
+    <div class="store-main-col">
+        <div class="store-toolbar">
+            <div class="store-toolbar-count">
                 <span id="visibleCount">{{ products|length }}</span> items
             </div>
         </div>
@@ -876,7 +1540,7 @@
                             </button>
                             {% if product.is_available and product.stock_quantity > 0 %}
                             <button class="overlay-btn"
-                                    onclick="event.stopPropagation(); quickAdd({{ product.id }}, '{{ product.name|replace("'", "\\'")|safe }}', {{ product.price }}, '{{ product.category|replace("'", "\\'")|safe }}')"
+                                    onclick="event.stopPropagation(); openQuickAddPicker(event.currentTarget, {{ product.id }})"
                                     title="Quick Add">
                                 <i class="ri-shopping-bag-line"></i>
                             </button>
@@ -924,40 +1588,10 @@
             </div>
             <div class="sidebar-card-body">
                 <div class="info-row">
-                    <i class="ri-map-pin-2-line"></i>
-                    <div>
-                        <div class="info-row-label">Address</div>
-                        <div class="info-row-value">{{ store.address or 'Not provided' }}</div>
-                    </div>
-                </div>
-                {% if store.contact_number %}
-                <div class="info-row">
-                    <i class="ri-phone-line"></i>
-                    <div>
-                        <div class="info-row-label">Contact</div>
-                        <div class="info-row-value">
-                            <a href="tel:{{ store.contact_number }}"
-                               style="color:var(--deep-rose);text-decoration:none;">
-                                {{ store.contact_number }}
-                            </a>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-                <div class="info-row">
-                    <i class="ri-truck-line"></i>
-                    <div>
-                        <div class="info-row-label">Delivery Radius</div>
-                        <div class="info-row-value">Up to {{ store.delivery_radius_km or 5 }}km from store</div>
-                    </div>
-                </div>
-                <div class="info-row">
                     <i class="ri-time-line"></i>
                     <div>
                         <div class="info-row-label">Status</div>
-                       
-                            <span class="status-open">Open Now</span>
-                       
+                        <span class="status-open" id="storeStatusSidebar">Open Now</span>
                     </div>
                 </div>
                 <div class="info-row" id="storeHoursRow" style="display:none;">
@@ -992,26 +1626,29 @@
                 <div class="sidebar-card-title">Reviews</div>
             </div>
             <div class="sidebar-card-body">
-                {% if testimonials and testimonials|length > 0 %}
-                    {% for t in testimonials[:3] %}
-                    <div class="mini-review">
-                        <div class="mini-review-header">
-                            <div class="mini-reviewer">
-                                <div class="mini-avatar">
-                                    {{ t.customer_name[0] if t.customer_name else 'C' }}
+                {% set review_list = reviews if reviews is defined else testimonials %}
+                {% if review_list and review_list|length > 0 %}
+                    <div class="store-reviews-scroll">
+                        {% for t in review_list %}
+                        <div class="mini-review">
+                            <div class="mini-review-header">
+                                <div class="mini-reviewer">
+                                    <div class="mini-avatar">
+                                        {{ (t.customer_name or 'C')[0] }}
+                                    </div>
+                                    {{ t.customer_name or 'Customer' }}
                                 </div>
-                                {{ t.customer_name or 'Customer' }}
+                                <div class="mini-stars">
+                                    {% for i in range(t.rating|int) %}<i class="ri-star-fill"></i>{% endfor %}
+                                    {% for i in range(5 - (t.rating|int)) %}<i class="ri-star-line" style="opacity:0.3;"></i>{% endfor %}
+                                </div>
                             </div>
-                            <div class="mini-stars">
-                                {% for i in range(t.rating) %}<i class="ri-star-fill"></i>{% endfor %}
-                                {% for i in range(5 - t.rating) %}<i class="ri-star-line" style="opacity:0.3;"></i>{% endfor %}
-                            </div>
+                            {% if t.comment %}
+                            <div class="mini-review-text">{{ t.comment }}</div>
+                            {% endif %}
                         </div>
-                        {% if t.comment %}
-                        <div class="mini-review-text">{{ t.comment }}</div>
-                        {% endif %}
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 {% else %}
                 <div style="text-align:center;padding:1rem 0;color:var(--muted);font-size:13px;">
                     <i class="ri-star-line" style="font-size:24px;display:block;margin-bottom:0.5rem;opacity:0.3;"></i>
@@ -1076,76 +1713,6 @@
 function viewProduct(productId) {
     window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
 }
-
-    // Enhanced quickAdd function that uses the global cart system
-    async function quickAdd(productId, productName, productPrice, productCategory) {
-        // Get the button that was clicked
-        const button = event.currentTarget;
-        const originalHtml = button.innerHTML;
-        
-        // Show loading state
-        button.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
-        button.disabled = true;
-        
-        try {
-            // Get the product card to extract image URL
-            const productCard = button.closest('.product-card');
-            const imageElement = productCard.querySelector('.product-image img');
-            const imageUrl = imageElement ? imageElement.src : '';
-            
-            // Create product object for the global addToCart function
-            const product = {
-                id: productId,
-                name: productName,
-                price: productPrice,
-                store_id: {{ store.id }},
-                store_name: "{{ store.name|replace('"', '\\"')|safe }}",
-                image_url: imageUrl
-            };
-            
-            // Check if the global addToCart function exists (from base.html)
-            if (typeof window.addToCart === 'function') {
-                // Use the global function which handles both logged-in and guest users
-                await window.addToCart(product);
-                
-                // Show success message
-                showToast(`${productName} added to basket`);
-            } else {
-                // Fallback if global function doesn't exist
-                const response = await fetch('/api/cart/items', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ product_id: productId, quantity: 1 })
-                });
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast(`${productName} added to basket`);
-                    
-                    // Try to update cart count if function exists
-                    if (typeof window.updateCartCount === 'function') {
-                        window.updateCartCount();
-                    }
-                    
-                    // Try to reload cart if function exists
-                    if (typeof window.loadCart === 'function') {
-                        window.loadCart();
-                    }
-                } else {
-                    showToast(data.error || 'Could not add to cart');
-                }
-            }
-        } catch (error) {
-            console.error('Error adding to cart:', error);
-            showToast('Network error — please try again');
-        } finally {
-            // Restore button after a short delay
-            setTimeout(() => {
-                button.innerHTML = originalHtml;
-                button.disabled = false;
-            }, 500);
-        }
-    }
 
     function copyStoreLink() {
         navigator.clipboard.writeText(window.location.href)
@@ -1272,19 +1839,20 @@ function viewProduct(productId) {
     }
 
     function updateStatusDisplay(isOpen, todayHours, weekSchedule) {
-        const statusHero = document.getElementById('storeStatusHero');
         const statusSidebar = document.getElementById('storeStatusSidebar');
         const hoursRow = document.getElementById('storeHoursRow');
         const hoursValue = document.getElementById('storeHoursValue');
 
-        if (isOpen) {
-            const statusHTML = '<span class="status-open"><i class="ri-checkbox-circle-line" style="margin-right:5px;"></i>Open Now</span>';
-            if (statusHero) statusHero.innerHTML = statusHTML;
-            if (statusSidebar) statusSidebar.innerHTML = statusHTML;
-        } else {
-            const statusHTML = '<span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:#c0392b;"><i class="ri-close-circle-line"></i> Closed</span>';
-            if (statusHero) statusHero.innerHTML = statusHTML;
-            if (statusSidebar) statusSidebar.innerHTML = statusHTML;
+        if (statusSidebar) {
+            if (isOpen) {
+                statusSidebar.className = 'status-open';
+                statusSidebar.removeAttribute('style');
+                statusSidebar.innerHTML = '<i class="ri-checkbox-circle-line" style="margin-right:5px;"></i>Open Now';
+            } else {
+                statusSidebar.className = '';
+                statusSidebar.setAttribute('style', 'display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:#c0392b;');
+                statusSidebar.innerHTML = '<i class="ri-close-circle-line"></i> Closed';
+            }
         }
 
         // Display full week schedule
@@ -1315,4 +1883,228 @@ function viewProduct(productId) {
         }
     }
 </script>
+<script type="application/json" id="storeDeliveryMapData">{{ store_map_data|tojson }}</script>
+<script>
+    (function () {
+        const dataEl = document.getElementById('storeDeliveryMapData');
+        const modal = document.getElementById('deliveryMapModal');
+        const statusEl = document.getElementById('deliveryMapStatus');
+        const subtitleEl = document.getElementById('deliveryMapSubtitle');
+        const customerLegend = document.getElementById('customerMapLegend');
+        const mapboxToken = {{ mapbox_public_token|tojson }};
+        let map = null;
+        let lastFocusedElement = null;
+
+        if (!dataEl || !modal) return;
+
+        let mapData;
+        try {
+            mapData = JSON.parse(dataEl.textContent || '{}');
+        } catch (error) {
+            console.error('Could not load store delivery map data', error);
+            return;
+        }
+
+        function setStatus(message, state) {
+            statusEl.className = 'delivery-map-status' + (state ? ' ' + state : '');
+            statusEl.innerHTML = '<i class="' + (state === 'is-outside' ? 'ri-close-circle-line' : state === 'is-neutral' ? 'ri-information-line' : 'ri-checkbox-circle-line') + '"></i> ' + message;
+        }
+
+        function coverageDescription() {
+            const coverage = mapData.coverage || {};
+            if (coverage.method === 'radius') {
+                return (Number(coverage.radius_km) || 0) + ' km delivery radius';
+            }
+            if (coverage.method === 'municipality') {
+                const areas = coverage.municipalities || [];
+                return areas.length ? 'Delivers to: ' + areas.join(', ') : 'Municipality delivery area';
+            }
+            return 'Custom delivery zone';
+        }
+
+        function radiusGeometry(latitude, longitude, radiusKm) {
+            const points = [];
+            const radius = Number(radiusKm) || 0;
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || radius <= 0) return null;
+            for (let i = 0; i <= 64; i += 1) {
+                const angle = (i / 64) * Math.PI * 2;
+                const lat = latitude + (radius / 111.32) * Math.cos(angle);
+                const lng = longitude + (radius / (111.32 * Math.max(Math.cos(latitude * Math.PI / 180), 0.1))) * Math.sin(angle);
+                points.push([lng, lat]);
+            }
+            return { type: 'Polygon', coordinates: [points] };
+        }
+
+        function extendBoundsFromCoordinates(bounds, coordinates) {
+            if (!Array.isArray(coordinates)) return;
+            if (coordinates.length === 2 && coordinates.every(Number.isFinite)) {
+                bounds.extend(coordinates);
+                return;
+            }
+            coordinates.forEach(function (item) {
+                extendBoundsFromCoordinates(bounds, item);
+            });
+        }
+
+        function createStoreMarker(store) {
+            const wrap = document.createElement('div');
+            wrap.className = 'store-map-marker';
+            wrap.title = store.name || 'Store';
+
+            const avatar = document.createElement('div');
+            avatar.className = 'store-map-marker-avatar';
+
+            const logoUrl = store.logo_url || '';
+            const initial = String(store.name || 'S').trim().charAt(0).toUpperCase() || 'S';
+            if (logoUrl) {
+                const img = document.createElement('img');
+                img.src = logoUrl;
+                img.alt = '';
+                img.onerror = function () {
+                    avatar.textContent = initial;
+                };
+                avatar.appendChild(img);
+            } else {
+                avatar.textContent = initial;
+            }
+
+            const tip = document.createElement('div');
+            tip.className = 'store-map-marker-tip';
+            wrap.appendChild(avatar);
+            wrap.appendChild(tip);
+            return wrap;
+        }
+
+        function createCustomerMarker(title) {
+            const el = document.createElement('div');
+            el.className = 'customer-map-marker';
+            el.title = title;
+            return el;
+        }
+
+        function buildMap() {
+            const store = mapData.store || {};
+            if (!window.mapboxgl || !mapboxToken || !Number.isFinite(store.latitude) || !Number.isFinite(store.longitude)) {
+                document.getElementById('storeDeliveryMap').innerHTML =
+                    '<div style="height:100%;display:grid;place-items:center;padding:2rem;text-align:center;color:var(--muted);">Map preview is unavailable right now.</div>';
+                setStatus('Store map location is unavailable.', 'is-neutral');
+                return;
+            }
+
+            mapboxgl.accessToken = mapboxToken;
+            map = new mapboxgl.Map({
+                container: 'storeDeliveryMap',
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [store.longitude, store.latitude],
+                zoom: 12,
+                attributionControl: false,
+            });
+            map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+
+            map.on('load', function () {
+                const bounds = new mapboxgl.LngLatBounds([store.longitude, store.latitude], [store.longitude, store.latitude]);
+                new mapboxgl.Marker({ element: createStoreMarker(store), anchor: 'bottom' })
+                    .setLngLat([store.longitude, store.latitude])
+                    .addTo(map);
+
+                const customer = mapData.customer;
+                if (customer && Number.isFinite(customer.latitude) && Number.isFinite(customer.longitude)) {
+                    customerLegend.hidden = false;
+                    new mapboxgl.Marker({ element: createCustomerMarker(customer.label || 'Your default address') })
+                        .setLngLat([customer.longitude, customer.latitude])
+                        .addTo(map);
+                    bounds.extend([customer.longitude, customer.latitude]);
+                }
+
+                const coverage = mapData.coverage || {};
+                let geometry = coverage.geometry;
+                if (coverage.method === 'radius' && !geometry) {
+                    geometry = radiusGeometry(store.latitude, store.longitude, coverage.radius_km);
+                }
+                if (geometry && geometry.type && geometry.coordinates) {
+                    map.addSource('delivery-coverage', {
+                        type: 'geojson',
+                        data: { type: 'Feature', properties: {}, geometry: geometry },
+                    });
+                    map.addLayer({
+                        id: 'delivery-coverage-fill',
+                        type: 'fill',
+                        source: 'delivery-coverage',
+                        paint: { 'fill-color': '#b5445a', 'fill-opacity': 0.16 },
+                    });
+                    map.addLayer({
+                        id: 'delivery-coverage-outline',
+                        type: 'line',
+                        source: 'delivery-coverage',
+                        paint: { 'line-color': '#b5445a', 'line-width': 2, 'line-dasharray': [2, 1] },
+                    });
+                    extendBoundsFromCoordinates(bounds, geometry.coordinates);
+                }
+
+                if (!bounds.isEmpty()) {
+                    map.fitBounds(bounds, { padding: 58, maxZoom: 14, duration: 0 });
+                }
+
+                window.setTimeout(function () {
+                    if (map) map.resize();
+                }, 60);
+            });
+        }
+
+        window.openStoreDeliveryMap = function () {
+            lastFocusedElement = document.activeElement;
+            modal.hidden = false;
+            document.body.classList.add('delivery-map-open');
+            subtitleEl.textContent = coverageDescription();
+
+            const delivery = mapData.delivery || {};
+            if (!mapData.is_customer) {
+                setStatus('Sign in and set a default address to check delivery coverage.', 'is-neutral');
+            } else if (delivery.can_deliver) {
+                setStatus('This store delivers to your default address.', '');
+            } else {
+                const reason = delivery.reason || 'Delivery coverage could not be checked.';
+                const needsSetup = /set your default|missing map coordinates|missing a municipality/i.test(reason);
+                setStatus(reason, needsSetup ? 'is-neutral' : 'is-outside');
+            }
+
+            if (!map) {
+                buildMap();
+            } else {
+                window.setTimeout(function () {
+                    map.resize();
+                }, 0);
+            }
+            window.setTimeout(function () {
+                modal.querySelector('.delivery-map-close').focus();
+            }, 0);
+        };
+
+        window.closeStoreDeliveryMap = function () {
+            if (modal.hidden) return;
+            modal.hidden = true;
+            document.body.classList.remove('delivery-map-open');
+            if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+                lastFocusedElement.focus();
+            }
+        };
+
+        function resizeOpenMap() {
+            if (!map || modal.hidden) return;
+            map.resize();
+        }
+
+        window.addEventListener('resize', resizeOpenMap);
+        window.addEventListener('orientationchange', function () {
+            window.setTimeout(resizeOpenMap, 180);
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !modal.hidden) {
+                closeStoreDeliveryMap();
+            }
+        });
+    })();
+</script>
+{% include 'partials/quick_add_picker.html' %}
 {% endblock %}

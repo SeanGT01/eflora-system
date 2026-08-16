@@ -9461,19 +9461,84 @@ def store_detail(store_id):
 
         product_list = _product_list_for_storefront(products)
 
-        # Fetch testimonials for this store (most recent 10)
-        testimonials = Testimonial.query \
-            .filter_by(store_id=store.id) \
-            .order_by(Testimonial.created_at.desc()) \
-            .limit(10) \
+        # Delivery map data is intentionally scoped to this store.  A customer's
+        # default-address coordinates are only exposed back to that same customer.
+        delivery_method = (store.delivery_method or 'radius').strip().casefold()
+        geometry_key = {
+            'radius': 'radius_geojson',
+            'zone': 'zone_geojson',
+            'municipality': 'municipality_geojson',
+        }.get(delivery_method, 'current_delivery_geojson')
+        coverage_geometry = store_data.get(geometry_key) or store_data.get('current_delivery_geojson')
+        if isinstance(coverage_geometry, str):
+            try:
+                coverage_geometry = json.loads(coverage_geometry)
+            except (TypeError, ValueError):
+                coverage_geometry = None
+
+        is_customer = session.get('role') == 'customer' and session.get('user_id')
+        default_address = _get_default_customer_address(session.get('user_id')) if is_customer else None
+        delivery_match = _store_delivery_match(store, default_address) if default_address else {
+            'can_deliver': False,
+            'reason': 'Set your default address to check delivery coverage.',
+        }
+        customer_map_location = None
+        if default_address and default_address.latitude is not None and default_address.longitude is not None:
+            customer_map_location = {
+                'latitude': default_address.latitude,
+                'longitude': default_address.longitude,
+                'label': default_address.address_label or 'Default address',
+            }
+
+        store_map_data = {
+            'store': {
+                'name': store.name,
+                'address': store.formatted_address or store.address,
+                'latitude': store.latitude,
+                'longitude': store.longitude,
+                'logo_url': store_data.get('logo_url'),
+            },
+            'customer': customer_map_location,
+            'coverage': {
+                'method': delivery_method,
+                'radius_km': store.delivery_radius_km,
+                'municipalities': store.selected_municipalities or [],
+                'geometry': coverage_geometry,
+            },
+            'delivery': delivery_match,
+            'is_customer': bool(is_customer),
+        }
+
+        # Real store ratings from post-order StoreRating (not legacy testimonials)
+        store_avg_row = db.session.query(
+            db.func.coalesce(db.func.avg(StoreRating.rating), 0),
+            db.func.count(StoreRating.id),
+        ).filter(StoreRating.store_id == store.id).first()
+        avg_rating = round(float(store_avg_row[0]), 1) if store_avg_row else 0.0
+        total_reviews = int(store_avg_row[1]) if store_avg_row else 0
+
+        store_ratings = (
+            StoreRating.query
+            .filter_by(store_id=store.id)
+            .order_by(StoreRating.created_at.desc())
+            .limit(10)
             .all()
+        )
+        reviews = [r.to_dict() for r in store_ratings]
 
-        testimonial_list = [t.to_dict() for t in testimonials]
-
-        # Average rating
-        avg_rating = 0.0
-        if testimonials:
-            avg_rating = round(sum(t.rating for t in testimonials) / len(testimonials), 1)
+        # Keep legacy testimonials as fallback if no StoreRating rows exist yet
+        if not reviews:
+            testimonials = (
+                Testimonial.query
+                .filter_by(store_id=store.id)
+                .order_by(Testimonial.created_at.desc())
+                .limit(10)
+                .all()
+            )
+            reviews = [t.to_dict() for t in testimonials]
+            if reviews and total_reviews == 0:
+                total_reviews = len(reviews)
+                avg_rating = round(sum(t['rating'] for t in reviews) / len(reviews), 1)
 
         now = datetime.utcnow()
 
@@ -9481,8 +9546,11 @@ def store_detail(store_id):
             'store_detail.html',
             store=store_data,
             products=product_list,
-            testimonials=testimonial_list,
+            reviews=reviews,
+            testimonials=reviews,
             avg_rating=avg_rating,
+            total_reviews=total_reviews,
+            store_map_data=store_map_data,
             now=now,
             timedelta=timedelta,
         )
@@ -9772,6 +9840,13 @@ def update_store_settings():
             if 'store_logo_public_id' in data and data['store_logo_public_id']:
                 seller_app.store_logo_public_id = data['store_logo_public_id']
                 print(f"✅ Stored logo public_id: {data['store_logo_public_id']}")
+
+        # ===== STOREFRONT BANNER HANDLING =====
+        # Empty values are meaningful here: they restore the shared floral default.
+        if 'store_banner_url' in data:
+            store.banner_url = data['store_banner_url'] or None
+        if 'store_banner_public_id' in data:
+            store.banner_public_id = data['store_banner_public_id'] or None
         
         # ===== ADDRESS FIELDS =====
         if 'municipality' in data:
@@ -9886,6 +9961,43 @@ def update_store_settings():
                     print(f"✅ Saved zone_delivery_area to database")
                 except Exception as e:
                     print(f"⚠️ Error saving zone_delivery_area: {e}")
+
+        effective_method = (data.get('delivery_method') or store.delivery_method or 'radius').strip().casefold()
+
+        # A custom delivery zone must cover the store itself.  Otherwise a
+        # seller could define an isolated delivery island unrelated to its pin.
+        if effective_method == 'zone':
+            if store.latitude is None or store.longitude is None:
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': 'Set the store location pin before saving a custom delivery zone.',
+                }), 400
+            if store.zone_delivery_area is None:
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': 'Draw a custom delivery zone that includes the store location.',
+                }), 400
+            try:
+                from geoalchemy2.shape import to_shape
+                from shapely.geometry import Point
+
+                zone_shape = to_shape(store.zone_delivery_area)
+                store_point = Point(float(store.longitude), float(store.latitude))
+                if zone_shape is None or zone_shape.is_empty or not zone_shape.covers(store_point):
+                    db.session.rollback()
+                    return jsonify({
+                        'success': False,
+                        'error': 'Custom delivery zone must include the store location pin.',
+                    }), 400
+            except Exception as e:
+                print(f"⚠️ Custom zone/store location validation failed: {e}")
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not validate that the custom delivery zone includes the store location.',
+                }), 400
         
         # ===== MUNICIPALITY SELECTION (always save when provided) =====
         if 'selected_municipalities' in data:
@@ -9976,7 +10088,6 @@ def update_store_settings():
                     print(f"⚠️ Error saving municipality_delivery_area: {e}")
 
         # Auto-build WKB when municipality method is selected but geo was not posted
-        effective_method = data.get('delivery_method') or store.delivery_method
         if (
             effective_method == 'municipality'
             and store.selected_municipalities
@@ -10002,6 +10113,25 @@ def update_store_settings():
                 return jsonify({
                     'success': False,
                     'error': 'Select at least one municipality for delivery coverage.'
+                }), 400
+            store_municipality = _normalize_place_name(store.municipality)
+            if not store_municipality:
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': 'Set the municipality for the store location pin before using municipality coverage.',
+                }), 400
+            if not any(
+                _normalize_place_name(municipality) == store_municipality
+                for municipality in selected_for_check
+            ):
+                db.session.rollback()
+                return jsonify({
+                    'success': False,
+                    'error': (
+                        f'The store municipality ({store.municipality}) must be included '
+                        'as the starting point for municipality delivery coverage.'
+                    ),
                 }), 400
             try:
                 contig = _evaluate_municipality_contiguity(selected_for_check, province='Laguna')
@@ -11358,8 +11488,19 @@ def upload_store_logo():
                 'error': 'Cloudinary is not configured.'
             }), 500
         
-        # Upload to Cloudinary with folder
-        result = upload_to_cloudinary(file, 'e-flowers/store_logos')
+        upload_type = request.form.get('type', 'store_logo')
+        upload_targets = {
+            'store_logo': ('e-flowers/store_logos', None),
+            'store_banner': (
+                'e-flowers/store_banners',
+                [{'width': 1600, 'height': 500, 'crop': 'fill', 'gravity': 'auto', 'fetch_format': 'auto', 'quality': 'auto'}],
+            ),
+        }
+        if upload_type not in upload_targets:
+            return jsonify({'success': False, 'error': 'Unsupported upload type.'}), 400
+
+        folder, transformation = upload_targets[upload_type]
+        result = upload_to_cloudinary(file, folder, transformation=transformation)
         
         if result['success']:
             return jsonify({

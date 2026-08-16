@@ -216,6 +216,11 @@ class Store(db.Model):
     
     contact_number = db.Column(db.String(20))
     description = db.Column(db.Text)
+
+    # Optional seller-managed storefront hero banner (Cloudinary).
+    # A null URL intentionally falls back to the shared floral banner.
+    banner_url = db.Column(db.String(500), nullable=True)
+    banner_public_id = db.Column(db.String(255), nullable=True)
     
     # Current active delivery area (changes based on selected method)
     delivery_area = db.Column(Geometry('POLYGON', srid=4326))
@@ -460,6 +465,8 @@ class Store(db.Model):
             'contact_number': self.contact_number,
             'description': self.description,
             'logo_url': self.logo_url,  # Cloudinary only
+            'banner_url': self.banner_url,
+            'banner_public_id': self.banner_public_id,
             'seller_application_id': self.seller_application_id,
             'approved_at': self.approved_at.isoformat() if self.approved_at else None,
             'municipality': self.municipality,

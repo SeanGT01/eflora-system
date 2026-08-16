@@ -16,9 +16,145 @@
 <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css' />
 <!-- Turf: point/polygon vs province boundary checks -->
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+<!-- Cropper.js for storefront banner framing -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
 
 <style>
     /* QR visibility handled by JS + scoped QR slot styles below */
+
+    .store-banner-editor {
+        --storefront-banner-ratio: 16 / 5;
+        position: relative;
+        aspect-ratio: var(--storefront-banner-ratio);
+        width: 100%;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid rgba(107, 76, 59, 0.18);
+        border-radius: 16px;
+        background:
+            url("{{ url_for('static', filename='images/store-hero-florals.jpg') }}") center / cover no-repeat;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.34);
+    }
+
+    .store-banner-editor.has-custom-banner {
+        background-image: var(--store-banner-image);
+        background-size: cover;
+        background-position: center;
+    }
+
+    .store-banner-editor::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background:
+            linear-gradient(
+                180deg,
+                rgba(16, 20, 18, 0.2) 0%,
+                rgba(16, 20, 18, 0.16) 28%,
+                rgba(16, 20, 18, 0.5) 58%,
+                rgba(12, 16, 14, 0.8) 78%,
+                rgba(10, 14, 12, 0.88) 100%
+            );
+    }
+
+    .store-banner-editor__content {
+        position: relative;
+        z-index: 1;
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 0.65rem;
+        padding: 1rem;
+        color: #fff;
+    }
+
+    .store-banner-editor__title {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: 22px;
+        text-shadow: 0 2px 14px rgba(0,0,0,0.45);
+    }
+    .store-banner-editor__hint {
+        margin: 0;
+        font-size: 12px;
+        color: rgba(255,255,255,0.9);
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
+        text-shadow: 0 1px 8px rgba(0,0,0,0.4);
+    }
+    .store-banner-editor__actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .store-banner-editor__actions .btn-mini-compact { background: rgba(255,255,255,0.92); color: var(--charcoal); border-color: rgba(255,255,255,0.7); padding: 0.42rem 0.7rem; }
+    .store-banner-editor__actions .btn-mini-compact.btn-danger { background: rgba(160, 49, 63, 0.94); color: #fff; border-color: transparent; }
+
+    .banner-crop-modal[hidden] { display: none !important; }
+    .banner-crop-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 13000;
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+    }
+    .banner-crop-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(28, 24, 22, 0.62);
+        backdrop-filter: blur(4px);
+    }
+    .banner-crop-dialog {
+        position: relative;
+        width: min(860px, 100%);
+        max-height: calc(100dvh - 2rem);
+        overflow: auto;
+        border-radius: 18px;
+        background: #fffdf9;
+        border: 1px solid rgba(107, 76, 59, 0.16);
+        box-shadow: 0 24px 70px rgba(35, 27, 31, 0.32);
+        display: grid;
+        grid-template-rows: auto minmax(240px, 1fr) auto;
+    }
+    .banner-crop-head,
+    .banner-crop-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.9rem 1.1rem;
+    }
+    .banner-crop-head { border-bottom: 1px solid rgba(107, 76, 59, 0.12); }
+    .banner-crop-foot {
+        border-top: 1px solid rgba(107, 76, 59, 0.12);
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+    .banner-crop-title { margin: 0; font-family: var(--font-display); font-size: 1.35rem; color: var(--charcoal); }
+    .banner-crop-subtitle { margin: 0.2rem 0 0; color: var(--muted); font-size: 12px; }
+    .banner-crop-stage {
+        min-height: 280px;
+        max-height: min(52vh, 420px);
+        background: #1c1a18;
+        overflow: hidden;
+    }
+    .banner-crop-stage img {
+        display: block;
+        max-width: 100%;
+    }
+    .banner-crop-foot .btn { min-width: 110px; }
+
+    @media (max-width: 600px) {
+        .store-banner-editor__content { padding: 0.85rem; }
+        .store-banner-editor__title { font-size: 19px; }
+        .banner-crop-stage { min-height: 220px; max-height: 42vh; }
+    }
 
 .qr-slot .primary-badge {
     display: none;
@@ -187,6 +323,48 @@
     #map {
         width: 100%;
         height: 100%;
+    }
+
+    .map-boundary-legend {
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding: 0.5rem 0.65rem;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        font-size: 11px;
+        line-height: 1.2;
+        color: #374151;
+        pointer-events: none;
+    }
+
+    .map-boundary-legend-row {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+    }
+
+    .map-boundary-swatch {
+        width: 18px;
+        height: 0;
+        border-top-width: 3px;
+        border-top-style: dashed;
+        flex-shrink: 0;
+    }
+
+    .map-boundary-swatch--province {
+        border-top-color: #DC2626;
+    }
+
+    .map-boundary-swatch--buffer {
+        border-top-color: #D97706;
+        border-top-width: 2px;
     }
     
     .map-instructions {
@@ -2427,6 +2605,35 @@
                     <div class="section-content" id="basic-info-content">
                         <form id="basic-info-form">
                             <div class="form-grid">
+                                <div class="form-group form-group-full">
+                                    <label class="form-label">Storefront Banner</label>
+                                    <div
+                                        class="store-banner-editor{% if store.banner_url %} has-custom-banner{% endif %}"
+                                        id="store-banner-editor"
+                                        {% if store.banner_url %}style="--store-banner-image: url('{{ store.banner_url }}');"{% endif %}>
+                                        <div class="store-banner-editor__content">
+                                            <div>
+                                                <h3 class="store-banner-editor__title" id="store-banner-title">{{ store.name }}</h3>
+                                                <p class="store-banner-editor__hint" id="store-banner-hint">
+                                                    {% if store.banner_url %}Preview matches the live storefront banner framing and overlay.{% else %}Using the E-FLORA floral default. Upload an image to personalize it.{% endif %}
+                                                </p>
+                                            </div>
+                                            <div class="store-banner-editor__actions">
+                                                <input type="file" id="store-banner-file" accept="image/png,image/jpeg,image/webp" hidden>
+                                                <button type="button" class="btn-mini-compact" id="upload-banner-btn">
+                                                    <i class="ri-image-add-line"></i> Upload banner
+                                                </button>
+                                                <button type="button" class="btn-mini-compact btn-danger" id="remove-banner-btn" {% if not store.banner_url %}hidden{% endif %}>
+                                                    <i class="ri-refresh-line"></i> Use default
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="store-banner-url" value="{{ store.banner_url or '' }}">
+                                    <input type="hidden" id="store-banner-public-id" value="{{ store.banner_public_id or '' }}">
+                                    <div class="form-hint">JPG, PNG, or WebP up to 5MB. Crop to the storefront ratio (16:5) before upload so the preview matches the live store page.</div>
+                                </div>
+
                                 <!-- Logo + Form Fields Layout -->
                                 <div class="logo-form-layout">
                                     <!-- Logo (Left Column) -->
@@ -2587,6 +2794,16 @@
                                     <!-- Map -->
                                     <div class="map-container map-pin-locked" id="store-map-container" style="margin-bottom: 0.75rem;">
                                         <div id="map"></div>
+                                        <div class="map-boundary-legend" aria-hidden="true">
+                                            <div class="map-boundary-legend-row">
+                                                <span class="map-boundary-swatch map-boundary-swatch--province"></span>
+                                                <span>Laguna boundary</span>
+                                            </div>
+                                            <div class="map-boundary-legend-row">
+                                                <span class="map-boundary-swatch map-boundary-swatch--buffer"></span>
+                                                <span>Pin buffer (~600 m)</span>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="map-instructions" style="margin-bottom: 0.75rem;">
                                         <i class="ri-information-line"></i>
@@ -2737,7 +2954,7 @@
                                         Validation message will appear here
                                     </div>
                                     <div class="form-hint" style="margin-top: 0.5rem;">
-                                        Select municipalities you want to deliver to. They must be adjacent (next to each other).
+                                        Your store's municipality is automatically included as the starting point. Add only adjacent municipalities/cities.
                                     </div>
                                     <div id="municipality-preview" class="subtle-panel" style="margin-top: 0.75rem;">
                                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
@@ -2745,7 +2962,7 @@
                                             <span id="selected-count" style="background: var(--deep-rose); color: white; padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-weight: 600;">0</span>
                                         </div>
                                         <div class="form-hint" style="margin: 0;">
-                                            Green = adjacent / valid. Red = not adjacent to the rest. Delivery zone is built automatically when you save.
+                                            Green = connected to the store municipality. Red = not adjacent to the delivery area. Delivery zone is built automatically when you save.
                                         </div>
                                     </div>
                                 </div>
@@ -3075,6 +3292,27 @@
 </script>
 
 <!-- Toast notification placeholder -->
+<div class="banner-crop-modal" id="bannerCropModal" hidden>
+    <div class="banner-crop-backdrop" onclick="closeBannerCropModal()"></div>
+    <section class="banner-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="bannerCropTitle">
+        <div class="banner-crop-head">
+            <div>
+                <h3 class="banner-crop-title" id="bannerCropTitle">Crop storefront banner</h3>
+                <p class="banner-crop-subtitle">Drag to frame the image at the live storefront ratio (16:5).</p>
+            </div>
+        </div>
+        <div class="banner-crop-stage">
+            <img id="bannerCropImage" alt="Banner crop preview">
+        </div>
+        <div class="banner-crop-foot">
+            <button type="button" class="btn btn-outline" id="cancel-banner-crop" onclick="closeBannerCropModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="confirm-banner-crop">
+                <i class="ri-crop-line"></i> Use this crop
+            </button>
+        </div>
+    </section>
+</div>
+
 <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;"></div>
 
 <!-- Add CSS animations for toast -->
@@ -3475,6 +3713,7 @@
 
     // ===== LAGUNA PROVINCE BOUNDARY (from DB via API; fallback rectangle) =====
     let lagunaProvinceFeature = null;
+    let lagunaProvincePinFeature = null;
 
     const LAGUNA_BOUNDARY_FALLBACK = {
         "type": "Polygon",
@@ -3514,6 +3753,18 @@
                     properties: { title: 'Laguna Province' },
                     geometry: data.geometry
                 };
+                // Pin validation uses a soft shoreline buffer: lake-edge barangays
+                // (e.g. Mayondon tip) are often outside simplified municipal polygons.
+                lagunaProvincePinFeature = lagunaProvinceFeature;
+                if (typeof turf !== 'undefined' && typeof turf.buffer === 'function') {
+                    try {
+                        lagunaProvincePinFeature = turf.buffer(lagunaProvinceFeature, 0.6, { units: 'kilometers' })
+                            || lagunaProvinceFeature;
+                    } catch (bufferErr) {
+                        debug.warn('Could not buffer Laguna boundary for pin checks:', bufferErr);
+                        lagunaProvincePinFeature = lagunaProvinceFeature;
+                    }
+                }
                 debug.success('Laguna province boundary loaded from database');
                 return true;
             }
@@ -3521,14 +3772,22 @@
             debug.warn('Could not load merged Laguna boundary:', e);
         }
         lagunaProvinceFeature = null;
+        lagunaProvincePinFeature = null;
         debug.warn('Using fallback Laguna rectangle for map overlay');
         return false;
     }
 
     function isPointInLaguna(lng, lat) {
-        if (lagunaProvinceFeature && typeof turf !== 'undefined') {
+        if (typeof turf !== 'undefined') {
             try {
-                return turf.booleanPointInPolygon(turf.point([lng, lat]), lagunaProvinceFeature);
+                const pt = turf.point([lng, lat]);
+                if (lagunaProvinceFeature && turf.booleanPointInPolygon(pt, lagunaProvinceFeature)) {
+                    return true;
+                }
+                // Accept lake-shore / peninsula land just outside the simplified boundary.
+                if (lagunaProvincePinFeature && turf.booleanPointInPolygon(pt, lagunaProvincePinFeature)) {
+                    return true;
+                }
             } catch (e) {
                 debug.warn('isPointInLaguna turf error:', e);
             }
@@ -3904,10 +4163,59 @@
     }
 
     // ─── BASIC INFORMATION SECTION ───
+    let __basicInfoEditSnapshot = null;
+
+    function getBasicInfoSnapshot() {
+        return {
+            storeName: document.getElementById('store-name')?.value || '',
+            contactNumber: document.getElementById('contact-number')?.value || '',
+            status: document.getElementById('store-status')?.value || '',
+            description: document.getElementById('store-description')?.value || '',
+            municipality: document.getElementById('municipality')?.value || '',
+            barangay: document.getElementById('barangay')?.value || '',
+            street: document.getElementById('street-address')?.value || '',
+            logoUrl: document.getElementById('store-logo-url')?.value || '',
+            logoPublicId: document.getElementById('store-logo-public-id')?.value || '',
+            bannerUrl: document.getElementById('store-banner-url')?.value || '',
+            bannerPublicId: document.getElementById('store-banner-public-id')?.value || '',
+            deliveryMethod: document.querySelector('input[name="delivery-method"]:checked')?.value || 'radius',
+            deliveryRadius: document.getElementById('delivery-radius')?.value || '',
+            maxDistance: document.getElementById('max-distance')?.value || '',
+            zoneArea: document.getElementById('zone-delivery-area')?.value || '',
+            municipalityArea: document.getElementById('municipality-delivery-area')?.value || '',
+            selectedMunicipalities: Array.from(document.querySelectorAll('.municipality-check:checked')).map((cb) => cb.value).sort(),
+            slotDuration: document.getElementById('slot-duration')?.value || '',
+            deliveryStart: document.getElementById('delivery-start-time')?.value || '',
+            deliveryCutoff: document.getElementById('delivery-cutoff-time')?.value || '',
+            schedule: (typeof scheduleEntries !== 'undefined')
+                ? JSON.parse(JSON.stringify(scheduleEntries || []))
+                : [],
+            location: currentLocation
+                ? {
+                    lat: currentLocation.lat,
+                    lng: currentLocation.lng,
+                    address: currentLocation.address || '',
+                    place_id: currentLocation.place_id || null,
+                }
+                : null,
+        };
+    }
+
+    function basicInfoHasUnsavedEdits() {
+        if (__storeSettingsDirty.basic || locationChanged) return true;
+        if (!__basicInfoEditSnapshot) return false;
+        try {
+            return JSON.stringify(getBasicInfoSnapshot()) !== JSON.stringify(__basicInfoEditSnapshot);
+        } catch (e) {
+            return true;
+        }
+    }
+
     function toggleBasicInfoSection(expanded) {
         setSectionEditing('basic-info-content', 'edit-basic-info', expanded);
 
         if (expanded) {
+            __basicInfoEditSnapshot = getBasicInfoSnapshot();
             // Resize map after the section becomes visible
             setTimeout(() => {
                 if (typeof map !== 'undefined' && map) {
@@ -4116,6 +4424,212 @@
         bindStoreSettingsDirtyTracking();
     }
     
+    // ─── STOREFRONT BANNER UPLOAD + CROP ───
+    const STOREFRONT_BANNER_RATIO = 16 / 5;
+    let bannerCropper = null;
+    let bannerObjectUrl = null;
+
+    function setStoreBannerPreview(url) {
+        const editor = document.getElementById('store-banner-editor');
+        const hint = document.getElementById('store-banner-hint');
+        const removeButton = document.getElementById('remove-banner-btn');
+        if (!editor) return;
+
+        if (url) {
+            editor.style.setProperty('--store-banner-image', `url(${JSON.stringify(url)})`);
+            editor.classList.add('has-custom-banner');
+            if (hint) hint.textContent = 'Preview matches the live storefront banner framing and overlay.';
+            if (removeButton) removeButton.hidden = false;
+        } else {
+            editor.style.removeProperty('--store-banner-image');
+            editor.classList.remove('has-custom-banner');
+            if (hint) hint.textContent = 'Using the E-FLORA floral default. Upload an image to personalize it.';
+            if (removeButton) removeButton.hidden = true;
+        }
+    }
+
+    function destroyBannerCropper() {
+        if (bannerCropper) {
+            bannerCropper.destroy();
+            bannerCropper = null;
+        }
+        if (bannerObjectUrl) {
+            URL.revokeObjectURL(bannerObjectUrl);
+            bannerObjectUrl = null;
+        }
+        const image = document.getElementById('bannerCropImage');
+        if (image) image.removeAttribute('src');
+    }
+
+    window.closeBannerCropModal = function () {
+        const modal = document.getElementById('bannerCropModal');
+        if (modal) modal.hidden = true;
+        destroyBannerCropper();
+        const fileInput = document.getElementById('store-banner-file');
+        if (fileInput) fileInput.value = '';
+    };
+
+    function openBannerCropModal(file) {
+        if (typeof Cropper === 'undefined') {
+            showToast('Crop tool failed to load. Refresh and try again.', 'error');
+            return;
+        }
+        const modal = document.getElementById('bannerCropModal');
+        const image = document.getElementById('bannerCropImage');
+        if (!modal || !image) return;
+
+        destroyBannerCropper();
+        bannerObjectUrl = URL.createObjectURL(file);
+        image.src = bannerObjectUrl;
+        modal.hidden = false;
+
+        image.onload = function () {
+            bannerCropper = new Cropper(image, {
+                aspectRatio: STOREFRONT_BANNER_RATIO,
+                viewMode: 1,
+                dragMode: 'move',
+                autoCropArea: 1,
+                responsive: true,
+                background: false,
+                guides: true,
+                center: true,
+                highlight: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+            });
+        };
+    }
+
+    async function uploadCroppedBannerBlob(blob) {
+        const button = document.getElementById('upload-banner-btn');
+        const confirmBtn = document.getElementById('confirm-banner-crop');
+        const originalUpload = button ? button.innerHTML : '';
+        const originalConfirm = confirmBtn ? confirmBtn.innerHTML : '';
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading…';
+        }
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading…';
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('file', blob, 'store-banner.jpg');
+            formData.append('type', 'store_banner');
+            const response = await fetch('/api/upload-cloudinary', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': document.getElementById('csrf_token')?.value || '' },
+                body: formData,
+            });
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || 'Upload failed');
+
+            document.getElementById('store-banner-url').value = data.url;
+            document.getElementById('store-banner-public-id').value = data.public_id;
+            setStoreBannerPreview(data.url);
+            markStoreSettingsDirty('basic');
+            closeBannerCropModal();
+            showToast('Banner uploaded. Save Basic Information to publish it.', 'success');
+        } catch (error) {
+            console.error('Banner upload failed:', error);
+            showToast(error.message || 'Could not upload banner.', 'error');
+        } finally {
+            if (button) {
+                button.innerHTML = originalUpload;
+                button.disabled = false;
+            }
+            if (confirmBtn) {
+                confirmBtn.innerHTML = originalConfirm;
+                confirmBtn.disabled = false;
+            }
+        }
+    }
+
+    document.getElementById('upload-banner-btn')?.addEventListener('click', () => {
+        document.getElementById('store-banner-file')?.click();
+    });
+
+    document.getElementById('store-banner-file')?.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+            showToast('Banner image must be less than 5MB.', 'error');
+            event.target.value = '';
+            return;
+        }
+        if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+            showToast('Use a PNG, JPG, or WebP image for the banner.', 'error');
+            event.target.value = '';
+            return;
+        }
+        openBannerCropModal(file);
+    });
+
+    document.getElementById('confirm-banner-crop')?.addEventListener('click', () => {
+        if (!bannerCropper) {
+            showToast('Crop is not ready yet.', 'error');
+            return;
+        }
+        const canvas = bannerCropper.getCroppedCanvas({
+            width: 1600,
+            height: 500,
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high',
+        });
+        if (!canvas) {
+            showToast('Could not create the cropped banner.', 'error');
+            return;
+        }
+        canvas.toBlob(function (blob) {
+            if (!blob) {
+                showToast('Could not create the cropped banner.', 'error');
+                return;
+            }
+            uploadCroppedBannerBlob(blob);
+        }, 'image/jpeg', 0.9);
+    });
+
+    document.getElementById('remove-banner-btn')?.addEventListener('click', async () => {
+        if (!await window.openConfirmModal('Use the default floral storefront banner?')) return;
+        const button = document.getElementById('remove-banner-btn');
+        const publicId = document.getElementById('store-banner-public-id').value;
+        const original = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+        try {
+            if (publicId) {
+                await fetch('/api/delete-cloudinary', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.getElementById('csrf_token')?.value || '',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ public_id: publicId, type: 'store_banner' }),
+                });
+            }
+            document.getElementById('store-banner-url').value = '';
+            document.getElementById('store-banner-public-id').value = '';
+            setStoreBannerPreview('');
+            markStoreSettingsDirty('basic');
+            showToast('Default banner will be restored when you save.', 'success');
+        } catch (error) {
+            console.error('Banner removal failed:', error);
+            showToast('Could not reset the banner.', 'error');
+        } finally {
+            button.innerHTML = original;
+            button.disabled = false;
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        const modal = document.getElementById('bannerCropModal');
+        if (event.key === 'Escape' && modal && !modal.hidden) {
+            closeBannerCropModal();
+        }
+    });
+
     // ─── LOGO UPLOAD HANDLERS ───
     document.getElementById('upload-logo-btn')?.addEventListener('click', () => {
         document.getElementById('store-logo-file').click();
@@ -4630,8 +5144,19 @@
         }
     });
     
-    // Cancel button
-    document.getElementById('cancel-basic-info')?.addEventListener('click', () => {
+    // Cancel button — discard unsaved edits and restore last saved state
+    document.getElementById('cancel-basic-info')?.addEventListener('click', async () => {
+        if (basicInfoHasUnsavedEdits()) {
+            const discard = await window.openConfirmModal(
+                'Discard unsaved changes? Your Basic Information will go back to the last saved version.'
+            );
+            if (!discard) return;
+            // Reload is the reliable revert for form + map + schedule + banner/logo.
+            window.location.reload();
+            return;
+        }
+        __basicInfoEditSnapshot = null;
+        clearStoreSettingsDirty('basic');
         toggleBasicInfoSection(false);
     });
     
@@ -4714,6 +5239,10 @@
                 formData.append('store_logo_url', logoUrl);
                 formData.append('store_logo_public_id', logoPublicId);
             }
+
+            // Empty values intentionally restore the shared floral storefront banner.
+            formData.append('store_banner_url', document.getElementById('store-banner-url').value || '');
+            formData.append('store_banner_public_id', document.getElementById('store-banner-public-id').value || '');
             
             // Include location data from map
             if (currentLocation) {
@@ -4744,11 +5273,53 @@
             formData.append('max_delivery_distance', document.getElementById('max-distance')?.value || 15);
             const zoneArea = document.getElementById('zone-delivery-area')?.value || '';
             if (zoneArea) formData.append('zone_delivery_area', zoneArea);
+
+            if (deliveryMethod === 'zone') {
+                if (!zoneArea || !marker || typeof turf === 'undefined') {
+                    showToast('Draw a custom delivery zone that includes the store location pin.', 'error');
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    document.dispatchEvent(new CustomEvent('store-section-saved', { detail: { section: 'basic', success: false } }));
+                    return;
+                }
+                try {
+                    const geometry = JSON.parse(zoneArea);
+                    const pin = marker.getLngLat();
+                    const zoneFeature = geometry.type === 'Feature'
+                        ? geometry
+                        : { type: 'Feature', properties: {}, geometry: geometry };
+                    if (!turf.booleanPointInPolygon(turf.point([pin.lng, pin.lat]), zoneFeature)) {
+                        showToast('Custom delivery zone must include the store location pin.', 'error');
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        document.dispatchEvent(new CustomEvent('store-section-saved', { detail: { section: 'basic', success: false } }));
+                        return;
+                    }
+                } catch (error) {
+                    showToast('Could not validate the custom delivery zone.', 'error');
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    document.dispatchEvent(new CustomEvent('store-section-saved', { detail: { section: 'basic', success: false } }));
+                    return;
+                }
+            }
+
             const selectedMunicipalities = Array.from(document.querySelectorAll('.municipality-check:checked')).map(cb => cb.value);
             formData.append('selected_municipalities', JSON.stringify(selectedMunicipalities));
 
             // Municipality WKB only exists after merge — build it on save if missing
             if (deliveryMethod === 'municipality') {
+                if (!enforceStoreMunicipalitySelection({ notify: true })) {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    document.dispatchEvent(new CustomEvent('store-section-saved', { detail: { section: 'basic', success: false } }));
+                    return;
+                }
+                // Re-read after the store municipality was automatically included.
+                selectedMunicipalities.splice(0, selectedMunicipalities.length, ...Array.from(
+                    document.querySelectorAll('.municipality-check:checked')
+                ).map(cb => cb.value));
+                formData.set('selected_municipalities', JSON.stringify(selectedMunicipalities));
                 if (selectedMunicipalities.length === 0) {
                     showToast('Select at least one municipality for delivery coverage', 'error');
                     btn.innerHTML = originalText;
@@ -4853,7 +5424,16 @@
         toggleQRSettingsSection(true);
     });
 
-    document.getElementById('cancel-qr-settings')?.addEventListener('click', () => {
+    document.getElementById('cancel-qr-settings')?.addEventListener('click', async () => {
+        if (__storeSettingsDirty.qr) {
+            const discard = await window.openConfirmModal(
+                'Discard unsaved payment / QR changes? They will go back to the last saved version.'
+            );
+            if (!discard) return;
+            window.location.reload();
+            return;
+        }
+        clearStoreSettingsDirty('qr');
         toggleQRSettingsSection(false);
     });
 
@@ -5665,6 +6245,48 @@ async function handleQRFile(file, index) {
     }
 
     // Municipality initialization function
+    function normalizeStoreMunicipalityName(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/^(city|municipality)\s+of\s+/, '')
+            .replace(/\s+city$/, '')
+            .replace(/[-']/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function enforceStoreMunicipalitySelection({ notify = false } = {}) {
+        const storeMunicipality = document.getElementById('municipality')?.value || storeData?.municipality;
+        if (!storeMunicipality) {
+            if (notify) {
+                showToast('Set the store location municipality before configuring municipality delivery coverage.', 'error');
+            }
+            return false;
+        }
+
+        const normalizedStoreMunicipality = normalizeStoreMunicipalityName(storeMunicipality);
+        const anchorCheckbox = Array.from(document.querySelectorAll('.municipality-check'))
+            .find((checkbox) => normalizeStoreMunicipalityName(checkbox.value) === normalizedStoreMunicipality);
+
+        if (!anchorCheckbox) {
+            if (notify) {
+                showToast(`Could not find ${storeMunicipality} in the delivery municipality list.`, 'error');
+            }
+            return false;
+        }
+
+        const wasUnchecked = !anchorCheckbox.checked;
+        anchorCheckbox.checked = true;
+        anchorCheckbox.dataset.storeAnchor = 'true';
+        anchorCheckbox.disabled = !isBasicInfoEditing();
+        if (wasUnchecked && notify) {
+            showToast(`${anchorCheckbox.value} is required because it contains the store location.`, 'info');
+        }
+        return true;
+    }
+
     function initializeMunicipalityCheckboxes(storeData) {
         console.log('📍 Initializing municipality checkboxes with store data:', storeData.selected_municipalities);
         
@@ -5682,7 +6304,9 @@ async function handleQRFile(file, index) {
             console.log('📍 Selected municipalities to check:', selectedList);
             
             document.querySelectorAll('.municipality-check').forEach(checkbox => {
-                if (selectedList.includes(checkbox.value)) {
+                if (selectedList.some((name) =>
+                    normalizeStoreMunicipalityName(name) === normalizeStoreMunicipalityName(checkbox.value)
+                )) {
                     checkbox.checked = true;
                     console.log(`  ✅ Checked: ${checkbox.value}`);
                 } else {
@@ -5691,6 +6315,7 @@ async function handleQRFile(file, index) {
             });
             
             // Update the count display
+            enforceStoreMunicipalitySelection();
             updateSelectedCount();
             
             // If we're in municipality mode, validate
@@ -5705,6 +6330,7 @@ async function handleQRFile(file, index) {
             document.querySelectorAll('.municipality-check').forEach(checkbox => {
                 checkbox.checked = false;
             });
+            enforceStoreMunicipalitySelection();
             updateSelectedCount();
         }
     }
@@ -5921,6 +6547,34 @@ async function handleQRFile(file, index) {
                         properties: { title: 'Laguna Province' },
                         geometry: LAGUNA_BOUNDARY_FALLBACK
                     };
+                    const pinBufferFeature = lagunaProvincePinFeature || lagunaBoundaryFeature;
+
+                    // Soft shoreline buffer first (under official boundary): pin-allowed zone
+                    map.addSource('laguna-pin-buffer', {
+                        'type': 'geojson',
+                        'data': pinBufferFeature
+                    });
+                    map.addLayer({
+                        'id': 'laguna-pin-buffer-fill',
+                        'type': 'fill',
+                        'source': 'laguna-pin-buffer',
+                        'paint': {
+                            'fill-color': '#F59E0B',
+                            'fill-opacity': 0.08
+                        }
+                    });
+                    map.addLayer({
+                        'id': 'laguna-pin-buffer-outline',
+                        'type': 'line',
+                        'source': 'laguna-pin-buffer',
+                        'paint': {
+                            'line-color': '#D97706',
+                            'line-width': 2,
+                            'line-dasharray': [2, 2],
+                            'line-opacity': 0.85
+                        }
+                    });
+
                     map.addSource('laguna-boundary', {
                         'type': 'geojson',
                         'data': lagunaBoundaryFeature
@@ -6512,7 +7166,7 @@ async function handleQRFile(file, index) {
                     municipalitySettings.style.display = 'none';
                     updateDeliveryMethodBoxes();
                     if (methodDesc) {
-                        methodDesc.textContent = 'Your custom zone is shown on the map. Use Draw Zone to update it. Delivery fees are set in Payment Options.';
+                        methodDesc.textContent = 'Your custom zone must include the store location pin. Use Draw Zone to update it. Delivery fees are set in Payment Options.';
                     }
                     markStoreSettingsDirty('basic');
                     refreshDeliveryCoverageOnMap({ toast: true });
@@ -6534,7 +7188,7 @@ async function handleQRFile(file, index) {
                     municipalitySettings.style.display = 'block';
                     updateDeliveryMethodBoxes();
                     if (methodDesc) {
-                        methodDesc.textContent = 'Boundaries load automatically. Green = adjacent, red = not adjacent. Delivery fees are in Payment Options.';
+                        methodDesc.textContent = 'Your store municipality is included automatically. Add only adjacent areas; green is connected, red is not. Delivery fees are in Payment Options.';
                     }
                     markStoreSettingsDirty('basic');
 
@@ -6885,10 +7539,19 @@ async function handleQRFile(file, index) {
         }
         
         async function validateMunicipalitySelection({ updateMap = true, fitMap = false } = {}) {
+            const storeMunicipalityIsIncluded = enforceStoreMunicipalitySelection();
             const selected = getSelectedMunicipalities();
             const messageDiv = document.getElementById('municipality-validation-message');
             
             if (!messageDiv) return false;
+
+            if (!storeMunicipalityIsIncluded) {
+                messageDiv.style.display = 'block';
+                messageDiv.innerHTML = 'Set the store location municipality before selecting municipality delivery coverage.';
+                messageDiv.style.borderLeftColor = '#dc2626';
+                if (updateMap) paintSelectedMunicipalities([], selected, { fit: false });
+                return false;
+            }
             
             if (selected.length === 0) {
                 messageDiv.style.display = 'block';
@@ -6970,6 +7633,7 @@ async function handleQRFile(file, index) {
         }
 
         async function onMunicipalityCheckboxChanged() {
+            enforceStoreMunicipalitySelection({ notify: true });
             updateSelectedCount();
             if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
             await ensureMunicipalityBoundariesLoaded({ silent: true });
