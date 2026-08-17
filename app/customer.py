@@ -406,15 +406,46 @@ def get_store(store_id):
     # Add product count
     product_count = Product.query.filter_by(store_id=store_id, is_available=True).count()
     data['product_count'] = product_count
-    # Add average rating from testimonials
-    from app.models import Testimonial
-    testimonials = Testimonial.query.filter_by(store_id=store_id).all()
-    if testimonials:
-        data['avg_rating'] = round(sum(t.rating for t in testimonials) / len(testimonials), 1)
-        data['review_count'] = len(testimonials)
-    else:
-        data['avg_rating'] = 0
-        data['review_count'] = 0
+    # Match the web storefront: ratings come from completed-order StoreRating
+    # records. Keep legacy testimonials only as a fallback for older stores.
+    rating_row = db.session.query(
+        db.func.coalesce(db.func.avg(StoreRating.rating), 0),
+        db.func.count(StoreRating.id),
+    ).filter(StoreRating.store_id == store_id).first()
+    avg_rating = round(float(rating_row[0]), 1) if rating_row else 0.0
+    review_count = int(rating_row[1]) if rating_row else 0
+
+    reviews = [
+        rating.to_dict()
+        for rating in (
+            StoreRating.query
+            .filter_by(store_id=store_id)
+            .order_by(StoreRating.created_at.desc())
+            .limit(10)
+            .all()
+        )
+    ]
+
+    if not reviews:
+        from app.models import Testimonial
+        testimonials = (
+            Testimonial.query
+            .filter_by(store_id=store_id)
+            .order_by(Testimonial.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        reviews = [testimonial.to_dict() for testimonial in testimonials]
+        if reviews:
+            avg_rating = round(
+                sum(float(review.get('rating') or 0) for review in reviews) / len(reviews),
+                1,
+            )
+            review_count = len(reviews)
+
+    data['avg_rating'] = avg_rating
+    data['review_count'] = review_count
+    data['reviews'] = reviews
     return jsonify(data)
 
 
