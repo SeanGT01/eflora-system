@@ -446,6 +446,30 @@ def get_store(store_id):
     data['avg_rating'] = avg_rating
     data['review_count'] = review_count
     data['reviews'] = reviews
+
+    # Match web store detail map: default-address pin + delivery eligibility.
+    customer_id, default_address = _resolve_optional_customer_address()
+    is_customer = customer_id is not None
+    delivery_match = _listing_delivery_match(store, default_address) if default_address else {
+        'can_deliver': False,
+        'reason': 'Set your default address to check delivery coverage.',
+    }
+    customer_map_location = None
+    if (
+        default_address
+        and default_address.latitude is not None
+        and default_address.longitude is not None
+    ):
+        customer_map_location = {
+            'latitude': default_address.latitude,
+            'longitude': default_address.longitude,
+            'label': default_address.address_label or 'Default address',
+        }
+
+    data['is_customer'] = is_customer
+    data['can_deliver_to_customer'] = bool(delivery_match.get('can_deliver'))
+    data['delivery_reason'] = delivery_match.get('reason')
+    data['customer_map_location'] = customer_map_location
     return jsonify(data)
 
 
