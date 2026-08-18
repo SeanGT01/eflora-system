@@ -266,7 +266,7 @@ class Store(db.Model):
     # ==================================
     
     # ===== STORE SCHEDULE =====
-    # JSON format: {"schedules": [{"days": ["monday","tuesday",...], "open": "07:00", "close": "12:00"}, ...], "slot_duration": 2}
+    # JSON: schedules, slot_duration, delivery_start, delivery_cutoff, order_cutoff, lead_time_hours
     store_schedule = db.Column(db.JSON, nullable=True)
     # ==================================
     

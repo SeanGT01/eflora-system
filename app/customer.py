@@ -1357,138 +1357,24 @@ def mark_all_notifications_read():
 @customer_bp.route('/stores/<int:store_id>/time-slots', methods=['GET'])
 def get_store_time_slots(store_id):
     """Get available delivery time slots for a store based on its schedule.
-    Query params: date (YYYY-MM-DD), slot_duration (optional, default from store schedule or 2)
+    Query params: date (YYYY-MM-DD)
     """
     from datetime import datetime as dt
-    
+    from app.utils.store_schedule import build_store_time_slots
+
     store = Store.query.get(store_id)
     if not store:
         return jsonify({'error': 'Store not found'}), 404
-    
-    schedule = store.store_schedule or {}
-    delivery_start = schedule.get('delivery_start')
-    delivery_cutoff = schedule.get('delivery_cutoff')
-    if not schedule or not schedule.get('schedules'):
-        # No schedule configured - return default time slots
-        return jsonify({
-            'success': True,
-            'time_slots': [
-                {'label': '8:00 AM - 12:00 PM', 'value': '08:00-12:00'},
-                {'label': '12:00 PM - 3:00 PM', 'value': '12:00-15:00'},
-                {'label': '3:00 PM - 6:00 PM', 'value': '15:00-18:00'}
-            ],
-            'is_open': True,
-            'has_schedule': False
-        })
-    
-    # Get the requested date (default: today)
+
     date_str = request.args.get('date')
+    target_date = None
     if date_str:
         try:
-            target_date = dt.strptime(date_str, '%Y-%m-%d')
+            target_date = dt.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-    else:
-        target_date = dt.now()
-    
-    day_name = target_date.strftime('%A').lower()  # "monday", "tuesday", etc.
-    slot_duration = schedule.get('slot_duration', 2)
-    
-    # Find all schedule entries that include this day
-    active_ranges = []
-    for entry in schedule['schedules']:
-        if day_name in [d.lower() for d in entry.get('days', [])]:
-            active_ranges.append({
-                'open': entry['open'],
-                'close': entry['close']
-            })
-    
-    if not active_ranges:
-        return jsonify({
-            'success': True,
-            'time_slots': [],
-            'is_open': False,
-            'has_schedule': True,
-            'day': day_name
-        })
-    
-    # Generate time slots from active ranges
-    time_slots = []
-    for r in active_ranges:
-        open_h, open_m = map(int, r['open'].split(':'))
-        close_h, close_m = map(int, r['close'].split(':'))
 
-        # Apply optional delivery window (start/cutoff) on top of store hours.
-        if delivery_start:
-            ds_h, ds_m = map(int, delivery_start.split(':'))
-            if (ds_h, ds_m) > (open_h, open_m):
-                open_h, open_m = ds_h, ds_m
-        if delivery_cutoff:
-            dc_h, dc_m = map(int, delivery_cutoff.split(':'))
-            if (dc_h, dc_m) < (close_h, close_m):
-                close_h, close_m = dc_h, dc_m
-
-        # Skip invalid ranges after applying delivery window.
-        if (open_h, open_m) >= (close_h, close_m):
-            continue
-        
-        current_h = open_h
-        current_m = open_m
-        
-        while True:
-            end_h = current_h + slot_duration
-            end_m = current_m
-            
-            # Don't exceed closing time
-            if end_h > close_h or (end_h == close_h and end_m > close_m):
-                # If there's remaining time of any amount, make a shorter slot
-                remaining = (close_h - current_h) + (close_m - current_m) / 60
-                if remaining > 0:  # Allow any remaining time as final slot (even < 1 hour)
-                    end_h = close_h
-                    end_m = close_m
-                else:
-                    break
-            
-            start_str = f"{current_h:02d}:{current_m:02d}"
-            end_str = f"{end_h:02d}:{end_m:02d}"
-            
-            # Format label (e.g., "7:00 AM - 9:00 AM")
-            start_label = _format_time_label(current_h, current_m)
-            end_label = _format_time_label(end_h, end_m)
-            
-            time_slots.append({
-                'label': f"{start_label} - {end_label}",
-                'value': f"{start_str}-{end_str}"
-            })
-            
-            current_h = end_h
-            current_m = end_m
-            
-            if current_h >= close_h and current_m >= close_m:
-                break
-    
-    if not time_slots:
-        return jsonify({
-            'success': True,
-            'time_slots': [],
-            'is_open': False,
-            'has_schedule': True,
-            'day': day_name,
-            'slot_duration': slot_duration,
-            'delivery_start': delivery_start,
-            'delivery_cutoff': delivery_cutoff
-        })
-
-    return jsonify({
-        'success': True,
-        'time_slots': time_slots,
-        'is_open': True,
-        'has_schedule': True,
-        'day': day_name,
-        'slot_duration': slot_duration,
-        'delivery_start': delivery_start,
-        'delivery_cutoff': delivery_cutoff
-    })
+    return jsonify(build_store_time_slots(store, target_date))
 
 
 def _format_time_label(hour, minute):

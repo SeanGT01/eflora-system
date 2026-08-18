@@ -1591,7 +1591,7 @@
                     <i class="ri-time-line"></i>
                     <div>
                         <div class="info-row-label">Status</div>
-                        <span class="status-open" id="storeStatusSidebar">Open Now</span>
+                        <span class="status-open" id="storeStatusSidebar">Checking…</span>
                     </div>
                 </div>
                 <div class="info-row" id="storeHoursRow" style="display:none;">
@@ -1599,6 +1599,27 @@
                     <div>
                         <div class="info-row-label">Weekly Hours</div>
                         <div class="info-row-value" id="storeHoursValue" style="font-size:12px; line-height:1.6;"></div>
+                    </div>
+                </div>
+                <div class="info-row" id="storeDeliveryWindowRow" style="display:none;">
+                    <i class="ri-truck-line"></i>
+                    <div>
+                        <div class="info-row-label">Delivery Window</div>
+                        <div class="info-row-value" id="storeDeliveryWindowValue"></div>
+                    </div>
+                </div>
+                <div class="info-row" id="storeOrderCutoffRow" style="display:none;">
+                    <i class="ri-alarm-line"></i>
+                    <div>
+                        <div class="info-row-label">Same-day Order Cutoff</div>
+                        <div class="info-row-value" id="storeOrderCutoffValue"></div>
+                    </div>
+                </div>
+                <div class="info-row" id="storeLeadTimeRow" style="display:none;">
+                    <i class="ri-hourglass-line"></i>
+                    <div>
+                        <div class="info-row-label">Prep Time</div>
+                        <div class="info-row-value" id="storeLeadTimeValue"></div>
                     </div>
                 </div>
                 <div class="info-row">
@@ -1779,10 +1800,10 @@ function viewProduct(productId) {
     // Check if store is currently open
     function checkStoreStatus() {
         const storeSchedule = {{ store.store_schedule | tojson if store.store_schedule else 'null' }};
-        
-        if (!storeSchedule || !storeSchedule.schedules) {
-            // No schedule configured, show default
-            updateStatusDisplay(true, null, null);
+        fillDeliveryRules(storeSchedule);
+
+        if (!storeSchedule || !Array.isArray(storeSchedule.schedules) || !storeSchedule.schedules.length) {
+            updateStatusDisplay(false, null, null);
             return;
         }
 
@@ -1880,7 +1901,63 @@ function viewProduct(productId) {
             html += '</div>';
             
             hoursValue.innerHTML = html;
+        } else if (hoursRow) {
+            hoursRow.style.display = 'none';
         }
+    }
+
+    function fillDeliveryRules(schedule) {
+        const windowRow = document.getElementById('storeDeliveryWindowRow');
+        const windowValue = document.getElementById('storeDeliveryWindowValue');
+        const cutoffRow = document.getElementById('storeOrderCutoffRow');
+        const cutoffValue = document.getElementById('storeOrderCutoffValue');
+        const leadRow = document.getElementById('storeLeadTimeRow');
+        const leadValue = document.getElementById('storeLeadTimeValue');
+
+        const showRow = (row, valueEl, text) => {
+            if (!row || !valueEl) return;
+            if (text) {
+                row.style.display = 'flex';
+                valueEl.textContent = text;
+            } else {
+                row.style.display = 'none';
+                valueEl.textContent = '';
+            }
+        };
+
+        if (!schedule) {
+            showRow(windowRow, windowValue, '');
+            showRow(cutoffRow, cutoffValue, '');
+            showRow(leadRow, leadValue, '');
+            return;
+        }
+
+        const start = schedule.delivery_start;
+        const end = schedule.delivery_cutoff;
+        showRow(
+            windowRow,
+            windowValue,
+            (start && end) ? `${formatTime12Hour(start)} – ${formatTime12Hour(end)}` : ''
+        );
+        showRow(
+            cutoffRow,
+            cutoffValue,
+            schedule.order_cutoff
+                ? `Order by ${formatTime12Hour(schedule.order_cutoff)} for same-day`
+                : ''
+        );
+
+        let leadText = '';
+        if (schedule.lead_time_hours != null && schedule.lead_time_hours !== '') {
+            const hours = parseInt(schedule.lead_time_hours, 10);
+            if (hours === 0) leadText = 'None';
+            else if (Number.isFinite(hours) && hours > 0) {
+                leadText = hours === 1 ? '1 hour before slot start' : `${hours} hours before slot start`;
+            }
+        } else if (schedule.schedules && schedule.schedules.length) {
+            leadText = '1 hour before slot start';
+        }
+        showRow(leadRow, leadValue, leadText);
     }
 </script>
 <script type="application/json" id="storeDeliveryMapData">{{ store_map_data|tojson }}</script>

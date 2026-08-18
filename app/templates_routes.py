@@ -494,13 +494,54 @@ def _apply_store_performance(store_data, total_orders, delivered_or_completed):
     return store_data
 
 
-def _public_storefront_product_base_query():
-    """Products eligible for the public storefront: active store, not archived, in stock (product or variant)."""
+def _store_rating_stats(store_ids):
+    """Average post-order StoreRating per store: {store_id: (avg, count)}."""
+    stats = {int(sid): (0.0, 0) for sid in store_ids or []}
+    if not store_ids:
+        return stats
+    rows = (
+        db.session.query(
+            StoreRating.store_id,
+            db.func.avg(StoreRating.rating),
+            db.func.count(StoreRating.id),
+        )
+        .filter(StoreRating.store_id.in_(list(store_ids)))
+        .group_by(StoreRating.store_id)
+        .all()
+    )
+    for store_id, avg_rating, review_count in rows:
+        stats[int(store_id)] = (
+            round(float(avg_rating or 0), 1),
+            int(review_count or 0),
+        )
+    return stats
+
+
+def _apply_store_card_rating(store_data, avg_rating, review_count):
+    store_data['avg_rating'] = float(avg_rating or 0)
+    store_data['review_count'] = int(review_count or 0)
+    return store_data
+
+
+def _public_storefront_sellable_filter():
+    """Public storefront stock rule: main stock or any sellable variant stock."""
     variant_in_stock_exists = db.session.query(ProductVariant.id).filter(
         ProductVariant.product_id == Product.id,
         ProductVariant.is_available == True,
         ProductVariant.stock_quantity > 0
     ).exists()
+    return db.or_(
+        Product.stock_quantity > 0,
+        variant_in_stock_exists
+    )
+
+
+def _public_storefront_product_base_query():
+    """Products eligible for the public storefront: active store, not archived, and available.
+
+    Stock-state rendering (in stock / variant-only stock / out of stock) is handled
+    by the frontend cards, so we do not hide products here based on stock quantity.
+    """
     return (
         Product.query
         .join(Store, Product.store_id == Store.id)
@@ -515,10 +556,6 @@ def _public_storefront_product_base_query():
             Product.is_archived == False,
             Product.is_available == True,
             Store.status == 'active',
-            db.or_(
-                Product.stock_quantity > 0,
-                variant_in_stock_exists
-            )
         )
     )
 
@@ -768,7 +805,9 @@ def index():
                 if _store_delivery_match(store, customer_address).get('can_deliver')
             ]
         stores = stores[:12]
-        fulfillment_map = _store_fulfillment_stats([store.id for store in stores])
+        store_ids = [store.id for store in stores]
+        fulfillment_map = _store_fulfillment_stats(store_ids)
+        rating_map = _store_rating_stats(store_ids)
 
         store_list = []
         for store in stores:
@@ -783,6 +822,8 @@ def index():
 
             total_orders, delivered_or_completed = fulfillment_map.get(store.id, (0, 0))
             _apply_store_performance(store_data, total_orders, delivered_or_completed)
+            avg_rating, review_count = rating_map.get(store.id, (0.0, 0))
+            _apply_store_card_rating(store_data, avg_rating, review_count)
             store_list.append(store_data)
 
         # Format categories for the template (for featured categories section)
@@ -1010,11 +1051,12 @@ def seller_required(f):
             return redirect(url_for('templates.login'))
         if session.get('role') != 'seller':
             return redirect(url_for('templates.dashboard'))
-        # Suspended storefronts cannot use seller tools.
+        # Admin-suspended storefronts cannot use seller tools.
+        # Seller-chosen "inactive" still allows portal access (store is just hidden).
         if request.endpoint != 'templates.seller_store_suspended':
             if (
                 _seller_portal_suspended_store(session['user_id'])
-                and not _seller_portal_active_store(session['user_id'])
+                and not _seller_portal_manageable_store(session['user_id'])
             ):
                 return redirect(url_for('templates.seller_store_suspended'))
         return f(*args, **kwargs)
@@ -1093,12 +1135,8 @@ def product_archive_choice(product_id):
     
 # ===== HELPER FUNCTIONS =====
 def _get_seller_store():
-    """Return the active store for the logged-in seller, or None."""
-    return (
-        Store.query
-        .filter_by(seller_id=session['user_id'], status='active')
-        .first()
-    )
+    """Return the seller's manageable store (active or self-hidden inactive)."""
+    return _seller_portal_manageable_store(session.get('user_id'))
 
 def _get_primary_image(product):
     """Return the URL path for the primary (or first) product image."""
@@ -1124,9 +1162,9 @@ def inject_user():
             user = user_obj.to_dict()
             if session.get('role') == 'seller':
                 active_store_ids = [
-                    store.id for store in Store.query.filter_by(
-                        seller_id=session['user_id'],
-                        status='active'
+                    store.id for store in Store.query.filter(
+                        Store.seller_id == session['user_id'],
+                        Store.status.in_(('active', 'inactive')),
                     ).all()
                 ]
                 if active_store_ids:
@@ -2482,15 +2520,37 @@ def register_resend_otp():
 
 
 def _seller_portal_active_store(user_id):
-    return Store.query.filter_by(seller_id=user_id, status='active').first()
+    if not user_id:
+        return None
+    return Store.query.filter(
+        Store.seller_id == user_id,
+        Store.status == 'active',
+    ).first()
 
 
-def _seller_portal_suspended_store(user_id):
-    """Storefront marked suspended/inactive by admin (not merely pending signup)."""
+def _seller_portal_manageable_store(user_id):
+    """Store the seller can still manage: visible (active) or self-hidden (inactive).
+
+    Admin `suspended` is excluded so those sellers stay on the suspended screen.
+    """
+    if not user_id:
+        return None
     return (
         Store.query.filter(
             Store.seller_id == user_id,
-            Store.status.in_(('suspended', 'inactive')),
+            Store.status.in_(('active', 'inactive')),
+        )
+        .order_by(Store.updated_at.desc().nullslast(), Store.id.desc())
+        .first()
+    )
+
+
+def _seller_portal_suspended_store(user_id):
+    """Storefront locked by admin (not seller-chosen inactive / hide from customers)."""
+    return (
+        Store.query.filter(
+            Store.seller_id == user_id,
+            Store.status == 'suspended',
         )
         .order_by(Store.updated_at.desc().nullslast(), Store.id.desc())
         .first()
@@ -2499,7 +2559,7 @@ def _seller_portal_suspended_store(user_id):
 
 def _seller_home_redirect(user_id):
     """Where a logged-in seller should land after login / portal entry."""
-    if _seller_portal_active_store(user_id):
+    if _seller_portal_manageable_store(user_id):
         return redirect(url_for('templates.seller_products'))
     suspended = _seller_portal_suspended_store(user_id)
     if suspended:
@@ -2907,7 +2967,7 @@ def seller_signup_complete():
     if not user or user.role not in ('seller', 'customer'):
         return redirect(url_for('templates.dashboard'))
 
-    if user.role == 'seller' and _seller_portal_active_store(user.id):
+    if user.role == 'seller' and _seller_portal_manageable_store(user.id):
         return redirect(url_for('templates.seller_products'))
 
     if user.role == 'seller' and _seller_portal_suspended_store(user.id):
@@ -2921,7 +2981,7 @@ def seller_signup_complete():
 
 @templates_bp.route('/seller/suspended', methods=['GET'])
 def seller_store_suspended():
-    """Shown when the seller's storefront was suspended/inactive by admin."""
+    """Shown when the seller's storefront was locked by admin (suspended)."""
     if not session.get('user_id'):
         return redirect(url_for('templates.login', next=url_for('templates.seller_store_suspended')))
 
@@ -2929,8 +2989,8 @@ def seller_store_suspended():
     if not user or user.role != 'seller':
         return redirect(url_for('templates.index'))
 
-    # If they were reactivated, send them back into the portal.
-    if _seller_portal_active_store(user.id):
+    # If they were reactivated (or only self-hidden as inactive), send them back.
+    if _seller_portal_manageable_store(user.id):
         return redirect(url_for('templates.seller_products'))
 
     store = _seller_portal_suspended_store(user.id)
@@ -2953,7 +3013,7 @@ def seller_signup_status():
     if not user:
         return redirect(url_for('templates.index'))
 
-    if user.role == 'seller' and _seller_portal_suspended_store(user.id) and not _seller_portal_active_store(user.id):
+    if user.role == 'seller' and _seller_portal_suspended_store(user.id) and not _seller_portal_manageable_store(user.id):
         return redirect(url_for('templates.seller_store_suspended'))
 
     latest = _seller_portal_latest_application(user.id)
@@ -3569,7 +3629,7 @@ def product_detail(product_id):
             Product.id != product_id,
             Product.is_available == True,
             Product.is_archived == False,
-            Product.stock_quantity > 0
+            _public_storefront_sellable_filter()
         ).limit(4).all()
         
         # Get add-on products - different main category but same store
@@ -3581,7 +3641,7 @@ def product_detail(product_id):
                 Product.id != product_id,
                 Product.is_available == True,
                 Product.is_archived == False,
-                Product.stock_quantity > 0
+                _public_storefront_sellable_filter()
             ).limit(8).all()
         
         # Convert products to dict format
@@ -3899,7 +3959,7 @@ def seller_dashboard():
     from app.utils.report_service import period_range
 
     user_id = session['user_id']
-    store = Store.query.filter_by(seller_id=user_id, status='active').first()
+    store = _seller_portal_manageable_store(user_id)
 
     if not store:
         suspended = _seller_portal_suspended_store(user_id)
@@ -5228,12 +5288,11 @@ def seller_products():
     user_id = session.get('user_id')
     if (
         _seller_portal_suspended_store(user_id)
-        and not _seller_portal_active_store(user_id)
+        and not _seller_portal_manageable_store(user_id)
     ):
         return redirect(url_for('templates.seller_store_suspended'))
 
-    # Get seller's store
-    store = Store.query.filter_by(seller_id=user_id, status='active').first()
+    store = _seller_portal_manageable_store(user_id)
     categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order.asc(), Category.name.asc()).all()
     if not store:
         return _seller_home_redirect(user_id)
@@ -5257,11 +5316,11 @@ def seller_inventory():
     user_id = session.get('user_id')
     if (
         _seller_portal_suspended_store(user_id)
-        and not _seller_portal_active_store(user_id)
+        and not _seller_portal_manageable_store(user_id)
     ):
         return redirect(url_for('templates.seller_store_suspended'))
 
-    store = Store.query.filter_by(seller_id=user_id, status='active').first()
+    store = _seller_portal_manageable_store(user_id)
     if not store:
         return _seller_home_redirect(user_id)
 
@@ -6007,7 +6066,7 @@ def reduce_product_stock(product_id):
     
     try:
         # Get seller's store
-        store = Store.query.filter_by(seller_id=user_id, status='active').first()
+        store = _seller_portal_manageable_store(user_id)
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -6138,7 +6197,7 @@ def add_product_stock(product_id):
     
     try:
         # Get seller's store
-        store = Store.query.filter_by(seller_id=user_id, status='active').first()
+        store = _seller_portal_manageable_store(user_id)
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -6271,7 +6330,7 @@ def get_stock_history(product_id):
     
     try:
         # Get seller's store
-        store = Store.query.filter_by(seller_id=user_id, status='active').first()
+        store = _seller_portal_manageable_store(user_id)
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -6823,7 +6882,7 @@ def seller_riders_api():
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -6865,7 +6924,7 @@ def seller_invite_rider_api():
 
     user_id = session['user_id']
     user = User.query.get(user_id)
-    store = Store.query.filter_by(seller_id=user_id, status='active').first()
+    store = _seller_portal_manageable_store(user_id)
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -6971,7 +7030,7 @@ def seller_resend_rider_invitation_api():
 
     user_id = session['user_id']
     user = User.query.get(user_id)
-    store = Store.query.filter_by(seller_id=user_id, status='active').first()
+    store = _seller_portal_manageable_store(user_id)
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -7027,7 +7086,7 @@ def seller_verify_rider_otp_api():
         return jsonify({'error': 'Unauthorized'}), 401
 
     user_id = session['user_id']
-    store = Store.query.filter_by(seller_id=user_id, status='active').first()
+    store = _seller_portal_manageable_store(user_id)
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -7151,7 +7210,7 @@ def seller_cancel_rider_invitation_api():
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -7175,7 +7234,7 @@ def seller_rider_detail_api(rider_id):
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -7198,7 +7257,7 @@ def seller_update_rider_api(rider_id):
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -7237,7 +7296,7 @@ def seller_reset_rider_password_api(rider_id):
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -7291,7 +7350,7 @@ def seller_rider_status_api(rider_id):
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -7320,7 +7379,7 @@ def seller_delete_rider_api(rider_id):
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    store = Store.query.filter_by(seller_id=session['user_id'], status='active').first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -7352,12 +7411,8 @@ def seller_delete_rider_api(rider_id):
 # ─── Helper ───────────────────────────────────────────────────────────────────
 
 def _get_seller_store():
-    """Return the active store for the logged-in seller, or None."""
-    return (
-        Store.query
-        .filter_by(seller_id=session['user_id'], status='active')
-        .first()
-    )
+    """Return the seller's manageable store (active or self-hidden inactive)."""
+    return _seller_portal_manageable_store(session.get('user_id'))
 
 @templates_bp.route('/seller/pos')
 @seller_required
@@ -7911,7 +7966,7 @@ def _resolve_report_store():
     user_id = session.get('user_id')
     if not user_id:
         return None
-    return (Store.query.filter_by(seller_id=user_id, status='active').first()
+    return (_seller_portal_manageable_store(user_id)
             or Store.query.filter_by(seller_id=user_id).first())
 
 
@@ -8377,7 +8432,7 @@ def product_details(product_id):
             Product.id != product_id,
             Product.is_available == True,
             Product.is_archived == False,
-            Product.stock_quantity > 0
+            _public_storefront_sellable_filter()
         )
         
         # If product has a main category, get products from different categories
@@ -8406,7 +8461,7 @@ def product_details(product_id):
             Product.id != product_id,
             Product.is_available == True,
             Product.is_archived == False,
-            Product.stock_quantity > 0
+            _public_storefront_sellable_filter()
         ).limit(8).all()
         
         # Convert related products to dict
@@ -9371,7 +9426,9 @@ def stores():
         )
 
         now = datetime.utcnow()
-        fulfillment_map = _store_fulfillment_stats([store.id for store in active_stores])
+        store_ids = [store.id for store in active_stores]
+        fulfillment_map = _store_fulfillment_stats(store_ids)
+        rating_map = _store_rating_stats(store_ids)
         store_list = []
         for store in active_stores:
             store_data = store.to_dict()
@@ -9385,6 +9442,8 @@ def stores():
 
             total_orders, delivered_or_completed = fulfillment_map.get(store.id, (0, 0))
             _apply_store_performance(store_data, total_orders, delivered_or_completed)
+            avg_rating, review_count = rating_map.get(store.id, (0.0, 0))
+            _apply_store_card_rating(store_data, avg_rating, review_count)
             store_data['product_count'] = int(product_counts.get(store.id, 0))
             store_data['is_newly_approved'] = bool(
                 store.approved_at and (now - store.approved_at).days < 7
@@ -9583,132 +9642,21 @@ def store_detail(store_id):
 def get_store_time_slots_web(store_id):
     """Get available delivery time slots for a store (web/session-based, no JWT required)"""
     from datetime import datetime as dt
-    
+    from app.utils.store_schedule import build_store_time_slots
+
     store = Store.query.get(store_id)
     if not store:
         return jsonify({'error': 'Store not found'}), 404
-    
-    schedule = store.store_schedule or {}
-    delivery_start = schedule.get('delivery_start')
-    delivery_cutoff = schedule.get('delivery_cutoff')
-    if not schedule.get('schedules'):
-        return jsonify({
-            'success': True,
-            'time_slots': [
-                {'label': '8:00 AM - 12:00 PM', 'value': '08:00-12:00'},
-                {'label': '12:00 PM - 3:00 PM', 'value': '12:00-15:00'},
-                {'label': '3:00 PM - 6:00 PM', 'value': '15:00-18:00'}
-            ],
-            'is_open': True,
-            'has_schedule': False,
-            'open_days': [],
-        })
-    
-    open_days = sorted({
-        str(day).lower()
-        for entry in schedule.get('schedules', [])
-        for day in (entry.get('days') or [])
-    })
-    
+
     date_str = request.args.get('date')
+    target_date = None
     if date_str:
         try:
-            target_date = dt.strptime(date_str, '%Y-%m-%d')
+            target_date = dt.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-    else:
-        target_date = dt.now()
-    
-    day_name = target_date.strftime('%A').lower()
-    slot_duration = schedule.get('slot_duration', 2)
-    
-    active_ranges = []
-    for entry in schedule['schedules']:
-        if day_name in [d.lower() for d in entry.get('days', [])]:
-            active_ranges.append({'open': entry['open'], 'close': entry['close']})
-    
-    if not active_ranges:
-        return jsonify({
-            'success': True,
-            'time_slots': [],
-            'is_open': False,
-            'has_schedule': True,
-            'day': day_name,
-            'open_days': open_days,
-        })
-    
-    time_slots = []
-    for r in active_ranges:
-        open_h, open_m = map(int, r['open'].split(':'))
-        close_h, close_m = map(int, r['close'].split(':'))
 
-        # Apply optional delivery window (start/cutoff) on top of store hours.
-        if delivery_start:
-            ds_h, ds_m = map(int, delivery_start.split(':'))
-            if (ds_h, ds_m) > (open_h, open_m):
-                open_h, open_m = ds_h, ds_m
-        if delivery_cutoff:
-            dc_h, dc_m = map(int, delivery_cutoff.split(':'))
-            if (dc_h, dc_m) < (close_h, close_m):
-                close_h, close_m = dc_h, dc_m
-
-        # Skip invalid ranges after applying delivery window.
-        if (open_h, open_m) >= (close_h, close_m):
-            continue
-
-        current_h, current_m = open_h, open_m
-        
-        while True:
-            end_h = current_h + slot_duration
-            end_m = current_m
-            if end_h > close_h or (end_h == close_h and end_m > close_m):
-                remaining = (close_h - current_h) + (close_m - current_m) / 60
-                if remaining > 0:  # Allow any remaining time as final slot (even < 1 hour)
-                    end_h, end_m = close_h, close_m
-                else:
-                    break
-            
-            start_str = f"{current_h:02d}:{current_m:02d}"
-            end_str = f"{end_h:02d}:{end_m:02d}"
-            
-            def fmt(h, m):
-                p = 'AM' if h < 12 else 'PM'
-                dh = h % 12 or 12
-                return f"{dh}:{m:02d} {p}"
-            
-            time_slots.append({
-                'label': f"{fmt(current_h, current_m)} - {fmt(end_h, end_m)}",
-                'value': f"{start_str}-{end_str}"
-            })
-            
-            current_h, current_m = end_h, end_m
-            if current_h >= close_h and current_m >= close_m:
-                break
-    
-    if not time_slots:
-        return jsonify({
-            'success': True,
-            'time_slots': [],
-            'is_open': False,
-            'has_schedule': True,
-            'day': day_name,
-            'slot_duration': slot_duration,
-            'delivery_start': delivery_start,
-            'delivery_cutoff': delivery_cutoff,
-            'open_days': open_days,
-        })
-
-    return jsonify({
-        'success': True,
-        'time_slots': time_slots,
-        'is_open': True,
-        'has_schedule': True,
-        'day': day_name,
-        'slot_duration': slot_duration,
-        'delivery_start': delivery_start,
-        'delivery_cutoff': delivery_cutoff,
-        'open_days': open_days,
-    })
+    return jsonify(build_store_time_slots(store, target_date))
 
 
 @templates_bp.route('/seller/store-settings')
@@ -9876,7 +9824,11 @@ def update_store_settings():
         if 'description' in data:
             store.description = data['description']
         if 'status' in data:
-            store.status = data['status']
+            requested_status = (data.get('status') or '').strip().lower()
+            current_status = (store.status or '').strip().lower()
+            # Sellers may hide/show the storefront. Admin pending/suspended stays locked.
+            if current_status not in ('pending', 'suspended') and requested_status in ('active', 'inactive'):
+                store.status = requested_status
         
         # ===== LOCATION FIELDS =====
         if 'latitude' in data and data['latitude']:
@@ -9905,15 +9857,18 @@ def update_store_settings():
         
         # ===== STORE SCHEDULE =====
         if 'store_schedule' in data:
+            from app.utils.store_schedule import sanitize_store_schedule
             schedule_value = data['store_schedule']
             if isinstance(schedule_value, str):
                 try:
-                    store.store_schedule = json.loads(schedule_value)
-                except:
-                    pass
-            elif isinstance(schedule_value, dict):
-                store.store_schedule = schedule_value
-            print(f"✅ Updated store_schedule: {store.store_schedule}")
+                    schedule_value = json.loads(schedule_value)
+                except Exception:
+                    schedule_value = None
+            if isinstance(schedule_value, dict):
+                cleaned = sanitize_store_schedule(schedule_value)
+                if cleaned is not None:
+                    store.store_schedule = cleaned
+                    print(f"✅ Updated store_schedule: {store.store_schedule}")
         
         # ===== DELIVERY SETTINGS =====
         old_method = store.delivery_method

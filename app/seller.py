@@ -27,8 +27,16 @@ def seller_required(f):
     return decorated
 
 def get_seller_store(user_id):
-    store = Store.query.filter_by(seller_id=user_id, status='active').first()
-    return store
+    if not user_id:
+        return None
+    return (
+        Store.query.filter(
+            Store.seller_id == user_id,
+            Store.status.in_(('active', 'inactive')),
+        )
+        .order_by(Store.updated_at.desc().nullslast(), Store.id.desc())
+        .first()
+    )
 
 @seller_bp.route('/dashboard', methods=['GET'])
 @seller_required

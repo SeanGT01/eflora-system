@@ -79,8 +79,18 @@ def seller_required(f):
     return decorated
 
 def get_seller_store():
-    """Return the active store for the logged-in seller, or None."""
-    return Store.query.filter_by(seller_id=session.get('user_id'), status='active').first()
+    """Return the seller's manageable store (active or self-hidden inactive)."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+    return (
+        Store.query.filter(
+            Store.seller_id == user_id,
+            Store.status.in_(('active', 'inactive')),
+        )
+        .order_by(Store.updated_at.desc().nullslast(), Store.id.desc())
+        .first()
+    )
 
 @archive_bp.route('/products', methods=['GET'])
 @seller_required

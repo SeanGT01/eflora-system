@@ -2688,10 +2688,12 @@
                                                 <label class="form-label">Status</label>
                                                 <select class="form-select" id="store-status">
                                                     <option value="active" {% if store.status == 'active' %}selected{% endif %}>Active</option>
-                                                    <option value="pending" {% if store.status == 'pending' %}selected{% endif %}>Pending</option>
                                                     <option value="inactive" {% if store.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                                                    {% if store.status not in ['active', 'inactive'] %}
+                                                    <option value="{{ store.status }}" selected>{{ (store.status or 'Pending')|title }}</option>
+                                                    {% endif %}
                                                 </select>
-                                                <div class="form-hint">Active stores are visible to customers</div>
+                                                <div class="form-hint">Inactive hides your store and products from customers. You can still log in and manage the store.</div>
                                             </div>
                                         </div>
                                     </div>
@@ -2709,7 +2711,7 @@
                                 <!-- STORE SCHEDULE / OPERATING HOURS -->
                                 <div class="form-group form-group-full">
                                     <label class="form-label">Store Operating Hours</label>
-                                    <div class="form-hint" style="margin-bottom: 0.75rem;">Set the days and times your store is available for delivery. Time slots will be auto-generated for customers.</div>
+                                    <div class="form-hint" style="margin-bottom: 0.75rem;">Set the days and times your store is open. Delivery slots are generated from these hours, then limited by delivery window, same-day cutoff, and prep time.</div>
                                     
                                     <div id="schedule-entries" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 0.75rem;">
                                         <!-- Schedule entries will be populated by JS -->
@@ -2737,7 +2739,27 @@
                                             <span style="color: var(--muted); font-weight: 600;">to</span>
                                             <input type="time" class="form-control" id="delivery-cutoff-time" style="width: auto; min-width: 140px;" placeholder="Cutoff">
                                         </div>
-                                        <div class="form-hint">Example: store hours 07:00–19:00, delivery window 09:00–17:00.</div>
+                                        <div class="form-hint">When riders can deliver. Example: store hours 07:00–19:00, delivery window 09:00–17:00.</div>
+                                    </div>
+
+                                    <div style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 1rem;">
+                                        <div>
+                                            <label class="form-label" style="margin-bottom: 0.35rem;">Same-day order cutoff (Optional)</label>
+                                            <input type="time" class="form-control" id="order-cutoff-time" style="width: auto; min-width: 140px;">
+                                            <div class="form-hint">After this time, customers cannot book today. They must pick another open day.</div>
+                                        </div>
+                                        <div>
+                                            <label class="form-label" style="margin-bottom: 0.35rem;">Prep / lead time</label>
+                                            <select class="form-control" id="lead-time-hours" style="width: auto; min-width: 140px;">
+                                                <option value="0">None</option>
+                                                <option value="1" selected>1 hour</option>
+                                                <option value="2">2 hours</option>
+                                                <option value="3">3 hours</option>
+                                                <option value="4">4 hours</option>
+                                                <option value="6">6 hours</option>
+                                            </select>
+                                            <div class="form-hint">Customers must book a slot that starts at least this many hours from now.</div>
+                                        </div>
                                     </div>
                                 </div>
                                 
@@ -3038,7 +3060,7 @@
                                         </div>
                                     {% endfor %}
                                 {% else %}
-                                    Not configured (using default hours)
+                                    Not configured
                                 {% endif %}
                             </div>
                         </div>
@@ -4187,6 +4209,8 @@
             slotDuration: document.getElementById('slot-duration')?.value || '',
             deliveryStart: document.getElementById('delivery-start-time')?.value || '',
             deliveryCutoff: document.getElementById('delivery-cutoff-time')?.value || '',
+            orderCutoff: document.getElementById('order-cutoff-time')?.value || '',
+            leadTimeHours: document.getElementById('lead-time-hours')?.value || '',
             schedule: (typeof scheduleEntries !== 'undefined')
                 ? JSON.parse(JSON.stringify(scheduleEntries || []))
                 : [],
@@ -4899,6 +4923,18 @@
     if (existingSchedule && existingSchedule.delivery_cutoff) {
         document.getElementById('delivery-cutoff-time').value = existingSchedule.delivery_cutoff;
     }
+    if (existingSchedule && existingSchedule.order_cutoff) {
+        document.getElementById('order-cutoff-time').value = existingSchedule.order_cutoff;
+    }
+    const leadHoursEl = document.getElementById('lead-time-hours');
+    if (leadHoursEl) {
+        const savedLead = existingSchedule && existingSchedule.lead_time_hours != null
+            ? String(existingSchedule.lead_time_hours)
+            : '1';
+        if ([...leadHoursEl.options].some((opt) => opt.value === savedLead)) {
+            leadHoursEl.value = savedLead;
+        }
+    }
     
     function renderScheduleEntries() {
         const container = document.getElementById('schedule-entries');
@@ -5081,7 +5117,6 @@
     
     function getScheduleJSON() {
         const validEntries = scheduleEntries.filter(e => e.days.length > 0 && e.open && e.close);
-        if (validEntries.length === 0) return null;
         
         // Validate: close must be after open
         for (const entry of validEntries) {
@@ -5116,11 +5151,17 @@
             return 'INVALID';
         }
 
+        const orderCutoff = (document.getElementById('order-cutoff-time')?.value || '').trim();
+        let leadTimeHours = parseInt(document.getElementById('lead-time-hours')?.value, 10);
+        if (!Number.isFinite(leadTimeHours) || leadTimeHours < 0) leadTimeHours = 1;
+
         return {
             schedules: validEntries.map(e => ({ days: e.days, open: e.open, close: e.close })),
             slot_duration: parseInt(document.getElementById('slot-duration').value) || 2,
             delivery_start: deliveryStart || null,
-            delivery_cutoff: deliveryCutoff || null
+            delivery_cutoff: deliveryCutoff || null,
+            order_cutoff: orderCutoff || null,
+            lead_time_hours: leadTimeHours
         };
     }
     
@@ -5393,7 +5434,7 @@
                     }).join('');
                 } else {
                     sumSchedule.classList.add('empty');
-                    sumSchedule.textContent = 'Not configured (using default hours)';
+                    sumSchedule.textContent = 'Not configured';
                 }
             }
             

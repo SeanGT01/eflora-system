@@ -213,90 +213,26 @@ def _reduce_stock_lookup(stock_lookup, user_id, reason_notes, store_id=None):
 
 
 def _generate_store_time_slots_for_date(store, target_date):
-    """Generate available time slots for a store/date using schedule + delivery window."""
-    schedule = store.store_schedule or {}
-    if not schedule.get("schedules"):
-        return []
-
-    day_name = target_date.strftime("%A").lower()
-    slot_duration = int(schedule.get("slot_duration") or 2)
-    delivery_start = schedule.get("delivery_start")
-    delivery_cutoff = schedule.get("delivery_cutoff")
-
-    active_ranges = []
-    for entry in schedule["schedules"]:
-        if day_name in [d.lower() for d in entry.get("days", [])]:
-            active_ranges.append({"open": entry["open"], "close": entry["close"]})
-
-    if not active_ranges:
-        return []
-
-    slots = []
-    for r in active_ranges:
-        open_h, open_m = map(int, r["open"].split(":"))
-        close_h, close_m = map(int, r["close"].split(":"))
-
-        # Apply optional delivery window over store operating hours.
-        if delivery_start:
-            ds_h, ds_m = map(int, delivery_start.split(":"))
-            if (ds_h, ds_m) > (open_h, open_m):
-                open_h, open_m = ds_h, ds_m
-        if delivery_cutoff:
-            dc_h, dc_m = map(int, delivery_cutoff.split(":"))
-            if (dc_h, dc_m) < (close_h, close_m):
-                close_h, close_m = dc_h, dc_m
-
-        if (open_h, open_m) >= (close_h, close_m):
-            continue
-
-        current_h, current_m = open_h, open_m
-        while True:
-            end_h = current_h + slot_duration
-            end_m = current_m
-            if end_h > close_h or (end_h == close_h and end_m > close_m):
-                remaining = (close_h - current_h) + (close_m - current_m) / 60
-                if remaining > 0:
-                    end_h, end_m = close_h, close_m
-                else:
-                    break
-
-            start_str = f"{current_h:02d}:{current_m:02d}"
-            end_str = f"{end_h:02d}:{end_m:02d}"
-            slots.append(f"{start_str}-{end_str}")
-
-            current_h, current_m = end_h, end_m
-            if current_h >= close_h and current_m >= close_m:
-                break
-
-    return slots
+    """Generate bookable time-slot values for a store/date (Philippine time)."""
+    from app.utils.store_schedule import build_store_time_slots, slot_values
+    return slot_values(build_store_time_slots(store, target_date))
 
 
 def _validate_requested_delivery_slot(store, requested_delivery_date, requested_delivery_time):
     """
-    Validate requested slot against store schedule + delivery window.
+    Validate requested slot against store schedule, delivery window, cutoff, and lead time.
     Returns None if valid/skip; otherwise returns error message.
     """
+    from app.utils.store_schedule import validate_delivery_slot
+
     if not requested_delivery_date or not requested_delivery_time:
         return None
-
-    from datetime import timedelta
-    today = datetime.now().date()
-    max_allowed = today + timedelta(days=14)
-    if requested_delivery_date < today:
-        return "Selected delivery date has already passed."
-    if requested_delivery_date > max_allowed:
-        return "Selected delivery date must be within 14 days from today."
 
     normalized_slot = _normalize_requested_delivery_time(requested_delivery_time)
     if not normalized_slot:
         return "Invalid delivery time format."
 
-    valid_slots = _generate_store_time_slots_for_date(store, requested_delivery_date)
-    if not valid_slots:
-        return f"{store.name} is closed on the selected date."
-    if normalized_slot not in valid_slots:
-        return f"Selected delivery time is outside {store.name}'s available delivery window."
-    return None
+    return validate_delivery_slot(store, requested_delivery_date, normalized_slot)
 
 
 def _normalize_requested_delivery_time(value):

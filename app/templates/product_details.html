@@ -1587,9 +1587,12 @@
                             on this store’s open days{% if sorted_days.list %}
                             ({{ sorted_days.list|map('capitalize')|join(', ') }}){% endif %},
                             while delivery slots remain.
-                        {% elif delivery_cutoff %}
+                            {% if store_sched and store_sched.order_cutoff %}
+                            Order by <span data-store-time="{{ store_sched.order_cutoff }}">{{ store_sched.order_cutoff }}</span> for same-day.
+                            {% endif %}
+                        {% elif store_sched and store_sched.order_cutoff %}
                             Orders placed before
-                            <span data-store-time="{{ delivery_cutoff }}">{{ delivery_cutoff }}</span>
+                            <span data-store-time="{{ store_sched.order_cutoff }}">{{ store_sched.order_cutoff }}</span>
                             are eligible for same-day delivery within our service area, while delivery slots remain.
                         {% elif sorted_days.list %}
                             Same-day delivery is available on this store’s open days
@@ -1848,10 +1851,10 @@
         <!-- Trust badges -->
         <div style="display:flex;gap:1.25rem;flex-wrap:wrap;">
             {% set store_sched_badge = product.store.store_schedule if product.store and product.store.store_schedule else none %}
-            {% set has_same_day_info = store_sched_badge and (store_sched_badge.delivery_cutoff or store_sched_badge.schedules) %}
+            {% set has_same_day_info = store_sched_badge and store_sched_badge.schedules %}
             <div style="display:flex;align-items:center;gap:0.4rem;font-size:12px;color:var(--muted);">
                 <i class="ri-truck-line" style="color:var(--sage);"></i>
-                {% if has_same_day_info or not store_sched_badge %}
+                {% if has_same_day_info %}
                     Same-day delivery
                 {% else %}
                     Scheduled delivery
@@ -2539,12 +2542,9 @@ function filterAddons(cat, btn) {
    }
    
    // Time slots - will be fetched from store schedule API
-   let timeSlots = [
-       { label: '8:00 AM - 12:00 PM', value: '08:00-12:00' },
-       { label: '12:00 PM - 3:00 PM', value: '12:00-15:00' },
-       { label: '3:00 PM - 6:00 PM', value: '15:00-18:00' }
-   ];
-   let gotCustomTimeSlots = false;  // Track if API returned custom slots
+   let timeSlots = [];
+   let gotCustomTimeSlots = false;
+   let lastSlotBlockReason = null;
    
    const STORE_ID = {{ product.store_id }};
    
@@ -2553,18 +2553,19 @@ function filterAddons(cat, btn) {
        try {
            const resp = await fetch(`/api/store/${STORE_ID}/time-slots?date=${dateStr}`);
            const data = await resp.json();
+           lastSlotBlockReason = data && data.block_reason ? data.block_reason : null;
            if (data.success && data.time_slots && data.time_slots.length > 0) {
                timeSlots = data.time_slots;
                gotCustomTimeSlots = true;
-               console.log('✅ Fetched custom time slots from API:', timeSlots);
            } else {
-               gotCustomTimeSlots = false;
-               console.warn('⚠️ No custom time slots from API, using defaults. Store schedule may not be configured.');
+               timeSlots = [];
+               gotCustomTimeSlots = !!(data && data.has_schedule);
            }
            return data;
        } catch (e) {
+           timeSlots = [];
            gotCustomTimeSlots = false;
-           console.warn('❌ Could not fetch store time slots, using defaults:', e);
+           lastSlotBlockReason = 'no_schedule';
            return null;
        }
    }
@@ -2578,7 +2579,7 @@ function formatDateISO(dateObj) {
 
 function isStoreOpenOnDate(dateObj) {
     if (!storeSchedule || !Array.isArray(storeSchedule.schedules) || storeSchedule.schedules.length === 0) {
-        return true; // no configured schedule -> keep current fallback behavior
+        return false;
     }
     const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Manila' }).toLowerCase();
     return storeSchedule.schedules.some(entry =>
@@ -2737,57 +2738,49 @@ function buildTimeOptions() {
         container.innerHTML = '<p style="color: var(--slate); font-size: 0.9rem;">Select a date first</p>';
         return;
     }
-    
-    const phTime = getPhilippineTime();
-    const todayStr = getPhilippineTodayStr();
-    const isToday = selectedDate === todayStr;
-    const currentMinutes = phTime.getHours() * 60 + phTime.getMinutes();
+
+    function emptySlotMessage(reason) {
+        if (reason === 'no_schedule') {
+            return '<p style="color: var(--orange); font-size: 0.9rem;"><i class="ri-alert-line"></i> This store has not set delivery hours yet.</p>';
+        }
+        if (reason === 'order_cutoff') {
+            return '<p style="color: var(--terracotta); font-size: 0.9rem;"><i class="ri-time-line"></i> Same-day ordering is closed. Please choose another open day.</p>';
+        }
+        if (reason === 'lead_time') {
+            return '<p style="color: var(--terracotta); font-size: 0.9rem;"><i class="ri-time-line"></i> Remaining slots are inside the store prep window. Please choose a later slot or another date.</p>';
+        }
+        if (reason === 'slots_passed') {
+            return '<p style="color: var(--terracotta); font-size: 0.9rem;"><i class="ri-time-line"></i> All delivery slots for today have passed. Please select another date.</p>';
+        }
+        if (reason === 'closed') {
+            return '<p style="color: var(--terracotta); font-size: 0.9rem;"><i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.</p>';
+        }
+        return '<p style="color: var(--terracotta); font-size: 0.9rem;"><i class="ri-time-line"></i> No delivery slots available for this date.</p>';
+    }
+
+    if (!timeSlots.length) {
+        container.innerHTML = emptySlotMessage(lastSlotBlockReason);
+        selectedTime = null;
+        storeIsOpen = lastSlotBlockReason !== 'closed' && lastSlotBlockReason !== 'no_schedule';
+        syncPurchaseActions();
+        return;
+    }
+
     let firstAvailable = null;
-    
-    console.log(`📅 Date: ${selectedDate}, Current PH time: ${phTime.getHours()}:${String(phTime.getMinutes()).padStart(2, '0')}, Available slots: ${timeSlots.length}`);
-    
-    timeSlots.forEach((slot, index) => {
+    timeSlots.forEach((slot) => {
         const div = document.createElement('div');
         div.className = 'time-option';
         div.dataset.time = slot.value;
-        
-        // Check if this slot has passed (compare end time of slot with current PH time)
-        let isPast = false;
-        if (isToday && slot.value.includes('-')) {
-            const endTime = slot.value.split('-')[1]; // e.g. "12:00"
-            const [eh, em] = endTime.split(':').map(Number);
-            const endMinutes = eh * 60 + em;
-            isPast = currentMinutes >= endMinutes;
-            console.log(`  Slot ${index}: ${slot.label} (ends ${eh}:${String(em).padStart(2, '0')}) - ${isPast ? 'PASSED ❌' : 'AVAILABLE ✅'}`);
-        }
-        
-        if (isPast) {
-            div.classList.add('disabled');
-            div.style.opacity = '0.4';
-            div.style.cursor = 'not-allowed';
-            div.style.pointerEvents = 'none';
-                        div.innerHTML = `<i class="ri-time-line"></i> ${slot.label}`;
-        } else {
-            div.innerHTML = `<i class="ri-time-line"></i> ${slot.label}`;
-            if (!firstAvailable) firstAvailable = div;
-            div.addEventListener('click', () => selectTime(div));
-        }
-        
+        div.innerHTML = `<i class="ri-time-line"></i> ${slot.label}`;
+        if (!firstAvailable) firstAvailable = div;
+        div.addEventListener('click', () => selectTime(div));
         container.appendChild(div);
     });
-    
-    // Auto-select first available slot
+
     if (firstAvailable) {
         firstAvailable.classList.add('selected');
         selectedTime = firstAvailable.dataset.time;
-    } else if (isToday) {
-        // All slots have passed
-        const message = !gotCustomTimeSlots 
-            ? '<p style="color: var(--orange); font-size: 0.9rem;"><i class="ri-alert-line"></i> Store schedule not configured. Please contact the store.</p>'
-            : '<p style="color: var(--terracotta); font-size: 0.9rem;"><i class="ri-time-line"></i> All delivery slots for today have passed. Please select another date.</p>';
-        container.innerHTML = message;
-        selectedTime = null;
-        storeIsOpen = false;
+        storeIsOpen = true;
         syncPurchaseActions();
     }
 }
