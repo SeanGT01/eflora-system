@@ -3148,7 +3148,17 @@
                     <!-- DELIVERY FEES (moved from Delivery Settings) -->
                     <div class="form-group form-group-full payment-fees-block" id="delivery-fees-block">
                         <label class="form-label">Delivery Fees</label>
-                        <div class="form-hint payment-fees-hint">Based on delivery coverage from Basic Information.</div>
+                        <div class="form-hint payment-fees-hint">Fee is base + (rate × km) for radius, custom zone, and municipality.</div>
+                        <label class="cod-toggle-row" for="freeDeliveryToggle" style="margin-bottom: 0.75rem;">
+                            <span class="cod-toggle-copy">
+                                <strong>Enable free delivery</strong>
+                                <small>When on, orders at or above the minimum amount pay ₱0 delivery. Turn off to always charge base + km.</small>
+                            </span>
+                            <span class="cod-toggle-switch">
+                                <input type="checkbox" id="freeDeliveryToggle" {% if store.free_delivery_enabled != false %}checked{% endif %}>
+                                <span class="cod-toggle-slider"></span>
+                            </span>
+                        </label>
 
                         <div id="fee-settings-radius" class="payment-fee-grid" {% if store.delivery_method == 'zone' or store.delivery_method == 'municipality' %}style="display: none;"{% endif %}>
                             <div class="form-group">
@@ -3167,7 +3177,7 @@
                                            value="{{ store.delivery_rate_per_km or 20 }}" min="0" step="5">
                                 </div>
                             </div>
-                            <div class="form-group">
+                            <div class="form-group free-delivery-min-field">
                                 <label class="form-label">Free Delivery Min (₱)</label>
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
@@ -3187,6 +3197,14 @@
                                 </div>
                             </div>
                             <div class="form-group">
+                                <label class="form-label">Rate / km (₱)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">₱</span>
+                                    <input type="number" class="form-control" id="zone-rate-per-km"
+                                           value="{{ store.delivery_rate_per_km or 20 }}" min="0" step="5">
+                                </div>
+                            </div>
+                            <div class="form-group free-delivery-min-field">
                                 <label class="form-label">Free Delivery Min (₱)</label>
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
@@ -3206,6 +3224,14 @@
                                 </div>
                             </div>
                             <div class="form-group">
+                                <label class="form-label">Rate / km (₱)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">₱</span>
+                                    <input type="number" class="form-control" id="municipality-rate-per-km"
+                                           value="{{ store.delivery_rate_per_km or 20 }}" min="0" step="5">
+                                </div>
+                            </div>
+                            <div class="form-group free-delivery-min-field">
                                 <label class="form-label">Free Delivery Min (₱)</label>
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
@@ -3236,6 +3262,16 @@
                         <div class="summary-field">
                             <div class="summary-label">Cash on Delivery</div>
                             <div class="summary-value" id="sum-cod-enabled">{{ 'Enabled' if allow_cod else 'Disabled' }}</div>
+                        </div>
+                        <div class="summary-field">
+                            <div class="summary-label">Free Delivery</div>
+                            <div class="summary-value" id="sum-free-delivery">
+                                {% if store.free_delivery_enabled != false %}
+                                    Enabled at ₱{{ '%.0f'|format(store.free_delivery_minimum or 500) }}
+                                {% else %}
+                                    Disabled
+                                {% endif %}
+                            </div>
                         </div>
                         <div class="summary-field">
                             <div class="summary-label">Payment Instructions</div>
@@ -3302,6 +3338,7 @@
     "base_delivery_fee": {{ store.base_delivery_fee if store.base_delivery_fee is not none else 50 }},
     "delivery_rate_per_km": {{ store.delivery_rate_per_km if store.delivery_rate_per_km is not none else 20 }},
     "free_delivery_minimum": {{ store.free_delivery_minimum if store.free_delivery_minimum is not none else 500 }},
+    "free_delivery_enabled": {{ (store.free_delivery_enabled if store.free_delivery_enabled is not none else true)|tojson }},
     "max_delivery_distance": {{ store.max_delivery_distance if store.max_delivery_distance is not none else 15 }},
     "radius_geojson": {{ store.to_dict().radius_geojson|tojson if store.to_dict().radius_geojson else 'null' }},
     "zone_geojson": {{ store.to_dict().zone_geojson|tojson if store.to_dict().zone_geojson else 'null' }},
@@ -3489,6 +3526,10 @@
     }
     #pane-payment-options .payment-fees-hint {
         margin: 0 0 0.55rem;
+    }
+    #pane-payment-options .free-delivery-min-field.is-disabled {
+        opacity: 0.45;
+        pointer-events: none;
     }
     #pane-payment-options .payment-fee-grid {
         display: grid;
@@ -3713,10 +3754,6 @@
 
     function updateLocationDisplay(location) {
         currentLocation = location;
-        locationChanged = true;
-        if (typeof markStoreSettingsDirty === 'function') {
-            markStoreSettingsDirty('basic');
-        }
 
         const previewLat = document.getElementById('preview-lat');
         const previewLng = document.getElementById('preview-lng');
@@ -3725,6 +3762,14 @@
         if (previewLat) previewLat.textContent = Number(location.lat).toFixed(6);
         if (previewLng) previewLng.textContent = Number(location.lng).toFixed(6);
         if (previewAddress) previewAddress.textContent = location.address || 'Not set';
+
+        // Map redraws after save/cancel should not re-arm the leave-page warning.
+        if (!isBasicInfoEditing()) return;
+
+        locationChanged = true;
+        if (typeof markStoreSettingsDirty === 'function') {
+            markStoreSettingsDirty('basic');
+        }
 
         showToast('Location updated — click Save Changes to save', 'info', 3000);
         if ((document.querySelector('input[name="delivery-method"]:checked')?.value || 'radius') === 'radius'
@@ -4152,6 +4197,7 @@
         if (contentId === 'qr-settings-content') {
             const gallery = document.getElementById('qrGallery');
             if (gallery) gallery.classList.toggle('readonly', !editing);
+            if (typeof syncFreeDeliveryMinFields === 'function') syncFreeDeliveryMinFields();
         }
 
         if (contentId === 'basic-info-content') {
@@ -4259,6 +4305,8 @@
 
     function markStoreSettingsDirty(section) {
         if (!section || !__storeSettingsDirty.hasOwnProperty(section)) return;
+        const editingId = section === 'qr' ? 'qr-settings-content' : 'basic-info-content';
+        if (!document.getElementById(editingId)?.classList.contains('editing')) return;
         __storeSettingsDirty[section] = true;
     }
 
@@ -4277,8 +4325,7 @@
         return !!(
             __storeSettingsDirty.basic ||
             __storeSettingsDirty.qr ||
-            locationChanged ||
-            document.querySelector('#basic-info-content.editing, #qr-settings-content.editing')
+            locationChanged
         );
     }
 
@@ -4329,14 +4376,14 @@
         if (cancelBtn) cancelBtn.disabled = true;
 
         const queue = [];
-        if (__storeSettingsDirty.basic || locationChanged || document.getElementById('basic-info-content')?.classList.contains('editing')) {
+        if (__storeSettingsDirty.basic || locationChanged) {
             queue.push({
                 section: 'basic',
                 ensureEdit: () => toggleBasicInfoSection(true),
                 buttonId: 'save-basic-info'
             });
         }
-        if (__storeSettingsDirty.qr || document.getElementById('qr-settings-content')?.classList.contains('editing')) {
+        if (__storeSettingsDirty.qr) {
             queue.push({
                 section: 'qr',
                 ensureEdit: () => toggleQRSettingsSection(true),
@@ -4395,7 +4442,6 @@
         });
 
         // Mark dirty only on real edits while a section is in edit mode.
-        // Leaving while .editing is open is also blocked via hasUnsavedStoreSettings().
 
         document.getElementById('unsaved-store-cancel-btn')?.addEventListener('click', () => {
             closeUnsavedStoreSettingsModal();
@@ -5197,8 +5243,8 @@
             return;
         }
         __basicInfoEditSnapshot = null;
-        clearStoreSettingsDirty('basic');
         toggleBasicInfoSection(false);
+        clearStoreSettingsDirty('basic');
     });
     
     // Real-time validation for contact number
@@ -5439,10 +5485,11 @@
             }
             
             showToast('Store information saved successfully!', 'success');
+            toggleBasicInfoSection(false);
+            __basicInfoEditSnapshot = null;
             locationChanged = false;
             if (typeof clearStoreSettingsDirty === 'function') clearStoreSettingsDirty('basic');
             document.dispatchEvent(new CustomEvent('store-section-saved', { detail: { section: 'basic', success: true } }));
-            toggleBasicInfoSection(false);
             
         } catch (error) {
             console.error('Error:', error);
@@ -5461,6 +5508,23 @@
         setSectionEditing('qr-settings-content', 'edit-qr-settings', expanded);
     }
 
+    function syncFreeDeliveryMinFields() {
+        const editing = !!document.getElementById('qr-settings-content')?.classList.contains('editing');
+        const enabled = !!document.getElementById('freeDeliveryToggle')?.checked;
+        document.querySelectorAll('.free-delivery-min-field').forEach((field) => {
+            field.classList.toggle('is-disabled', !enabled);
+            field.querySelectorAll('input').forEach((input) => {
+                input.disabled = !editing || !enabled;
+            });
+        });
+    }
+
+    document.getElementById('freeDeliveryToggle')?.addEventListener('change', () => {
+        if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('qr');
+        syncFreeDeliveryMinFields();
+    });
+    syncFreeDeliveryMinFields();
+
     document.getElementById('edit-qr-settings')?.addEventListener('click', () => {
         toggleQRSettingsSection(true);
     });
@@ -5474,8 +5538,8 @@
             window.location.reload();
             return;
         }
-        clearStoreSettingsDirty('qr');
         toggleQRSettingsSection(false);
+        clearStoreSettingsDirty('qr');
     });
 
     // ─── QR SETTINGS SECTION ───
@@ -5493,19 +5557,17 @@
             formData.append('gcash_instructions', gcashInstructions);
             formData.append('allow_cod', allowCod);
 
-            // Delivery fees (coverage method still owned by Basic Information)
+            // Delivery fees (same formula for all coverage methods)
             const feeMethod = document.querySelector('input[name="delivery-method"]:checked')?.value || 'radius';
-            if (feeMethod === 'radius') {
-                formData.append('base_delivery_fee', document.getElementById('base-fee')?.value || 50);
-                formData.append('delivery_rate_per_km', document.getElementById('rate-per-km')?.value || 20);
-                formData.append('free_delivery_minimum', document.getElementById('free-minimum')?.value || 500);
-            } else if (feeMethod === 'zone') {
-                formData.append('base_delivery_fee', document.getElementById('zone-base-fee')?.value || 50);
-                formData.append('free_delivery_minimum', document.getElementById('zone-free-minimum')?.value || 500);
-            } else if (feeMethod === 'municipality') {
-                formData.append('base_delivery_fee', document.getElementById('municipality-base-fee')?.value || 50);
-                formData.append('free_delivery_minimum', document.getElementById('municipality-free-minimum')?.value || 500);
-            }
+            const feeFields = feeMethod === 'zone'
+                ? { base: 'zone-base-fee', rate: 'zone-rate-per-km', free: 'zone-free-minimum' }
+                : feeMethod === 'municipality'
+                    ? { base: 'municipality-base-fee', rate: 'municipality-rate-per-km', free: 'municipality-free-minimum' }
+                    : { base: 'base-fee', rate: 'rate-per-km', free: 'free-minimum' };
+            formData.append('base_delivery_fee', document.getElementById(feeFields.base)?.value || 50);
+            formData.append('delivery_rate_per_km', document.getElementById(feeFields.rate)?.value || 20);
+            formData.append('free_delivery_minimum', document.getElementById(feeFields.free)?.value || 500);
+            formData.append('free_delivery_enabled', document.getElementById('freeDeliveryToggle')?.checked ? '1' : '0');
 
             // Collect QR changes so backend can persist updates.
             const qrIdsToKeep = [];
@@ -5566,11 +5628,17 @@
                 document.getElementById('sum-gcash-instructions').classList.toggle('empty', !gcashInstructions);
                 const sumCod = document.getElementById('sum-cod-enabled');
                 if (sumCod) sumCod.textContent = allowCod === '1' ? 'Enabled' : 'Disabled';
+                const freeOn = document.getElementById('freeDeliveryToggle')?.checked;
+                const freeMin = document.getElementById(feeFields.free)?.value || '500';
+                const sumFree = document.getElementById('sum-free-delivery');
+                if (sumFree) {
+                    sumFree.textContent = freeOn ? `Enabled at ₱${parseFloat(freeMin) || 0}` : 'Disabled';
+                }
                 
                 showToast('QR settings saved successfully!', 'success');
+                toggleQRSettingsSection(false);
                 if (typeof clearStoreSettingsDirty === 'function') clearStoreSettingsDirty('qr');
                 document.dispatchEvent(new CustomEvent('store-section-saved', { detail: { section: 'qr', success: true } }));
-                toggleQRSettingsSection(false);  // Collapse back to view mode
                 syncStoreDataQrFromSlots();
             }
             
@@ -6935,6 +7003,11 @@ async function handleQRFile(file, index) {
         // Auto-save function for delivery method only
         async function autoSaveDeliveryMethod(method) {
             console.log('🔄 Auto-saving delivery method:', method);
+            const feeIds = method === 'zone'
+                ? { base: 'zone-base-fee', rate: 'zone-rate-per-km', free: 'zone-free-minimum' }
+                : method === 'municipality'
+                    ? { base: 'municipality-base-fee', rate: 'municipality-rate-per-km', free: 'municipality-free-minimum' }
+                    : { base: 'base-fee', rate: 'rate-per-km', free: 'free-minimum' };
             
             try {
                 const response = await fetch('/api/seller/store/settings', {
@@ -6955,9 +7028,9 @@ async function handleQRFile(file, index) {
                         place_id: currentLocation.place_id,
                         delivery_radius_km: parseFloat(document.getElementById('delivery-radius').value) || 15,
                         max_delivery_distance: parseFloat(document.getElementById('max-distance').value) || 15,
-                        base_delivery_fee: parseFloat(document.getElementById('base-fee').value) || 50,
-                        delivery_rate_per_km: parseFloat(document.getElementById('rate-per-km').value) || 20,
-                        free_delivery_minimum: parseFloat(document.getElementById('free-minimum')?.value || document.getElementById('zone-free-minimum')?.value || document.getElementById('municipality-free-minimum')?.value) || 500,
+                        base_delivery_fee: parseFloat(document.getElementById(feeIds.base)?.value) || 50,
+                        delivery_rate_per_km: parseFloat(document.getElementById(feeIds.rate)?.value) || 20,
+                        free_delivery_minimum: parseFloat(document.getElementById(feeIds.free)?.value) || 500,
                         selected_municipalities: Array.from(document.querySelectorAll('.municipality-check:checked')).map(cb => cb.value)
                     })
                 });

@@ -254,6 +254,7 @@ class Store(db.Model):
     base_delivery_fee = db.Column(db.Numeric(10, 2), default=50.00)
     delivery_rate_per_km = db.Column(db.Numeric(10, 2), default=20.00)
     free_delivery_minimum = db.Column(db.Numeric(10, 2), default=500.00)
+    free_delivery_enabled = db.Column(db.Boolean, default=True, nullable=False, server_default='true')
     max_delivery_distance = db.Column(db.Float, default=15.0)
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
@@ -295,11 +296,22 @@ class Store(db.Model):
     
     def calculate_delivery_fee(self, distance_km, subtotal):
         """Calculate delivery fee based on distance and order subtotal"""
-        if subtotal >= self.free_delivery_minimum:
-            return Decimal('0')
+        try:
+            subtotal_dec = Decimal(str(subtotal if subtotal is not None else 0))
+        except Exception:
+            subtotal_dec = Decimal('0')
+
+        free_enabled = bool(getattr(self, 'free_delivery_enabled', True))
+        if free_enabled:
+            try:
+                threshold = Decimal(str(self.free_delivery_minimum or 0))
+            except Exception:
+                threshold = Decimal('0')
+            if subtotal_dec >= threshold:
+                return Decimal('0')
         
         fee = Decimal(str(self.base_delivery_fee or 0)) + \
-              (Decimal(str(self.delivery_rate_per_km or 0)) * Decimal(str(distance_km)))
+              (Decimal(str(self.delivery_rate_per_km or 0)) * Decimal(str(distance_km or 0)))
         
         min_fee = Decimal('30.00')
         if fee < min_fee:
@@ -477,6 +489,7 @@ class Store(db.Model):
             'base_delivery_fee': float(self.base_delivery_fee or 0),
             'delivery_rate_per_km': float(self.delivery_rate_per_km or 0),
             'free_delivery_minimum': float(self.free_delivery_minimum or 0),
+            'free_delivery_enabled': bool(getattr(self, 'free_delivery_enabled', True)),
             'max_delivery_distance': self.max_delivery_distance,
             'created_at': self.created_at,
             'latitude': self.latitude,

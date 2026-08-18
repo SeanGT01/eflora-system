@@ -109,6 +109,21 @@ def create_app(config_class='default'):
                     db.session.commit()
         except Exception:
             db.session.rollback()
+
+    def _ensure_store_free_delivery_column():
+        try:
+            with app.app_context():
+                existing_tables = inspect(db.engine).get_table_names()
+                if 'stores' not in existing_tables:
+                    return
+                cols = {c['name'] for c in inspect(db.engine).get_columns('stores')}
+                if 'free_delivery_enabled' not in cols:
+                    db.session.execute(text(
+                        "ALTER TABLE stores ADD COLUMN free_delivery_enabled BOOLEAN NOT NULL DEFAULT TRUE"
+                    ))
+                    db.session.commit()
+        except Exception:
+            db.session.rollback()
     
     # Log mail config for debugging (mask password)
     mail_user = app.config.get('MAIL_USERNAME', '')
@@ -137,6 +152,7 @@ def create_app(config_class='default'):
 
     with app.app_context():
         _ensure_order_fulfillment_columns()
+        _ensure_store_free_delivery_column()
     
     # ====================================================
     # INITIALIZE CLOUDINARY

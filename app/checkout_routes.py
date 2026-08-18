@@ -69,6 +69,51 @@ def _store_allows_cod(store_id):
     return bool(row.allow_cod) if row else False
 
 
+def _free_delivery_fields(store, subtotal, delivery_fee):
+    """Checkout payload fields for free-delivery min / applied state."""
+    enabled = bool(getattr(store, 'free_delivery_enabled', True))
+    try:
+        minimum = float(store.free_delivery_minimum or 0)
+    except Exception:
+        minimum = 0.0
+    try:
+        sub = float(subtotal or 0)
+    except Exception:
+        sub = 0.0
+    applied = False
+    remaining = None
+    if enabled:
+        try:
+            fee_val = Decimal(str(delivery_fee if delivery_fee is not None else 0))
+        except Exception:
+            fee_val = Decimal('0')
+        applied = fee_val <= 0
+        remaining = 0.0 if applied else max(0.0, round(minimum - sub, 2))
+    return {
+        "free_delivery_enabled": enabled,
+        "free_delivery_minimum": minimum,
+        "free_delivery_applied": applied,
+        "amount_to_free_delivery": remaining,
+    }
+
+
+def _subtotal_from_order_items(order_data):
+    line_total = Decimal('0')
+    for item_data in order_data.get('items') or []:
+        try:
+            price = Decimal(str(item_data.get('price') or 0))
+            qty = int(item_data.get('quantity') or 0)
+        except Exception:
+            continue
+        line_total += price * qty
+    if line_total > 0:
+        return line_total
+    try:
+        return Decimal(str(order_data.get('subtotal') or 0))
+    except Exception:
+        return Decimal('0')
+
+
 def _build_stock_lookup(cart_items):
     """Aggregate requested quantities by product/variant from cart items."""
     stock_lookup = {}
@@ -696,6 +741,7 @@ def validate_checkout():
                     "gcash_instructions": store.gcash_instructions,
                     "allow_cod": _store_allows_cod(store.id),
                     "store_schedule": store.store_schedule,
+                    **_free_delivery_fields(store, subtotal, delivery_check["delivery_fee"]),
                 })
 
         if undeliverable_stores:
@@ -894,15 +940,25 @@ def create_orders():
             if slot_error:
                 return jsonify({"error": slot_error}), 400
 
+            computed_subtotal = _subtotal_from_order_items(order_data)
+            delivery_check = _check_store_delivery(store, address, computed_subtotal)
+            if not delivery_check["can_deliver"]:
+                return jsonify({
+                    "error": delivery_check["reason"] or f"Cannot deliver from {store.name}."
+                }), 400
+            computed_fee = delivery_check["delivery_fee"]
+            computed_distance = delivery_check["distance_km"]
+            computed_total = computed_subtotal + Decimal(str(computed_fee or 0))
+
             order = Order(
                 customer_id=user_id,
                 store_id=store.id,
                 order_type="online",
                 status="pending",
-                subtotal_amount=order_data.get("subtotal", 0),
-                delivery_fee=order_data.get("delivery_fee", 0),
-                distance_km=order_data.get("distance_km"),
-                total_amount=order_data.get("total", 0),
+                subtotal_amount=computed_subtotal,
+                delivery_fee=computed_fee,
+                distance_km=computed_distance,
+                total_amount=computed_total,
                 payment_method="cod" if payment_method == "cod" else "gcash",
                 payment_status="cod_pending" if payment_method == "cod" else "pending_verification",
                 delivery_location=delivery_point,
@@ -1614,6 +1670,7 @@ def buy_now_validate():
                 "gcash_instructions": store.gcash_instructions,
                 "allow_cod": _store_allows_cod(store.id),
                 "store_schedule": store.store_schedule,
+                **_free_delivery_fields(store, subtotal, delivery_check["delivery_fee"]),
             }],
             "address": address.to_dict(),
         }), 200

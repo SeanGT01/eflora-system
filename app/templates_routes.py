@@ -9901,6 +9901,9 @@ def update_store_settings():
                 store.free_delivery_minimum = float(data['free_delivery_minimum'])
             except:
                 pass
+        if 'free_delivery_enabled' in data:
+            enabled_raw = str(data.get('free_delivery_enabled', '')).strip().lower()
+            store.free_delivery_enabled = enabled_raw in {'1', 'true', 'yes', 'on'}
         
         # ===== ZONE DELIVERY AREA (always save when provided) =====
         if 'zone_delivery_area' in data:
