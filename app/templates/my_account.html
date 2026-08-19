@@ -705,6 +705,13 @@
     }
 
     // ===== PROFILE PAGE INIT (CLOUDINARY AVATAR SUPPORT) =====
+    const DEFAULT_CUSTOMER_AVATAR_URL = "{{ url_for('static', filename='images/default-customer-avatar.svg') }}";
+
+    function setCustomerDefaultAvatar(el) {
+        if (!el) return;
+        el.innerHTML = `<img src="${DEFAULT_CUSTOMER_AVATAR_URL}" alt="Profile">`;
+    }
+
     function initProfilePage() {
         // Keep the last saved custom gender value around so it sticks when toggling back to "other"
         let lastSavedOtherGender = document.getElementById('gender_other')?.value || '';
@@ -725,7 +732,7 @@
                 if (user.avatar_url) {
                     avatarCircle.innerHTML = `<img src="${user.avatar_url}?t=${Date.now()}" alt="Profile">`;
                 } else {
-                    avatarCircle.textContent = user.full_name ? user.full_name.charAt(0).toUpperCase() : 'U';
+                    setCustomerDefaultAvatar(avatarCircle);
                 }
             }
 

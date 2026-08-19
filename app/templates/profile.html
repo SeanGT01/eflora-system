@@ -22,7 +22,7 @@
             <div class="section-content">
                 <div class="avatar-section">
                     <div class="avatar-large">
-                        {{ session.get('user_name', 'User')[0] }}
+                        <img src="{{ url_for('static', filename='images/default-customer-avatar.svg') }}" alt="Profile" id="profileDefaultAvatar">
                     </div>
                     <div class="avatar-actions">
                         <button class="btn btn-outline" onclick="changeAvatar()">
@@ -238,6 +238,13 @@
         box-shadow: var(--shadow-lg);
         border: 4px solid white;
         outline: 2px solid var(--primary);
+        overflow: hidden;
+    }
+
+    .avatar-large img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
 
     .avatar-actions {
@@ -542,14 +549,9 @@
 
                     if (result.success) {
                         showNotification('Profile updated successfully!');
-                        // Update the avatar initial if name changed
+                        // Keep florist default avatar unless user uploaded a custom photo
                         if (result.user_name) {
-                            const avatarLarge = document.querySelector('.avatar-large');
-                            const avatarMini = document.querySelector('.user-avatar-mini');
                             const userName = document.querySelector('.user-name');
-
-                            if (avatarLarge) avatarLarge.textContent = result.user_name[0];
-                            if (avatarMini) avatarMini.textContent = result.user_name[0];
                             if (userName) userName.textContent = result.user_name;
                         }
                     } else {

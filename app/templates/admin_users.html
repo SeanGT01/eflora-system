@@ -802,6 +802,12 @@
     let currentSubCategory = 'applications';
     let currentReviewOriginal = null;
 
+    const DEFAULT_CUSTOMER_AVATAR_URL = '/static/images/default-customer-avatar.svg';
+    function _userAvatarHtml(avatarUrl) {
+        if (avatarUrl) return `<img src="${avatarUrl}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">`;
+        return `<img src="${DEFAULT_CUSTOMER_AVATAR_URL}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">`;
+    }
+
     function collectRejectionDetails() {
         const rejectionDetails = {};
         let checkedCount = 0;
@@ -1005,9 +1011,7 @@
                 <td><span style="font-weight: 600;">#${app.id}</span></td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div class="avatar" style="background: linear-gradient(135deg, var(--dusty-rose), var(--deep-rose)); color: white;">
-                            ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
-                        </div>
+                        ${_userAvatarHtml(app.avatar_url)}
                         <div>
                             <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
                             <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
@@ -1050,9 +1054,7 @@
                 <td><span style="font-weight: 600;">#${app.id}</span></td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div class="avatar" style="background: linear-gradient(135deg, #d68910, #f0b429); color: white;">
-                            ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
-                        </div>
+                        ${_userAvatarHtml(app.avatar_url)}
                         <div>
                             <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
                             <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
@@ -1095,9 +1097,7 @@
                 <td><span style="font-weight: 600;">#${app.id}</span></td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div class="avatar" style="background: linear-gradient(135deg, var(--sage), var(--deep-sage)); color: white;">
-                            ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
-                        </div>
+                        ${_userAvatarHtml(app.avatar_url)}
                         <div>
                             <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
                             <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
@@ -1143,9 +1143,7 @@
                 <td><span style="font-weight: 600;">#${app.id}</span></td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div class="avatar" style="background: linear-gradient(135deg, #c0392b, #e74c3c); color: white;">
-                            ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
-                        </div>
+                        ${_userAvatarHtml(app.avatar_url)}
                         <div>
                             <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
                             <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
@@ -1199,9 +1197,7 @@
                     <td><span style="font-weight: 600;">#${app.id}</span></td>
                     <td>
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <div class="avatar" style="background: linear-gradient(135deg, ${statusBg}, ${statusBg}dd); color: white;">
-                                ${app.full_name ? app.full_name.charAt(0).toUpperCase() : '?'}
-                            </div>
+                            ${_userAvatarHtml(app.avatar_url)}
                             <div>
                                 <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
                                 <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
@@ -1308,7 +1304,6 @@
             if (status === 'active') statusClass = 'status-approved';
             if (status === 'banned' || status === 'deleted' || status === 'inactive' || status === 'suspended') statusClass = 'status-rejected';
             const safeName = user.full_name || 'N/A';
-            const initial = safeName.charAt(0).toUpperCase();
             const isLocked = status === 'deleted' || user.role === 'admin' || status === 'banned';
 
             return `
@@ -1316,7 +1311,7 @@
                     <td><span style="font-weight: 600;">#${user.id}</span></td>
                     <td>
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <div class="avatar" style="background: linear-gradient(135deg, var(--dusty-rose), var(--deep-rose)); color: white;">${initial}</div>
+                            ${_userAvatarHtml(user.avatar_url)}
                             <div>
                                 <div style="font-weight: 600; color: var(--charcoal);">${safeName}</div>
                                 <div style="font-size: 12px; color: var(--muted);">${user.email || 'N/A'}</div>

@@ -440,32 +440,6 @@
   height: 200px;
 }
 
-.chart-tabs {
-  display: flex;
-  gap: .3rem;
-  margin-bottom: 0.75rem;
-}
-
-.chart-tab {
-  padding: .3rem .75rem;
-  border-radius: 100px;
-  border: 1.5px solid rgba(107, 76, 59, 0.16);
-  background: #ffffff;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.chart-tab.active,
-.chart-tab:hover {
-  border-color: var(--deep-rose);
-  color: var(--deep-rose);
-  background: rgba(181,68,90,.06);
-}
-
 /* ─── Top Products Panel ────────────────────────────────── */
 .product-rank {
   padding: .6rem 1rem;
@@ -1143,9 +1117,6 @@ table.dash-table {
     position: relative;
     height: 160px;
   }
-  .chart-tabs { gap: .2rem; flex-wrap: wrap; margin: 0; }
-  .chart-tab { padding: .2rem .55rem; font-size: 10px; }
-
   .product-rank { padding: .5rem .875rem; gap: .5rem; }
   .rank-num { width: 20px; height: 20px; font-size: 10px; }
   .rank-dot { width: 7px; height: 7px; }
@@ -1239,7 +1210,6 @@ table.dash-table {
   .panel-action { font-size: 10px; }
 
   .chart-wrap { height: 130px; padding: .4rem .625rem .5rem; }
-  .chart-tab { padding: .18rem .5rem; font-size: 9.5px; }
 
   .product-rank { padding: .4rem .625rem; gap: .4rem; }
   .rank-num { width: 18px; height: 18px; font-size: 9px; }
@@ -1405,11 +1375,7 @@ table.dash-table {
     <div class="panel">
       <div class="panel-head">
         <span class="panel-title">Revenue Overview</span>
-        <div class="chart-tabs">
-          <button class="chart-tab" onclick="switchPeriod('7d',this)">7 days</button>
-          <button class="chart-tab active" onclick="switchPeriod('30d',this)">30 days</button>
-          <button class="chart-tab" onclick="switchPeriod('90d',this)">90 days</button>
-        </div>
+        <span class="chart-panel-subtitle" style="margin-left:.5rem;font-size:11px;">{{ period_label }}</span>
       </div>
       <div class="chart-wrap">
         <canvas id="revenueChart"></canvas>
@@ -1510,7 +1476,7 @@ table.dash-table {
             <td><span class="order-id">#{{ '%05d' % order.id }}</span></td>
             <td>
               <div class="customer-cell">
-                <div class="c-avatar" style="background:{{ avatar_colors[loop.index0 % 5] }}">{{ order.customer_initial }}</div>
+                <div class="c-avatar" style="padding:0;overflow:hidden;"><img src="{{ url_for('static', filename='images/default-customer-avatar.svg') }}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>
                 <span class="c-name">{{ order.customer_name }}</span>
               </div>
             </td>
@@ -1571,7 +1537,7 @@ table.dash-table {
             <div class="qa-desc">{{ active_riders }}/{{ total_riders }} active</div>
           </a>
           <a href="{{ url_for('templates.seller_pos') }}" class="qa-btn">
-            <div class="qa-icon bark"><i class="ri-receipt-line"></i></div>
+            <div class="qa-icon bark"><i class="ri-store-2-line"></i></div>
             <div class="qa-label">POS System</div>
             <div class="qa-desc">₱{{ '{:,.0f}'.format(pos_revenue_today) }} today ({{ pos_orders_today }} sales)</div>
           </a>
@@ -1716,7 +1682,7 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">Order Status</div>
-          <div class="chart-panel-subtitle">All-time distribution</div>
+          <div class="chart-panel-subtitle">{{ period_label }} distribution</div>
         </div>
       </div>
       <div class="chart-panel-body">
@@ -1745,7 +1711,7 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">Payment Methods</div>
-          <div class="chart-panel-subtitle">Revenue this month</div>
+          <div class="chart-panel-subtitle">{{ period_label }} revenue</div>
         </div>
       </div>
       <div class="chart-panel-body">
@@ -1778,7 +1744,7 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">POS vs Online</div>
-          <div class="chart-panel-subtitle">Last 7 days revenue comparison</div>
+          <div class="chart-panel-subtitle">{{ period_label }} revenue comparison</div>
         </div>
       </div>
       <div class="chart-panel-body">
@@ -1793,7 +1759,7 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">Peak Hours</div>
-          <div class="chart-panel-subtitle">Delivered orders by hour</div>
+          <div class="chart-panel-subtitle">{{ period_label }} orders by hour</div>
         </div>
       </div>
       <div class="chart-panel-body">
@@ -1812,7 +1778,7 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">By Category</div>
-          <div class="chart-panel-subtitle">Online + POS breakdown</div>
+          <div class="chart-panel-subtitle">{{ period_label }} Online + POS breakdown</div>
         </div>
       </div>
       <div class="chart-panel-body">
@@ -1850,7 +1816,7 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">Avg. Order Value</div>
-          <div class="chart-panel-subtitle">Last 30 days trend</div>
+          <div class="chart-panel-subtitle">{{ period_label }} trend</div>
         </div>
       </div>
       <div class="chart-panel-body">
@@ -1877,7 +1843,7 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">Customers</div>
-          <div class="chart-panel-subtitle">Retention overview</div>
+          <div class="chart-panel-subtitle">{{ period_label }} retention</div>
         </div>
       </div>
       <div class="chart-panel-body">
@@ -1908,7 +1874,7 @@ table.dash-table {
               <div class="retention-legend-dot" style="background:var(--terracotta)"></div>
               <div class="retention-legend-text">
                 <strong>{{ new_customers }}</strong> New
-                <span>(last 90 days)</span>
+                <span>({{ period_label }})</span>
               </div>
             </div>
           </div>
@@ -1997,7 +1963,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ── Chart data from backend ──────────────────────────── */
-const datasets = {{ chart_data|tojson }};
+const chartData = {{ chart_data|tojson }};
 
 function sumArray(values) {
   return (values || []).reduce((acc, v) => acc + (Number(v) || 0), 0);
@@ -2011,11 +1977,11 @@ function fmtPeso(v) {
   return '₱' + (Number(v) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function updateRevenueBreakdownTable(periodData) {
-  const onlineRev = sumArray(periodData.online_revenue || []);
-  const posRev = sumArray(periodData.pos_revenue || []);
-  const onlineOrd = sumArray(periodData.online_orders || []);
-  const posOrd = sumArray(periodData.pos_orders || []);
+function updateRevenueBreakdownTable(d) {
+  const onlineRev = sumArray(d.online_revenue || []);
+  const posRev = sumArray(d.pos_revenue || []);
+  const onlineOrd = sumArray(d.online_orders || []);
+  const posOrd = sumArray(d.pos_orders || []);
   const totalRev = onlineRev + posRev;
   const totalOrd = onlineOrd + posOrd;
 
@@ -2038,17 +2004,16 @@ const sageGrad = ctx.createLinearGradient(0,0,0,220);
 sageGrad.addColorStop(0,   'rgba(122,158,126,.18)');
 sageGrad.addColorStop(1,   'rgba(122,158,126,.02)');
 
-const initialPeriod = datasets['30d'] && datasets['30d'].labels.length > 0 ? '30d' : '7d';
-updateRevenueBreakdownTable(datasets[initialPeriod] || {});
+updateRevenueBreakdownTable(chartData);
 
 let chart = new Chart(ctx, {
   type: 'line',
   data: {
-    labels: (datasets[initialPeriod] || {labels:[]}).labels,
+    labels: chartData.labels || [],
     datasets: [
       {
         label: 'Revenue (₱)',
-        data: (datasets[initialPeriod] || {revenue:[]}).revenue,
+        data: chartData.revenue || [],
         borderColor: 'rgba(181,68,90,1)',
         backgroundColor: roseGrad,
         borderWidth: 2.5,
@@ -2062,7 +2027,7 @@ let chart = new Chart(ctx, {
       },
       {
         label: 'Orders',
-        data: (datasets[initialPeriod] || {orders:[]}).orders,
+        data: chartData.orders || [],
         borderColor: 'rgba(122,158,126,1)',
         backgroundColor: sageGrad,
         borderWidth: 2,
@@ -2132,18 +2097,6 @@ let chart = new Chart(ctx, {
     }
   }
 });
-
-/* ── Period Switch ────────────────────────────────────── */
-function switchPeriod(period, btn) {
-  document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  const d = datasets[period] || {labels:[], revenue:[], orders:[], online_revenue:[], pos_revenue:[], online_orders:[], pos_orders:[]};
-  chart.data.labels = d.labels;
-  chart.data.datasets[0].data = d.revenue;
-  chart.data.datasets[1].data = d.orders;
-  updateRevenueBreakdownTable(d);
-  chart.update('active');
-}
 
 /* ── Animate progress bars on load ───────────────────── */
 document.addEventListener('DOMContentLoaded', () => {

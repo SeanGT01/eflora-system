@@ -192,7 +192,7 @@ def _to_float(v) -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 
 # These statuses count as "completed/paid" revenue for online orders.
-COMPLETED_ORDER_STATUSES = ('delivered',)
+COMPLETED_ORDER_STATUSES = ('delivered', 'completed')
 
 
 def _online_revenue(store_id: int, start: datetime, end: datetime) -> float:
@@ -258,28 +258,33 @@ def _new_customer_count(store_id, start, end) -> int:
 
 
 def _top_products(store_id, start, end, limit=5):
-    """Return list of dicts with ``name``, ``category``, ``quantity``, ``revenue``."""
+    """Return list of dicts with ``name``, ``category``, ``quantity``, ``revenue``.
+    Groups by product + variant so each variant is a separate line item."""
+    from app.models import ProductVariant
     rows = db.session.query(
         Product.id,
         Product.name,
+        ProductVariant.id.label('variant_id'),
+        ProductVariant.name.label('variant_name'),
         Category.name.label('category_name'),
         func.coalesce(func.sum(OrderItem.quantity), 0).label('qty'),
         func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('revenue'),
     ).join(OrderItem, OrderItem.product_id == Product.id) \
      .join(Order, Order.id == OrderItem.order_id) \
+     .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id) \
      .outerjoin(Category, Category.id == Product.main_category_id) \
      .filter(
         Order.store_id == store_id,
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
-     ).group_by(Product.id, Product.name, Category.name) \
+     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name) \
       .order_by(func.sum(OrderItem.quantity * OrderItem.price).desc()) \
       .limit(limit).all()
 
     return [{
         'id': r.id,
-        'name': r.name,
+        'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
         'category': r.category_name or 'Uncategorized',
         'quantity': int(r.qty or 0),
         'revenue': _to_float(r.revenue),
@@ -1563,26 +1568,30 @@ def _platform_new_customer_count(start, end) -> int:
 
 
 def _platform_top_products(start, end, limit=5):
+    from app.models import ProductVariant
     rows = db.session.query(
         Product.id,
         Product.name,
+        ProductVariant.id.label('variant_id'),
+        ProductVariant.name.label('variant_name'),
         Category.name.label('category_name'),
         func.coalesce(func.sum(OrderItem.quantity), 0).label('qty'),
         func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('revenue'),
     ).join(OrderItem, OrderItem.product_id == Product.id) \
      .join(Order, Order.id == OrderItem.order_id) \
+     .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id) \
      .outerjoin(Category, Category.id == Product.main_category_id) \
      .filter(
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
-     ).group_by(Product.id, Product.name, Category.name) \
+     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name) \
       .order_by(func.sum(OrderItem.quantity * OrderItem.price).desc()) \
       .limit(limit).all()
 
     return [{
         'id': r.id,
-        'name': r.name,
+        'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
         'category': r.category_name or 'Uncategorized',
         'quantity': int(r.qty or 0),
         'revenue': _to_float(r.revenue),

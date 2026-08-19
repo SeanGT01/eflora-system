@@ -299,31 +299,6 @@
   height: 260px;
 }
 
-.chart-tabs {
-  display: flex;
-  gap: .35rem;
-  margin-bottom: 1.5rem;
-}
-
-.chart-tab {
-  padding: .4rem 1rem;
-  border-radius: 100px;
-  border: 1.5px solid var(--border-md);
-  background: transparent;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.chart-tab.active,
-.chart-tab:hover {
-  border-color: var(--deep-rose);
-  color: var(--deep-rose);
-  background: rgba(181,68,90,.06);
-}
 
 /* ─── Top Products Panel ────────────────────────────────── */
 .product-rank {
@@ -776,9 +751,6 @@ table.dash-table {
     position: relative;
     height: 160px;
   }
-  .chart-tabs { gap: .2rem; flex-wrap: wrap; margin: 0; }
-  .chart-tab { padding: .2rem .55rem; font-size: 10px; }
-
   /* Top products */
   .product-rank { padding: .5rem .875rem; gap: .5rem; }
   .rank-num { width: 20px; height: 20px; font-size: 10px; }
@@ -864,7 +836,6 @@ table.dash-table {
 
   /* Chart */
   .chart-wrap { height: 130px; padding: .4rem .625rem .5rem; }
-  .chart-tab { padding: .18rem .5rem; font-size: 9.5px; }
 
   /* Products */
   .product-rank { padding: .4rem .625rem; gap: .4rem; }
@@ -973,7 +944,7 @@ table.dash-table {
         <div class="kpi-icon"><i class="ri-money-dollar-circle-line"></i></div>
       </div>
       <div class="kpi-value" id="kpiRevenue">₱{{ '{:,.0f}'.format(revenue_this_month|default(0)) }}</div>
-      <div class="kpi-sub">This month</div>
+      <div class="kpi-sub">{{ period_label or 'Selected period' }}</div>
       {% if revenue_change != 0 %}
         <span class="kpi-badge {% if revenue_change >= 0 %}up{% else %}down{% endif %}">
           <i class="ri-arrow-{% if revenue_change >= 0 %}up{% else %}down{% endif %}-line"></i>
@@ -988,7 +959,7 @@ table.dash-table {
         <div class="kpi-icon"><i class="ri-shopping-bag-line"></i></div>
       </div>
       <div class="kpi-value" id="kpiOrders">{{ '{:,}'.format(orders_this_month|default(0)) }}</div>
-      <div class="kpi-sub">Orders placed</div>
+      <div class="kpi-sub">{{ period_label or 'Selected period' }} · all statuses</div>
       {% if orders_change != 0 %}
         <span class="kpi-badge {% if orders_change >= 0 %}up{% else %}down{% endif %}">
           <i class="ri-arrow-{% if orders_change >= 0 %}up{% else %}down{% endif %}-line"></i>
@@ -1003,7 +974,7 @@ table.dash-table {
         <div class="kpi-icon"><i class="ri-user-heart-line"></i></div>
       </div>
       <div class="kpi-value" id="kpiCustomers">{{ '{:,}'.format(customers_this_month|default(0)) }}</div>
-      <div class="kpi-sub">This month</div>
+      <div class="kpi-sub">{{ period_label or 'Selected period' }}</div>
       {% if customers_change != 0 %}
         <span class="kpi-badge {% if customers_change >= 0 %}up{% else %}down{% endif %}">
           <i class="ri-arrow-{% if customers_change >= 0 %}up{% else %}down{% endif %}-line"></i>
@@ -1029,11 +1000,7 @@ table.dash-table {
     <div class="panel">
       <div class="panel-head">
         <span class="panel-title">Revenue Overview</span>
-        <div class="chart-tabs">
-          <button class="chart-tab" onclick="switchPeriod('7d',this)">7 days</button>
-          <button class="chart-tab active" onclick="switchPeriod('30d',this)">30 days</button>
-          <button class="chart-tab" onclick="switchPeriod('90d',this)">90 days</button>
-        </div>
+        <span style="margin-left:.5rem;font-size:11px;color:var(--muted);">{{ period_label }}</span>
       </div>
       <div class="chart-wrap">
         <canvas id="revenueChart"></canvas>
@@ -1136,7 +1103,7 @@ table.dash-table {
                 <td><span class="order-id">#{{ '%05d' % o.id }}</span></td>
                 <td>
                   <div class="customer-cell">
-                    <div class="c-avatar" style="background:linear-gradient(135deg,{{ p[0] }},{{ p[1] }})">{{ (o.customer_name[:1] or 'U')|upper }}</div>
+                    <div class="c-avatar" style="padding:0;overflow:hidden;"><img src="{{ url_for('static', filename='images/default-customer-avatar.svg') }}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>
                     <span class="c-name">{{ o.customer_name }}</span>
                   </div>
                 </td>
@@ -1243,7 +1210,7 @@ table.dash-table {
             <div class="perf-track">
               <div class="perf-fill fill-sage" style="width:{{ '%.1f'|format(delivery_rate) }}%"></div>
             </div>
-            <div class="perf-note">Delivered orders this month</div>
+            <div class="perf-note">Fulfilled orders · {{ period_label or 'selected period' }}</div>
           </div>
 
           {% if is_admin %}
@@ -1337,7 +1304,7 @@ table.dash-table {
 })();
 
 /* ── Chart data sets (from backend) ───────────────────── */
-const datasets = {{ chart_data|default({'7d':{'labels':[],'revenue':[],'orders':[]}, '30d':{'labels':[],'revenue':[],'orders':[]}, '90d':{'labels':[],'revenue':[],'orders':[]}})|tojson }};
+const chartData = {{ chart_data|default({'labels':[],'revenue':[],'orders':[]})|tojson }};
 
 /* ── Build Chart ──────────────────────────────────────── */
 const ctx = document.getElementById('revenueChart').getContext('2d');
@@ -1353,11 +1320,11 @@ sageGrad.addColorStop(1,   'rgba(122,158,126,.02)');
 let chart = new Chart(ctx, {
   type: 'line',
   data: {
-    labels: datasets['30d'].labels,
+    labels: chartData.labels || [],
     datasets: [
       {
         label: 'Revenue (₱)',
-        data: datasets['30d'].revenue,
+        data: chartData.revenue || [],
         borderColor: 'rgba(181,68,90,1)',
         backgroundColor: roseGrad,
         borderWidth: 2.5,
@@ -1371,7 +1338,7 @@ let chart = new Chart(ctx, {
       },
       {
         label: 'Orders',
-        data: datasets['30d'].orders,
+        data: chartData.orders || [],
         borderColor: 'rgba(122,158,126,1)',
         backgroundColor: sageGrad,
         borderWidth: 2,
@@ -1442,16 +1409,6 @@ let chart = new Chart(ctx, {
   }
 });
 
-/* ── Period Switch ────────────────────────────────────── */
-function switchPeriod(period, btn) {
-  document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  const d = datasets[period];
-  chart.data.labels = d.labels;
-  chart.data.datasets[0].data = d.revenue;
-  chart.data.datasets[1].data = d.orders;
-  chart.update('active');
-}
 
 /* ── Animate progress bars on load ───────────────────── */
 document.addEventListener('DOMContentLoaded', () => {

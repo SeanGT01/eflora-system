@@ -3718,12 +3718,13 @@ def _render_admin_dashboard():
 
     today = date.today()
 
+    # Revenue KPI: online = delivered/completed, POS = all
     online_revenue = db.session.query(
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
-        Order.status == 'delivered',
-        Order.delivered_at >= range_start,
-        Order.delivered_at < range_end,
+        Order.status.in_(['delivered', 'completed']),
+        Order.created_at >= range_start,
+        Order.created_at < range_end,
     ).scalar() or 0
     pos_revenue = db.session.query(
         func.coalesce(func.sum(POSOrder.total_amount), 0)
@@ -3736,9 +3737,9 @@ def _render_admin_dashboard():
     prev_online_revenue = db.session.query(
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
-        Order.status == 'delivered',
-        Order.delivered_at >= prev_start,
-        Order.delivered_at < prev_end,
+        Order.status.in_(['delivered', 'completed']),
+        Order.created_at >= prev_start,
+        Order.created_at < prev_end,
     ).scalar() or 0
     prev_pos_revenue = db.session.query(
         func.coalesce(func.sum(POSOrder.total_amount), 0)
@@ -3752,6 +3753,7 @@ def _render_admin_dashboard():
     if revenue_prev_month > 0:
         revenue_change = round(((revenue_this_month - revenue_prev_month) / revenue_prev_month) * 100, 1)
 
+    # Orders KPI: ALL online statuses + all POS
     online_orders_this = Order.query.filter(
         Order.created_at >= range_start,
         Order.created_at < range_end,
@@ -3775,6 +3777,7 @@ def _render_admin_dashboard():
     if orders_prev_month > 0:
         orders_change = round(((orders_this_month - orders_prev_month) / orders_prev_month) * 100, 1)
 
+    # Customers KPI: new customer accounts registered in period
     customers_this_month = db.session.query(func.count(User.id)).filter(
         User.role == 'customer',
         User.created_at >= range_start,
@@ -3789,55 +3792,69 @@ def _render_admin_dashboard():
     if customers_prev_month > 0:
         customers_change = round(((customers_this_month - customers_prev_month) / customers_prev_month) * 100, 1)
 
-    total_completed_statuses = Order.query.filter(
-        Order.status.in_(['delivered', 'cancelled']),
+    # Delivery rate: (delivered+completed) / (delivered+completed+cancelled)
+    total_resolved = Order.query.filter(
+        Order.status.in_(['delivered', 'completed', 'cancelled']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
     delivered_this_month = Order.query.filter(
-        Order.status == 'delivered',
+        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
-    delivery_rate = round((delivered_this_month / total_completed_statuses * 100), 1) if total_completed_statuses > 0 else 100.0
+    delivery_rate = round((delivered_this_month / total_resolved * 100), 1) if total_resolved > 0 else 100.0
 
+    # Top products: online delivered/completed + POS all
     top_products_query = db.session.query(
         Product.id,
         Product.name,
+        ProductVariant.id.label('variant_id'),
+        ProductVariant.name.label('variant_name'),
         Store.name.label('store_name'),
         Category.name.label('category_name'),
         func.coalesce(func.sum(OrderItem.quantity), 0).label('total_sold'),
     ).join(OrderItem, OrderItem.product_id == Product.id) \
      .join(Order, Order.id == OrderItem.order_id) \
+     .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id) \
      .outerjoin(Store, Store.id == Product.store_id) \
      .outerjoin(Category, Category.id == Product.main_category_id) \
      .filter(
-        Order.status == 'delivered',
+        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
      ) \
-     .group_by(Product.id, Product.name, Store.name, Category.name) \
+     .group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Store.name, Category.name) \
      .order_by(func.sum(OrderItem.quantity).desc()) \
      .limit(5).all()
 
     top_products = [{
         'id': r.id,
-        'name': r.name,
+        'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
         'store_name': r.store_name or '—',
         'category': r.category_name or 'General',
         'total_sold': int(r.total_sold or 0),
     } for r in top_products_query]
 
-    recent_orders_q = (Order.query
+    # Recent orders: online (delivered/completed) + POS, merged and sorted
+    online_recent_q = (Order.query
                        .filter(
+                           Order.status.in_(['delivered', 'completed']),
                            Order.created_at >= range_start,
                            Order.created_at < range_end,
                        )
                        .order_by(Order.created_at.desc())
-                       .limit(8)
-                       .all())
+                       .limit(8).all())
+    pos_recent_q = (POSOrder.query
+                    .filter(
+                        POSOrder.created_at >= range_start,
+                        POSOrder.created_at < range_end,
+                    )
+                    .order_by(POSOrder.created_at.desc())
+                    .limit(8).all())
+
     recent_orders_list = []
-    for o in recent_orders_q:
+    for o in online_recent_q:
         cust_name = o.customer.full_name if o.customer else 'Walk-in'
         recent_orders_list.append({
             'id': o.id,
@@ -3848,55 +3865,58 @@ def _render_admin_dashboard():
             'date': _fmt_pht(o.created_at) if o.created_at else '',
             'total': float(o.total_amount or 0),
             'status': o.status or 'pending',
+            'type': 'online',
         })
+    for p in pos_recent_q:
+        recent_orders_list.append({
+            'id': p.id,
+            'order_no': f"#POS-{p.id:04d}",
+            'customer_name': p.customer_name or 'Walk-in',
+            'customer_initial': ((p.customer_name or 'W')[0]).upper(),
+            'store_name': p.store.name if getattr(p, 'store', None) else '—',
+            'date': _fmt_pht(p.created_at) if p.created_at else '',
+            'total': float(p.total_amount or 0),
+            'status': 'completed',
+            'type': 'pos',
+        })
+    recent_orders_list.sort(key=lambda x: x['date'], reverse=True)
+    recent_orders_list = recent_orders_list[:8]
 
-    # Keep chart tabs UI, but all tab datasets follow selected global range.
-    daily_online = db.session.query(
-        func.date(Order.delivered_at).label('day'),
-        func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
-        func.count(Order.id).label('order_count'),
-    ).filter(
-        Order.status == 'delivered',
-        Order.delivered_at >= range_start,
-        Order.delivered_at < range_end,
-    ).group_by(func.date(Order.delivered_at)) \
-     .order_by(func.date(Order.delivered_at)).all()
+    # Chart data: matches selected period range
+    def _admin_build_chart(ds_start, ds_end):
+        d_online = db.session.query(
+            func.date(Order.created_at).label('day'),
+            func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
+            func.count(Order.id).label('order_count'),
+        ).filter(
+            Order.status.in_(['delivered', 'completed']),
+            Order.created_at >= ds_start,
+            Order.created_at < ds_end,
+        ).group_by(func.date(Order.created_at)).all()
 
-    daily_pos = db.session.query(
-        func.date(POSOrder.created_at).label('day'),
-        func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue'),
-        func.count(POSOrder.id).label('order_count'),
-    ).filter(
-        POSOrder.created_at >= range_start,
-        POSOrder.created_at < range_end,
-    ).group_by(func.date(POSOrder.created_at)) \
-     .order_by(func.date(POSOrder.created_at)).all()
+        d_pos = db.session.query(
+            func.date(POSOrder.created_at).label('day'),
+            func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue'),
+            func.count(POSOrder.id).label('order_count'),
+        ).filter(
+            POSOrder.created_at >= ds_start,
+            POSOrder.created_at < ds_end,
+        ).group_by(func.date(POSOrder.created_at)).all()
 
-    online_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in daily_online}
-    pos_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in daily_pos}
+        o_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in d_online}
+        p_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in d_pos}
+        days = max(1, (ds_end.date() - ds_start.date()).days)
+        labels, revenues, order_counts = [], [], []
+        for i in range(days):
+            day_val = ds_start.date() + timedelta(days=i)
+            o_rev, o_cnt = o_map.get(day_val, (0.0, 0))
+            p_rev, p_cnt = p_map.get(day_val, (0.0, 0))
+            labels.append(day_val.strftime('%b %d'))
+            revenues.append(o_rev + p_rev)
+            order_counts.append(o_cnt + p_cnt)
+        return {'labels': labels, 'revenue': revenues, 'orders': order_counts}
 
-    labels = []
-    revenues = []
-    order_counts = []
-    range_days = max(1, (range_end.date() - range_start.date()).days)
-    for i in range(range_days):
-        day_val = range_start.date() + timedelta(days=i)
-        o_rev, o_cnt = online_map.get(day_val, (0.0, 0))
-        p_rev, p_cnt = pos_map.get(day_val, (0.0, 0))
-        labels.append(day_val.strftime('%b %d'))
-        revenues.append(o_rev + p_rev)
-        order_counts.append(o_cnt + p_cnt)
-
-    selected_chart = {
-        'labels': labels,
-        'revenue': revenues,
-        'orders': order_counts,
-    }
-    chart_data = {
-        '7d': selected_chart,
-        '30d': selected_chart,
-        '90d': selected_chart,
-    }
+    chart_data = _admin_build_chart(range_start, range_end)
 
     total_stores = db.session.query(func.count(Store.id)).scalar() or 0
     active_stores = db.session.query(func.count(Store.id)).filter(Store.status == 'active').scalar() or 0
@@ -3980,14 +4000,16 @@ def seller_dashboard():
     prev_end = range_start
     today = date.today()
 
+
+
     # ── KPI: Revenue this month (delivered orders) ──
     online_revenue_this = db.session.query(
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
         Order.store_id == store.id,
-        Order.status == 'delivered',
-        Order.delivered_at >= range_start,
-        Order.delivered_at < range_end,
+        Order.status.in_(['delivered', 'completed']),
+        Order.created_at >= range_start,
+        Order.created_at < range_end,
     ).scalar() or 0
     pos_revenue_this = db.session.query(
         func.coalesce(func.sum(POSOrder.total_amount), 0)
@@ -4002,9 +4024,9 @@ def seller_dashboard():
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
         Order.store_id == store.id,
-        Order.status == 'delivered',
-        Order.delivered_at >= prev_start,
-        Order.delivered_at < prev_end,
+        Order.status.in_(['delivered', 'completed']),
+        Order.created_at >= prev_start,
+        Order.created_at < prev_end,
     ).scalar() or 0
     pos_revenue_prev = db.session.query(
         func.coalesce(func.sum(POSOrder.total_amount), 0)
@@ -4019,7 +4041,7 @@ def seller_dashboard():
     if revenue_prev_month and float(revenue_prev_month) > 0:
         revenue_change = round(((float(revenue_this_month) - float(revenue_prev_month)) / float(revenue_prev_month)) * 100, 1)
 
-    # ── KPI: Total orders this month ──
+    # ── KPI: Total orders (ALL online statuses + all POS) ──
     orders_this_month = Order.query.filter(
         Order.store_id == store.id,
         Order.created_at >= range_start,
@@ -4046,11 +4068,12 @@ def seller_dashboard():
     if orders_prev_month > 0:
         orders_change = round(((orders_this_month - orders_prev_month) / orders_prev_month) * 100, 1)
 
-    # ── KPI: Unique customers this month ──
+    # ── KPI: Unique customers (delivered/completed orders only) ──
     customers_this_month = db.session.query(
         func.count(func.distinct(Order.customer_id))
     ).filter(
         Order.store_id == store.id,
+        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).scalar() or 0
@@ -4059,6 +4082,7 @@ def seller_dashboard():
         func.count(func.distinct(Order.customer_id))
     ).filter(
         Order.store_id == store.id,
+        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= prev_start,
         Order.created_at < prev_end,
     ).scalar() or 0
@@ -4067,58 +4091,95 @@ def seller_dashboard():
     if customers_prev_month > 0:
         customers_change = round(((customers_this_month - customers_prev_month) / customers_prev_month) * 100, 1)
 
-    # ── KPI: Delivery rate (delivered / total non-pending) ──
-    total_completed_statuses = Order.query.filter(
+    # ── KPI: Delivery rate (delivered+completed / delivered+completed+cancelled) ──
+    total_resolved = Order.query.filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'cancelled']),
+        Order.status.in_(['delivered', 'completed', 'cancelled']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
 
     delivered_this_month = Order.query.filter(
         Order.store_id == store.id,
-        Order.status == 'delivered',
+        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
 
-    delivery_rate = round((delivered_this_month / total_completed_statuses * 100), 1) if total_completed_statuses > 0 else 100.0
+    delivery_rate = round((delivered_this_month / total_resolved * 100), 1) if total_resolved > 0 else 100.0
 
-    # ── Top products (by quantity sold, delivered orders only) ──
-    top_products_query = db.session.query(
+    # ── Top products (online + POS, variant-level) ──
+    online_top = db.session.query(
         Product.id,
         Product.name,
-        func.coalesce(func.sum(OrderItem.quantity), 0).label('total_sold')
+        ProductVariant.id.label('variant_id'),
+        ProductVariant.name.label('variant_name'),
+        Category.name.label('category_name'),
+        func.coalesce(func.sum(OrderItem.quantity), 0).label('total_sold'),
     ).join(OrderItem, OrderItem.product_id == Product.id) \
      .join(Order, Order.id == OrderItem.order_id) \
+     .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id) \
+     .outerjoin(Category, Category.id == Product.main_category_id) \
      .filter(
         Product.store_id == store.id,
-        Order.status == 'delivered',
+        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
-    ).group_by(Product.id, Product.name) \
-     .order_by(func.sum(OrderItem.quantity).desc()) \
-     .limit(5).all()
+    ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
 
-    top_products = []
-    for p_id, p_name, total_sold in top_products_query:
-        prod = Product.query.get(p_id)
-        category_name = prod.main_category.name if prod and prod.main_category else 'General'
-        top_products.append({
-            'name': p_name,
-            'category': category_name,
-            'total_sold': int(total_sold)
-        })
+    pos_top = db.session.query(
+        Product.id,
+        Product.name,
+        ProductVariant.id.label('variant_id'),
+        ProductVariant.name.label('variant_name'),
+        Category.name.label('category_name'),
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('total_sold'),
+    ).join(POSOrderItem, POSOrderItem.product_id == Product.id) \
+     .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .outerjoin(ProductVariant, ProductVariant.id == POSOrderItem.variant_id) \
+     .outerjoin(Category, Category.id == Product.main_category_id) \
+     .filter(
+        Product.store_id == store.id,
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
+    ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
 
-    # ── Recent orders (last 10) ──
-    recent_orders = Order.query.filter(
+    from collections import defaultdict
+    tp_map = defaultdict(lambda: {'total_sold': 0, 'category': 'General', 'variant_name': None})
+    for r in online_top:
+        key = (r.id, r.variant_id)
+        tp_map[key]['name'] = r.name
+        tp_map[key]['variant_name'] = r.variant_name
+        tp_map[key]['category'] = r.category_name or 'General'
+        tp_map[key]['total_sold'] += int(r.total_sold or 0)
+    for r in pos_top:
+        key = (r.id, r.variant_id)
+        tp_map[key]['name'] = r.name
+        tp_map[key]['variant_name'] = r.variant_name
+        tp_map[key]['category'] = r.category_name or 'General'
+        tp_map[key]['total_sold'] += int(r.total_sold or 0)
+
+    top_products = sorted(tp_map.values(), key=lambda x: x['total_sold'], reverse=True)[:5]
+    for tp in top_products:
+        if tp['variant_name']:
+            tp['name'] = f"{tp['name']} — {tp['variant_name']}"
+        del tp['variant_name']
+
+    # ── Recent orders (online + POS, last 10 combined) ──
+    online_recent = Order.query.filter(
         Order.store_id == store.id,
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).order_by(Order.created_at.desc()).limit(10).all()
 
+    pos_recent = POSOrder.query.filter(
+        POSOrder.store_id == store.id,
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
+    ).order_by(POSOrder.created_at.desc()).limit(10).all()
+
     recent_orders_list = []
-    for o in recent_orders:
+    for o in online_recent:
         recent_orders_list.append({
             'id': o.id,
             'customer_name': o.customer.full_name if o.customer else 'Unknown',
@@ -4126,69 +4187,63 @@ def seller_dashboard():
             'date': _fmt_pht(o.created_at) if o.created_at else '',
             'total': float(o.total_amount or 0),
             'status': o.status,
+            'type': 'online',
         })
+    for p in pos_recent:
+        recent_orders_list.append({
+            'id': p.id,
+            'customer_name': p.customer_name or 'Walk-in',
+            'customer_initial': ((p.customer_name or 'W')[0]).upper(),
+            'date': _fmt_pht(p.created_at) if p.created_at else '',
+            'total': float(p.total_amount or 0),
+            'status': 'completed',
+            'type': 'pos',
+        })
+    recent_orders_list.sort(key=lambda x: x['date'], reverse=True)
+    recent_orders_list = recent_orders_list[:10]
 
-    # ── Revenue chart data for selected range (online + POS) ──
-    online_daily = db.session.query(
-        func.date(Order.delivered_at).label('day'),
-        func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
-        func.count(Order.id).label('order_count')
-    ).filter(
-        Order.store_id == store.id,
-        Order.status == 'delivered',
-        Order.delivered_at >= range_start,
-        Order.delivered_at < range_end,
-    ).group_by(func.date(Order.delivered_at)) \
-     .order_by(func.date(Order.delivered_at)).all()
+    # ── Revenue chart data (matches selected period range) ──
+    def _build_chart_dataset(store_id, ds_start, ds_end):
+        online_daily = db.session.query(
+            func.date(Order.created_at).label('day'),
+            func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
+            func.count(Order.id).label('order_count')
+        ).filter(
+            Order.store_id == store_id,
+            Order.status.in_(['delivered', 'completed']),
+            Order.created_at >= ds_start,
+            Order.created_at < ds_end,
+        ).group_by(func.date(Order.created_at)).all()
 
-    pos_daily = db.session.query(
-        func.date(POSOrder.created_at).label('day'),
-        func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue'),
-        func.count(POSOrder.id).label('order_count')
-    ).filter(
-        POSOrder.store_id == store.id,
-        POSOrder.created_at >= range_start,
-        POSOrder.created_at < range_end,
-    ).group_by(func.date(POSOrder.created_at)) \
-     .order_by(func.date(POSOrder.created_at)).all()
+        pos_daily = db.session.query(
+            func.date(POSOrder.created_at).label('day'),
+            func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue'),
+            func.count(POSOrder.id).label('order_count')
+        ).filter(
+            POSOrder.store_id == store_id,
+            POSOrder.created_at >= ds_start,
+            POSOrder.created_at < ds_end,
+        ).group_by(func.date(POSOrder.created_at)).all()
 
-    online_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in online_daily}
-    pos_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in pos_daily}
+        o_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in online_daily}
+        p_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in pos_daily}
 
-    labels = []
-    revenues = []
-    online_revenues = []
-    pos_revenues = []
-    order_counts = []
-    online_orders = []
-    pos_orders = []
-    range_days = max(1, (range_end.date() - range_start.date()).days)
-    for i in range(range_days):
-        day_val = range_start.date() + timedelta(days=i)
-        labels.append(day_val.strftime('%b %d'))
-        o_rev, o_cnt = online_map.get(day_val, (0.0, 0))
-        p_rev, p_cnt = pos_map.get(day_val, (0.0, 0))
-        online_revenues.append(o_rev)
-        pos_revenues.append(p_rev)
-        revenues.append(o_rev + p_rev)
-        online_orders.append(o_cnt)
-        pos_orders.append(p_cnt)
-        order_counts.append(o_cnt + p_cnt)
+        days = max(1, (ds_end.date() - ds_start.date()).days)
+        labels, rev, o_rev, p_rev, cnt, o_cnt, p_cnt = [], [], [], [], [], [], []
+        for i in range(days):
+            d = ds_start.date() + timedelta(days=i)
+            labels.append(d.strftime('%b %d'))
+            or_v, oc = o_map.get(d, (0.0, 0))
+            pr_v, pc = p_map.get(d, (0.0, 0))
+            o_rev.append(or_v); p_rev.append(pr_v); rev.append(or_v + pr_v)
+            o_cnt.append(oc); p_cnt.append(pc); cnt.append(oc + pc)
+        return {
+            'labels': labels, 'revenue': rev,
+            'online_revenue': o_rev, 'pos_revenue': p_rev,
+            'orders': cnt, 'online_orders': o_cnt, 'pos_orders': p_cnt,
+        }
 
-    selected_chart = {
-        'labels': labels,
-        'revenue': revenues,
-        'online_revenue': online_revenues,
-        'pos_revenue': pos_revenues,
-        'orders': order_counts,
-        'online_orders': online_orders,
-        'pos_orders': pos_orders,
-    }
-    chart_data = {
-        '7d': selected_chart,
-        '30d': selected_chart,
-        '90d': selected_chart,
-    }
+    chart_data = _build_chart_dataset(store.id, range_start, range_end)
 
     # ── Performance metrics ──
     avg_rating_row = db.session.query(
@@ -4257,15 +4312,15 @@ def seller_dashboard():
     ).group_by(Order.status).all()
     order_status_dist = {row[0]: row[1] for row in status_dist_query}
 
-    # ── Analytics: Revenue by payment method (this month, delivered) ──
+    # ── Analytics: Revenue by payment method (delivered/completed) ──
     payment_method_query = db.session.query(
         Order.payment_method,
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
         Order.store_id == store.id,
-        Order.status == 'delivered',
-        Order.delivered_at >= range_start,
-        Order.delivered_at < range_end,
+        Order.status.in_(['delivered', 'completed']),
+        Order.created_at >= range_start,
+        Order.created_at < range_end,
     ).group_by(Order.payment_method).all()
     revenue_by_payment = {row[0] or 'unknown': float(row[1]) for row in payment_method_query}
 
@@ -4279,9 +4334,9 @@ def seller_dashboard():
      .join(Order, Order.id == OrderItem.order_id) \
      .filter(
         Product.store_id == store.id,
-        Order.status == 'delivered',
-        Order.delivered_at >= range_start,
-        Order.delivered_at < range_end,
+        Order.status.in_(['delivered', 'completed']),
+        Order.created_at >= range_start,
+        Order.created_at < range_end,
     ).group_by(Category.name).all()
 
     pos_category_sales_query = db.session.query(
@@ -4335,6 +4390,7 @@ def seller_dashboard():
     sales_by_category = sales_by_category[:8]
 
     # ── Analytics: POS vs Online revenue (selected range) ──
+    range_days = max(1, (range_end.date() - range_start.date()).days)
     pos_vs_online = {'labels': [], 'online': [], 'pos': []}
     for i in range(range_days):
         d = range_start.date() + timedelta(days=i)
@@ -4343,8 +4399,8 @@ def seller_dashboard():
             func.coalesce(func.sum(Order.total_amount), 0)
         ).filter(
             Order.store_id == store.id,
-            Order.status == 'delivered',
-            func.date(Order.delivered_at) == d
+            Order.status.in_(['delivered', 'completed']),
+            func.date(Order.created_at) == d
         ).scalar()
         pos_rev = db.session.query(
             func.coalesce(func.sum(POSOrder.total_amount), 0)
@@ -4383,7 +4439,7 @@ def seller_dashboard():
         func.count(Order.id)
     ).filter(
         Order.store_id == store.id,
-        Order.status == 'delivered',
+        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).group_by(extract('hour', Order.created_at)).all()
@@ -4391,16 +4447,16 @@ def seller_dashboard():
 
     # ── Analytics: Average order value trend (selected range) ──
     aov_query = db.session.query(
-        func.date(Order.delivered_at).label('day'),
+        func.date(Order.created_at).label('day'),
         func.avg(Order.total_amount).label('aov'),
         func.count(Order.id).label('cnt')
     ).filter(
         Order.store_id == store.id,
-        Order.status == 'delivered',
-        Order.delivered_at >= range_start,
-        Order.delivered_at < range_end,
-    ).group_by(func.date(Order.delivered_at)) \
-     .order_by(func.date(Order.delivered_at)).all()
+        Order.status.in_(['delivered', 'completed']),
+        Order.created_at >= range_start,
+        Order.created_at < range_end,
+    ).group_by(func.date(Order.created_at)) \
+     .order_by(func.date(Order.created_at)).all()
     aov_trend = {
         'labels': [],
         'values': [],
@@ -4418,7 +4474,7 @@ def seller_dashboard():
         func.count(Order.id).label('order_count')
     ).filter(
         Order.store_id == store.id,
-        Order.status == 'delivered',
+        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).group_by(Order.customer_id).all()

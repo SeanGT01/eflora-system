@@ -1005,9 +1005,17 @@ const chatWidget = (() => {
         return parts.length >= 2 ? (parts[0][0]+parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
     }
 
-    function _avatarHtml(url, name, size) {
+    const DEFAULT_CUSTOMER_AVATAR_URL = '/static/images/default-customer-avatar.svg';
+
+    function _customerDefaultAvatarHtml(size) {
+        size = size || 38;
+        return `<img class="avatar avatar--customer-default" src="${DEFAULT_CUSTOMER_AVATAR_URL}" alt="" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;">`;
+    }
+
+    function _avatarHtml(url, name, size, customerDefault) {
         size = size || 38;
         if (url) return `<img class="avatar" src="${url}" alt="" style="width:${size}px;height:${size}px;">`;
+        if (customerDefault) return _customerDefaultAvatarHtml(size);
         return `<div class="avatar-placeholder" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.37)}px;">${_initials(name)}</div>`;
     }
 
@@ -1446,7 +1454,7 @@ const chatWidget = (() => {
             const displayName = isSeller ? (c.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown');
             const displayAvatar = isSeller ? (c.store_logo || other.avatar_url) : other.avatar_url;
             return `<div class="inbox-item" onclick="chatWidget.openConvo(${c.id})">
-                ${_avatarHtml(displayAvatar, displayName, 44)}
+                ${_avatarHtml(displayAvatar, displayName, 44, !isSeller)}
                 <div class="info">
                     <div class="name">${displayName}</div>
                     <div class="preview">${c.last_message_text || 'No messages yet'}</div>
@@ -1740,7 +1748,7 @@ const chatWidget = (() => {
         if (other.role === 'admin') {
             document.getElementById('chat-detail-avatar').innerHTML = _adminAvatar(38);
         } else {
-            document.getElementById('chat-detail-avatar').innerHTML = _avatarHtml(displayAvatar, displayName, 38);
+            document.getElementById('chat-detail-avatar').innerHTML = _avatarHtml(displayAvatar, displayName, 38, !isSeller);
         }
         document.getElementById('chat-detail-name').textContent = displayName;
         // Check online
@@ -1946,6 +1954,9 @@ const chatWidget = (() => {
         function senderAvatarHtml(m, isSent) {
             if (isSent) return '';
             if (m.sender_avatar) return `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
+            if (m.sender_role !== 'seller' && m.sender_role !== 'admin') {
+                return _customerDefaultAvatarHtml(26);
+            }
             const name = (m.sender_name || '?').trim();
             const initial = _esc((name[0] || '?').toUpperCase());
             return `<div class="sender-avatar-placeholder">${initial}</div>`;
