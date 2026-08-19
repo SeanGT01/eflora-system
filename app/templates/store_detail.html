@@ -1046,79 +1046,9 @@
         50% { opacity: 0.6; transform: scale(0.8); }
     }
 
-    .mini-review {
-        padding: 1rem 0;
-        border-bottom: 1px solid var(--border);
-    }
+    body.reviews-modal-open { overflow: hidden; }
 
-    .mini-review:last-child { border-bottom: none; padding-bottom: 0; }
-    .mini-review:first-child { padding-top: 0; }
-
-    .store-reviews-scroll {
-        max-height: 15.5rem; /* ~3 review rows visible */
-        overflow-y: auto;
-        overflow-x: hidden;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        padding-right: 0.25rem;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(107, 76, 59, 0.25) transparent;
-    }
-
-    .store-reviews-scroll::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .store-reviews-scroll::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .store-reviews-scroll::-webkit-scrollbar-thumb {
-        background: rgba(107, 76, 59, 0.25);
-        border-radius: 999px;
-    }
-
-    .store-reviews-scroll::-webkit-scrollbar-thumb:hover {
-        background: rgba(107, 76, 59, 0.4);
-    }
-
-    .mini-review-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 0.5rem;
-    }
-
-    .mini-reviewer {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--charcoal);
-    }
-
-    .mini-avatar {
-        width: 28px; height: 28px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #c24e68, #d878a0);
-        display: flex; align-items: center; justify-content: center;
-        color: white; font-size: 12px; font-weight: 500;
-        flex-shrink: 0;
-    }
-
-    .mini-stars { color: #f0b429; font-size: 10px; display: flex; gap: 1px; }
-
-    .mini-review-text {
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.5;
-        font-style: italic;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
+    button.stat-cell:hover { background: rgba(255,190,210,.18); }
 
     .empty-products {
         grid-column: 1 / -1;
@@ -1470,10 +1400,10 @@
         <div class="stat-value">{{ store.delivery_radius_km or 5 }}<span>km</span></div>
         <div class="stat-label">Delivery Area</div>
     </div>
-    <div class="stat-cell">
+    <button class="stat-cell" type="button" onclick="openReviewsModal()" style="border:none;background:none;cursor:pointer;text-align:center;" aria-haspopup="dialog">
         <div class="stat-value">{{ total_reviews|default(0) }}</div>
-        <div class="stat-label">Reviews</div>
-    </div>
+        <div class="stat-label" style="color:var(--deep-rose);">Reviews <i class="ri-arrow-right-s-line" style="vertical-align:middle;font-size:13px;"></i></div>
+    </button>
 </div>
 
     <!-- ─── Main Layout ─── -->
@@ -1638,46 +1568,6 @@
             </div>
         </div>
 
-        <!-- Reviews -->
-        <div class="sidebar-card">
-            <div class="sidebar-card-header">
-                <div class="sidebar-icon" style="background:rgba(240,180,41,0.1); color:#a07000;">
-                    <i class="ri-star-line"></i>
-                </div>
-                <div class="sidebar-card-title">Reviews</div>
-            </div>
-            <div class="sidebar-card-body">
-                {% set review_list = reviews if reviews is defined else testimonials %}
-                {% if review_list and review_list|length > 0 %}
-                    <div class="store-reviews-scroll">
-                        {% for t in review_list %}
-                        <div class="mini-review">
-                            <div class="mini-review-header">
-                                <div class="mini-reviewer">
-                                    <div class="mini-avatar">
-                                        {{ (t.customer_name or 'C')[0] }}
-                                    </div>
-                                    {{ t.customer_name or 'Customer' }}
-                                </div>
-                                <div class="mini-stars">
-                                    {% for i in range(t.rating|int) %}<i class="ri-star-fill"></i>{% endfor %}
-                                    {% for i in range(5 - (t.rating|int)) %}<i class="ri-star-line" style="opacity:0.3;"></i>{% endfor %}
-                                </div>
-                            </div>
-                            {% if t.comment %}
-                            <div class="mini-review-text">{{ t.comment }}</div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                <div style="text-align:center;padding:1rem 0;color:var(--muted);font-size:13px;">
-                    <i class="ri-star-line" style="font-size:24px;display:block;margin-bottom:0.5rem;opacity:0.3;"></i>
-                    No reviews yet
-                </div>
-                {% endif %}
-            </div>
-        </div>
 
         <!-- Share -->
         <div class="sidebar-card">
@@ -1709,7 +1599,222 @@
 {% endblock %}
 
 {% block extra_js %}
+
+<!-- Reviews Modal — inside extra_js block so Jinja renders it -->
+{% set review_list = reviews if reviews is defined else testimonials %}
+<div id="reviewsModal" class="rv-modal" aria-hidden="true">
+    <div class="rv-backdrop" onclick="closeReviewsModal()"></div>
+    <section class="rv-dialog" role="dialog" aria-modal="true" aria-labelledby="reviewsModalTitle">
+        <div class="rv-head">
+            <div style="display:flex;align-items:center;gap:.75rem;min-width:0;">
+                <div class="rv-icon"><i class="ri-star-half-line"></i></div>
+                <div style="min-width:0;">
+                    <h2 id="reviewsModalTitle" class="rv-title">{{ store.name }} Reviews</h2>
+                    {% if avg_rating and avg_rating > 0 %}
+                    <div class="rv-meta">
+                        <span style="color:#f0b429;">★</span>
+                        <strong style="color:var(--charcoal);">{{ avg_rating }}</strong>
+                        <span>·</span>
+                        <span>{{ total_reviews|default(0) }} review{{ 's' if total_reviews|default(0) != 1 else '' }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <button onclick="closeReviewsModal()" type="button" aria-label="Close reviews" class="rv-close">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="rv-body">
+            {% if review_list and review_list|length > 0 %}
+                {% for t in review_list %}
+                <div class="rv-item">
+                    <div class="rv-item-top">
+                        <div style="display:flex;align-items:center;gap:.6rem;">
+                            <img class="rv-avatar" src="{{ url_for('static', filename='images/default-customer-avatar.svg') }}" alt="{{ t.customer_name or 'Customer' }}" style="object-fit:cover;">
+                            <div>
+                                <div class="rv-name">{{ t.customer_name or 'Customer' }}</div>
+                                {% if t.created_at %}
+                                <div class="rv-date">
+                                    {{ t.created_at.strftime('%b %d, %Y') if t.created_at is not string else t.created_at[:10] }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="rv-stars">
+                            {% for i in range(t.rating|int) %}<i class="ri-star-fill"></i>{% endfor %}
+                            {% for i in range(5 - (t.rating|int)) %}<i class="ri-star-line" style="opacity:0.3;"></i>{% endfor %}
+                        </div>
+                    </div>
+                    {% if t.comment %}
+                    <p class="rv-comment">"{{ t.comment }}"</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="rv-empty">
+                    <i class="ri-star-line"></i>
+                    <p>No reviews yet for this store.</p>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+</div>
+
+<style>
+/* Reviews modal */
+.rv-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 12200;
+    align-items: center;
+    justify-content: center;
+    padding: max(.75rem, env(safe-area-inset-top, .75rem))
+             max(.75rem, env(safe-area-inset-right, .75rem))
+             max(.75rem, env(safe-area-inset-bottom, .75rem))
+             max(.75rem, env(safe-area-inset-left, .75rem));
+}
+.rv-modal.is-open { display: flex; }
+.rv-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(35,27,31,.58);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+.rv-dialog {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0,1fr);
+    width: min(560px, 100%);
+    max-height: min(680px, calc(100dvh - 1.5rem));
+    background: #fffdf9;
+    border-radius: 22px;
+    overflow: hidden;
+    border: 1px solid rgba(107,76,59,.16);
+    box-shadow: 0 24px 70px rgba(35,27,31,.32);
+}
+.rv-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(107,76,59,.12);
+    background: linear-gradient(90deg,rgba(240,180,41,.06),rgba(255,253,249,.9));
+    flex-shrink: 0;
+}
+.rv-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: rgba(240,180,41,.12);
+    display: flex; align-items: center; justify-content: center;
+    color: #a07000; font-size: 17px; flex-shrink: 0;
+}
+.rv-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(1rem, 3vw, 1.25rem);
+    color: var(--charcoal);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+.rv-meta {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin-top: .2rem;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--font-sans);
+}
+.rv-close {
+    width: 36px; height: 36px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(181,68,90,.1);
+    color: var(--deep-rose);
+    cursor: pointer;
+    font-size: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .15s;
+}
+.rv-close:hover { background: rgba(181,68,90,.2); }
+.rv-body {
+    overflow-y: auto;
+    padding: .25rem 1.25rem 1.25rem;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(107,76,59,.25) transparent;
+}
+.rv-item {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.rv-item:last-child { border-bottom: none; }
+.rv-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-bottom: .5rem;
+}
+.rv-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+.rv-name { font-size: 13px; font-weight: 600; color: var(--charcoal); }
+.rv-date { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.rv-stars { display: flex; gap: 2px; color: #f0b429; font-size: 13px; flex-shrink: 0; }
+.rv-comment { margin: 0; font-size: 13px; color: var(--charcoal); line-height: 1.6; font-style: italic; }
+.rv-empty { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+.rv-empty i { font-size: 40px; display: block; margin-bottom: .75rem; opacity: .3; }
+.rv-empty p { margin: 0; font-size: 14px; }
+
+/* Mobile: slide up from bottom */
+@media (max-width: 600px) {
+    .rv-modal { align-items: flex-end; justify-content: stretch; padding: 0; }
+    .rv-dialog {
+        width: 100%;
+        max-height: 88dvh;
+        border-radius: 20px 20px 0 0;
+        border-left: 0; border-right: 0; border-bottom: 0;
+    }
+}
+body.reviews-modal-open { overflow: hidden; }
+</style>
 <script>
+    /* ── Reviews modal ───────────────────────────────── */
+    let _reviewsLastFocus = null;
+    function openReviewsModal() {
+        _reviewsLastFocus = document.activeElement;
+        const modal = document.getElementById('reviewsModal');
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('reviews-modal-open');
+        const closeBtn = modal.querySelector('button[aria-label="Close reviews"]');
+        if (closeBtn) setTimeout(() => closeBtn.focus(), 0);
+    }
+    function closeReviewsModal() {
+        const modal = document.getElementById('reviewsModal');
+        if (!modal.classList.contains('is-open')) return;
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('reviews-modal-open');
+        if (_reviewsLastFocus && typeof _reviewsLastFocus.focus === 'function') _reviewsLastFocus.focus();
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('reviewsModal');
+            if (modal && modal.classList.contains('is-open')) closeReviewsModal();
+        }
+    });
+
     function filterProducts(category, btn) {
         document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
