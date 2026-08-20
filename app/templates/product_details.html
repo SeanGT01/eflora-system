@@ -926,6 +926,12 @@
         align-items: center;
         justify-content: center;
     }
+    .structured-addon-preview.has-image {
+        cursor: zoom-in;
+    }
+    .structured-addon-preview.has-image:hover {
+        border-color: rgba(181, 68, 90, 0.55);
+    }
     .structured-addon-preview img.addon-preview-photo {
         width: 100%;
         height: 100%;
@@ -965,12 +971,32 @@
         color: var(--charcoal);
     }
     .structured-addon-select {
-        display: block;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+    .addon-dd {
+        position: relative;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+    .addon-dd-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
         min-width: 0;
-        padding: 0.55rem 2rem 0.55rem 0.75rem;
+        padding: 0.4rem 0.55rem 0.4rem 0.4rem;
         border-radius: var(--radius-md);
         border: 1.5px solid rgba(230, 170, 195, 0.55);
         background-color: rgba(255, 255, 255, 0.7);
@@ -978,20 +1004,173 @@
         font-size: 13px;
         line-height: 1.3;
         color: var(--charcoal);
-        appearance: none;
-        -webkit-appearance: none;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23b5445a' d='M2.2 4.2L6 8l3.8-3.8' stroke='%23b5445a' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 0.7rem center;
-        background-size: 12px;
+        cursor: pointer;
+        text-align: left;
     }
-    .structured-addon-select:focus {
+    .addon-dd-trigger:focus {
         outline: none;
         border-color: rgba(181, 68, 90, 0.65);
         box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.12);
+    }
+    .addon-dd.is-open .addon-dd-trigger {
+        border-color: rgba(181, 68, 90, 0.65);
+        box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.12);
+    }
+    .addon-dd-trigger-inner {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+        flex: 1;
+    }
+    .addon-dd-trigger-thumb,
+    .addon-dd-trigger-ph {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        flex-shrink: 0;
+        object-fit: cover;
+        border: 1px solid rgba(230, 170, 195, 0.4);
+        background: #fff8f6;
+    }
+    .addon-dd-trigger-thumb.is-hidden { display: none; }
+    .addon-dd-trigger-ph.is-hidden { display: none; }
+    .addon-dd-trigger-thumb.is-zoomable {
+        cursor: zoom-in;
+    }
+    .addon-dd-trigger-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .addon-dd-chevron {
+        flex-shrink: 0;
+        color: #b5445a;
+        font-size: 1.1rem;
+        transition: transform 0.15s ease;
+    }
+    .addon-dd.is-open .addon-dd-chevron {
+        transform: rotate(180deg);
+    }
+    .addon-dd-menu {
+        position: absolute;
+        z-index: 40;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        max-height: 260px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 0.35rem;
+        border-radius: var(--radius-md);
+        border: 1.5px solid rgba(230, 170, 195, 0.55);
+        background: #fff;
+        box-shadow: 0 10px 28px rgba(80, 40, 55, 0.14);
+    }
+    .addon-dd-menu[hidden] {
+        display: none !important;
+    }
+    .addon-dd-option {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        width: 100%;
+        padding: 0.4rem 0.45rem;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.3;
+        color: var(--charcoal);
+        cursor: pointer;
+        text-align: left;
+    }
+    .addon-dd-option:hover:not(:disabled),
+    .addon-dd-option.is-selected {
+        background: rgba(255, 240, 245, 0.95);
+    }
+    .addon-dd-option:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+    .addon-dd-opt-thumb {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        flex-shrink: 0;
+        object-fit: cover;
+        border: 1px solid rgba(230, 170, 195, 0.4);
+        background: #fff8f6;
+    }
+    .addon-dd-opt-thumb.is-zoomable {
+        cursor: zoom-in;
+    }
+    .addon-dd-opt-ph {
+        display: block;
+        padding: 0;
+        overflow: hidden;
+    }
+    .addon-dd-opt-ph img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    .addon-dd-opt-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .addon-image-zoom-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10050;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1.25rem;
+        background: rgba(20, 12, 16, 0.82);
+        cursor: zoom-out;
+    }
+    .addon-image-zoom-overlay.active {
+        display: flex;
+    }
+    .addon-image-zoom-inner {
+        position: relative;
+        max-width: min(92vw, 720px);
+        max-height: 88vh;
+        cursor: default;
+    }
+    .addon-image-zoom-inner img {
+        display: block;
+        max-width: 100%;
+        max-height: 88vh;
+        width: auto;
+        height: auto;
+        border-radius: 12px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        object-fit: contain;
+        background: #1a1216;
+    }
+    .addon-image-zoom-close {
+        position: absolute;
+        top: -0.65rem;
+        right: -0.65rem;
+        width: 36px;
+        height: 36px;
+        border: none;
+        border-radius: 999px;
+        background: #fff;
+        color: var(--charcoal);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
     }
     .addon-ymal-badge {
         position: absolute;
@@ -1025,10 +1204,18 @@
         .structured-addon-label {
             font-size: 12.5px;
         }
-        .structured-addon-select {
+        .addon-dd-trigger {
             font-size: 12.5px;
-            padding: 0.5rem 1.75rem 0.5rem 0.65rem;
-            background-position: right 0.55rem center;
+            padding: 0.35rem 0.45rem 0.35rem 0.35rem;
+        }
+        .addon-dd-trigger-thumb,
+        .addon-dd-trigger-ph {
+            width: 26px;
+            height: 26px;
+        }
+        .addon-dd-opt-thumb {
+            width: 30px;
+            height: 30px;
         }
     }
     @media (max-width: 380px) {
@@ -2338,23 +2525,92 @@
                         </div>
                     </div>
                     <div class="structured-addon-fields">
-                        <label class="structured-addon-label" for="addon-group-{{ group.id }}">{{ group.name }}</label>
-                        <select class="structured-addon-select" id="addon-group-{{ group.id }}"
-                                data-group-id="{{ group.id }}"
-                                onchange="onStructuredAddonChange(this)">
-                            <option value="">Do not add</option>
-                            {% for opt in group.options or [] %}
-                            {% set opt_oos = (opt.stock_quantity|default(0)|int) <= 0 %}
-                            <option value="{{ opt.id }}"
-                                    data-price="{{ opt.price }}"
-                                    data-name="{{ opt.name }}"
-                                    data-stock="{{ opt.stock_quantity|default(0) }}"
-                                    data-image="{{ opt.image_url or '' }}"
-                                    {% if opt_oos %}disabled{% endif %}>
-                                {{ opt.name }} (+₱{{ "%.2f"|format(opt.price|float) }}){% if opt_oos %} — Out of stock{% endif %}
-                            </option>
-                            {% endfor %}
-                        </select>
+                        <label class="structured-addon-label" id="addon-group-label-{{ group.id }}">{{ group.name }}</label>
+                        <div class="addon-dd" data-group-id="{{ group.id }}">
+                            <button type="button"
+                                    class="addon-dd-trigger"
+                                    id="addon-group-trigger-{{ group.id }}"
+                                    aria-haspopup="listbox"
+                                    aria-expanded="false"
+                                    aria-labelledby="addon-group-label-{{ group.id }}">
+                                <span class="addon-dd-trigger-inner">
+                                    <img class="addon-dd-trigger-thumb is-hidden" alt="" draggable="false">
+                                    <span class="addon-dd-trigger-ph">
+                                        <img src="{{ url_for('static', filename='images/no_addon_placeholder.png') }}"
+                                             alt="" width="28" height="28" draggable="false">
+                                    </span>
+                                    <span class="addon-dd-trigger-text">Do not add</span>
+                                </span>
+                                <i class="ri-arrow-down-s-line addon-dd-chevron" aria-hidden="true"></i>
+                            </button>
+                            <div class="addon-dd-menu" id="addon-group-menu-{{ group.id }}" role="listbox" hidden>
+                                <button type="button"
+                                        class="addon-dd-option is-selected"
+                                        role="option"
+                                        data-value=""
+                                        data-price="0"
+                                        data-name="Do not add"
+                                        data-image=""
+                                        aria-selected="true">
+                                    <span class="addon-dd-opt-thumb addon-dd-opt-ph">
+                                        <img src="{{ url_for('static', filename='images/no_addon_placeholder.png') }}"
+                                             alt="" width="32" height="32" draggable="false">
+                                    </span>
+                                    <span class="addon-dd-opt-text">Do not add</span>
+                                </button>
+                                {% for opt in group.options or [] %}
+                                {% set opt_oos = (opt.stock_quantity|default(0)|int) <= 0 %}
+                                <button type="button"
+                                        class="addon-dd-option"
+                                        role="option"
+                                        data-value="{{ opt.id }}"
+                                        data-price="{{ opt.price }}"
+                                        data-name="{{ opt.name }}"
+                                        data-stock="{{ opt.stock_quantity|default(0) }}"
+                                        data-image="{{ opt.image_url or '' }}"
+                                        aria-selected="false"
+                                        {% if opt_oos %}disabled{% endif %}>
+                                    {% if opt.image_url %}
+                                    <img class="addon-dd-opt-thumb is-zoomable"
+                                         src="{{ opt.image_url }}"
+                                         alt="{{ opt.name }}"
+                                         data-zoom-src="{{ opt.image_url }}"
+                                         data-zoom-name="{{ opt.name }}"
+                                         width="32" height="32"
+                                         loading="lazy"
+                                         decoding="async"
+                                         draggable="false">
+                                    {% else %}
+                                    <span class="addon-dd-opt-thumb addon-dd-opt-ph">
+                                        <img src="{{ url_for('static', filename='images/no_addon_placeholder.png') }}"
+                                             alt="" width="32" height="32" draggable="false">
+                                    </span>
+                                    {% endif %}
+                                    <span class="addon-dd-opt-text">
+                                        {{ opt.name }} (+₱{{ "%.2f"|format(opt.price|float) }}){% if opt_oos %} — Out of stock{% endif %}
+                                    </span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                            <select class="structured-addon-select" id="addon-group-{{ group.id }}"
+                                    data-group-id="{{ group.id }}"
+                                    tabindex="-1"
+                                    aria-hidden="true"
+                                    onchange="onStructuredAddonChange(this)">
+                                <option value="">Do not add</option>
+                                {% for opt in group.options or [] %}
+                                {% set opt_oos = (opt.stock_quantity|default(0)|int) <= 0 %}
+                                <option value="{{ opt.id }}"
+                                        data-price="{{ opt.price }}"
+                                        data-name="{{ opt.name }}"
+                                        data-stock="{{ opt.stock_quantity|default(0) }}"
+                                        data-image="{{ opt.image_url or '' }}"
+                                        {% if opt_oos %}disabled{% endif %}>
+                                    {{ opt.name }} (+₱{{ "%.2f"|format(opt.price|float) }}){% if opt_oos %} — Out of stock{% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
@@ -2622,6 +2878,16 @@
                 <i class="ri-shopping-bag-line"></i> Add to Basket
             </button>
         </div>
+    </div>
+</div>
+
+<!-- ─── Addon Image Zoom ─── -->
+<div class="addon-image-zoom-overlay" id="addonImageZoomModal" role="dialog" aria-modal="true" aria-label="Add-on image preview" onclick="if (event.target === this) closeAddonImageZoom()">
+    <div class="addon-image-zoom-inner" onclick="event.stopPropagation()">
+        <button type="button" class="addon-image-zoom-close" onclick="closeAddonImageZoom()" aria-label="Close">
+            <i class="ri-close-line"></i>
+        </button>
+        <img id="addonImageZoomImg" src="" alt="Add-on preview">
     </div>
 </div>
 
@@ -3790,6 +4056,156 @@ function getStructuredAddonsTotal() {
     return sum;
 }
 
+function openAddonImageZoom(imageUrl, altText) {
+    if (!imageUrl) return;
+    const modal = document.getElementById('addonImageZoomModal');
+    const img = document.getElementById('addonImageZoomImg');
+    if (!modal || !img) return;
+    img.src = imageUrl;
+    img.alt = altText || 'Add-on preview';
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAddonImageZoom() {
+    const modal = document.getElementById('addonImageZoomModal');
+    const img = document.getElementById('addonImageZoomImg');
+    if (modal) modal.classList.remove('active');
+    if (img) {
+        img.removeAttribute('src');
+        img.alt = '';
+    }
+    if (!document.getElementById('addonInfoModal')?.classList.contains('active')) {
+        document.body.style.overflow = '';
+    }
+}
+
+function closeAllAddonDropdowns(exceptDd) {
+    document.querySelectorAll('.addon-dd.is-open').forEach(dd => {
+        if (exceptDd && dd === exceptDd) return;
+        dd.classList.remove('is-open');
+        const trigger = dd.querySelector('.addon-dd-trigger');
+        const menu = dd.querySelector('.addon-dd-menu');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        if (menu) menu.hidden = true;
+    });
+}
+
+function syncAddonDropdownTrigger(dd, selectEl) {
+    if (!dd || !selectEl) return;
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const textEl = dd.querySelector('.addon-dd-trigger-text');
+    const thumb = dd.querySelector('.addon-dd-trigger-thumb');
+    const ph = dd.querySelector('.addon-dd-trigger-ph');
+    const label = (!opt || !opt.value)
+        ? 'Do not add'
+        : ((opt.textContent || '').trim() || (opt.dataset.name || 'Add-on'));
+    if (textEl) textEl.textContent = label;
+
+    const imageUrl = opt && opt.value ? (opt.dataset.image || '') : '';
+    if (thumb && ph) {
+        if (imageUrl) {
+            thumb.src = imageUrl;
+            thumb.alt = opt.dataset.name || 'Add-on';
+            thumb.classList.remove('is-hidden');
+            thumb.classList.add('is-zoomable');
+            thumb.dataset.zoomSrc = imageUrl;
+            thumb.dataset.zoomName = opt.dataset.name || 'Add-on';
+            ph.classList.add('is-hidden');
+        } else {
+            thumb.removeAttribute('src');
+            thumb.alt = '';
+            thumb.classList.add('is-hidden');
+            thumb.classList.remove('is-zoomable');
+            delete thumb.dataset.zoomSrc;
+            delete thumb.dataset.zoomName;
+            ph.classList.remove('is-hidden');
+        }
+    }
+
+    dd.querySelectorAll('.addon-dd-option').forEach(btn => {
+        const selected = (btn.dataset.value || '') === (selectEl.value || '');
+        btn.classList.toggle('is-selected', selected);
+        btn.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+}
+
+function selectAddonDropdownOption(dd, optionBtn) {
+    if (!dd || !optionBtn || optionBtn.disabled) return;
+    const selectEl = dd.querySelector('.structured-addon-select');
+    if (!selectEl) return;
+    selectEl.value = optionBtn.dataset.value || '';
+    syncAddonDropdownTrigger(dd, selectEl);
+    closeAllAddonDropdowns();
+    onStructuredAddonChange(selectEl);
+}
+
+function initAddonDropdowns() {
+    document.querySelectorAll('.addon-dd').forEach(dd => {
+        const trigger = dd.querySelector('.addon-dd-trigger');
+        const menu = dd.querySelector('.addon-dd-menu');
+        const selectEl = dd.querySelector('.structured-addon-select');
+        if (!trigger || !menu || !selectEl) return;
+
+        syncAddonDropdownTrigger(dd, selectEl);
+
+        trigger.addEventListener('click', (e) => {
+            const zoomThumb = e.target.closest('.addon-dd-trigger-thumb.is-zoomable');
+            if (zoomThumb && zoomThumb.dataset.zoomSrc) {
+                e.preventDefault();
+                e.stopPropagation();
+                openAddonImageZoom(zoomThumb.dataset.zoomSrc, zoomThumb.dataset.zoomName || '');
+                return;
+            }
+            const willOpen = !dd.classList.contains('is-open');
+            closeAllAddonDropdowns(willOpen ? dd : null);
+            if (willOpen) {
+                dd.classList.add('is-open');
+                trigger.setAttribute('aria-expanded', 'true');
+                menu.hidden = false;
+            } else {
+                dd.classList.remove('is-open');
+                trigger.setAttribute('aria-expanded', 'false');
+                menu.hidden = true;
+            }
+        });
+
+        menu.querySelectorAll('.addon-dd-option').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const zoomImg = e.target.closest('.addon-dd-opt-thumb.is-zoomable');
+                if (zoomImg && zoomImg.dataset.zoomSrc) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openAddonImageZoom(zoomImg.dataset.zoomSrc, zoomImg.dataset.zoomName || '');
+                    return;
+                }
+                selectAddonDropdownOption(dd, btn);
+            });
+        });
+    });
+
+    document.querySelectorAll('.structured-addon-preview').forEach(preview => {
+        preview.addEventListener('click', () => {
+            if (!preview.classList.contains('has-image')) return;
+            const img = preview.querySelector('img.addon-preview-photo');
+            if (img && img.getAttribute('src')) {
+                openAddonImageZoom(img.getAttribute('src'), img.alt || '');
+            }
+        });
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.addon-dd')) closeAllAddonDropdowns();
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeAddonImageZoom();
+        closeAllAddonDropdowns();
+    }
+});
+
 function updateStructuredAddonPreview(selectEl) {
     if (!selectEl) return;
     const groupId = selectEl.dataset.groupId;
@@ -3808,6 +4224,9 @@ function updateStructuredAddonPreview(selectEl) {
         img.alt = '';
         preview.classList.remove('has-image');
     }
+
+    const dd = selectEl.closest('.addon-dd');
+    if (dd) syncAddonDropdownTrigger(dd, selectEl);
 }
 
 function onStructuredAddonChange(selectEl) {
@@ -4159,6 +4578,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     syncPurchaseActions();
+    initAddonDropdowns();
     
     // Verify addToCart exists
     if (typeof window.addToCart !== 'function') {
