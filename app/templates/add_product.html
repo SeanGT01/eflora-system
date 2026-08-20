@@ -384,6 +384,46 @@
                 </div>
             </div>
 
+            <!-- Product Add-ons Card -->
+            <div class="form-card">
+                <div class="card-header">
+                    <h3>Product Add-ons</h3>
+                </div>
+                <div class="card-body">
+                    <div class="variants-toggle">
+                        <label class="toggle-switch large">
+                            <input type="checkbox" id="hasAddons" onchange="toggleAddonsSection()">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">This product has add-ons (chocolates, balloons, gift cards, etc.)</span>
+                        </label>
+                    </div>
+
+                    <div id="addonsSection" class="variants-section" style="display:none;">
+                        <div class="variants-header">
+                            <div class="variants-header-left">
+                                <h4>Add-on Groups</h4>
+                                <span class="variant-count-badge" id="addonGroupCountBadge">0 group(s)</span>
+                            </div>
+                            <div class="variants-header-right">
+                                <button type="button" class="btn btn-rose btn-sm" onclick="addAddonGroup()">
+                                    <i class="ri-add-line"></i> Add Group
+                                </button>
+                            </div>
+                        </div>
+                        <p class="form-hint" style="margin:0 0 1rem;">
+                            Each group becomes a dropdown on the product page (default: “Do not add”).
+                            Check “Show in You might also like” on an option to also list it in that section.
+                        </p>
+                        <div id="addonGroupsContainer"></div>
+                    </div>
+
+                    <div id="noAddonsMessage" class="no-variants-message" style="display:flex;">
+                        <i class="ri-gift-line"></i>
+                        <p>No add-ons. Customers will only see the main product options.</p>
+                    </div>
+                </div>
+            </div>
+
         </div><!-- /.form-layout-bottom -->
 
         <!-- Sticky Footer with Actions -->
@@ -1854,6 +1894,37 @@
         margin: 0;
     }
 
+    .addon-group-card {
+        border: 1px solid rgba(230, 170, 195, 0.35);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        margin-bottom: 1rem;
+        background: rgba(255, 255, 255, 0.45);
+    }
+    .addon-group-header {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        margin-bottom: 0.75rem;
+    }
+    .addon-group-header .form-control { flex: 1; }
+    .addon-options-head,
+    .addon-option-row {
+        display: grid;
+        grid-template-columns: minmax(140px, 1.6fr) 90px 70px 64px 44px 54px 36px;
+        gap: 0.4rem;
+        align-items: center;
+    }
+    .addon-options-head {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.35rem;
+    }
+    .addon-option-row { margin-bottom: 0.35rem; }
+
     /* ===== Sticky Footer ===== */
     .form-footer {
         position: fixed;
@@ -2197,6 +2268,12 @@
                     if (product.has_variants && product.variants && product.variants.length > 0) {
                         console.log('🎯 Loading variants:', product.variants);
                         loadExistingVariants(product.variants);
+                    }
+
+                    if (product.has_addons && product.addon_groups && product.addon_groups.length > 0) {
+                        loadExistingAddonGroups(product.addon_groups);
+                    } else if (product.addon_groups && product.addon_groups.length > 0) {
+                        loadExistingAddonGroups(product.addon_groups);
                     }
                 }
             })
@@ -3151,6 +3228,8 @@
         
         formData.append('is_available', document.getElementById('isAvailable').checked);
         formData.append('has_variants', hasVariants);
+        const hasAddons = document.getElementById('hasAddons')?.checked || false;
+        formData.append('has_addons', hasAddons);
 
         // Handle product images
         const imageFiles = getImageFiles();
@@ -3282,6 +3361,67 @@
                 document.getElementById('loadingOverlay').style.display = 'none';
                 return;
             }
+        }
+
+        // Handle structured product add-ons
+        if (hasAddons) {
+            const groups = collectAddonGroups();
+            const activeGroups = groups.filter(g => !g._delete);
+            if (activeGroups.length === 0) {
+                showToast('Please add at least one add-on group or disable add-ons', 'error');
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return;
+            }
+            for (const g of activeGroups) {
+                const activeOpts = (g.options || []).filter(o => !o._delete);
+                if (!g.name || activeOpts.length === 0) {
+                    showToast('Each add-on group needs a name and at least one option', 'error');
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                    return;
+                }
+                for (const o of activeOpts) {
+                    if (!o.name || o.price === undefined || o.price === null || o.stock_quantity === undefined) {
+                        showToast('Please fill name, price, and stock for every add-on option', 'error');
+                        document.getElementById('loadingOverlay').style.display = 'none';
+                        return;
+                    }
+                    const hasNewImage = !!o.imageFile;
+                    const keepingExisting = !!(o.id && !o._remove_image && o._has_image);
+                    if (!hasNewImage && !keepingExisting) {
+                        showToast(`Please add an image for add-on "${o.name}"`, 'error');
+                        document.getElementById('loadingOverlay').style.display = 'none';
+                        return;
+                    }
+                }
+            }
+
+            const addonPayload = [];
+            for (const group of groups) {
+                if (group._delete) {
+                    addonPayload.push(group);
+                    continue;
+                }
+                const gOut = { ...group, options: [] };
+                for (const opt of group.options || []) {
+                    const o = { ...opt };
+                    if (o.imageFile) {
+                        showToast(`Uploading add-on image for ${o.name}...`, 'info');
+                        const result = await uploadToCloudinary(o.imageFile, 'e-flowers/addons');
+                        if (!result.success) {
+                            showToast(`Failed to upload add-on image: ${result.error}`, 'error');
+                            document.getElementById('loadingOverlay').style.display = 'none';
+                            return;
+                        }
+                        o.cloudinary_public_id = result.public_id;
+                        o.cloudinary_url = result.url;
+                    }
+                    delete o.imageFile;
+                    delete o._has_image;
+                    gOut.options.push(o);
+                }
+                addonPayload.push(gOut);
+            }
+            formData.append('addon_groups', JSON.stringify(addonPayload));
         }
 
         const url = isEditMode ? `/seller/products/${productId}` : '/seller/products/create';
@@ -3879,6 +4019,34 @@ function updateVariantStockInData(variantId, newStock) {
         modal.style.display = 'none';
     }
 
+    function parseApiDateTime(value) {
+        if (!value) return null;
+        if (value instanceof Date) return value;
+        const raw = String(value).trim();
+        if (!raw) return null;
+        if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(raw)) return new Date(raw);
+        return new Date(`${raw}Z`);
+    }
+
+    function formatHistoryDateTime(value) {
+        if (!value) return '—';
+        try {
+            const parsed = parseApiDateTime(value);
+            if (!parsed || Number.isNaN(parsed.getTime())) return String(value);
+            return new Intl.DateTimeFormat('en-PH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+                timeZone: 'Asia/Manila',
+            }).format(parsed);
+        } catch {
+            return String(value);
+        }
+    }
+
     async function loadStockHistory() {
     const productId = document.getElementById('productId').value;
     const content = document.getElementById('stockHistoryContent');
@@ -3903,8 +4071,8 @@ function updateVariantStockInData(variantId, newStock) {
             throw new Error(data.error || 'Failed to load history');
         }
         
-        if (!data.stock_history || (!data.stock_history.main && !data.stock_history.variants) || 
-            (data.stock_history.main.length === 0 && data.stock_history.variants.length === 0)) {
+        if (!data.stock_history || (!data.stock_history.main && !data.stock_history.variants && !data.stock_history.addons) || 
+            (data.stock_history.main.length === 0 && data.stock_history.variants.length === 0 && (!(data.stock_history.addons) || data.stock_history.addons.length === 0))) {
             content.innerHTML = `
                 <div style="text-align: center; padding: 40px 20px;">
                     <i class="ri-database-2-line" style="font-size: 3rem; color: #ccc;"></i>
@@ -3920,7 +4088,7 @@ function updateVariantStockInData(variantId, newStock) {
                 ${data.product.image ? `<img src="${data.product.image}" alt="${data.product.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px;">` : `<div style="width: 60px; height: 60px; background: #e0e0e0; border-radius: 6px; display: flex; align-items: center; justify-content: center;"><i class="ri-image-line" style="color: #999; font-size: 1.5rem;"></i></div>`}
                 <div>
                     <h4 style="margin: 0 0 5px 0; font-size: 1.1rem; color: #333;">${data.product.name}</h4>
-                    <p style="margin: 0; font-size: 0.9rem; color: #666;"><i class="ri-database-2-line" style="margin-right: 4px;"></i>${data.main_product.reduction_count + data.variants.reduction_count} total reductions</p>
+                    <p style="margin: 0; font-size: 0.9rem; color: #666;"><i class="ri-database-2-line" style="margin-right: 4px;"></i>${(data.main_product?.reduction_count || 0) + (data.variants?.reduction_count || 0) + (data.addons?.reduction_count || 0)} total reductions</p>
                 </div>
             </div>
         `;
@@ -3943,7 +4111,7 @@ function updateVariantStockInData(variantId, newStock) {
                 </div>`;
             
             reductions.forEach(reduction => {
-                const date = new Date(reduction.created_at).toLocaleString();
+                const date = formatHistoryDateTime(reduction.created_at);
                 const reasonColors = {
                     'spoilage': '#FFB74D',
                     'damage': '#EF5350',
@@ -4036,6 +4204,9 @@ function updateVariantStockInData(variantId, newStock) {
         
         // Add variants history
         html += buildHistorySection('Variants', data.stock_history.variants, '#9C27B0', 'ri-layout-grid-line');
+
+        // Add add-ons history
+        html += buildHistorySection('Add-ons', data.stock_history.addons || [], '#7A9E7E', 'ri-gift-line');
         
         content.innerHTML = html;
         
@@ -4205,6 +4376,295 @@ function updateVariantStockInData(variantId, newStock) {
         if (pctEl) pctEl.textContent = pct + '%';
     }
 
+    // ===== PRODUCT ADD-ONS (seller) =====
+    let addonGroupSeq = 0;
+    let addonOptionSeq = 0;
+
+    function toggleAddonsSection() {
+        const enabled = document.getElementById('hasAddons')?.checked;
+        const section = document.getElementById('addonsSection');
+        const empty = document.getElementById('noAddonsMessage');
+        if (section) section.style.display = enabled ? 'block' : 'none';
+        if (empty) empty.style.display = enabled ? 'none' : 'flex';
+        if (enabled && document.querySelectorAll('.addon-group-card').length === 0) {
+            addAddonGroup();
+        }
+        updateAddonGroupCount();
+    }
+
+    function updateAddonGroupCount() {
+        const n = document.querySelectorAll('.addon-group-card:not([data-delete-group="true"])').length;
+        const badge = document.getElementById('addonGroupCountBadge');
+        if (badge) badge.textContent = `${n} group(s)`;
+    }
+
+    function loadExistingAddonGroups(groups) {
+        const hasAddons = document.getElementById('hasAddons');
+        if (hasAddons) hasAddons.checked = true;
+        toggleAddonsSection();
+        const container = document.getElementById('addonGroupsContainer');
+        if (container) container.innerHTML = '';
+        (groups || []).forEach(g => addAddonGroup(g));
+        updateAddonGroupCount();
+    }
+
+    function addAddonGroup(existing) {
+        const container = document.getElementById('addonGroupsContainer');
+        if (!container) return;
+        const gid = `ag-${++addonGroupSeq}`;
+        const card = document.createElement('div');
+        card.className = 'addon-group-card';
+        card.id = gid;
+        if (existing && existing.id) {
+            card.dataset.groupId = String(existing.id);
+        }
+        const nameVal = existing ? escapeHtml(existing.name || '') : '';
+        const isActive = existing ? (existing.is_active !== false) : true;
+        card.innerHTML = `
+            <div class="addon-group-header">
+                <input type="text" class="form-control" name="addon_group_name" value="${nameVal}"
+                       placeholder="Group name (e.g. Ferrero Rocher, Gift Cards)" required>
+                <label class="toggle-switch" style="margin:0;width:auto;flex-shrink:0;" title="Active">
+                    <input type="checkbox" name="addon_group_active" ${isActive ? 'checked' : ''}
+                           onchange="onAddonGroupActiveChange('${gid}')">
+                    <span class="toggle-slider"></span>
+                </label>
+                <button type="button" class="btn-icon-danger" onclick="removeAddonGroup('${gid}', ${existing && existing.id ? 'true' : 'false'})" title="Remove group">
+                    <i class="ri-delete-bin-line"></i>
+                </button>
+            </div>
+            <div class="addon-options-head">
+                <span>Option name</span><span>Price</span><span>Stock</span><span>Image *</span><span>YMAL</span><span>Active</span><span></span>
+            </div>
+            <div class="addon-options-container" id="${gid}-options"></div>
+            <button type="button" class="btn btn-outline btn-sm" style="margin-top:0.5rem;" onclick="addAddonOptionRow('${gid}')">
+                <i class="ri-add-line"></i> Add option
+            </button>
+        `;
+        container.appendChild(card);
+        const opts = (existing && existing.options) ? existing.options : [];
+        if (opts.length) {
+            opts.forEach(o => addAddonOptionRow(gid, o));
+        } else {
+            addAddonOptionRow(gid);
+        }
+        updateAddonGroupCount();
+    }
+
+    function removeAddonGroup(gid, isExisting) {
+        const card = document.getElementById(gid);
+        if (!card) return;
+        if (isExisting === true || isExisting === 'true') {
+            card.setAttribute('data-delete-group', 'true');
+            card.style.display = 'none';
+        } else {
+            card.remove();
+        }
+        updateAddonGroupCount();
+    }
+
+    function addAddonOptionRow(gid, existing) {
+        const wrap = document.getElementById(`${gid}-options`);
+        if (!wrap) return;
+        const oid = `ao-${++addonOptionSeq}`;
+        const row = document.createElement('div');
+        row.className = 'addon-option-row';
+        row.id = oid;
+        if (existing && existing.id) row.dataset.optionId = String(existing.id);
+        const nameVal = existing ? escapeHtml(existing.name || '') : '';
+        const priceVal = existing ? (existing.price ?? '') : '';
+        const stockVal = existing ? (existing.stock_quantity ?? '') : '';
+        const imgSrc = existing && existing.image_url ? existing.image_url : '';
+        const hasImg = !!imgSrc;
+        const ymal = existing ? !!existing.show_in_you_may_also_like : false;
+        const isAvail = existing ? (existing.is_available !== false) : true;
+        const isExistingOpt = !!(existing && existing.id);
+        const stockDisabled = isExistingOpt && isEditMode ? 'disabled' : '';
+        const stockRequired = isExistingOpt && isEditMode ? '' : 'required';
+        const stockTitle = isExistingOpt && isEditMode ? 'title="Use Reduce / Add Stock to modify"' : '';
+        row.innerHTML = `
+            <input type="text" class="form-control-sm" name="addon_opt_name" value="${nameVal}" placeholder="e.g. 3 pcs Ferrero" required>
+            <input type="number" class="form-control-sm" name="addon_opt_price" step="0.01" min="0" value="${priceVal}" placeholder="0.00" required>
+            <input type="number" class="form-control-sm" name="addon_opt_stock" min="0" value="${stockVal}" placeholder="0" ${stockDisabled} ${stockRequired} ${stockTitle}>
+            <div class="variant-thumb-area">
+                <input type="file" class="addon-image-input" id="addon-image-${oid}" accept="image/*" style="display:none;">
+                <div class="variant-thumb-btn" id="addon-thumb-btn-${oid}" style="display:${hasImg ? 'none' : 'flex'};" onclick="document.getElementById('addon-image-${oid}').click()" title="Image required">
+                    <i class="ri-image-add-line"></i>
+                </div>
+                <div class="variant-thumb-img-wrap" id="addon-thumb-img-${oid}" style="display:${hasImg ? 'block' : 'none'};">
+                    <img class="variant-image-img" src="${imgSrc}" alt="Add-on">
+                    <button type="button" class="remove-variant-image" onclick="removeAddonOptionImage('${oid}', ${existing && existing.id ? 'true' : 'false'})">
+                        <i class="ri-close-line"></i>
+                    </button>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;" title="Show in You might also like">
+                <input type="checkbox" name="addon_opt_ymal" ${ymal ? 'checked' : ''}>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;">
+                <label class="toggle-switch" style="margin:0;width:auto;">
+                    <input type="checkbox" name="addon_opt_available" ${isAvail ? 'checked' : ''}
+                           onchange="syncAddonGroupActiveFromOptions('${gid}')">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;">
+                <button type="button" class="btn-icon-danger" onclick="removeAddonOptionRow('${oid}', ${existing && existing.id ? 'true' : 'false'})" title="Delete option">
+                    <i class="ri-delete-bin-line"></i>
+                </button>
+            </div>
+        `;
+        wrap.appendChild(row);
+        const fileInput = row.querySelector(`#addon-image-${oid}`);
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                row.addonImageFile = file;
+                row.removeAttribute('data-remove-addon-image');
+                const url = URL.createObjectURL(file);
+                const imgWrap = document.getElementById(`addon-thumb-img-${oid}`);
+                const btn = document.getElementById(`addon-thumb-btn-${oid}`);
+                if (imgWrap) {
+                    const img = imgWrap.querySelector('img');
+                    if (img) img.src = url;
+                    imgWrap.style.display = 'block';
+                }
+                if (btn) btn.style.display = 'none';
+            });
+        }
+        syncAddonGroupActiveFromOptions(gid);
+    }
+
+    function getLiveAddonOptionRows(card) {
+        return Array.from(card.querySelectorAll('.addon-option-row')).filter(
+            row => row.getAttribute('data-delete-option') !== 'true' && row.style.display !== 'none'
+        );
+    }
+
+    function syncAddonGroupActiveFromOptions(gid) {
+        const card = document.getElementById(gid);
+        if (!card) return;
+        const groupToggle = card.querySelector('[name="addon_group_active"]');
+        if (!groupToggle) return;
+
+        const rows = getLiveAddonOptionRows(card);
+        if (rows.length === 0) {
+            groupToggle.checked = false;
+            return;
+        }
+        const anyActive = rows.some(
+            row => row.querySelector('[name="addon_opt_available"]')?.checked
+        );
+        // If every option is deactivated, deactivate the group (main) too.
+        // If any option is active again, re-activate the group.
+        groupToggle.checked = anyActive;
+    }
+
+    function onAddonGroupActiveChange(gid) {
+        const card = document.getElementById(gid);
+        if (!card) return;
+        const groupToggle = card.querySelector('[name="addon_group_active"]');
+        if (!groupToggle || groupToggle.checked) return;
+        // Turning the group off deactivates all options under it.
+        getLiveAddonOptionRows(card).forEach(row => {
+            const optToggle = row.querySelector('[name="addon_opt_available"]');
+            if (optToggle) optToggle.checked = false;
+        });
+    }
+
+    function removeAddonOptionRow(oid, isExisting) {
+        const row = document.getElementById(oid);
+        if (!row) return;
+        const card = row.closest('.addon-group-card');
+        const gid = card?.id;
+        if (isExisting === true || isExisting === 'true') {
+            row.setAttribute('data-delete-option', 'true');
+            row.style.display = 'none';
+        } else {
+            row.remove();
+        }
+        if (gid) syncAddonGroupActiveFromOptions(gid);
+    }
+
+    function removeAddonOptionImage(oid, isExisting) {
+        const row = document.getElementById(oid);
+        if (!row) return;
+        row.addonImageFile = null;
+        const fileInput = document.getElementById(`addon-image-${oid}`);
+        if (fileInput) fileInput.value = '';
+        const imgWrap = document.getElementById(`addon-thumb-img-${oid}`);
+        const btn = document.getElementById(`addon-thumb-btn-${oid}`);
+        if (imgWrap) {
+            const img = imgWrap.querySelector('img');
+            if (img) img.src = '';
+            imgWrap.style.display = 'none';
+        }
+        if (btn) btn.style.display = 'flex';
+        if (isExisting === true || isExisting === 'true') {
+            row.setAttribute('data-remove-addon-image', 'true');
+        }
+    }
+
+    function collectAddonGroups() {
+        const cards = document.querySelectorAll('.addon-group-card');
+        const groups = [];
+        cards.forEach((card, gIdx) => {
+            const groupId = card.dataset.groupId || null;
+            if (card.getAttribute('data-delete-group') === 'true' && groupId) {
+                groups.push({ id: parseInt(groupId, 10), _delete: true });
+                return;
+            }
+            const name = card.querySelector('[name="addon_group_name"]')?.value?.trim();
+            let isActive = card.querySelector('[name="addon_group_active"]')?.checked ?? true;
+            const options = [];
+            card.querySelectorAll('.addon-option-row').forEach((row, oIdx) => {
+                const optId = row.dataset.optionId || null;
+                if (row.getAttribute('data-delete-option') === 'true' && optId) {
+                    options.push({ id: parseInt(optId, 10), _delete: true });
+                    return;
+                }
+                const optName = row.querySelector('[name="addon_opt_name"]')?.value?.trim();
+                const price = parseFloat(row.querySelector('[name="addon_opt_price"]')?.value);
+                const stockInput = row.querySelector('[name="addon_opt_stock"]');
+                const stock = stockInput?.value;
+                const stockFromAttribute = stockInput?.getAttribute('value');
+                // Existing options: keep original stock (edit only via Inventory Add/Reduce)
+                const finalStock = optId ? stockFromAttribute : stock;
+                const parsedStock = parseInt(finalStock, 10);
+                if (!optName) return;
+                const opt = {
+                    id: optId ? parseInt(optId, 10) : null,
+                    name: optName,
+                    price: isNaN(price) ? 0 : price,
+                    stock_quantity: isNaN(parsedStock) ? 0 : parsedStock,
+                    sort_order: oIdx,
+                    is_available: row.querySelector('[name="addon_opt_available"]')?.checked ?? true,
+                    show_in_you_may_also_like: row.querySelector('[name="addon_opt_ymal"]')?.checked ?? false,
+                };
+                if (row.addonImageFile) opt.imageFile = row.addonImageFile;
+                if (row.getAttribute('data-remove-addon-image') === 'true') opt._remove_image = true;
+                const existingImg = row.querySelector('.variant-image-img');
+                if (existingImg && existingImg.getAttribute('src')) {
+                    opt._has_image = true;
+                }
+                options.push(opt);
+            });
+            const liveOptions = options.filter(o => !o._delete);
+            if (liveOptions.length > 0 && liveOptions.every(o => !o.is_available)) {
+                isActive = false;
+            }
+            groups.push({
+                id: groupId ? parseInt(groupId, 10) : null,
+                name,
+                sort_order: gIdx,
+                is_active: isActive,
+                options,
+            });
+        });
+        return groups;
+    }
+
     // ===== GLOBAL FUNCTION EXPORTS =====
     window.addVariantRow = addVariantRow;
     window.removeVariantRow = removeVariantRow;
@@ -4222,6 +4682,14 @@ function updateVariantStockInData(variantId, newStock) {
     window.openStockReductionModal = openStockReductionModal;
     window.closeStockReductionModal = closeStockReductionModal;
     window.submitStockReduction = submitStockReduction;
+    window.toggleAddonsSection = toggleAddonsSection;
+    window.syncAddonGroupActiveFromOptions = syncAddonGroupActiveFromOptions;
+    window.onAddonGroupActiveChange = onAddonGroupActiveChange;
+    window.addAddonGroup = addAddonGroup;
+    window.removeAddonGroup = removeAddonGroup;
+    window.addAddonOptionRow = addAddonOptionRow;
+    window.removeAddonOptionRow = removeAddonOptionRow;
+    window.removeAddonOptionImage = removeAddonOptionImage;
     window.openStockAdditionModal = openStockAdditionModal;
     window.closeStockAdditionModal = closeStockAdditionModal;
     window.submitStockAddition = submitStockAddition;

@@ -22,6 +22,12 @@ from sqlalchemy import inspect
 
 from app.extensions import db
 from app.models import Cart, CartItem, Notification, Order, OrderItem, Product, ProductVariant, Store, User, UserAddress, StorePaymentSetting
+from app.addon_helpers import (
+    resolve_structured_addon_selections,
+    structured_addons_subtotal,
+    attach_order_item_addons,
+    decrement_addon_option_stock,
+)
 
 # Create blueprint
 checkout_bp = Blueprint("checkout", __name__)
@@ -97,6 +103,83 @@ def _free_delivery_fields(store, subtotal, delivery_fee):
     }
 
 
+def _resolve_buy_now_addons(addons_data, store_id, exclude_product_id=None):
+    """
+    Validate optional buy-now add-on products (You might also like).
+    Returns (resolved_lines, error_response).
+    resolved_lines: list of dicts with product, quantity, price (Decimal), name, image_url
+    """
+    if not addons_data:
+        return [], None
+    if not isinstance(addons_data, list):
+        return None, (jsonify({"error": "addons must be a list"}), 400)
+
+    resolved = []
+    seen = set()
+    for raw in addons_data:
+        if not isinstance(raw, dict):
+            return None, (jsonify({"error": "Invalid addon item"}), 400)
+        try:
+            product_id = int(raw.get("product_id") or raw.get("id"))
+            quantity = int(raw.get("quantity") or 1)
+        except (TypeError, ValueError):
+            return None, (jsonify({"error": "Invalid addon product_id or quantity"}), 400)
+
+        if quantity < 1:
+            return None, (jsonify({"error": "Addon quantity must be at least 1"}), 400)
+        if exclude_product_id and product_id == int(exclude_product_id):
+            continue
+        if product_id in seen:
+            # Merge quantities for duplicates
+            for line in resolved:
+                if line["product"].id == product_id:
+                    line["quantity"] += quantity
+                    break
+            continue
+        seen.add(product_id)
+
+        addon_product = Product.query.get(product_id)
+        if not addon_product:
+            return None, (jsonify({"error": f"Addon product #{product_id} not found"}), 404)
+        if addon_product.store_id != store_id:
+            return None, (jsonify({
+                "error": f'"{addon_product.name}" is not from the same store'
+            }), 400)
+        if not addon_product.is_available or getattr(addon_product, "is_archived", False):
+            return None, (jsonify({
+                "error": f'"{addon_product.name}" is no longer available'
+            }), 400)
+        if int(addon_product.stock_quantity or 0) < quantity:
+            return None, (jsonify({
+                "error": (
+                    f'Insufficient stock for "{addon_product.name}". '
+                    f'Available: {addon_product.stock_quantity}'
+                )
+            }), 400)
+
+        primary = None
+        try:
+            images = list(addon_product.images or [])
+            primary = next((img for img in images if getattr(img, "is_primary", False)), None)
+            if not primary and images:
+                primary = images[0]
+        except Exception:
+            primary = None
+        image_url = ""
+        if primary is not None:
+            image_url = getattr(primary, "cloudinary_url", None) or getattr(primary, "image_url", "") or ""
+
+        resolved.append({
+            "product": addon_product,
+            "quantity": quantity,
+            "price": Decimal(str(addon_product.effective_price)),
+            "name": addon_product.name,
+            "image_url": image_url,
+        })
+
+    return resolved, None
+
+
 def _subtotal_from_order_items(order_data):
     line_total = Decimal('0')
     for item_data in order_data.get('items') or []:
@@ -106,12 +189,52 @@ def _subtotal_from_order_items(order_data):
         except Exception:
             continue
         line_total += price * qty
+        try:
+            line_total += Decimal(str(item_data.get('addons_total') or 0))
+        except Exception:
+            for a in item_data.get('addons') or []:
+                try:
+                    line_total += Decimal(str(a.get('price') or 0)) * int(a.get('quantity') or 1)
+                except Exception:
+                    pass
     if line_total > 0:
         return line_total
     try:
         return Decimal(str(order_data.get('subtotal') or 0))
     except Exception:
         return Decimal('0')
+
+
+def _cart_items_subtotal(cart_items):
+    """Product + structured add-ons subtotal from live cart rows."""
+    total = Decimal('0')
+    for item in cart_items or []:
+        try:
+            total += Decimal(str(item.subtotal or 0))
+        except Exception:
+            continue
+    return total
+
+
+def _enrich_order_items_addons_from_cart(order_data, selected_items):
+    """Attach addons_total onto payload items from matching cart rows."""
+    items = order_data.get('items') or []
+    for item_data in items:
+        if item_data.get('addons_total') not in (None, '', 0, '0'):
+            continue
+        cart_match = next(
+            (
+                ci for ci in selected_items
+                if ci.product_id == item_data.get('product_id')
+                and (ci.variant_id or None) == (item_data.get('variant_id') or None)
+            ),
+            None,
+        )
+        if not cart_match:
+            continue
+        item_data['addons_total'] = float(cart_match.addons_subtotal or 0)
+        item_data['addons'] = [a.to_dict() for a in (cart_match.addons or [])]
+    return order_data
 
 
 def _build_stock_lookup(cart_items):
@@ -133,6 +256,41 @@ def _build_stock_lookup(cart_items):
         stock_lookup[key]["quantity"] += int(cart_item.quantity or 0)
 
     return stock_lookup
+
+
+def _cart_structured_addon_lines(cart_items):
+    """Resolved structured add-on lines for cart items (qty scaled by line qty)."""
+    lines = []
+    for cart_item in cart_items or []:
+        main_qty = max(1, int(cart_item.quantity or 1))
+        for row in (cart_item.addons or []):
+            opt = row.addon_option
+            if not opt:
+                continue
+            unit_qty = max(1, int(row.quantity or 1))
+            lines.append({
+                'option': opt,
+                'quantity': unit_qty * main_qty,
+                'price': Decimal(str(opt.price or 0)),
+                'name': opt.name,
+                'image_url': opt.image_url or '',
+                'group_id': opt.group_id,
+                'group_name': opt.group.name if opt.group else None,
+                'cart_item_id': cart_item.id,
+            })
+    return lines
+
+
+def _validate_structured_addon_stock(lines):
+    for line in lines or []:
+        opt = line['option']
+        need = int(line['quantity'])
+        if not opt.is_available or not opt.group or not opt.group.is_active:
+            raise ValueError(f'"{opt.name}" is no longer available')
+        if int(opt.stock_quantity or 0) < need:
+            raise ValueError(
+                f'Insufficient stock for "{opt.name}". Available: {opt.stock_quantity}'
+            )
 
 
 def _validate_stock_lookup(stock_lookup):
@@ -572,6 +730,36 @@ def validate_checkout_stock():
                 "variant": variant,
                 "quantity": quantity,
             }
+
+            # Include You might also like / add-on selections
+            addon_lines, addon_err = _resolve_buy_now_addons(
+                data.get("addons") or [],
+                product.store_id,
+                exclude_product_id=product.id,
+            )
+            if addon_err:
+                return addon_err
+            for line in addon_lines:
+                key = (line["product"].id, None)
+                if key not in stock_lookup:
+                    stock_lookup[key] = {
+                        "product": line["product"],
+                        "variant": None,
+                        "quantity": 0,
+                    }
+                stock_lookup[key]["quantity"] += int(line["quantity"] or 0)
+
+            struct_lines, struct_err = resolve_structured_addon_selections(
+                product,
+                data.get("addon_option_ids") or data.get("addon_selections") or [],
+                quantity_per_option=quantity,
+            )
+            if struct_err:
+                return struct_err
+            try:
+                _validate_structured_addon_stock(struct_lines)
+            except ValueError as e:
+                return jsonify({"success": False, "error": str(e)}), 400
         else:
             cart = Cart.query.filter_by(user_id=user_id).first()
             if not cart:
@@ -612,6 +800,11 @@ def validate_checkout_stock():
                         "quantity": 0,
                     }
                 stock_lookup[key]["quantity"] += max(qty, 0)
+
+            try:
+                _validate_structured_addon_stock(_cart_structured_addon_lines(selected_items))
+            except ValueError as e:
+                return jsonify({"success": False, "error": str(e)}), 400
 
         issues = _collect_stock_issues(stock_lookup)
         if issues:
@@ -708,7 +901,31 @@ def validate_checkout():
                 item_price = Decimal(str(src.effective_price))
                 orig_price = float(src.price)
                 disc_pct = src.discount_pct
-                subtotal += item_price * item.quantity
+                line_addons = []
+                addons_sum = Decimal('0')
+                for row in (item.addons or []):
+                    opt = row.addon_option
+                    if not opt:
+                        continue
+                    units = max(1, int(row.quantity or 1))
+                    need = units * int(item.quantity or 1)
+                    if not opt.is_available or int(opt.stock_quantity or 0) < need:
+                        raise Exception(
+                            f'Insufficient stock for add-on "{opt.name}"'
+                            if opt.is_available else f'Add-on "{opt.name}" is no longer available'
+                        )
+                    ap = Decimal(str(opt.price or 0))
+                    addons_sum += ap * need
+                    line_addons.append({
+                        'addon_option_id': opt.id,
+                        'name': opt.name,
+                        'price': float(ap),
+                        'quantity': need,
+                        'units': units,
+                        'image_url': opt.image_url or '',
+                        'group_name': opt.group.name if opt.group else None,
+                    })
+                subtotal += item_price * item.quantity + addons_sum
                 order_items_data.append({
                     "product_id": item.product_id,
                     "variant_id": item.variant_id,
@@ -716,6 +933,8 @@ def validate_checkout():
                     "price": float(item_price),
                     "original_price": orig_price if disc_pct else None,
                     "discount_pct": disc_pct,
+                    "addons": line_addons,
+                    "addons_total": float(addons_sum),
                 })
 
             delivery_check = _check_store_delivery(store, address, subtotal)
@@ -898,6 +1117,8 @@ def create_orders():
 
         stock_lookup = _build_stock_lookup(selected_items)
         _validate_stock_lookup(stock_lookup)
+        cart_addon_lines = _cart_structured_addon_lines(selected_items)
+        _validate_structured_addon_stock(cart_addon_lines)
 
         delivery_point = from_shape(Point(address.longitude, address.latitude), srid=4326)
         orders_created = []
@@ -940,7 +1161,19 @@ def create_orders():
             if slot_error:
                 return jsonify({"error": slot_error}), 400
 
-            computed_subtotal = _subtotal_from_order_items(order_data)
+            store_cart_items = [
+                ci for ci in selected_items
+                if ci.product and ci.product.store_id == store.id
+            ]
+            # Always prefer cart-derived subtotal so structured add-ons are included
+            # even when the client omits addons_total on payload items.
+            _enrich_order_items_addons_from_cart(order_data, selected_items)
+            cart_subtotal = _cart_items_subtotal(store_cart_items)
+            payload_subtotal = _subtotal_from_order_items(order_data)
+            computed_subtotal = cart_subtotal if store_cart_items else payload_subtotal
+            if cart_subtotal > payload_subtotal:
+                computed_subtotal = cart_subtotal
+
             delivery_check = _check_store_delivery(store, address, computed_subtotal)
             if not delivery_check["can_deliver"]:
                 return jsonify({
@@ -993,13 +1226,39 @@ def create_orders():
             print(f"  ✅ Created order #{order.id} for store {store.name} - Total: ₱{float(order.total_amount):,.2f}")
 
             for item_data in order_data.get("items", []):
-                db.session.add(OrderItem(
+                order_item = OrderItem(
                     order_id=order.id,
                     product_id=item_data["product_id"],
                     variant_id=item_data.get("variant_id"),
                     quantity=item_data["quantity"],
                     price=item_data["price"],
-                ))
+                )
+                db.session.add(order_item)
+                db.session.flush()
+
+                cart_match = next(
+                    (
+                        ci for ci in selected_items
+                        if ci.product_id == item_data["product_id"]
+                        and ci.variant_id == item_data.get("variant_id")
+                    ),
+                    None,
+                )
+                if cart_match:
+                    main_qty = max(1, int(item_data.get("quantity") or cart_match.quantity or 1))
+                    lines = []
+                    for row in (cart_match.addons or []):
+                        opt = row.addon_option
+                        if not opt:
+                            continue
+                        lines.append({
+                            'option': opt,
+                            'quantity': main_qty * max(1, int(row.quantity or 1)),
+                            'price': Decimal(str(opt.price or 0)),
+                            'name': opt.name,
+                            'image_url': opt.image_url or '',
+                        })
+                    attach_order_item_addons(order_item, lines)
                 print(f"    ✅ Added item: product {item_data['product_id']} x {item_data['quantity']}")
 
             db.session.flush()
@@ -1022,6 +1281,12 @@ def create_orders():
             stock_lookup,
             user_id,
             f"Reduced automatically after online checkout by customer #{user_id}",
+        )
+        decrement_addon_option_stock(
+            cart_addon_lines,
+            user_id=user_id,
+            reason='other',
+            reason_notes=f"Reduced automatically after online checkout by customer #{user_id}",
         )
 
         print(f"🗑️ Removing {len(selected_items)} selected items from cart")
@@ -1310,7 +1575,8 @@ def process_checkout():
                 item_price = Decimal(str(src.effective_price))
                 orig_price = float(src.price)
                 disc_pct = src.discount_pct
-                subtotal += item_price * item.quantity
+                addons_sum = Decimal(str(item.addons_subtotal or 0))
+                subtotal += item_price * item.quantity + addons_sum
                 order_items_data.append({
                     "product_id": int(item.product_id),
                     "variant_id": int(item.variant_id) if item.variant_id else None,
@@ -1318,12 +1584,15 @@ def process_checkout():
                     "price": float(item_price),
                     "original_price": orig_price if disc_pct else None,
                     "discount_pct": disc_pct,
+                    "addons_total": float(addons_sum),
+                    "cart_item_id": item.id,
                 })
 
             store_checkout_data[store_id] = {
                 "store": store,
                 "subtotal": subtotal,
                 "order_items_data": order_items_data,
+                "store_items": store_items,
                 "delivery_check": _check_store_delivery(store, address, subtotal),
             }
 
@@ -1362,6 +1631,7 @@ def process_checkout():
             store = checkout_data["store"]
             subtotal = checkout_data["subtotal"]
             order_items_data = checkout_data["order_items_data"]
+            store_items = checkout_data.get("store_items") or []
             delivery_check = checkout_data["delivery_check"]
             distance = delivery_check["distance_km"]
             delivery_fee = delivery_check["delivery_fee"]
@@ -1393,13 +1663,42 @@ def process_checkout():
             db.session.flush()
 
             for item_data in order_items_data:
-                db.session.add(OrderItem(
+                order_item = OrderItem(
                     order_id=order.id,
                     product_id=item_data["product_id"],
                     variant_id=item_data["variant_id"],
                     quantity=item_data["quantity"],
                     price=item_data["price"],
-                ))
+                )
+                db.session.add(order_item)
+                db.session.flush()
+
+                cart_match = next(
+                    (
+                        ci for ci in store_items
+                        if ci.id == item_data.get("cart_item_id")
+                        or (
+                            ci.product_id == item_data["product_id"]
+                            and (ci.variant_id or None) == (item_data.get("variant_id") or None)
+                        )
+                    ),
+                    None,
+                )
+                if cart_match:
+                    main_qty = max(1, int(item_data.get("quantity") or cart_match.quantity or 1))
+                    lines = []
+                    for row in (cart_match.addons or []):
+                        opt = row.addon_option
+                        if not opt:
+                            continue
+                        lines.append({
+                            'option': opt,
+                            'quantity': main_qty * max(1, int(row.quantity or 1)),
+                            'price': Decimal(str(opt.price or 0)),
+                            'name': opt.name,
+                            'image_url': opt.image_url or '',
+                        })
+                    attach_order_item_addons(order_item, lines)
 
             db.session.flush()
 
@@ -1635,7 +1934,59 @@ def buy_now_validate():
         if not store:
             return jsonify({"error": "Store not found"}), 404
 
+        addon_lines, addon_err = _resolve_buy_now_addons(
+            data.get("addons") or [],
+            store.id,
+            exclude_product_id=product.id,
+        )
+        if addon_err:
+            return addon_err
+
+        struct_lines, struct_err = resolve_structured_addon_selections(
+            product,
+            data.get("addon_option_ids") or data.get("addon_selections") or [],
+            quantity_per_option=quantity,
+        )
+        if struct_err:
+            return struct_err
+
         subtotal = item_price * quantity
+        order_items = [{
+            "product_id": product.id,
+            "variant_id": variant.id if variant else None,
+            "quantity": quantity,
+            "price": float(item_price),
+            "name": product.name if not variant else f"{variant.name} {product.name}",
+            "image_url": (
+                (variant.image_url if variant and getattr(variant, "image_url", None) else None)
+                or (product.images[0].cloudinary_url if product.images else None)
+                or ""
+            ),
+            "addons": [
+                {
+                    "addon_option_id": line["option"].id,
+                    "name": line["name"],
+                    "price": float(line["price"]),
+                    "quantity": line["quantity"],
+                    "image_url": line.get("image_url") or "",
+                    "group_name": line.get("group_name"),
+                }
+                for line in struct_lines
+            ],
+            "addons_total": float(structured_addons_subtotal(struct_lines)),
+        }]
+        subtotal += structured_addons_subtotal(struct_lines)
+        for line in addon_lines:
+            subtotal += line["price"] * line["quantity"]
+            order_items.append({
+                "product_id": line["product"].id,
+                "variant_id": None,
+                "quantity": line["quantity"],
+                "price": float(line["price"]),
+                "name": line["name"],
+                "image_url": line["image_url"] or "",
+            })
+
         delivery_check = _check_store_delivery(store, address, subtotal)
 
         if not delivery_check["can_deliver"]:
@@ -1660,12 +2011,7 @@ def buy_now_validate():
                 "delivery_fee": float(delivery_check["delivery_fee"]),
                 "distance_km": delivery_check["distance_km"],
                 "total": float(subtotal + delivery_check["delivery_fee"]),
-                "items": [{
-                    "product_id": product.id,
-                    "variant_id": variant.id if variant else None,
-                    "quantity": quantity,
-                    "price": float(item_price),
-                }],
+                "items": order_items,
                 "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
                 "gcash_instructions": store.gcash_instructions,
                 "allow_cod": _store_allows_cod(store.id),
@@ -1747,7 +2093,27 @@ def buy_now_create_order():
             payment_proof_url = None
             payment_proof_public_id = None
 
+        addon_lines, addon_err = _resolve_buy_now_addons(
+            data.get("addons") or [],
+            store.id,
+            exclude_product_id=product.id,
+        )
+        if addon_err:
+            return addon_err
+
+        struct_lines, struct_err = resolve_structured_addon_selections(
+            product,
+            data.get("addon_option_ids") or data.get("addon_selections") or [],
+            quantity_per_option=quantity,
+        )
+        if struct_err:
+            return struct_err
+
         subtotal = item_price * quantity
+        subtotal += structured_addons_subtotal(struct_lines)
+        for line in addon_lines:
+            subtotal += line["price"] * line["quantity"]
+
         delivery_check = _check_store_delivery(store, address, subtotal)
 
         if not delivery_check["can_deliver"]:
@@ -1804,16 +2170,29 @@ def buy_now_create_order():
         if not order.total_amount or order.total_amount == 0:
             order.compute_total()
 
-        db.session.add(OrderItem(
+        main_order_item = OrderItem(
             order_id=order.id,
             product_id=product.id,
             variant_id=variant.id if variant else None,
             quantity=quantity,
             price=float(item_price),
-        ))
+        )
+        db.session.add(main_order_item)
+        db.session.flush()
+        attach_order_item_addons(main_order_item, struct_lines)
+
+        for line in addon_lines:
+            db.session.add(OrderItem(
+                order_id=order.id,
+                product_id=line["product"].id,
+                variant_id=None,
+                quantity=line["quantity"],
+                price=float(line["price"]),
+            ))
+
         db.session.flush()
 
-        # Reduce stock
+        # Reduce stock for main item
         if variant is not None:
             stock_before = int(variant.stock_quantity or 0)
         else:
@@ -1825,6 +2204,12 @@ def buy_now_create_order():
             user_id,
             reason_notes=f"Buy Now order #{order.id} by customer #{user_id}",
             variant=variant,
+        )
+        decrement_addon_option_stock(
+            struct_lines,
+            user_id=user_id,
+            reason='other',
+            reason_notes=f"Buy Now order #{order.id} by customer #{user_id}",
         )
 
         if variant is not None:
@@ -1839,6 +2224,24 @@ def buy_now_create_order():
             stock_before=stock_before,
             stock_after=stock_after,
         )
+
+        # Reduce stock for add-ons
+        for line in addon_lines:
+            addon_product = line["product"]
+            addon_before = int(addon_product.stock_quantity or 0)
+            addon_product.reduce_stock(
+                line["quantity"],
+                "other",
+                user_id,
+                reason_notes=f"Buy Now add-on on order #{order.id} by customer #{user_id}",
+                variant=None,
+            )
+            notify_low_stock_if_crossed(
+                store_id=store.id,
+                product=addon_product,
+                stock_before=addon_before,
+                stock_after=int(addon_product.stock_quantity or 0),
+            )
 
         _customer = User.query.get(user_id)
         _customer_name = _customer.full_name if _customer else f'Customer #{user_id}'

@@ -97,7 +97,9 @@ def get_pending_payment_proofs():
                         'variant_name': item.variant.name if item.variant else None,
                         'quantity': item.quantity,
                         'price': float(item.price),
-                        'subtotal': float(item.quantity * item.price)
+                        'addons': [a.to_dict() for a in (item.addons or [])],
+                        'addons_total': float(item.addons_total or 0),
+                        'subtotal': float(item.quantity * item.price) + float(item.addons_total or 0),
                     }
                     for item in order.items
                 ]

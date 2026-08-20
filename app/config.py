@@ -104,42 +104,43 @@ class Config:
     }
     
     # Cloudinary transformation presets
+    # IMPORTANT: Upload-time transforms permanently rewrite the stored asset.
+    # Keep product uploads large; resize on delivery (URL transforms) instead.
     CLOUDINARY_PRESETS = {
         'avatar': {
-            'width': 300,
-            'height': 300,
+            'width': 400,
+            'height': 400,
             'crop': 'fill',
             'gravity': 'face',
-            'quality': 'auto',
+            'quality': 'auto:good',
             'fetch_format': 'auto'
         },
         'product': {
-            'width': 800,
-            'height': 800,
+            # Soft ceiling only — do not downscale typical phone/camera photos hard
+            'width': 2500,
+            'height': 2500,
             'crop': 'limit',
-            'quality': 'auto',
-            'fetch_format': 'auto'
+            'quality': 'auto:best',
         },
         'product_thumbnail': {
-            'width': 300,
-            'height': 300,
+            # Used only for on-demand URL transforms, not for permanent uploads
+            'width': 400,
+            'height': 400,
             'crop': 'fill',
-            'quality': 'auto',
+            'quality': 'auto:good',
             'fetch_format': 'auto'
         },
         'gcash_qr': {
-            'width': 500,
-            'height': 500,
-            'crop': 'limit',
-            'quality': 'auto',
-            'fetch_format': 'auto'
-        },
-        'govt_id': {
             'width': 1000,
             'height': 1000,
             'crop': 'limit',
-            'quality': 'auto',
-            'fetch_format': 'auto'
+            'quality': 'auto:best',
+        },
+        'govt_id': {
+            'width': 2000,
+            'height': 2000,
+            'crop': 'limit',
+            'quality': 'auto:best',
         }
     }
     

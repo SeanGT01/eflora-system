@@ -67,6 +67,7 @@
         padding: 0.55rem 0.8rem !important;
         font-size: 12.5px !important;
         border-bottom: 1px solid rgba(194, 78, 104, 0.08) !important;
+        vertical-align: middle;
     }
 
     .inventory-page .table tbody tr:hover {
@@ -108,18 +109,59 @@
         gap: 0.25rem !important;
     }
 
+    .inventory-page .inv-thumb-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        min-width: 0;
+    }
+
+    .inventory-page .inv-thumb,
+    .inventory-page .inv-thumb-ph {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        flex-shrink: 0;
+        border: 1px solid rgba(194, 78, 104, 0.14);
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
+    }
+
+    .inventory-page .inv-thumb {
+        object-fit: cover;
+        display: block;
+    }
+
+    .inventory-page .inv-thumb-ph {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(107, 76, 59, 0.35);
+        font-size: 14px;
+    }
+
+    .inventory-page .inv-thumb-text {
+        min-width: 0;
+    }
+
     .inventory-page .variant-row td {
         background: rgba(181, 68, 90, 0.025);
     }
 
-    .inventory-page .variant-indent {
+    .inventory-page .addon-row td {
+        background: rgba(122, 158, 126, 0.05);
+    }
+
+    .inventory-page .variant-indent,
+    .inventory-page .addon-indent {
         padding-left: 1.5rem !important;
     }
 
-    .inventory-page .variant-row-inner {
+    .inventory-page .variant-row-inner,
+    .inventory-page .addon-row-inner {
         display: flex;
         align-items: center;
         gap: 0.4rem;
+        min-width: 0;
     }
 
     .inventory-page .empty-state {
@@ -137,6 +179,16 @@
     .inventory-page .empty-state-sub {
         font-size: 12.5px !important;
     }
+
+    #stockHistoryModal .modal {
+        max-width: 720px;
+    }
+
+    .stock-history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
 </style>
 
 <div class="card inventory-page">
@@ -148,6 +200,9 @@
         <div class="inventory-actions">
             <button type="button" class="btn btn-outline btn-sm" id="variantToggleBtn" onclick="toggleVariantRows()">
                 <i class="ri-eye-off-line"></i> Hide Variants
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" id="addonToggleBtn" onclick="toggleAddonRows()">
+                <i class="ri-eye-off-line"></i> Hide Add-ons
             </button>
             <a href="{{ url_for('templates.seller_products') }}" class="btn btn-outline btn-sm">
                 <i class="ri-edit-line"></i> Manage Products
@@ -171,10 +226,22 @@
             </thead>
             <tbody>
                 {% for product in products %}
+                {% set product_img = product.thumbnail_url or product.image_url %}
                 <tr>
                     <td>
-                        <div class="product-name">{{ product.name }}</div>
-                        <div class="product-meta">ID #{{ product.id }}</div>
+                        <div class="inv-thumb-cell">
+                            {% if product_img %}
+                            <img class="inv-thumb" src="{{ product_img }}" alt="" loading="lazy"
+                                 onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+                            <span class="inv-thumb-ph" style="display:none;" aria-hidden="true"><i class="ri-flower-line"></i></span>
+                            {% else %}
+                            <span class="inv-thumb-ph" aria-hidden="true"><i class="ri-flower-line"></i></span>
+                            {% endif %}
+                            <div class="inv-thumb-text">
+                                <div class="product-name">{{ product.name }}</div>
+                                <div class="product-meta">ID #{{ product.id }}</div>
+                            </div>
+                        </div>
                     </td>
                     <td>{{ product.category_display or 'Uncategorized' }}</td>
                     <td>{{ price_tag(product, 'sm') }}</td>
@@ -197,10 +264,13 @@
                     </td>
                     <td>
                         <div class="row-actions">
-                            <button class="btn btn-outline btn-sm" onclick='openStockAdditionModal({{ product.id }}, null)'>
+                            <button class="btn btn-outline btn-sm" onclick='openStockHistoryModal({{ product.id }})' title="Stock history">
+                                <i class="ri-history-line"></i>
+                            </button>
+                            <button class="btn btn-outline btn-sm" onclick='openStockAdditionModal({{ product.id }}, null, null)'>
                                 <i class="ri-add-line"></i> Add
                             </button>
-                            <button class="btn btn-danger-outline btn-sm" onclick='openStockReductionModal({{ product.id }}, null)'>
+                            <button class="btn btn-danger-outline btn-sm" onclick='openStockReductionModal({{ product.id }}, null, null)'>
                                 <i class="ri-subtract-line"></i> Reduce
                             </button>
                         </div>
@@ -208,11 +278,19 @@
                 </tr>
                 {% if product.variants %}
                     {% for variant in product.variants %}
+                    {% set variant_img = variant.image_thumbnail or variant.image_url or product_img %}
                     <tr class="variant-row">
                         <td class="variant-indent">
                             <div class="variant-row-inner">
-                                <i class="ri-corner-down-right-line" style="color: var(--muted);"></i>
-                                <div>
+                                <i class="ri-corner-down-right-line" style="color: var(--muted); flex-shrink:0;"></i>
+                                {% if variant_img %}
+                                <img class="inv-thumb" src="{{ variant_img }}" alt="" loading="lazy"
+                                     onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+                                <span class="inv-thumb-ph" style="display:none;" aria-hidden="true"><i class="ri-layout-grid-line"></i></span>
+                                {% else %}
+                                <span class="inv-thumb-ph" aria-hidden="true"><i class="ri-layout-grid-line"></i></span>
+                                {% endif %}
+                                <div class="inv-thumb-text">
                                     <div class="product-name" style="color: var(--bark);">{{ variant.name }}</div>
                                     <div class="product-meta">Variant of {{ product.name }}</div>
                                 </div>
@@ -237,15 +315,72 @@
                         </td>
                         <td>
                             <div class="row-actions">
-                                <button class="btn btn-outline btn-sm" onclick='openStockAdditionModal({{ product.id }}, {{ variant.id }})'>
+                                <button class="btn btn-outline btn-sm" onclick='openStockHistoryModal({{ product.id }}, {{ variant.id }}, null)' title="Stock history">
+                                    <i class="ri-history-line"></i>
+                                </button>
+                                <button class="btn btn-outline btn-sm" onclick='openStockAdditionModal({{ product.id }}, {{ variant.id }}, null)'>
                                     <i class="ri-add-line"></i> Add
                                 </button>
-                                <button class="btn btn-danger-outline btn-sm" onclick='openStockReductionModal({{ product.id }}, {{ variant.id }})'>
+                                <button class="btn btn-danger-outline btn-sm" onclick='openStockReductionModal({{ product.id }}, {{ variant.id }}, null)'>
                                     <i class="ri-subtract-line"></i> Reduce
                                 </button>
                             </div>
                         </td>
                     </tr>
+                    {% endfor %}
+                {% endif %}
+                {% if product.addon_groups %}
+                    {% for group in product.addon_groups %}
+                        {% for opt in group.options or [] %}
+                        <tr class="addon-row">
+                            <td class="addon-indent">
+                                <div class="addon-row-inner">
+                                    <i class="ri-corner-down-right-line" style="color: var(--deep-sage); flex-shrink:0;"></i>
+                                    {% if opt.image_url %}
+                                    <img class="inv-thumb" src="{{ opt.image_url }}" alt="" loading="lazy"
+                                         onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+                                    <span class="inv-thumb-ph" style="display:none;" aria-hidden="true"><i class="ri-gift-line"></i></span>
+                                    {% else %}
+                                    <span class="inv-thumb-ph" aria-hidden="true"><i class="ri-gift-line"></i></span>
+                                    {% endif %}
+                                    <div class="inv-thumb-text">
+                                        <div class="product-name" style="color: var(--deep-sage);">{{ opt.name }}</div>
+                                        <div class="product-meta">Add-on · {{ group.name }} · {{ product.name }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td><span class="product-meta">Add-on</span></td>
+                            <td>₱{{ '%.2f'|format(opt.price|float) }}</td>
+                            <td>{{ opt.stock_quantity }}</td>
+                            <td>
+                                {% if opt.stock_quantity > 10 %}
+                                    <span class="status-badge badge-available">In Stock</span>
+                                {% elif opt.stock_quantity > 0 %}
+                                    <span class="status-badge badge-low">Low Stock</span>
+                                {% else %}
+                                    <span class="status-badge badge-out">Out of Stock</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="status-badge {% if opt.is_available %}badge-active{% else %}badge-cancelled{% endif %}">
+                                    {{ 'Active' if opt.is_available else 'Unavailable' }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="row-actions">
+                                    <button class="btn btn-outline btn-sm" onclick='openStockHistoryModal({{ product.id }}, null, {{ opt.id }})' title="Stock history">
+                                        <i class="ri-history-line"></i>
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick='openStockAdditionModal({{ product.id }}, null, {{ opt.id }})'>
+                                        <i class="ri-add-line"></i> Add
+                                    </button>
+                                    <button class="btn btn-danger-outline btn-sm" onclick='openStockReductionModal({{ product.id }}, null, {{ opt.id }})'>
+                                        <i class="ri-subtract-line"></i> Reduce
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
                     {% endfor %}
                 {% endif %}
                 {% endfor %}
@@ -273,9 +408,9 @@
         <div class="modal-body">
             <form id="stockReductionForm">
                 <div class="form-group">
-                    <label class="form-label">Select Product/Variant <span style="color: var(--deep-rose);">*</span></label>
+                    <label class="form-label">Select Product / Variant / Add-on <span style="color: var(--deep-rose);">*</span></label>
                     <select class="form-select" id="reductionSelector" onchange="updateReductionSelection()"></select>
-                    <div class="form-hint">Select the product or variant to reduce stock for.</div>
+                    <div class="form-hint">Choose what to reduce stock for.</div>
                 </div>
                 <div class="form-group">
                     <div style="padding:0.75rem 0.9rem; border:1px solid var(--border); border-left:3px solid var(--deep-rose); border-radius: var(--radius-md); background: var(--cream);">
@@ -321,9 +456,9 @@
         <div class="modal-body">
             <form id="stockAdditionForm">
                 <div class="form-group">
-                    <label class="form-label">Select Product/Variant <span style="color: var(--deep-rose);">*</span></label>
+                    <label class="form-label">Select Product / Variant / Add-on <span style="color: var(--deep-rose);">*</span></label>
                     <select class="form-select" id="additionSelector" onchange="updateAdditionSelection()"></select>
-                    <div class="form-hint">Select the product or variant to add stock for.</div>
+                    <div class="form-hint">Choose what to add stock for.</div>
                 </div>
                 <div class="form-group">
                     <div style="padding:0.75rem 0.9rem; border:1px solid var(--border); border-left:3px solid var(--sage); border-radius: var(--radius-md); background: var(--cream);">
@@ -359,6 +494,18 @@
         </div>
     </div>
 </div>
+
+<div class="modal-overlay" id="stockHistoryModal" style="display:none;">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Stock History</h3>
+            <button class="modal-close" onclick="closeStockHistoryModal()"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="stockHistoryContent" style="min-height: 200px;"></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -366,14 +513,32 @@
     const inventoryProducts = {{ products|tojson }};
     let reductionMainProductId = null;
     let reductionVariantId = null;
+    let reductionAddonOptionId = null;
     let additionMainProductId = null;
     let additionVariantId = null;
+    let additionAddonOptionId = null;
+    let historyProductId = null;
+    let historyVariantId = null;
+    let historyAddonOptionId = null;
 
     function getCsrfToken() {
         return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     }
 
-    function populateSelector(selectorEl, mainProductId, selectedVariantId) {
+    function flattenAddonOptions(product) {
+        const rows = [];
+        (product.addon_groups || []).forEach(g => {
+            (g.options || []).forEach(opt => {
+                rows.push({
+                    ...opt,
+                    group_name: g.name || opt.group_name || 'Add-on',
+                });
+            });
+        });
+        return rows;
+    }
+
+    function populateSelector(selectorEl, mainProductId, selectedVariantId, selectedAddonOptionId) {
         const product = inventoryProducts.find(p => p.id === mainProductId);
         selectorEl.innerHTML = '';
         if (!product) {
@@ -391,40 +556,66 @@
 
         (product.variants || []).forEach(v => {
             const opt = document.createElement('option');
-            opt.value = `${product.id}|${v.id}`;
+            opt.value = `${product.id}|v:${v.id}`;
             opt.text = `${product.name} → ${v.name} (Variant - ${v.stock_quantity} units)`;
             selectorEl.appendChild(opt);
         });
 
-        if (selectedVariantId) {
-            selectorEl.value = `${mainProductId}|${selectedVariantId}`;
+        flattenAddonOptions(product).forEach(a => {
+            const opt = document.createElement('option');
+            opt.value = `${product.id}|a:${a.id}`;
+            opt.text = `${product.name} → ${a.group_name}: ${a.name} (Add-on - ${a.stock_quantity} units)`;
+            selectorEl.appendChild(opt);
+        });
+
+        if (selectedAddonOptionId) {
+            selectorEl.value = `${mainProductId}|a:${selectedAddonOptionId}`;
+        } else if (selectedVariantId) {
+            selectorEl.value = `${mainProductId}|v:${selectedVariantId}`;
         } else {
             selectorEl.value = `${mainProductId}|main`;
         }
     }
 
     function parseSelection(value) {
-        const [main, variant] = String(value || '').split('|');
-        return {
-            mainProductId: main ? parseInt(main, 10) : null,
-            variantId: variant && variant !== 'main' ? parseInt(variant, 10) : null
-        };
+        const [main, rest] = String(value || '').split('|');
+        const mainProductId = main ? parseInt(main, 10) : null;
+        if (!rest || rest === 'main') {
+            return { mainProductId, variantId: null, addonOptionId: null };
+        }
+        if (rest.startsWith('v:')) {
+            return { mainProductId, variantId: parseInt(rest.slice(2), 10) || null, addonOptionId: null };
+        }
+        if (rest.startsWith('a:')) {
+            return { mainProductId, variantId: null, addonOptionId: parseInt(rest.slice(2), 10) || null };
+        }
+        // Backward-compatible: bare variant id
+        return { mainProductId, variantId: parseInt(rest, 10) || null, addonOptionId: null };
     }
 
-    function getSelectedStock(mainId, variantId) {
+    function getSelectedStock(mainId, variantId, addonOptionId) {
         const product = inventoryProducts.find(p => p.id === mainId);
         if (!product) return { name: 'Select a product', stock: 0 };
-        if (!variantId) return { name: product.name, stock: product.stock_quantity || 0 };
-        const variant = (product.variants || []).find(v => v.id === variantId);
-        return {
-            name: variant ? `${product.name} → ${variant.name}` : product.name,
-            stock: variant ? (variant.stock_quantity || 0) : (product.stock_quantity || 0)
-        };
+        if (addonOptionId) {
+            const addon = flattenAddonOptions(product).find(a => a.id === addonOptionId);
+            return {
+                name: addon ? `${product.name} → ${addon.group_name}: ${addon.name}` : product.name,
+                stock: addon ? (addon.stock_quantity || 0) : 0,
+            };
+        }
+        if (variantId) {
+            const variant = (product.variants || []).find(v => v.id === variantId);
+            return {
+                name: variant ? `${product.name} → ${variant.name}` : product.name,
+                stock: variant ? (variant.stock_quantity || 0) : (product.stock_quantity || 0),
+            };
+        }
+        return { name: product.name, stock: product.stock_quantity || 0 };
     }
 
-    function openStockReductionModal(productId, variantId) {
+    function openStockReductionModal(productId, variantId, addonOptionId) {
         const selector = document.getElementById('reductionSelector');
-        populateSelector(selector, productId, variantId);
+        populateSelector(selector, productId, variantId, addonOptionId);
         updateReductionSelection();
         document.getElementById('reductionAmount').value = '';
         document.getElementById('reductionNotes').value = '';
@@ -439,9 +630,9 @@
         document.body.style.overflow = '';
     }
 
-    function openStockAdditionModal(productId, variantId) {
+    function openStockAdditionModal(productId, variantId, addonOptionId) {
         const selector = document.getElementById('additionSelector');
-        populateSelector(selector, productId, variantId);
+        populateSelector(selector, productId, variantId, addonOptionId);
         updateAdditionSelection();
         document.getElementById('additionAmount').value = '';
         document.getElementById('additionNotes').value = '';
@@ -460,7 +651,8 @@
         const parsed = parseSelection(document.getElementById('reductionSelector').value);
         reductionMainProductId = parsed.mainProductId;
         reductionVariantId = parsed.variantId;
-        const data = getSelectedStock(reductionMainProductId, reductionVariantId);
+        reductionAddonOptionId = parsed.addonOptionId;
+        const data = getSelectedStock(reductionMainProductId, reductionVariantId, reductionAddonOptionId);
         document.getElementById('reductionSelectedName').textContent = data.name;
         document.getElementById('reductionCurrentStock').textContent = data.stock;
         document.getElementById('reductionAmountHint').textContent = `Available: ${data.stock} units`;
@@ -470,7 +662,8 @@
         const parsed = parseSelection(document.getElementById('additionSelector').value);
         additionMainProductId = parsed.mainProductId;
         additionVariantId = parsed.variantId;
-        const data = getSelectedStock(additionMainProductId, additionVariantId);
+        additionAddonOptionId = parsed.addonOptionId;
+        const data = getSelectedStock(additionMainProductId, additionVariantId, additionAddonOptionId);
         document.getElementById('additionSelectedName').textContent = data.name;
         document.getElementById('additionCurrentStock').textContent = data.stock;
         document.getElementById('additionAmountHint').textContent = `Current: ${data.stock} units`;
@@ -488,6 +681,21 @@
         } else {
             variantRows.forEach(row => { row.style.display = ''; });
             toggleBtn.innerHTML = '<i class="ri-eye-off-line"></i> Hide Variants';
+        }
+    }
+
+    function toggleAddonRows() {
+        const addonRows = document.querySelectorAll('.addon-row');
+        const toggleBtn = document.getElementById('addonToggleBtn');
+        if (!toggleBtn || addonRows.length === 0) return;
+
+        const addonsAreVisible = Array.from(addonRows).some(row => row.style.display !== 'none');
+        if (addonsAreVisible) {
+            addonRows.forEach(row => { row.style.display = 'none'; });
+            toggleBtn.innerHTML = '<i class="ri-eye-line"></i> Show Add-ons';
+        } else {
+            addonRows.forEach(row => { row.style.display = ''; });
+            toggleBtn.innerHTML = '<i class="ri-eye-off-line"></i> Hide Add-ons';
         }
     }
 
@@ -537,11 +745,12 @@
         const reasonNotes = document.getElementById('reductionNotes').value.trim();
         const btn = document.getElementById('submitReductionBtn');
         if (!reductionMainProductId) {
-            window.showToast('Please select a product or variant', 'error');
+            window.showToast('Please select a product, variant, or add-on', 'error');
             return;
         }
         const payload = { amount, reason, reason_notes: reasonNotes };
-        if (reductionVariantId) payload.variant_id = reductionVariantId;
+        if (reductionAddonOptionId) payload.addon_option_id = reductionAddonOptionId;
+        else if (reductionVariantId) payload.variant_id = reductionVariantId;
         const success = await applyStockUpdate(
             `/seller/products/${reductionMainProductId}/reduce-stock`,
             payload,
@@ -557,11 +766,12 @@
         const reasonNotes = document.getElementById('additionNotes').value.trim();
         const btn = document.getElementById('submitAdditionBtn');
         if (!additionMainProductId) {
-            window.showToast('Please select a product or variant', 'error');
+            window.showToast('Please select a product, variant, or add-on', 'error');
             return;
         }
         const payload = { amount, reason, reason_notes: reasonNotes };
-        if (additionVariantId) payload.variant_id = additionVariantId;
+        if (additionAddonOptionId) payload.addon_option_id = additionAddonOptionId;
+        else if (additionVariantId) payload.variant_id = additionVariantId;
         const success = await applyStockUpdate(
             `/seller/products/${additionMainProductId}/add-stock`,
             payload,
@@ -569,6 +779,182 @@
             'Stock added successfully'
         );
         if (success) closeStockAdditionModal();
+    }
+
+    function openStockHistoryModal(productId, variantId, addonOptionId) {
+        historyProductId = productId;
+        historyVariantId = variantId || null;
+        historyAddonOptionId = addonOptionId || null;
+        const modal = document.getElementById('stockHistoryModal');
+        modal.style.display = 'flex';
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        loadStockHistory();
+    }
+
+    function closeStockHistoryModal() {
+        const modal = document.getElementById('stockHistoryModal');
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function isAdditionReason(reason) {
+        return ['found_stock', 'receiving_error', 'restock'].includes(reason);
+    }
+
+    function parseApiDateTime(value) {
+        if (!value) return null;
+        if (value instanceof Date) return value;
+        const raw = String(value).trim();
+        if (!raw) return null;
+        if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(raw)) return new Date(raw);
+        // Server stores naive UTC — treat as UTC so Manila conversion is correct
+        return new Date(`${raw}Z`);
+    }
+
+    function formatHistoryDateTime(value) {
+        if (!value) return '—';
+        try {
+            const parsed = parseApiDateTime(value);
+            if (!parsed || Number.isNaN(parsed.getTime())) return String(value);
+            return new Intl.DateTimeFormat('en-PH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+                timeZone: 'Asia/Manila',
+            }).format(parsed);
+        } catch {
+            return String(value);
+        }
+    }
+
+    function buildHistorySection(title, reductions, color, icon) {
+        if (!reductions || reductions.length === 0) return '';
+
+        let html = `<div style="margin-bottom: 1.1rem;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid ${color};">
+                <i class="${icon}" style="color:${color};font-size:1.1rem;"></i>
+                <h5 style="margin:0;color:${color};font-size:0.95rem;">${title}</h5>
+                <span style="background:${color};color:#fff;padding:2px 8px;border-radius:12px;font-size:0.72rem;margin-left:auto;">
+                    ${reductions.length} entr${reductions.length === 1 ? 'y' : 'ies'}
+                </span>
+            </div>`;
+
+        reductions.forEach(reduction => {
+            const date = formatHistoryDateTime(reduction.created_at);
+            const reasonColors = {
+                spoilage: '#FFB74D', damage: '#EF5350', defect: '#AB47BC', other: '#90A4AE',
+                pos_sale: '#4CAF50', found_stock: '#2196F3', receiving_error: '#FF9800', restock: '#8BC34A'
+            };
+            const reasonIcons = {
+                spoilage: 'ri-leaf-line', damage: 'ri-alert-line', defect: 'ri-error-warning-line',
+                other: 'ri-question-line', pos_sale: 'ri-shopping-cart-line', found_stock: 'ri-search-line',
+                receiving_error: 'ri-error-warning-line', restock: 'ri-inbox-archive-line'
+            };
+            const reasonColor = reasonColors[reduction.reason] || '#90A4AE';
+            const reasonIcon = reasonIcons[reduction.reason] || 'ri-question-line';
+            const added = isAdditionReason(reduction.reason);
+            const itemImage = reduction.product_image;
+            const itemName = reduction.product_name || 'Item';
+            const reasonLabel = reduction.reason === 'pos_sale' ? 'POS Sale'
+                : reduction.reason === 'found_stock' ? 'Found Stock'
+                : reduction.reason === 'receiving_error' ? 'Receiving Error'
+                : reduction.reason === 'restock' ? 'Restock'
+                : (reduction.reason || 'Other').charAt(0).toUpperCase() + (reduction.reason || 'other').slice(1);
+
+            html += `
+                <div style="border:1px solid #e8e0dc;border-radius:10px;padding:12px;margin-bottom:10px;background:#faf8f6;">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #eee;">
+                        ${itemImage
+                            ? `<img src="${itemImage}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">`
+                            : `<div style="width:40px;height:40px;background:#eee;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ri-image-line" style="color:#999;"></i></div>`}
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:0.9rem;font-weight:600;color:var(--charcoal);">${itemName}</div>
+                            <div style="font-size:0.75rem;color:var(--muted);">${added ? 'Added by' : 'Reduced by'} ${reduction.reduced_by_user || 'Unknown'}</div>
+                        </div>
+                        <div style="font-size:0.72rem;color:var(--muted);white-space:nowrap;">${date}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="background:${reasonColor};color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <i class="${reasonIcon}"></i>
+                        </div>
+                        <div>
+                            <strong style="font-size:1rem;color:${added ? '#2e7d32' : '#c62828'};">${added ? '+' : '-'}${reduction.reduction_amount} units</strong>
+                            <div style="margin-top:3px;">
+                                <span style="background:${reasonColor};color:#fff;padding:2px 9px;border-radius:12px;font-size:0.72rem;font-weight:600;">${reasonLabel}</span>
+                            </div>
+                        </div>
+                    </div>
+                    ${reduction.reason_notes ? `<div style="background:#fff;padding:8px 10px;border-radius:6px;border-left:3px solid ${reasonColor};font-size:0.85rem;color:#555;margin-top:10px;"><strong>Notes:</strong> ${reduction.reason_notes}</div>` : ''}
+                </div>`;
+        });
+
+        html += '</div>';
+        return html;
+    }
+
+    async function loadStockHistory() {
+        const content = document.getElementById('stockHistoryContent');
+        if (!historyProductId) {
+            content.innerHTML = '<p style="color:#c62828;padding:1rem;">Product not found.</p>';
+            return;
+        }
+
+        content.innerHTML = '<div style="text-align:center;padding:1.5rem;"><i class="ri-loader-4-line ri-spin" style="font-size:1.6rem;"></i><p>Loading history...</p></div>';
+
+        try {
+            const params = new URLSearchParams();
+            if (historyVariantId) params.set('variant_id', historyVariantId);
+            if (historyAddonOptionId) params.set('addon_option_id', historyAddonOptionId);
+            const qs = params.toString() ? `?${params.toString()}` : '';
+            const response = await fetch(`/seller/products/${historyProductId}/stock-history${qs}`, {
+                headers: { 'X-CSRFToken': getCsrfToken() }
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Failed to load history');
+
+            const main = data.stock_history?.main || [];
+            const variants = data.stock_history?.variants || [];
+            const addons = data.stock_history?.addons || [];
+            const totalCount = main.length + variants.length + addons.length;
+
+            if (!totalCount) {
+                content.innerHTML = `
+                    <div style="text-align:center;padding:2.5rem 1rem;">
+                        <i class="ri-history-line" style="font-size:2.4rem;color:#ccc;"></i>
+                        <p style="color:#999;margin-top:0.75rem;">No stock history yet for this item.</p>
+                    </div>`;
+                return;
+            }
+
+            let html = `
+                <div style="display:flex;gap:12px;margin-bottom:1rem;padding:12px;background:#f7f3f0;border-radius:10px;border-left:4px solid var(--deep-rose);">
+                    ${data.product?.image
+                        ? `<img src="${data.product.image}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;">`
+                        : `<div style="width:52px;height:52px;background:#e8e0dc;border-radius:8px;display:flex;align-items:center;justify-content:center;"><i class="ri-image-line" style="color:#999;"></i></div>`}
+                    <div>
+                        <h4 style="margin:0 0 4px;font-size:1rem;color:var(--charcoal);">${data.product?.name || 'Product'}</h4>
+                        <p style="margin:0;font-size:0.85rem;color:var(--muted);">${totalCount} stock change${totalCount === 1 ? '' : 's'}</p>
+                    </div>
+                </div>`;
+
+            html += buildHistorySection('Main Product', main, '#4CAF50', 'ri-box-3-line');
+            html += buildHistorySection('Variants', variants, '#9C27B0', 'ri-layout-grid-line');
+            html += buildHistorySection('Add-ons', addons, '#7A9E7E', 'ri-gift-line');
+            content.innerHTML = html;
+        } catch (error) {
+            content.innerHTML = `
+                <div style="text-align:center;padding:1.25rem;">
+                    <p style="color:#c62828;margin-bottom:0.75rem;">Error loading history: ${error.message}</p>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="loadStockHistory()">
+                        <i class="ri-refresh-line"></i> Retry
+                    </button>
+                </div>`;
+        }
     }
 
     document.getElementById('stockReductionModal')?.addEventListener('click', function(e) {
@@ -579,10 +965,15 @@
         if (e.target === this) closeStockAdditionModal();
     });
 
+    document.getElementById('stockHistoryModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeStockHistoryModal();
+    });
+
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         if (document.getElementById('stockReductionModal')?.classList.contains('active')) closeStockReductionModal();
         if (document.getElementById('stockAdditionModal')?.classList.contains('active')) closeStockAdditionModal();
+        if (document.getElementById('stockHistoryModal')?.classList.contains('active')) closeStockHistoryModal();
     });
 </script>
 {% endblock %}

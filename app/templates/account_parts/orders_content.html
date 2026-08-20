@@ -1316,6 +1316,13 @@ function normaliseCartGroups(cartItems) {
         const key = storeId || `store-${storeName}`;
         const price = Number(item.price || 0);
         const quantity = Number(item.quantity || 0);
+        const addons = Array.isArray(item.addons) ? item.addons : [];
+        const unitAddons = addons.reduce((s, a) => {
+            const units = Math.max(1, Number(a.quantity || a.units || 1));
+            return s + Number(a.price || 0) * units;
+        }, 0);
+        const addonsTotal = Number(item.addons_total != null ? item.addons_total : (unitAddons * quantity));
+        const lineTotal = (price * quantity) + addonsTotal;
 
         if (!groups.has(key)) {
             groups.set(key, {
@@ -1343,11 +1350,14 @@ function normaliseCartGroups(cartItems) {
             variant_name: item.variant?.name || null,
             quantity,
             price,
+            total: lineTotal,
+            addons,
+            addons_total: addonsTotal,
             image_url: item.image_url || null,
             product_image_url: item.image_url || null,
             is_selected: Boolean(item.is_selected)
         });
-        group.total_amount += price * quantity;
+        group.total_amount += lineTotal;
         group.item_count += quantity;
     });
 
@@ -1455,18 +1465,31 @@ function renderEmpty(msg) {
         </div>`;
 }
 
-/** Subtotal, delivery, and grand total for customer orders (API total can omit delivery). */
+/** Subtotal, delivery, and grand total for customer orders (API total can omit delivery / add-ons). */
 function customerOrderAmounts(order) {
-    const sub = Number(order.subtotal_amount ?? order.subtotal ?? 0) || 0;
+    const items = order.items || [];
+    const fromItems = items.reduce((s, i) => s + orderItemLineTotal(i), 0);
+    const apiSub = Number(order.subtotal_amount ?? order.subtotal ?? 0) || 0;
+    const hasAddons = items.some(i =>
+        (Array.isArray(i.addons) && i.addons.length > 0) || Number(i.addons_total || 0) > 0
+    );
+    // Prefer item-line sum when add-ons exist or when it exceeds a stale API subtotal
+    const sub = (hasAddons && fromItems > 0)
+        ? fromItems
+        : (fromItems > apiSub + 0.009 ? fromItems : (apiSub || fromItems));
     const delivery = Number(order.delivery_fee ?? 0) || 0;
     const computedTotal = sub + delivery;
     const apiTotal = Number(order.total_amount ?? order.total);
     const total =
-        Number.isFinite(apiTotal) &&
-        apiTotal > 0 &&
-        !(delivery > 0 && Math.abs(apiTotal - sub) <= 0.01 && computedTotal > apiTotal + 0.01)
-            ? apiTotal
-            : computedTotal;
+        hasAddons || (fromItems > apiSub + 0.009)
+            ? computedTotal
+            : (
+                Number.isFinite(apiTotal) &&
+                apiTotal > 0 &&
+                !(delivery > 0 && Math.abs(apiTotal - apiSub) <= 0.01 && computedTotal > apiTotal + 0.01)
+                    ? apiTotal
+                    : computedTotal
+            );
     return { sub, delivery, total };
 }
 
@@ -1492,7 +1515,7 @@ function renderOrderCard(order) {
         const name   = item.name || item.product_name || 'Product';
         const variant = item.variant_name ? `<div class="order-item-variant">${esc(item.variant_name)}</div>` : '';
         const qty    = item.quantity || 1;
-        const price  = formatPeso(item.price || 0);
+        const price  = formatPeso(orderItemLineTotal(item));
         const imgHtml = img
             ? `<img class="order-item-img" src="${img}" alt="${esc(name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
                <div class="order-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
@@ -1504,6 +1527,7 @@ function renderOrderCard(order) {
                     <div class="order-item-name">${esc(name)}</div>
                     ${variant}
                     <div class="order-item-qty">Qty: ${qty}</div>
+                    ${orderItemAddonsHtml(item, true)}
                 </div>
                 <div class="order-item-price">${price}</div>
             </div>`;
@@ -1584,8 +1608,9 @@ function renderCartGroupCard(group) {
                     <div class="order-item-name">${esc(name)}</div>
                     ${variant}
                     <div class="order-item-qty">Qty: ${item.quantity || 1}</div>
+                    ${orderItemAddonsHtml(item, true)}
                 </div>
-                <div class="order-item-price">${formatPeso(item.price || 0)}</div>
+                <div class="order-item-price">${formatPeso(orderItemLineTotal(item))}</div>
             </div>`;
     }).join('');
 
@@ -1796,8 +1821,9 @@ function buildCartDetailHTML(group, estimate = {}) {
                     <div class="order-item-name" style="font-size:13px;">${esc(name)}</div>
                     ${item.variant_name ? `<div class="order-item-variant" style="font-size:11px;">${esc(item.variant_name)}</div>` : ''}
                     <div class="order-item-qty" style="font-size:12px;">Qty: ${item.quantity || 1}${item.is_selected ? ' • Selected' : ''}</div>
+                    ${orderItemAddonsHtml(item, false)}
                 </div>
-                <div class="order-item-price" style="font-size:15px;">${formatPeso(item.price || 0)}</div>
+                <div class="order-item-price" style="font-size:15px;">${formatPeso(orderItemLineTotal(item))}</div>
             </div>`;
     }).join('');
 
@@ -1898,8 +1924,9 @@ function buildOrderDetailHTML(order) {
                     <div class="order-item-name" style="font-size:13px;">${esc(name)}</div>
                     ${variantHtml}
                     <div class="order-item-qty" style="font-size:12px;">Qty: ${item.quantity || 1}</div>
+                    ${orderItemAddonsHtml(item, false)}
                 </div>
-                <div class="order-item-price" style="font-size:15px;">${formatPeso(item.price || 0)}</div>
+                <div class="order-item-price" style="font-size:15px;">${formatPeso(orderItemLineTotal(item))}</div>
             </div>`;
     }).join('');
 
@@ -2021,7 +2048,29 @@ async function cancelOrderFromCard(orderId) {
         const d   = await res.json();
         if (d.success) {
             showOrderToast('Order cancelled.');
-            await loadOrders();
+            const cancelled = d.order || null;
+            const idx = _allOrders.findIndex(o => Number(o.id) === Number(orderId));
+            if (idx >= 0) {
+                _allOrders[idx] = cancelled
+                    ? { ..._allOrders[idx], ...cancelled, status: 'cancelled' }
+                    : { ..._allOrders[idx], status: 'cancelled' };
+            }
+            refreshOrdersView();
+
+            const detailModal = document.getElementById('orderDetailModal');
+            if (detailModal && detailModal.classList.contains('active')) {
+                if (cancelled) {
+                    const title = document.getElementById('orderDetailTitle');
+                    const body = document.getElementById('orderDetailBody');
+                    if (title) title.textContent = `Order #${cancelled.order_number || String(orderId).padStart(4,'0')}`;
+                    if (body) body.innerHTML = buildOrderDetailHTML(cancelled);
+                } else {
+                    await viewOrderDetail(orderId);
+                }
+            }
+
+            // Sync from server in background
+            loadOrders().then(() => refreshOrdersView());
         } else {
             showOrderToast(d.message || 'Could not cancel order.');
         }
@@ -2534,6 +2583,37 @@ async function reorderItems(orderId) {
 ═══════════════════════════════════════ */
 function formatPeso(v) {
     return '₱' + parseFloat(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function orderItemLineTotal(item) {
+    if (item == null) return 0;
+    if (item.total != null && item.total !== '') return Number(item.total) || 0;
+    const qty = Number(item.quantity || 0);
+    const price = Number(item.price || 0);
+    const addons = Array.isArray(item.addons) ? item.addons : [];
+    const addonsTotal = Number(item.addons_total != null
+        ? item.addons_total
+        : addons.reduce((s, a) => s + Number(a.total != null ? a.total : (Number(a.price || 0) * Number(a.quantity || 1))), 0));
+    return (qty * price) + addonsTotal;
+}
+
+function orderItemAddonsHtml(item, compact) {
+    const addons = Array.isArray(item && item.addons) ? item.addons : [];
+    if (!addons.length) return '';
+    const fontSize = compact ? '10px' : '11px';
+    return `<div style="margin-top:4px;display:flex;flex-direction:column;gap:3px;">
+        ${addons.map(a => {
+            const aName = a.name || 'Add-on';
+            const aQty = Math.max(1, Number(a.quantity || 1));
+            const aImg = a.image_url
+                ? `<img src="${esc(a.image_url)}" alt="${esc(aName)}" style="width:18px;height:18px;object-fit:cover;border-radius:4px;border:1px solid rgba(107,76,59,0.12);flex-shrink:0;">`
+                : '';
+            return `<div style="display:flex;align-items:center;gap:5px;font-size:${fontSize};color:var(--muted);">
+                ${aImg}
+                <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">+ ${esc(aName)}${aQty > 1 ? ` ×${aQty}` : ''}</span>
+            </div>`;
+        }).join('')}
+    </div>`;
 }
 
 function parseApiDateTime(value) {

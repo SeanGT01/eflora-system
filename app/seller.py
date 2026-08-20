@@ -152,6 +152,19 @@ def serialize_seller_order(order):
     order_dict['customer_contact_label'] = contact['label']
     order_dict['payment_proof'] = order.payment_proof
     order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
+
+    items_sub = 0.0
+    for item in (order.items or []):
+        items_sub += float(item.price or 0) * int(item.quantity or 0)
+        items_sub += float(item.addons_total or 0)
+    delivery = float(order.delivery_fee or 0)
+    api_sub = float(order.subtotal_amount or 0)
+    sub = items_sub if (order.items and items_sub >= api_sub - 0.009) else api_sub
+    total = sub + delivery if order.items else float(order.total_amount or 0)
+    order_dict['subtotal_amount'] = sub
+    order_dict['total_amount'] = total
+    order_dict['display_subtotal'] = sub
+    order_dict['display_total'] = total
     return order_dict
 
 

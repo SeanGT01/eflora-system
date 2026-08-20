@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from collections import defaultdict
 
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating
+from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating, CartItemAddon, ProductAddonOption
 from app.extensions import db
 from sqlalchemy.orm import joinedload, selectinload
 from functools import wraps
@@ -511,6 +511,7 @@ def get_cart():
                 joinedload(CartItem.product).selectinload(Product.images),
                 joinedload(CartItem.product).selectinload(Product.variants),
                 joinedload(CartItem.variant),
+                selectinload(CartItem.addons).joinedload(CartItemAddon.addon_option).joinedload(ProductAddonOption.group),
             )
             .all()
         )
@@ -540,6 +541,7 @@ def add_to_cart():
         product_id = data.get('product_id')
         variant_id = data.get('variant_id')  # ✅ GET variant_id from payload
         quantity = int(data.get('quantity', 1))
+        addon_option_ids = data.get('addon_option_ids') or data.get('addon_selections') or []
 
         print(f"🛒 Adding to cart - User: {user_id}, Product: {product_id}, Variant: {variant_id}, Quantity: {quantity}")
 
@@ -549,6 +551,13 @@ def add_to_cart():
         product = Product.query.get(product_id)
         if not product or not product.is_available:
             return jsonify({'error': 'Product not available'}), 404
+
+        from app.addon_helpers import resolve_structured_addon_selections, sync_cart_item_addons
+        struct_lines, struct_err = resolve_structured_addon_selections(
+            product, addon_option_ids, quantity_per_option=1
+        )
+        if struct_err:
+            return struct_err
 
         # ✅ ALIGNED: If variant_id is provided, check variant exists and has stock
         variant = None
@@ -613,10 +622,20 @@ def add_to_cart():
                     return jsonify({'error': f'Only {product.stock_quantity} available total'}), 400
             print(f"🔄 Updating existing cart item from {item.quantity} to {item.quantity + quantity}")
             item.quantity += quantity
+            db.session.flush()
+            sync_err = sync_cart_item_addons(item, product, addon_option_ids)
+            if sync_err:
+                db.session.rollback()
+                return sync_err
         else:
             print(f"➕ Adding new cart item")
             item = CartItem(cart_id=cart.id, product_id=product_id, variant_id=variant_id, quantity=quantity)
             db.session.add(item)
+            db.session.flush()
+            sync_err = sync_cart_item_addons(item, product, addon_option_ids)
+            if sync_err:
+                db.session.rollback()
+                return sync_err
 
         db.session.commit()
         
@@ -918,6 +937,8 @@ def cancel_order(order_id):
                 'message': 'Only pending orders can be cancelled.',
             }), 400
 
+        # Ensure product/variant/add-on rows are available for stock restore
+        _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(user_id)
         order.status = 'cancelled'
         if hasattr(order, 'updated_at'):
@@ -931,7 +952,11 @@ def cancel_order(order_id):
             reference_id=order.id,
         )
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Order cancelled successfully'})
+        return jsonify({
+            'success': True,
+            'message': 'Order cancelled successfully',
+            'order': order.to_dict(),
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500

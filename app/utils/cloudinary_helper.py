@@ -121,7 +121,10 @@ def get_transformed_url(public_id, width=None, height=None, crop='fill', format=
     
     try:
         configure_cloudinary()
-        transformations = {}
+        transformations = {
+            'quality': 'auto:good',
+            'fetch_format': 'auto',
+        }
         if width:
             transformations['width'] = width
         if height:
@@ -191,18 +194,19 @@ def upload_product_image(file, product_id, is_primary=False, sort_order=0):
         return {'success': False, 'error': str(e)}
 
 def upload_variant_image(file, product_id, variant_name):
-    """Upload a variant image to Cloudinary"""
+    """Upload a variant image to Cloudinary (same quality as product images)."""
     try:
         folder = f"e-flowers/products/{product_id}/variants"
         
         # Clean variant name for public_id
         clean_name = ''.join(e for e in variant_name if e.isalnum() or e == '_')[:20]
         
+        # Use full product preset — never permanently store as 300px thumbnail
         result = upload_to_cloudinary(
             file,
             folder=folder,
             public_id=clean_name,
-            transformation=current_app.config.get('CLOUDINARY_PRESETS', {}).get('product_thumbnail', {})
+            transformation=current_app.config.get('CLOUDINARY_PRESETS', {}).get('product', {})
         )
         
         return result

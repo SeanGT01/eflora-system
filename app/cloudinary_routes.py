@@ -55,9 +55,15 @@ def upload_image():
     
     # Get folder from request or use default
     folder = request.form.get('folder', 'e-flowers/uploads')
+
+    # Soft size ceiling for product/variant uploads only (never hard-crop to 800px)
+    transformation = None
+    folder_lower = (folder or '').lower()
+    if 'product' in folder_lower or 'variant' in folder_lower:
+        transformation = current_app.config.get('CLOUDINARY_PRESETS', {}).get('product', {})
     
     # Upload to Cloudinary
-    result = upload_to_cloudinary(file, folder)
+    result = upload_to_cloudinary(file, folder, transformation=transformation)
     
     if result['success']:
         return jsonify({

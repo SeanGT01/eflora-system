@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting, Conversation, PasswordResetOTP
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting, Conversation, PasswordResetOTP, ProductAddonGroup, ProductAddonOption, CartItemAddon, OrderItemAddon
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -33,6 +33,156 @@ templates_bp = Blueprint('templates', __name__)
 
 PH_MOBILE_REGEX = re.compile(r'^(?:\+63|0)9\d{9}$')
 PHT = pytz.timezone('Asia/Manila')
+
+
+def _sync_product_addon_groups(product, groups_data, delete_cloudinary_fn=None):
+    """
+    Create/update/delete ProductAddonGroup + ProductAddonOption from seller JSON.
+    groups_data: list of {id?, name, sort_order?, is_active?, _delete?, options: [...]}
+    option: {id?, name, price, stock_quantity, is_available?, show_in_you_may_also_like?,
+             cloudinary_public_id?, cloudinary_url?, _delete?, _remove_image?}
+    """
+    if groups_data is None:
+        return
+
+    if not isinstance(groups_data, list):
+        raise ValueError('addon_groups must be a list')
+
+    delete_fn = delete_cloudinary_fn or delete_from_cloudinary
+    kept_group_ids = []
+
+    for g_idx, group_data in enumerate(groups_data):
+        if not isinstance(group_data, dict):
+            continue
+
+        group_id = group_data.get('id')
+        if group_data.get('_delete') and group_id:
+            group = ProductAddonGroup.query.filter_by(id=group_id, product_id=product.id).first()
+            if group:
+                for opt in list(group.options):
+                    if opt.image_public_id:
+                        delete_fn(opt.image_public_id)
+                db.session.delete(group)
+            continue
+
+        name = (group_data.get('name') or '').strip()
+        if not name:
+            continue
+
+        if group_id:
+            group = ProductAddonGroup.query.filter_by(id=group_id, product_id=product.id).first()
+            if not group:
+                continue
+            group.name = name
+            group.sort_order = int(group_data.get('sort_order', g_idx) or g_idx)
+            group.is_active = bool(group_data.get('is_active', True))
+            group.updated_at = datetime.utcnow()
+        else:
+            group = ProductAddonGroup(
+                product_id=product.id,
+                name=name,
+                sort_order=int(group_data.get('sort_order', g_idx) or g_idx),
+                is_active=bool(group_data.get('is_active', True)),
+            )
+            db.session.add(group)
+            db.session.flush()
+
+        kept_group_ids.append(group.id)
+        kept_option_ids = []
+        options_data = group_data.get('options') or []
+
+        for o_idx, opt_data in enumerate(options_data):
+            if not isinstance(opt_data, dict):
+                continue
+
+            opt_id = opt_data.get('id')
+            if opt_data.get('_delete') and opt_id:
+                opt = ProductAddonOption.query.filter_by(id=opt_id, group_id=group.id).first()
+                if opt:
+                    if opt.image_public_id:
+                        delete_fn(opt.image_public_id)
+                    db.session.delete(opt)
+                continue
+
+            opt_name = (opt_data.get('name') or '').strip()
+            if not opt_name:
+                continue
+
+            try:
+                price = Decimal(str(opt_data.get('price', 0) or 0))
+            except Exception:
+                price = Decimal('0')
+            try:
+                stock = int(opt_data.get('stock_quantity', 0) or 0)
+            except (TypeError, ValueError):
+                stock = 0
+
+            show_ymal = bool(opt_data.get('show_in_you_may_also_like', False))
+            is_available = bool(opt_data.get('is_available', True))
+
+            if opt_data.get('_remove_image') and not opt_data.get('cloudinary_public_id'):
+                raise ValueError(f'Add-on option "{opt_name}" requires an image')
+
+            if opt_id:
+                opt = ProductAddonOption.query.filter_by(id=opt_id, group_id=group.id).first()
+                if not opt:
+                    continue
+                opt.name = opt_name
+                opt.price = price
+                # Stock is managed only via Inventory Add/Reduce — do not overwrite here
+                opt.sort_order = int(opt_data.get('sort_order', o_idx) or o_idx)
+                opt.is_available = is_available
+                opt.show_in_you_may_also_like = show_ymal
+                opt.updated_at = datetime.utcnow()
+
+                if opt_data.get('cloudinary_public_id'):
+                    if opt.image_public_id and opt.image_public_id != opt_data['cloudinary_public_id']:
+                        delete_fn(opt.image_public_id)
+                    opt.image_public_id = opt_data['cloudinary_public_id']
+                    opt.image_url = opt_data.get('cloudinary_url')
+                    opt.image_filename = f"addon_{opt_data['cloudinary_public_id']}.jpg"
+
+                if not (opt.image_url or '').strip():
+                    raise ValueError(f'Add-on option "{opt_name}" requires an image')
+            else:
+                if not opt_data.get('cloudinary_public_id') or not opt_data.get('cloudinary_url'):
+                    raise ValueError(f'Add-on option "{opt_name}" requires an image')
+                opt = ProductAddonOption(
+                    group_id=group.id,
+                    name=opt_name,
+                    price=price,
+                    stock_quantity=max(0, stock),
+                    sort_order=int(opt_data.get('sort_order', o_idx) or o_idx),
+                    is_available=is_available,
+                    show_in_you_may_also_like=show_ymal,
+                    image_public_id=opt_data.get('cloudinary_public_id'),
+                    image_url=opt_data.get('cloudinary_url'),
+                    image_filename=f"addon_{opt_data['cloudinary_public_id']}.jpg",
+                )
+                db.session.add(opt)
+                db.session.flush()
+
+            kept_option_ids.append(opt.id)
+
+        for existing_opt in list(group.options):
+            if existing_opt.id not in kept_option_ids:
+                if existing_opt.image_public_id:
+                    delete_fn(existing_opt.image_public_id)
+                db.session.delete(existing_opt)
+
+        db.session.flush()
+        # If every remaining option is deactivated, deactivate the group too
+        remaining = ProductAddonOption.query.filter_by(group_id=group.id).all()
+        if remaining and all(not bool(o.is_available) for o in remaining):
+            group.is_active = False
+            group.updated_at = datetime.utcnow()
+
+    for existing_group in list(product.addon_groups):
+        if existing_group.id not in kept_group_ids:
+            for opt in list(existing_group.options):
+                if opt.image_public_id:
+                    delete_fn(opt.image_public_id)
+            db.session.delete(existing_group)
 
 
 def _recover_db_session():
@@ -277,6 +427,8 @@ def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
         quantity = item.quantity or 0
         unit_price = float(item.price or 0)
         total_quantity += quantity
+        addons_list = [a.to_dict() for a in (item.addons or [])]
+        addons_sum = float(item.addons_total or 0)
 
         items_payload.append({
             'id': item.id,
@@ -287,10 +439,12 @@ def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
             'variant_name': item.variant.name if item.variant else None,
             'quantity': quantity,
             'price': unit_price,
-            'total': float(quantity * unit_price),
+            'total': float(quantity * unit_price) + addons_sum,
             'product_image_url': item.product_image,
             'image_url': item.product_image,
             'is_rated': item.id in rated_item_ids,
+            'addons': addons_list,
+            'addons_total': addons_sum,
         })
 
     n_items = len(order.items) if order.items else 0
@@ -3116,6 +3270,8 @@ def cancel_order(order_id):
         }), 400
 
     try:
+        # Ensure add-on rows are loaded before stock restore
+        _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(user_id)
         order.status = 'cancelled'
         order.updated_at = datetime.utcnow()
@@ -3132,7 +3288,11 @@ def cancel_order(order_id):
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
 
-    return jsonify({'success': True, 'message': 'Order cancelled successfully'})
+    return jsonify({
+        'success': True,
+        'message': 'Order cancelled successfully',
+        'order': _serialize_customer_order(order),
+    })
 
 
 @templates_bp.route('/api/account/orders/<int:order_id>/complete', methods=['POST'])
@@ -5385,7 +5545,7 @@ def seller_inventory():
         is_archived=False
     ).order_by(Product.name.asc()).all()
 
-    product_list = [product.to_dict() for product in products]
+    product_list = [product.to_dict(include_inactive_addons=True) for product in products]
     return render_template('seller_inventory.html', products=product_list)
 
 def generate_short_filename(original_filename, product_id, index):
@@ -5622,6 +5782,21 @@ def create_product():
                     db.session.rollback()
                     return jsonify({'error': f'Error processing variants: {str(e)}'}), 400
         
+        # ===== HANDLE ADD-ON GROUPS =====
+        has_addons = request.form.get('has_addons', 'false').lower() == 'true'
+        if has_addons:
+            addon_groups_json = request.form.get('addon_groups')
+            if addon_groups_json:
+                try:
+                    addon_groups_data = json.loads(addon_groups_json)
+                    _sync_product_addon_groups(product, addon_groups_data)
+                except json.JSONDecodeError:
+                    db.session.rollback()
+                    return jsonify({'error': 'Invalid add-on groups data'}), 400
+                except Exception as e:
+                    db.session.rollback()
+                    return jsonify({'error': f'Error processing add-ons: {str(e)}'}), 400
+
         db.session.commit()
         print(f"✅ Product {product.id} created successfully with {image_count} Cloudinary images")
         print("="*60 + "\n")
@@ -5659,7 +5834,7 @@ def manage_product(product_id):
         # ── GET ───────────────────────────────────────────────────────────────
         if request.method == 'GET':
             print(f"\n📖 GET Product {product_id}")
-            product_dict = product.to_dict()
+            product_dict = product.to_dict(include_inactive_addons=True)
             print(f"✅ Returning product with {len(product_dict.get('variants', []))} variants")
             return jsonify({'success': True, 'product': product_dict})
 
@@ -5997,6 +6172,31 @@ def manage_product(product_id):
                         print(f"  🗑️ Deleted variant image from Cloudinary")
                     db.session.delete(variant)
 
+            # ===== HANDLE ADD-ON GROUPS UPDATE =====
+            has_addons = request.form.get('has_addons', 'false').lower() == 'true'
+            if has_addons:
+                addon_groups_json = request.form.get('addon_groups')
+                if addon_groups_json:
+                    try:
+                        addon_groups_data = json.loads(addon_groups_json)
+                        _sync_product_addon_groups(
+                            product,
+                            addon_groups_data,
+                            delete_cloudinary_fn=delete_from_cloudinary,
+                        )
+                    except json.JSONDecodeError:
+                        db.session.rollback()
+                        return jsonify({'error': 'Invalid add-on groups data'}), 400
+                    except Exception as e:
+                        db.session.rollback()
+                        return jsonify({'error': f'Error processing add-ons: {str(e)}'}), 400
+            else:
+                for group in list(product.addon_groups):
+                    for opt in list(group.options):
+                        if opt.image_public_id:
+                            delete_from_cloudinary(opt.image_public_id)
+                    db.session.delete(group)
+
             product.updated_at = datetime.utcnow()
             db.session.commit()
             
@@ -6006,7 +6206,7 @@ def manage_product(product_id):
             return jsonify({
                 'success': True,
                 'message': 'Product updated successfully',
-                'product': product.to_dict()
+                'product': product.to_dict(include_inactive_addons=True)
             })
 
         # ── DELETE ────────────────────────────────────────────────────────────
@@ -6112,7 +6312,8 @@ def reduce_product_stock(product_id):
         "amount": 5,
         "reason": "damage",  # spoilage, damage, defect, other, pos_sale
         "reason_notes": "Damaged during shipping",
-        "variant_id": 123  # Optional, only for variants
+        "variant_id": 123,  # Optional, only for variants
+        "addon_option_id": 45  # Optional, only for add-on options
     }
     """
     if session.get('role') != 'seller':
@@ -6135,7 +6336,8 @@ def reduce_product_stock(product_id):
         amount = data.get('amount')
         reason = data.get('reason')
         reason_notes = data.get('reason_notes', '')
-        variant_id = data.get('variant_id')  # Get variant_id if provided
+        variant_id = data.get('variant_id')
+        addon_option_id = data.get('addon_option_id')
         
         if not amount:
             return jsonify({'error': 'Reduction amount is required'}), 400
@@ -6152,12 +6354,54 @@ def reduce_product_stock(product_id):
             return jsonify({
                 'error': f'Invalid reason. Must be one of: {", ".join(StockReduction.REASONS)}'
             }), 400
+
+        if variant_id and addon_option_id:
+            return jsonify({'error': 'Provide either variant_id or addon_option_id, not both'}), 400
         
         # Find the product first
         product = Product.query.filter_by(id=product_id, store_id=store.id).first()
         if not product:
             return jsonify({'error': 'Product not found'}), 404
         
+        # Handle add-on option reduction
+        if addon_option_id:
+            addon_opt = ProductAddonOption.query.get(addon_option_id)
+            if (
+                not addon_opt
+                or not addon_opt.group
+                or addon_opt.group.product_id != product.id
+            ):
+                return jsonify({'error': 'Add-on option not found'}), 404
+
+            if amount > int(addon_opt.stock_quantity or 0):
+                return jsonify({
+                    'error': f'Cannot reduce by {amount}. Available: {addon_opt.stock_quantity}'
+                }), 400
+
+            addon_opt.stock_quantity = int(addon_opt.stock_quantity or 0) - amount
+            addon_opt.updated_at = datetime.utcnow()
+
+            reduction = StockReduction(
+                product_id=product.id,
+                variant_id=None,
+                addon_option_id=addon_opt.id,
+                reduction_amount=amount,
+                reason=reason,
+                reason_notes=reason_notes,
+                reduced_by=user_id,
+            )
+            db.session.add(reduction)
+            product.updated_at = datetime.utcnow()
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': f'Stock reduced by {amount} units for add-on {addon_opt.name}',
+                'reduction': reduction.to_dict(),
+                'product': product.to_dict(include_inactive_addons=True),
+                'addon_option': addon_opt.to_dict(),
+            }), 200
+
         # Handle variant reduction if variant_id is provided
         variant = None
         if variant_id:
@@ -6243,7 +6487,8 @@ def add_product_stock(product_id):
         "amount": 10,
         "reason": "restock",  # found_stock, receiving_error, restock
         "reason_notes": "Received new shipment",
-        "variant_id": 123  # Optional, only for variants
+        "variant_id": 123,  # Optional, only for variants
+        "addon_option_id": 45  # Optional, only for add-on options
     }
     """
     if session.get('role') != 'seller':
@@ -6266,7 +6511,8 @@ def add_product_stock(product_id):
         amount = data.get('amount')
         reason = data.get('reason')
         reason_notes = data.get('reason_notes', '')
-        variant_id = data.get('variant_id')  # Get variant_id if provided
+        variant_id = data.get('variant_id')
+        addon_option_id = data.get('addon_option_id')
         
         if not amount:
             return jsonify({'error': 'Addition amount is required'}), 400
@@ -6286,11 +6532,47 @@ def add_product_stock(product_id):
             return jsonify({
                 'error': f'Invalid reason. Must be one of: {", ".join(StockReduction.REASONS)}'
             }), 400
+
+        if variant_id and addon_option_id:
+            return jsonify({'error': 'Provide either variant_id or addon_option_id, not both'}), 400
         
         # Find the product first
         product = Product.query.filter_by(id=product_id, store_id=store.id).first()
         if not product:
             return jsonify({'error': 'Product not found'}), 404
+
+        if addon_option_id:
+            addon_opt = ProductAddonOption.query.get(addon_option_id)
+            if (
+                not addon_opt
+                or not addon_opt.group
+                or addon_opt.group.product_id != product.id
+            ):
+                return jsonify({'error': 'Add-on option not found'}), 404
+
+            addon_opt.stock_quantity = int(addon_opt.stock_quantity or 0) + amount
+            addon_opt.updated_at = datetime.utcnow()
+
+            addition = StockReduction(
+                product_id=product.id,
+                variant_id=None,
+                addon_option_id=addon_opt.id,
+                reduction_amount=amount,
+                reason=reason,
+                reason_notes=reason_notes,
+                reduced_by=user_id,
+            )
+            db.session.add(addition)
+            product.updated_at = datetime.utcnow()
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': f'Stock added {amount} units for add-on {addon_opt.name}',
+                'addition': addition.to_dict(),
+                'product': product.to_dict(include_inactive_addons=True),
+                'addon_option': addon_opt.to_dict(),
+            }), 200
         
         # Handle variant addition if variant_id is provided
         variant = None
@@ -6377,7 +6659,7 @@ def add_product_stock(product_id):
 @templates_bp.route('/seller/products/<int:product_id>/stock-history', methods=['GET'])
 def get_stock_history(product_id):
     """
-    Get audit log of all stock reductions for a product or variant
+    Get audit log of all stock reductions for a product, variant, or add-on option.
     """
     if session.get('role') != 'seller':
         return jsonify({'error': 'Unauthorized'}), 401
@@ -6405,24 +6687,49 @@ def get_stock_history(product_id):
                     return jsonify({'error': 'Product not found'}), 404
             else:
                 return jsonify({'error': 'Product not found'}), 404
+
+        filter_variant_id = request.args.get('variant_id', type=int)
+        filter_addon_option_id = request.args.get('addon_option_id', type=int)
         
-        # Get reductions for main product (where variant_id is NULL)
+        # Get reductions for main product (where variant_id and addon_option_id are NULL)
         main_reductions = StockReduction.query.filter_by(
             product_id=product.id, 
-            variant_id=None  # Only main product reductions
+            variant_id=None,
+            addon_option_id=None,
         ).order_by(StockReduction.created_at.desc()).all()
         
         # Get reductions for variants (where variant_id is NOT NULL)
-        variant_reductions = StockReduction.query.filter(
+        variant_q = StockReduction.query.filter(
             StockReduction.product_id == product.id,
-            StockReduction.variant_id != None  # Only variant reductions
-        ).order_by(StockReduction.created_at.desc()).all()
+            StockReduction.variant_id != None,
+        )
+        if filter_variant_id:
+            variant_q = variant_q.filter(StockReduction.variant_id == filter_variant_id)
+        variant_reductions = variant_q.order_by(StockReduction.created_at.desc()).all()
+
+        # Get reductions for add-on options
+        addon_q = StockReduction.query.filter(
+            StockReduction.product_id == product.id,
+            StockReduction.addon_option_id != None,
+        )
+        if filter_addon_option_id:
+            addon_q = addon_q.filter(StockReduction.addon_option_id == filter_addon_option_id)
+        addon_reductions = addon_q.order_by(StockReduction.created_at.desc()).all()
+
+        # When scoped to a variant/add-on, hide unrelated main history
+        if filter_variant_id or filter_addon_option_id:
+            main_reductions = []
+            if filter_variant_id:
+                addon_reductions = []
+            if filter_addon_option_id:
+                variant_reductions = []
         
         # Calculate totals for main product
         main_total_reduced = sum(r.reduction_amount for r in main_reductions)
         
         # Calculate totals for variants
         variant_total_reduced = sum(r.reduction_amount for r in variant_reductions)
+        addon_total_reduced = sum(r.reduction_amount for r in addon_reductions)
         
         # Get primary image for main product
         primary_image = None
@@ -6490,6 +6797,43 @@ def get_stock_history(product_id):
                     'updated_at': r.updated_at.isoformat() if r.updated_at else None
                 }
                 variant_history.append(reduction_data)
+
+        addon_history = []
+        for r in addon_reductions:
+            opt = r.addon_option or (
+                ProductAddonOption.query.get(r.addon_option_id) if r.addon_option_id else None
+            )
+            if opt:
+                group_name = opt.group.name if opt.group else 'Add-on'
+                addon_history.append({
+                    'id': r.id,
+                    'product_id': r.product_id,
+                    'addon_option_id': opt.id,
+                    'product_name': f"{product.name} — {group_name}: {opt.name}",
+                    'product_image': opt.image_url,
+                    'reduction_amount': r.reduction_amount,
+                    'reason': r.reason,
+                    'reason_notes': r.reason_notes,
+                    'reduced_by': r.reduced_by,
+                    'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
+                    'created_at': r.created_at.isoformat() if r.created_at else None,
+                    'updated_at': r.updated_at.isoformat() if r.updated_at else None,
+                })
+            else:
+                addon_history.append({
+                    'id': r.id,
+                    'product_id': r.product_id,
+                    'addon_option_id': r.addon_option_id,
+                    'product_name': f"{product.name} — Add-on #{r.addon_option_id}",
+                    'product_image': None,
+                    'reduction_amount': r.reduction_amount,
+                    'reason': r.reason,
+                    'reason_notes': r.reason_notes,
+                    'reduced_by': r.reduced_by,
+                    'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
+                    'created_at': r.created_at.isoformat() if r.created_at else None,
+                    'updated_at': r.updated_at.isoformat() if r.updated_at else None,
+                })
         
         return jsonify({
             'success': True,
@@ -6507,9 +6851,14 @@ def get_stock_history(product_id):
                 'total_reductions': variant_total_reduced,
                 'reduction_count': len(variant_reductions)
             },
+            'addons': {
+                'total_reductions': addon_total_reduced,
+                'reduction_count': len(addon_reductions)
+            },
             'stock_history': {
                 'main': main_history,
-                'variants': variant_history
+                'variants': variant_history,
+                'addons': addon_history,
             }
         }), 200
         
@@ -6574,6 +6923,7 @@ def seller_orders():
             .options(
                 selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
                 selectinload(Order.items).joinedload(OrderItem.variant),
+                selectinload(Order.items).selectinload(OrderItem.addons),
                 joinedload(Order.customer),
                 joinedload(Order.assigned_rider).joinedload(Rider.user),
             )
@@ -6596,6 +6946,7 @@ def seller_orders():
             order_dict['items'] = [item.to_dict() for item in order.items]
             order_dict['items_count'] = sum(item.quantity for item in order.items)
             _attach_seller_order_customer_contact(order_dict, order.customer)
+            _apply_order_display_totals(order, order_dict)
             order_dict['payment_proof'] = order.payment_proof
             order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
 
@@ -6612,7 +6963,7 @@ def seller_orders():
 
         today = datetime.now(PHT).date()
         order_stats = {
-            'total': len(orders),
+            'total': len(orders_data),
             'today': sum(
                 1
                 for order in orders
@@ -6625,7 +6976,11 @@ def seller_orders():
             'delivered': sum(1 for order in orders if order.status == 'delivered'),
             'completed': sum(1 for order in orders if order.status == 'completed'),
             'cancelled': sum(1 for order in orders if order.status == 'cancelled'),
-            'revenue': float(sum((order.total_amount or 0) for order in orders if order.status in ['delivered', 'completed']))
+            'revenue': float(sum(
+                float(od.get('display_total') or od.get('total_amount') or 0)
+                for od in orders_data
+                if od.get('status') in ['delivered', 'completed']
+            ))
         }
 
         riders_data = []
@@ -6675,11 +7030,39 @@ def _attach_seller_order_customer_contact(order_dict, customer):
     return order_dict
 
 
+def _order_amounts_including_addons(order):
+    """Recompute subtotal/total from line items so structured add-ons are included."""
+    items_sub = 0.0
+    for item in (order.items or []):
+        items_sub += float(item.price or 0) * int(item.quantity or 0)
+        items_sub += float(item.addons_total or 0)
+    delivery = float(order.delivery_fee or 0)
+    api_sub = float(order.subtotal_amount or 0)
+    api_total = float(order.total_amount or 0)
+    if order.items:
+        # Prefer item lines when they exceed a stale API subtotal (missing add-ons)
+        sub = items_sub if items_sub >= api_sub - 0.009 else api_sub
+        total = sub + delivery
+        return sub, delivery, total
+    return api_sub, delivery, api_total if api_total > 0 else (api_sub + delivery)
+
+
+def _apply_order_display_totals(order, order_dict):
+    sub, delivery, total = _order_amounts_including_addons(order)
+    order_dict['subtotal_amount'] = sub
+    order_dict['delivery_fee'] = delivery
+    order_dict['total_amount'] = total
+    order_dict['display_subtotal'] = sub
+    order_dict['display_total'] = total
+    return order_dict
+
+
 def _serialize_seller_order_for_template(order):
     order_dict = order.to_dict()
     order_dict['items'] = [item.to_dict() for item in order.items]
     order_dict['items_count'] = sum(item.quantity for item in order.items)
     _attach_seller_order_customer_contact(order_dict, order.customer)
+    _apply_order_display_totals(order, order_dict)
     order_dict['payment_proof'] = order.payment_proof
     order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
     if order.created_at:
@@ -6741,8 +7124,11 @@ def seller_order_details_api(order_id):
 
     order = (
         Order.query.options(
-            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
-            joinedload(Order.items).joinedload(OrderItem.variant),
+            selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
+            selectinload(Order.items).joinedload(OrderItem.variant),
+            selectinload(Order.items).selectinload(OrderItem.addons),
+            joinedload(Order.customer),
+            joinedload(Order.assigned_rider).joinedload(Rider.user),
         )
         .filter_by(id=order_id, store_id=store.id)
         .first()
@@ -8482,6 +8868,38 @@ def product_details(product_id):
                 'slug': product.store_category.slug
             }
         
+        # Related ("You might also like"): same store + same main category
+        # Include out-of-stock so UI can grey them (stock check happens client-side + buy-now)
+        related_products = Product.query.filter(
+            Product.store_id == product.store_id,
+            Product.main_category_id == product.main_category_id,
+            Product.id != product_id,
+            Product.is_available == True,
+            Product.is_archived == False,
+        ).order_by(
+            Product.stock_quantity.desc(),
+            Product.name.asc(),
+        ).limit(8).all()
+
+        # Convert related products to dict
+        related_dicts = []
+        for p in related_products:
+            p_dict = p.to_dict()
+            if p.main_category:
+                p_dict['main_category'] = {
+                    'id': p.main_category.id,
+                    'name': p.main_category.name,
+                    'slug': p.main_category.slug
+                }
+            # Explicit sellable stock for addon flow (main product stock)
+            p_dict['stock_quantity'] = int(p.stock_quantity or 0)
+            p_dict['ymal_type'] = 'related_product'
+            related_dicts.append(p_dict)
+
+        # Flagged structured add-on options also appear in YMAL
+        from app.addon_helpers import ymal_addon_option_dicts
+        ymal_addon_options = ymal_addon_option_dicts(product)
+
         # Add-ons: other products from same store, different main category
         addon_products = Product.query.filter(
             Product.store_id == product.store_id,
@@ -8490,15 +8908,15 @@ def product_details(product_id):
             Product.is_archived == False,
             _public_storefront_sellable_filter()
         )
-        
+
         # If product has a main category, get products from different categories
         if product.main_category_id:
             addon_products = addon_products.filter(
                 Product.main_category_id != product.main_category_id
             )
-        
+
         addon_products = addon_products.limit(8).all()
-        
+
         # Convert addon products to dict
         addon_dicts = []
         for p in addon_products:
@@ -8510,27 +8928,6 @@ def product_details(product_id):
                     'slug': p.main_category.slug
                 }
             addon_dicts.append(p_dict)
-        
-        # Related: same main category, different products
-        related_products = Product.query.filter(
-            Product.main_category_id == product.main_category_id,  # FIXED: Use main_category_id instead of category
-            Product.id != product_id,
-            Product.is_available == True,
-            Product.is_archived == False,
-            _public_storefront_sellable_filter()
-        ).limit(8).all()
-        
-        # Convert related products to dict
-        related_dicts = []
-        for p in related_products:
-            p_dict = p.to_dict()
-            if p.main_category:
-                p_dict['main_category'] = {
-                    'id': p.main_category.id,
-                    'name': p.main_category.name,
-                    'slug': p.main_category.slug
-                }
-            related_dicts.append(p_dict)
         
         # Debug print
         print(f"\n🔍 PRODUCT DETAILS - ID: {product_id}")
@@ -8569,6 +8966,7 @@ def product_details(product_id):
             product=product_dict,
             addon_products=addon_dicts,
             related_products=related_dicts,
+            ymal_addon_options=ymal_addon_options,
             main_categories=main_categories,
             avg_rating=avg_rating,
             total_ratings=total_ratings,
@@ -8737,6 +9135,7 @@ def add_to_cart():
         product_id = data.get('product_id')
         variant_id = data.get('variant_id')  # ✅ Get variant_id from payload
         quantity = data.get('quantity', 1)
+        addon_option_ids = data.get('addon_option_ids') or data.get('addon_selections') or []
         
         print(f"🛒 Adding to cart - User: {user.id}, Product: {product_id}, Variant: {variant_id}, Quantity: {quantity}")
         
@@ -8748,6 +9147,13 @@ def add_to_cart():
         if not product:
             print(f"❌ Product not found: {product_id}")
             return jsonify({'error': 'Product not found'}), 404
+
+        from app.addon_helpers import resolve_structured_addon_selections, sync_cart_item_addons
+        struct_lines, struct_err = resolve_structured_addon_selections(
+            product, addon_option_ids, quantity_per_option=1
+        )
+        if struct_err:
+            return struct_err
 
         address = _get_default_customer_address(user.id)
         delivery = _store_delivery_match(product.store, address)
@@ -8804,6 +9210,11 @@ def add_to_cart():
                     
             print(f"🔄 Updating existing cart item from {cart_item.quantity} to {cart_item.quantity + quantity}")
             cart_item.quantity += quantity
+            db.session.flush()
+            sync_err = sync_cart_item_addons(cart_item, product, addon_option_ids)
+            if sync_err:
+                db.session.rollback()
+                return sync_err
         else:
             print(f"➕ Adding new cart item with variant_id: {variant_id}")
             cart_item = CartItem(
@@ -8813,6 +9224,11 @@ def add_to_cart():
                 quantity=quantity
             )
             db.session.add(cart_item)
+            db.session.flush()
+            sync_err = sync_cart_item_addons(cart_item, product, addon_option_ids)
+            if sync_err:
+                db.session.rollback()
+                return sync_err
         
         db.session.commit()
         
@@ -8929,7 +9345,9 @@ def get_cart():
                 'discount_pct': discount_pct,
                 'name': name,
                 'image_url': image_url,  # Top-level convenience field
-                'subtotal': float(price * item.quantity)
+                'subtotal': float(item.subtotal),
+                'addons': [a.to_dict() for a in (item.addons or [])],
+                'addons_total': float(item.addons_subtotal),
             }
             
             # Add variant details if exists (with full Cloudinary URLs)

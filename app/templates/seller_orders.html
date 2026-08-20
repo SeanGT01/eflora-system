@@ -567,17 +567,18 @@
 
     .proof-image {
         width: 100%;
-        max-height: 65vh;
+        max-height: min(58vh, 520px);
         object-fit: contain;
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--border);
+        border-radius: 10px;
+        border: 1px solid rgba(44, 37, 32, 0.08);
         background: var(--cream);
+        display: block;
     }
 
     .proof-empty {
         display: none;
-        border: 1px dashed var(--border-strong);
-        border-radius: var(--radius-lg);
+        border: 1px dashed rgba(44, 37, 32, 0.16);
+        border-radius: 10px;
         padding: 2rem 1rem;
         text-align: center;
         color: var(--muted);
@@ -589,6 +590,19 @@
         font-size: 2rem;
         margin-bottom: 0.6rem;
         opacity: 0.45;
+    }
+
+    .custom-modal-dialog.payment-receipt-modal-surface {
+        width: min(560px, 100%);
+    }
+
+    .payment-receipt-fig {
+        margin: 0;
+    }
+
+    .payment-receipt-fig .proof-image {
+        aspect-ratio: auto;
+        min-height: 220px;
     }
 
     .custom-modal {
@@ -1088,7 +1102,7 @@
                         data-payment-method="{{ (order.payment_method or '')|lower }}"
                         data-order-date="{{ order.date_formatted }}"
                         data-is-today="{{ 'true' if order.date_formatted == today_str else 'false' }}"
-                        data-total-amount="{{ order.total_amount or 0 }}"
+                        data-total-amount="{{ order.display_total if order.display_total is defined else (order.total_amount or 0) }}"
                         data-search="{{ (
                             '#' ~ order.id ~ ' ' ~
                             (order.customer_name or '') ~ ' ' ~
@@ -1130,11 +1144,18 @@
                             </span>
                         </td>
                         <td data-label="Summary">
-                            <div class="order-code" style="font-size:15px;">Php {{ "%.2f"|format(order.total_amount or 0) }}</div>
+                            <div class="order-code" style="font-size:15px;">Php {{ "%.2f"|format(order.display_total if order.display_total is defined else (order.total_amount or 0)) }}</div>
                             <div class="order-subline">{{ order.items_count }} item{% if order.items_count != 1 %}s{% endif %}</div>
                             <div class="order-items-preview" style="margin-top:0.45rem;">
                                 {% for item in order['items'][:2] %}
-                                <div class="order-item-mini">{{ item.product_name }} x{{ item.quantity }}</div>
+                                <div class="order-item-mini">
+                                    {{ item.product_name }} x{{ item.quantity }}
+                                    {% if item.addons %}
+                                        {% for a in item.addons %}
+                                            <div style="font-size:11px;color:var(--muted);margin-top:2px;">+ {{ a.name }}{% if a.quantity and a.quantity > 1 %} ×{{ a.quantity }}{% endif %}</div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
                                 {% endfor %}
                                 {% if order['items']|length > 2 %}
                                 <div class="order-item-more">+{{ order['items']|length - 2 }} more items</div>
@@ -1159,7 +1180,7 @@
                                         data-customer-name="{{ order.customer_name or 'Customer' }}"
                                         data-customer-contact="{{ order.customer_contact or '' }}"
                                         data-customer-contact-label="{{ order.customer_contact_label or 'Contact' }}"
-                                        data-order-total="{{ '%.2f'|format(order.total_amount or 0) }}"
+                                        data-order-total="{{ '%.2f'|format(order.display_total if order.display_total is defined else (order.total_amount or 0)) }}"
                                         data-payment-method="{{ order.payment_method or '' }}"
                                         title="Receipt"
                                         aria-label="View payment receipt">
@@ -1230,8 +1251,8 @@
     </div>
 </div>
 
-<div class="custom-modal" id="sellerPaymentProofModal" aria-hidden="true">
-    <div class="custom-modal-dialog narrow">
+<div class="custom-modal order-details-modal" id="sellerPaymentProofModal" aria-hidden="true">
+    <div class="custom-modal-dialog order-details-modal-surface payment-receipt-modal-surface">
         <div class="custom-modal-head">
             <h5 class="modal-title" style="margin:0;">Payment Receipt</h5>
             <button type="button" class="custom-close" data-close-modal="sellerPaymentProofModal">
@@ -1239,24 +1260,40 @@
             </button>
         </div>
         <div class="custom-modal-body">
-            <div id="sellerPaymentProofMeta" class="proof-meta" style="display:none; margin-bottom:0.85rem;">
-                <div class="sdm-rows" style="gap:0.35rem;">
-                    <div class="sdm-row"><span class="sdm-k">Order</span><span class="sdm-v" id="sellerPaymentProofOrder">—</span></div>
-                    <div class="sdm-row"><span class="sdm-k">Customer</span><span class="sdm-v" id="sellerPaymentProofCustomer">—</span></div>
-                    <div class="sdm-row"><span class="sdm-k" id="sellerPaymentProofContactLabel">Contact</span><span class="sdm-v" id="sellerPaymentProofContact">—</span></div>
-                    <div class="sdm-row"><span class="sdm-k">Method</span><span class="sdm-v" id="sellerPaymentProofMethod">—</span></div>
-                    <div class="sdm-row"><span class="sdm-k">Amount</span><span class="sdm-v" id="sellerPaymentProofAmount">—</span></div>
-                </div>
-            </div>
-            <img id="sellerPaymentProofImage" class="proof-image" alt="Payment proof">
-            <div id="sellerPaymentProofEmpty" class="proof-empty">
-                <i class="ri-image-circle-line"></i>
-                <div>Payment receipt image is unavailable.</div>
-                <div style="font-size:12px; margin-top:0.35rem;">The saved proof link may no longer exist.</div>
+            <div class="sdm">
+                <header class="sdm-topbar">
+                    <div class="sdm-topbar-left">
+                        <span class="sdm-oid" id="sellerPaymentProofOrder">#—</span>
+                        <span class="payment-pill" id="sellerPaymentProofMethodPill">—</span>
+                    </div>
+                    <span class="sdm-when" id="sellerPaymentProofAmount">—</span>
+                </header>
+
+                <section class="sdm-block sdm-block--full">
+                    <h4>Payment details</h4>
+                    <div class="sdm-rows">
+                        <div class="sdm-row"><span class="sdm-k">Customer</span><span class="sdm-v" id="sellerPaymentProofCustomer">—</span></div>
+                        <div class="sdm-row"><span class="sdm-k" id="sellerPaymentProofContactLabel">Contact</span><span class="sdm-v" id="sellerPaymentProofContact">—</span></div>
+                        <div class="sdm-row"><span class="sdm-k">Method</span><span class="sdm-v" id="sellerPaymentProofMethod">—</span></div>
+                    </div>
+                </section>
+
+                <section class="sdm-block sdm-block--full">
+                    <h4>Receipt</h4>
+                    <figure class="payment-receipt-fig">
+                        <img id="sellerPaymentProofImage" class="proof-image" alt="Payment proof">
+                    </figure>
+                    <div id="sellerPaymentProofEmpty" class="proof-empty">
+                        <i class="ri-image-circle-line"></i>
+                        <div>Payment receipt image is unavailable.</div>
+                        <div style="font-size:12px; margin-top:0.35rem;">The saved proof link may no longer exist.</div>
+                    </div>
+                </section>
             </div>
         </div>
         <div class="custom-modal-foot">
-            <button type="button" class="btn btn-success" id="sellerVerifyPaymentBtn">
+            <button type="button" class="btn btn-outline-secondary" data-close-modal="sellerPaymentProofModal">Close</button>
+            <button type="button" class="btn btn-rose" id="sellerVerifyPaymentBtn">
                 <i class="ri-check-double-line"></i>
                 Verify Payment
             </button>
@@ -1669,15 +1706,55 @@
             if (!response.ok) throw new Error(order.error || 'Failed to load order');
             loadedOrder = order;
 
-            const itemsHtml = (order.items || []).map(item => `
+            const orderItems = order.items || [];
+            const itemsSubtotal = orderItems.reduce((sum, item) => {
+                const addons = Array.isArray(item.addons) ? item.addons : [];
+                const addonsTotal = Number(item.addons_total != null
+                    ? item.addons_total
+                    : addons.reduce((s, a) => s + Number(a.total != null ? a.total : (Number(a.price || 0) * Number(a.quantity || 1))), 0));
+                const lineTotal = Number(item.total != null
+                    ? item.total
+                    : ((item.quantity || 0) * (item.price || 0)) + addonsTotal);
+                return sum + lineTotal;
+            }, 0);
+            const deliveryFee = Number(order.delivery_fee || 0);
+            const displaySubtotal = itemsSubtotal > 0 ? itemsSubtotal : Number(order.subtotal_amount || 0);
+            const displayTotal = displaySubtotal + deliveryFee;
+
+            const itemsHtml = (order.items || []).map(item => {
+                const addons = Array.isArray(item.addons) ? item.addons : [];
+                const addonsTotal = Number(item.addons_total != null
+                    ? item.addons_total
+                    : addons.reduce((s, a) => s + Number(a.total != null ? a.total : (Number(a.price || 0) * Number(a.quantity || 1))), 0));
+                const lineTotal = Number(item.total != null
+                    ? item.total
+                    : ((item.quantity || 0) * (item.price || 0)) + addonsTotal);
+                const addonsHtml = addons.length
+                    ? `<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+                        ${addons.map(a => {
+                            const aName = a.name || 'Add-on';
+                            const aQty = Math.max(1, Number(a.quantity || 1));
+                            const aTotal = Number(a.total != null ? a.total : (Number(a.price || 0) * aQty));
+                            const aImg = a.image_url
+                                ? `<img src="${a.image_url}" alt="${aName}" style="width:22px;height:22px;object-fit:cover;border-radius:5px;border:1px solid var(--border);vertical-align:middle;margin-right:6px;">`
+                                : '';
+                            return `<div style="font-size:12px;color:var(--muted);">${aImg}+ ${aName}${aQty > 1 ? ` ×${aQty}` : ''} · ₱${formatAmount(aTotal)}</div>`;
+                        }).join('')}
+                    </div>`
+                    : '';
+                return `
                 <tr>
                     <td class="sdm-line-thumb-cell">${lineItemThumb(item.product_image_url)}</td>
-                    <td>${item.product_name || 'Product'}${item.variant_name ? ` <span style="color:var(--deep-rose)">(${item.variant_name})</span>` : ''}</td>
+                    <td>
+                        ${item.product_name || 'Product'}${item.variant_name ? ` <span style="color:var(--deep-rose)">(${item.variant_name})</span>` : ''}
+                        ${addonsHtml}
+                    </td>
                     <td>${item.quantity || 0}</td>
                     <td>Php ${formatAmount(item.price || 0)}</td>
-                    <td>Php ${formatAmount((item.quantity || 0) * (item.price || 0))}</td>
+                    <td>Php ${formatAmount(lineTotal)}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
             const proofHtml = [
                 { label: 'Finished product', url: order.done_preparing_proof_url },
                 { label: 'Rider proof 1', url: order.delivery_proof_url },
@@ -1715,9 +1792,9 @@
                                 <div class="sdm-rows">
                                     <div class="sdm-row"><span class="sdm-k">Method</span><span class="sdm-v">${titleCaseStatus(order.payment_method)}</span></div>
                                     <div class="sdm-row"><span class="sdm-k">Status</span><span class="sdm-v">${titleCaseStatus(order.payment_status)}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">₱${formatAmount(order.subtotal_amount || 0)}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Delivery</span><span class="sdm-v">₱${formatAmount(order.delivery_fee || 0)}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Total</span><span class="sdm-v" style="font-weight:600;color:var(--charcoal);">₱${formatAmount(order.total_amount || 0)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">₱${formatAmount(displaySubtotal)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Delivery</span><span class="sdm-v">₱${formatAmount(deliveryFee)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Total</span><span class="sdm-v" style="font-weight:600;color:var(--charcoal);">₱${formatAmount(displayTotal)}</span></div>
                                 </div>
                             </section>
                             <section class="sdm-block">
@@ -1964,17 +2041,23 @@
             activePaymentOrderId = button.dataset.orderId;
             const proofImage = document.getElementById('sellerPaymentProofImage');
             const proofEmpty = document.getElementById('sellerPaymentProofEmpty');
-            const proofMeta = document.getElementById('sellerPaymentProofMeta');
             const contactLabel = button.dataset.customerContactLabel || 'Contact';
             const contactValue = button.dataset.customerContact || '';
+            const methodLabel = titleCaseStatus(button.dataset.paymentMethod || '');
+            const methodPill = document.getElementById('sellerPaymentProofMethodPill');
 
             document.getElementById('sellerPaymentProofOrder').textContent = `#${button.dataset.orderId || '—'}`;
             document.getElementById('sellerPaymentProofCustomer').textContent = button.dataset.customerName || '—';
             document.getElementById('sellerPaymentProofContactLabel').textContent = contactLabel;
             document.getElementById('sellerPaymentProofContact').textContent = contactValue || '—';
-            document.getElementById('sellerPaymentProofMethod').textContent = titleCaseStatus(button.dataset.paymentMethod || '');
+            document.getElementById('sellerPaymentProofMethod').textContent = methodLabel || '—';
             document.getElementById('sellerPaymentProofAmount').textContent = `₱${formatAmount(button.dataset.orderTotal || 0)}`;
-            if (proofMeta) proofMeta.style.display = 'block';
+            if (methodPill) {
+                methodPill.textContent = methodLabel || 'Payment';
+                methodPill.className = 'payment-pill';
+                const methodKey = String(button.dataset.paymentMethod || '').toLowerCase().replace(/\s+/g, '_');
+                if (methodKey) methodPill.classList.add(`payment-${methodKey}`);
+            }
 
             proofEmpty.style.display = 'none';
             proofImage.style.display = 'block';

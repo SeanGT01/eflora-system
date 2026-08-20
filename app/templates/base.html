@@ -3032,7 +3032,7 @@ let currentCheckoutSession = null;
 let checkoutModalCloseHandler = null;
 let isCreatingOrders = false;  // ADDED: Prevents duplicate order creation
 let buyNowMode = false;  // True when using Buy Now (skip cart)
-let buyNowItem = null;   // { product_id, variant_id, quantity, price, name, store_name, image_url }
+let buyNowItem = null;   // { product_id, variant_id, quantity, price, name, store_name, image_url, addons? }
 
 // ===== CHECKOUT SESSION MANAGEMENT =====
 function startCheckoutSession() {
@@ -3907,7 +3907,9 @@ function loadCart() {
                         quantity: item.quantity || 1,
                         stock_quantity: Number.isFinite(stockQty) ? stockQty : null,
                         cart_item_id: item.id || item.cart_item_id,
-                        is_selected: item.is_selected !== false
+                        is_selected: item.is_selected !== false,
+                        addons: Array.isArray(item.addons) ? item.addons : [],
+                        addons_total: parseFloat(item.addons_total || 0) || 0
                     };
                 });
                 
@@ -3973,7 +3975,15 @@ function updateCartDisplay() {
     let total = 0;
 
     Object.entries(storesMap).forEach(([storeName, storeItems]) => {
-        const storeTotal = storeItems.reduce((sum, item) => sum + (item.is_selected ? item.price * item.quantity : 0), 0);
+        const storeTotal = storeItems.reduce((sum, item) => {
+            if (!item.is_selected) return sum;
+            const unitAddons = (Array.isArray(item.addons) ? item.addons : [])
+                .reduce((s, a) => {
+                    const units = Math.max(1, Number(a.quantity || a.units || 1));
+                    return s + Number(a.price || 0) * units;
+                }, 0);
+            return sum + (item.price * item.quantity) + (unitAddons * item.quantity);
+        }, 0);
         total += storeTotal;
 
         html += `
@@ -3997,6 +4007,31 @@ function updateCartDisplay() {
             const atMax = maxStock != null && item.quantity >= maxStock;
             const minusDisabled = item.quantity <= 1 ? 'disabled' : '';
             const plusDisabled = atMax ? 'disabled' : '';
+            const addons = Array.isArray(item.addons) ? item.addons : [];
+            const unitAddons = addons.reduce((s, a) => {
+                const units = Math.max(1, Number(a.quantity || a.units || 1));
+                return s + Number(a.price || 0) * units;
+            }, 0);
+            const addonsTotal = unitAddons * item.quantity;
+            const lineTotal = (item.price * item.quantity) + addonsTotal;
+            const addonsHtml = addons.length
+                ? `<div class="cart-item-addons" style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+                    ${addons.map(a => {
+                        const aName = a.name || 'Add-on';
+                        const aPrice = Number(a.price || 0);
+                        const aUnits = Math.max(1, Number(a.quantity || a.units || 1));
+                        const aGroup = a.group_name ? `${a.group_name}: ` : '';
+                        const aImg = a.image_url
+                            ? `<img src="${a.image_url}" alt="${aName}" style="width:22px;height:22px;object-fit:cover;border-radius:5px;border:1px solid var(--border);flex-shrink:0;">`
+                            : `<div style="width:22px;height:22px;border-radius:5px;border:1px solid var(--border);background:var(--cream);flex-shrink:0;display:flex;align-items:center;justify-content:center;"><i class="ri-gift-line" style="font-size:11px;color:var(--muted);"></i></div>`;
+                        return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);">
+                            ${aImg}
+                            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">+ ${aGroup}${aName}${aUnits > 1 ? ` ×${aUnits}` : ''}</span>
+                            <span style="margin-left:auto;white-space:nowrap;color:var(--charcoal);">₱${(aPrice * aUnits).toFixed(2)}</span>
+                        </div>`;
+                    }).join('')}
+                </div>`
+                : '';
             html += `
                 <div class="cart-item" data-index="${item.cartIndex}" data-product-id="${item.id}" data-variant-id="${item.variant_id || ''}" style="border: none; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; margin-bottom: 0; border-bottom: ${idx < storeItems.length - 1 ? '1px solid var(--border)' : 'none'}; display: flex; gap: 12px; padding: 12px 16px;">
                     <input type="checkbox" class="item-checkbox" data-index="${item.cartIndex}" onchange="toggleItem(${item.cartIndex})" ${item.is_selected ? 'checked' : ''} style="cursor: pointer; margin-top: 4px;">
@@ -4011,6 +4046,7 @@ function updateCartDisplay() {
                             ${item.original_price ? `<span class="cart-item-price-original">₱${item.original_price.toFixed(2)}</span>` : ''}
                             ${item.discount_pct ? `<span class="cart-item-discount-chip">${item.discount_pct}% off</span>` : ''}
                         </div>
+                        ${addonsHtml}
                         <div class="cart-qty-control" aria-label="Quantity">
                             <button type="button" class="quantity-btn" onclick="updateQuantity(${item.cartIndex},-1)" aria-label="Decrease quantity" ${minusDisabled}>−</button>
                             <span class="cart-qty-value" aria-live="polite">${item.quantity}</span>
@@ -4018,7 +4054,7 @@ function updateCartDisplay() {
                         </div>
                     </div>
                     <div style="text-align: right; display: flex; flex-direction: column; justify-content: space-between;">
-                        <div style="font-weight: 600; color: var(--charcoal);">₱${(item.price * item.quantity).toFixed(2)}</div>
+                        <div style="font-weight: 600; color: var(--charcoal);">₱${lineTotal.toFixed(2)}</div>
                         <button class="cart-item-remove" onclick="removeFromCart(${item.cartIndex})" style="background: transparent; border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; cursor: pointer; color: var(--deep-rose);"><i class="ri-delete-bin-line"></i></button>
                     </div>
                 </div>
@@ -4133,6 +4169,9 @@ function addToCart(product) {
     if (product.variant_id) {
         cartPayload.variant_id = product.variant_id;
     }
+    if (Array.isArray(product.addon_option_ids) && product.addon_option_ids.length) {
+        cartPayload.addon_option_ids = product.addon_option_ids;
+    }
     
     return fetch('/api/cart/items', {
         method: 'POST',
@@ -4243,6 +4282,13 @@ function updateQuantity(index, change) {
 
     // Instant local update so users can tap +/- quickly
     item.quantity = newQuantity;
+    if (Array.isArray(item.addons) && item.addons.length) {
+        const unitAddons = item.addons.reduce((s, a) => {
+            const units = Math.max(1, Number(a.quantity || a.units || 1));
+            return s + Number(a.price || 0) * units;
+        }, 0);
+        item.addons_total = unitAddons * newQuantity;
+    }
     persistLocalCart();
     updateCartCount();
     updateCartDisplay();
@@ -4576,7 +4622,9 @@ async function buyNowDirect(item) {
         mode: 'buy_now',
         product_id: item.product_id,
         variant_id: item.variant_id || null,
-        quantity: item.quantity || 1
+        quantity: item.quantity || 1,
+        addons: Array.isArray(item.addons) ? item.addons : [],
+        addon_option_ids: Array.isArray(item.addon_option_ids) ? item.addon_option_ids : [],
     });
     if (!stockOk) {
         buyNowMode = false;
@@ -4823,6 +4871,8 @@ async function probeCheckoutAddressDelivery(addressId) {
                     variant_id: buyNowItem.variant_id || null,
                     quantity: buyNowItem.quantity || 1,
                     delivery_address_id: addressId,
+                    addons: Array.isArray(buyNowItem.addons) ? buyNowItem.addons : [],
+                    addon_option_ids: Array.isArray(buyNowItem.addon_option_ids) ? buyNowItem.addon_option_ids : [],
                 })
             });
         } else {
@@ -5042,6 +5092,8 @@ async function proceedCheckout() {
                     variant_id: buyNowItem.variant_id || null,
                     quantity: buyNowItem.quantity || 1,
                     delivery_address_id: selectedCheckoutAddressId,
+                    addons: Array.isArray(buyNowItem.addons) ? buyNowItem.addons : [],
+                    addon_option_ids: Array.isArray(buyNowItem.addon_option_ids) ? buyNowItem.addon_option_ids : [],
                 };
                 console.log('📤 Buy Now Validate Request:', requestBody);
                 
@@ -5285,7 +5337,13 @@ async function createOrders() {
                     product_id: item.product_id,
                     variant_id: item.variant_id,
                     quantity: item.quantity,
-                    price: item.price
+                    price: item.price,
+                    addons: Array.isArray(item.addons) ? item.addons : [],
+                    addons_total: Number(item.addons_total != null
+                        ? item.addons_total
+                        : (Array.isArray(item.addons)
+                            ? item.addons.reduce((s, a) => s + (Number(a.price || 0) * Number(a.quantity || 1)), 0)
+                            : 0)),
                 })),
                 payment_proof_url: uploadedProofs[order.temp_id],
                 payment_proof_public_id: uploadedProofData[order.temp_id]?.public_id || null
@@ -5310,6 +5368,8 @@ async function createOrders() {
                 requested_delivery_time: getStoreDeliveryTime(order.temp_id),
                 payment_proof_url: uploadedProofs[order.temp_id],
                 payment_proof_public_id: uploadedProofData[order.temp_id]?.public_id || null,
+                addons: Array.isArray(buyNowItem.addons) ? buyNowItem.addons : [],
+                addon_option_ids: Array.isArray(buyNowItem.addon_option_ids) ? buyNowItem.addon_option_ids : [],
             };
             console.log('📦 Buy Now payload:', buyNowPayload);
 
@@ -5423,7 +5483,7 @@ function displayOrderSummary() {
             const itemRows = items.map(item => {
                 const productId = item.product_id || item.id;
                 const variantId = item.variant_id || null;
-                let itemName = `Product #${productId || ''}`;
+                let itemName = item.name || `Product #${productId || ''}`;
                 let itemImage = item.image_url || item.product_image_url || '';
                 let variantLabel = item.variant_name || '';
 
@@ -5431,6 +5491,14 @@ function displayOrderSummary() {
                     itemName = buyNowItem.name || itemName;
                     itemImage = buyNowItem.image_url || itemImage;
                     variantLabel = buyNowItem.variant_name || variantLabel;
+                } else if (buyNowMode && buyNowItem && Array.isArray(buyNowItem.addons)) {
+                    const addonMatch = buyNowItem.addons.find(a =>
+                        Number(a.product_id || a.id) === Number(productId) && !variantId
+                    );
+                    if (addonMatch) {
+                        itemName = addonMatch.name || itemName;
+                        itemImage = addonMatch.image_url || itemImage;
+                    }
                 } else {
                     const cartMatch = cartItemsSafe.find(ci => ci.id === productId && (ci.variant_id || null) === variantId);
                     if (cartMatch) {
@@ -5442,19 +5510,47 @@ function displayOrderSummary() {
 
                 const unitPrice = Number(item.price || 0);
                 const qty = Number(item.quantity || 0);
-                const lineTotal = unitPrice * qty;
+                let addons = Array.isArray(item.addons) ? item.addons : [];
+                if ((!addons || !addons.length) && buyNowMode && buyNowItem && Array.isArray(buyNowItem.structured_addons)) {
+                    addons = buyNowItem.structured_addons;
+                }
+                const cartMatchForAddons = cartItemsSafe.find(ci => ci.id === productId && (ci.variant_id || null) === variantId);
+                if ((!addons || !addons.length) && cartMatchForAddons && Array.isArray(cartMatchForAddons.addons)) {
+                    addons = cartMatchForAddons.addons;
+                }
+                const addonsTotal = Number(item.addons_total != null
+                    ? item.addons_total
+                    : addons.reduce((s, a) => s + (Number(a.price || 0) * Number(a.quantity || qty || 1)), 0));
+                const lineTotal = (unitPrice * qty) + addonsTotal;
+                const addonsRows = addons.map(a => {
+                    const aName = a.name || 'Add-on';
+                    const aGroup = a.group_name ? `${a.group_name}: ` : '';
+                    const aPrice = Number(a.price || 0);
+                    const aUnits = Math.max(1, Number(a.units || 0));
+                    // quantity from checkout may already be units * product qty; prefer units when present
+                    const displayQty = a.units != null ? aUnits : Math.max(1, Number(a.quantity || 1));
+                    const aImg = a.image_url
+                        ? `<img src="${escHtml(a.image_url)}" alt="${escHtml(aName)}" style="width:20px;height:20px;object-fit:cover;border-radius:5px;border:1px solid var(--border);flex-shrink:0;">`
+                        : `<div style="width:20px;height:20px;border-radius:5px;border:1px solid var(--border);background:var(--cream);flex-shrink:0;display:flex;align-items:center;justify-content:center;"><i class="ri-gift-line" style="font-size:10px;color:var(--muted);"></i></div>`;
+                    return `<div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;color:var(--muted);">
+                        ${aImg}
+                        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">+ ${escHtml(aGroup)}${escHtml(aName)}${displayQty > 1 ? ` ×${displayQty}` : ''}</span>
+                        <span style="margin-left:auto;white-space:nowrap;">₱${(aPrice * (a.units != null ? aUnits : 1)).toFixed(2)}</span>
+                    </div>`;
+                }).join('');
 
-                return `<li style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(107,76,59,0.12);">
-                    <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+                return `<li style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(107,76,59,0.12);">
+                    <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1;">
                         ${itemImage
                             ? `<img src="${escHtml(itemImage)}" alt="${escHtml(itemName)}" style="width:32px;height:32px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;">`
                             : `<div style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--cream);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0;"><i class="ri-flower-line"></i></div>`
                         }
-                        <div style="min-width:0;">
+                        <div style="min-width:0;flex:1;">
                             <div style="color:var(--charcoal);font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(itemName)}</div>
                             <div style="font-size:11px;color:var(--muted);line-height:1.3;">
                                 Qty: ${qty} × ₱${unitPrice.toFixed(2)}${variantLabel ? ` · ${escHtml(variantLabel)}` : ''}
                             </div>
+                            ${addonsRows}
                         </div>
                     </div>
                     <strong style="white-space:nowrap;color:var(--deep-rose);">₱${lineTotal.toFixed(2)}</strong>
@@ -5543,9 +5639,21 @@ async function displayGCashPayment() {
             const itemImage = item.image_url || item.product_image_url || (cartMatch && cartMatch.image_url) || '';
             const qty = Number(item.quantity || 0);
             const variantLabel = item.variant_name || (cartMatch && cartMatch.variant_name) || '';
+            const addons = Array.isArray(item.addons) ? item.addons : (cartMatch && Array.isArray(cartMatch.addons) ? cartMatch.addons : []);
+            const addonsRows = addons.map(a => {
+                const aName = a.name || 'Add-on';
+                const aGroup = a.group_name ? `${a.group_name}: ` : '';
+                const aImg = a.image_url
+                    ? `<img src="${escHtml(a.image_url)}" alt="${escHtml(aName)}" style="width:18px;height:18px;object-fit:cover;border-radius:4px;border:1px solid var(--border);flex-shrink:0;">`
+                    : '';
+                return `<div style="display:flex;align-items:center;gap:5px;margin-top:3px;font-size:10px;color:var(--muted);">
+                    ${aImg}
+                    <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">+ ${escHtml(aGroup)}${escHtml(aName)}</span>
+                </div>`;
+            }).join('');
 
-            return `<li style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(107,76,59,0.12);">
-                <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+            return `<li style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px dashed rgba(107,76,59,0.12);">
+                <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1;">
                     ${itemImage
                         ? `<img src="${escHtml(itemImage)}" alt="${escHtml(itemName)}" style="width:32px;height:32px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;">`
                         : `<div style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--cream);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0;"><i class="ri-flower-line"></i></div>`
@@ -5553,6 +5661,7 @@ async function displayGCashPayment() {
                     <div style="min-width:0;">
                         <div style="color:var(--charcoal);font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(itemName)}</div>
                         ${variantLabel ? `<div style="font-size:11px;color:var(--muted);line-height:1.2;">${escHtml(variantLabel)}</div>` : ''}
+                        ${addonsRows}
                     </div>
                 </div>
                 <strong style="white-space:nowrap;color:var(--deep-rose);">x${qty}</strong>

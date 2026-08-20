@@ -113,14 +113,20 @@ def _build_order_chat_context(order):
 
     items = []
     for item in (order.items or []):
+        addons_list = [a.to_dict() for a in (item.addons or [])]
+        addons_sum = float(item.addons_total or 0)
+        unit = float(item.price or 0)
+        qty = item.quantity or 1
         items.append({
             'id': item.id,
             'name': item.product.name if item.product else 'Product',
             'variant_name': item.variant.name if item.variant else None,
-            'quantity': item.quantity or 1,
-            'price': float(item.price or 0),
-            'total': float((item.quantity or 0) * float(item.price or 0)),
+            'quantity': qty,
+            'price': unit,
+            'total': float(qty * unit) + addons_sum,
             'image_url': item.product_image,
+            'addons': addons_list,
+            'addons_total': addons_sum,
         })
 
     return {

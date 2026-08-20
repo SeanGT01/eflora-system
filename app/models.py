@@ -792,6 +792,13 @@ class Product(db.Model):
     store_category = db.relationship('StoreCategory', back_populates='products')
     images = db.relationship('ProductImage', back_populates='product', lazy=True, cascade='all, delete-orphan', order_by='ProductImage.sort_order')
     variants = db.relationship('ProductVariant', back_populates='product', lazy=True, cascade='all, delete-orphan', order_by='ProductVariant.sort_order')
+    addon_groups = db.relationship(
+        'ProductAddonGroup',
+        back_populates='product',
+        lazy=True,
+        cascade='all, delete-orphan',
+        order_by='ProductAddonGroup.sort_order',
+    )
     order_items = db.relationship('OrderItem', backref='product', lazy=True)
     pos_order_items = db.relationship('POSOrderItem', back_populates='product', lazy=True)
     archived_by_user = db.relationship('User', foreign_keys=[archived_by], backref='archived_products')
@@ -949,7 +956,7 @@ class Product(db.Model):
         
         db.session.delete(self)
     
-    def to_dict(self):
+    def to_dict(self, include_inactive_addons=False):
         sorted_images = sorted(self.images, key=lambda x: x.sort_order)
         primary_image = next((img for img in sorted_images if img.is_primary), sorted_images[0] if sorted_images else None)
         
@@ -994,7 +1001,15 @@ class Product(db.Model):
             
             # Variant support
             'has_variants': len(self.variants) > 0,
-            'variants': [variant.to_dict() for variant in sorted_variants]
+            'variants': [variant.to_dict() for variant in sorted_variants],
+
+            # Structured product add-ons (dropdown groups)
+            'has_addons': any(g.is_active for g in self.addon_groups),
+            'addon_groups': [
+                g.to_dict(include_inactive_options=include_inactive_addons)
+                for g in sorted(self.addon_groups, key=lambda x: x.sort_order or 0)
+                if include_inactive_addons or g.is_active
+            ],
         }
         
         return data
@@ -1030,7 +1045,10 @@ class ProductImage(db.Model):
         if not self.public_id:
             return None
             
-        transformations = {}
+        transformations = {
+            'quality': 'auto:good',
+            'fetch_format': 'auto',
+        }
         if width:
             transformations['width'] = width
         if height:
@@ -1054,8 +1072,8 @@ class ProductImage(db.Model):
             'public_id': self.public_id,
             'image_url': self.image_url,
             'thumbnail_url': self.get_transformed_url(width=200, height=200),
-            'medium_url': self.get_transformed_url(width=400, height=400),
-            'large_url': self.get_transformed_url(width=800, height=800),
+            'medium_url': self.get_transformed_url(width=600, height=600, crop='limit'),
+            'large_url': self.get_transformed_url(width=1400, height=1400, crop='limit'),
             'is_primary': self.is_primary,
             'sort_order': self.sort_order,
             'created_at': self.created_at.isoformat() if self.created_at else None
@@ -1124,7 +1142,10 @@ class ProductVariant(db.Model):
         if not self.image_public_id:
             return None
             
-        transformations = {}
+        transformations = {
+            'quality': 'auto:good',
+            'fetch_format': 'auto',
+        }
         if width:
             transformations['width'] = width
         if height:
@@ -1162,8 +1183,165 @@ class ProductVariant(db.Model):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# STOCK REDUCTION AUDIT MODEL
+# PRODUCT ADD-ONS (dropdown groups + priced options)
 # ═════════════════════════════════════════════════════════════════════════════
+class ProductAddonGroup(db.Model):
+    """Named add-on group on a product (e.g. Ferrero Rocher, Gift Cards)."""
+    __tablename__ = 'product_addon_groups'
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    sort_order = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    product = db.relationship('Product', back_populates='addon_groups')
+    options = db.relationship(
+        'ProductAddonOption',
+        back_populates='group',
+        lazy=True,
+        cascade='all, delete-orphan',
+        order_by='ProductAddonOption.sort_order',
+    )
+
+    def to_dict(self, include_inactive_options=False):
+        opts = sorted(self.options, key=lambda o: o.sort_order or 0)
+        if not include_inactive_options:
+            opts = [o for o in opts if o.is_available]
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'name': self.name,
+            'sort_order': self.sort_order or 0,
+            'is_active': self.is_active,
+            'options': [o.to_dict() for o in opts],
+        }
+
+
+class ProductAddonOption(db.Model):
+    """A selectable option under an add-on group (name, price, stock, required image)."""
+    __tablename__ = 'product_addon_options'
+
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(
+        db.Integer,
+        db.ForeignKey('product_addon_groups.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    name = db.Column(db.String(150), nullable=False)
+    price = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    stock_quantity = db.Column(db.Integer, default=0, nullable=False)
+    image_filename = db.Column(db.String(255), nullable=True)
+    image_public_id = db.Column(db.String(255), nullable=True)
+    image_url = db.Column(db.String(500), nullable=True)
+    sort_order = db.Column(db.Integer, default=0)
+    is_available = db.Column(db.Boolean, default=True, nullable=False)
+    show_in_you_may_also_like = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    group = db.relationship('ProductAddonGroup', back_populates='options')
+    cart_item_addons = db.relationship('CartItemAddon', back_populates='addon_option', lazy=True)
+    order_item_addons = db.relationship('OrderItemAddon', back_populates='addon_option', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'group_id': self.group_id,
+            'group_name': self.group.name if self.group else None,
+            'name': self.name,
+            'price': float(self.price) if self.price is not None else 0,
+            'stock_quantity': int(self.stock_quantity or 0),
+            'image_url': self.image_url,
+            'image_public_id': self.image_public_id,
+            'sort_order': self.sort_order or 0,
+            'is_available': self.is_available,
+            'show_in_you_may_also_like': bool(self.show_in_you_may_also_like),
+            'is_oos': int(self.stock_quantity or 0) <= 0,
+        }
+
+
+class CartItemAddon(db.Model):
+    """Selected structured add-on option attached to a cart line."""
+    __tablename__ = 'cart_item_addons'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cart_item_id = db.Column(
+        db.Integer,
+        db.ForeignKey('cart_items.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    addon_option_id = db.Column(
+        db.Integer,
+        db.ForeignKey('product_addon_options.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    quantity = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    cart_item = db.relationship('CartItem', back_populates='addons')
+    addon_option = db.relationship('ProductAddonOption', back_populates='cart_item_addons')
+
+    __table_args__ = (
+        db.UniqueConstraint('cart_item_id', 'addon_option_id', name='unique_cart_item_addon_option'),
+    )
+
+    def to_dict(self):
+        opt = self.addon_option
+        price = float(opt.price) if opt and opt.price is not None else 0
+        qty = int(self.quantity or 1)
+        return {
+            'id': self.id,
+            'cart_item_id': self.cart_item_id,
+            'addon_option_id': self.addon_option_id,
+            'quantity': qty,
+            'name': opt.name if opt else None,
+            'price': price,
+            'image_url': opt.image_url if opt else None,
+            'group_id': opt.group_id if opt else None,
+            'group_name': opt.group.name if opt and opt.group else None,
+            'total': price * qty,
+        }
+
+
+class OrderItemAddon(db.Model):
+    """Snapshot of a structured add-on purchased with an order line."""
+    __tablename__ = 'order_item_addons'
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_item_id = db.Column(
+        db.Integer,
+        db.ForeignKey('order_items.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    addon_option_id = db.Column(
+        db.Integer,
+        db.ForeignKey('product_addon_options.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    name = db.Column(db.String(150), nullable=False)
+    price = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
+    image_url = db.Column(db.String(500), nullable=True)
+
+    order_item = db.relationship('OrderItem', back_populates='addons')
+    addon_option = db.relationship('ProductAddonOption', back_populates='order_item_addons')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'order_item_id': self.order_item_id,
+            'addon_option_id': self.addon_option_id,
+            'name': self.name,
+            'price': float(self.price) if self.price is not None else 0,
+            'quantity': self.quantity,
+            'image_url': self.image_url,
+            'total': float(self.quantity * self.price) if self.price is not None else 0,
+        }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # STOCK REDUCTION AUDIT MODEL
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1174,6 +1352,11 @@ class StockReduction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
+    addon_option_id = db.Column(
+        db.Integer,
+        db.ForeignKey('product_addon_options.id', ondelete='SET NULL'),
+        nullable=True,
+    )
     reduction_amount = db.Column(db.Integer, nullable=False)
     
     # Reason for reduction
@@ -1190,6 +1373,11 @@ class StockReduction(db.Model):
     # Relationships
     product = db.relationship('Product', back_populates='stock_reductions')
     variant = db.relationship('ProductVariant', backref='stock_reductions', foreign_keys=[variant_id])
+    addon_option = db.relationship(
+        'ProductAddonOption',
+        backref='stock_reductions',
+        foreign_keys=[addon_option_id],
+    )
     reducer_user = db.relationship('User', backref='stock_reductions_made', foreign_keys=[reduced_by])
     
     # Valid reasons
@@ -1204,7 +1392,7 @@ class StockReduction(db.Model):
         
         # Get variant info and variant image URL
         variant_info = None
-        variant_image_url = None  # ADD THIS VARIABLE
+        variant_image_url = None
         if self.variant:
             variant_info = {
                 'id': self.variant.id,
@@ -1212,9 +1400,20 @@ class StockReduction(db.Model):
                 'stock_before': self.variant.stock_quantity + self.reduction_amount if self.variant else None,
                 'stock_after': self.variant.stock_quantity if self.variant else None
             }
-            # ADD THIS - Get the variant's own image URL
             if self.variant.image_url:
                 variant_image_url = self.variant.image_url
+
+        addon_info = None
+        addon_image_url = None
+        if self.addon_option:
+            group_name = self.addon_option.group.name if self.addon_option.group else None
+            addon_info = {
+                'id': self.addon_option.id,
+                'name': self.addon_option.name,
+                'group_name': group_name,
+                'stock_after': int(self.addon_option.stock_quantity or 0),
+            }
+            addon_image_url = self.addon_option.image_url
         
         return {
             'id': self.id,
@@ -1223,7 +1422,10 @@ class StockReduction(db.Model):
             'product_image': product_image.image_url if product_image else None,
             'variant_id': self.variant_id,
             'variant_info': variant_info,
-            'variant_image_url': variant_image_url,  # ADD THIS LINE
+            'variant_image_url': variant_image_url,
+            'addon_option_id': self.addon_option_id,
+            'addon_info': addon_info,
+            'addon_image_url': addon_image_url,
             'reduction_amount': self.reduction_amount,
             'reason': self.reason,
             'reason_notes': self.reason_notes,
@@ -1361,28 +1563,50 @@ class Order(db.Model):
         self.updated_at = now
 
     def restore_stock_on_cancel(self, user_id):
-        """Return reserved product/variant quantities after this order is cancelled."""
+        """Return reserved product/variant and structured add-on stock after cancel."""
         for item in self.items:
             qty = int(item.quantity or 0)
-            if qty <= 0:
-                continue
+            if qty > 0:
+                product = item.product
+                if product is None and item.product_id:
+                    product = Product.query.get(item.product_id)
+                if product is not None:
+                    variant = item.variant
+                    if item.variant_id and variant is None:
+                        variant = ProductVariant.query.get(item.variant_id)
 
-            product = item.product
-            if product is None and item.product_id:
-                product = Product.query.get(item.product_id)
-            if product is None:
-                continue
+                    product.restore_stock(
+                        qty,
+                        user_id,
+                        reason_notes=f'Restored after cancellation of order #{self.id}',
+                        variant=variant,
+                    )
 
-            variant = item.variant
-            if item.variant_id and variant is None:
-                variant = ProductVariant.query.get(item.variant_id)
-
-            product.restore_stock(
-                qty,
-                user_id,
-                reason_notes=f'Restored after cancellation of order #{self.id}',
-                variant=variant,
-            )
+            # Restore structured add-on option stock (snapshot qty already includes line qty)
+            for addon_row in (item.addons or []):
+                addon_qty = int(addon_row.quantity or 0)
+                if addon_qty <= 0:
+                    continue
+                opt = addon_row.addon_option
+                if opt is None and addon_row.addon_option_id:
+                    opt = ProductAddonOption.query.get(addon_row.addon_option_id)
+                if opt is None:
+                    continue
+                opt.stock_quantity = int(opt.stock_quantity or 0) + addon_qty
+                opt.updated_at = datetime.utcnow()
+                product_id = item.product_id
+                if not product_id and opt.group:
+                    product_id = opt.group.product_id
+                if product_id and user_id:
+                    db.session.add(StockReduction(
+                        product_id=product_id,
+                        variant_id=None,
+                        addon_option_id=opt.id,
+                        reduction_amount=addon_qty,
+                        reason='restock',
+                        reason_notes=f'Restored after cancellation of order #{self.id}',
+                        reduced_by=user_id,
+                    ))
     
     def to_dict(self):
         return {
@@ -1440,6 +1664,12 @@ class OrderItem(db.Model):
     price = db.Column(db.Numeric(10, 2))
     
     variant = db.relationship('ProductVariant', backref='order_items', lazy=True)
+    addons = db.relationship(
+        'OrderItemAddon',
+        back_populates='order_item',
+        lazy=True,
+        cascade='all, delete-orphan',
+    )
     
     @property
     def product_image(self):
@@ -1450,6 +1680,10 @@ class OrderItem(db.Model):
             primary = next((img for img in self.product.images if img.is_primary), self.product.images[0] if self.product.images else None)
             return primary.image_url if primary else None
         return None
+
+    @property
+    def addons_total(self):
+        return sum(float(a.price or 0) * int(a.quantity or 1) for a in (self.addons or []))
     
     def to_dict(self):
         product = self.product
@@ -1457,6 +1691,10 @@ class OrderItem(db.Model):
         
         if self.variant:
             variant_name = self.variant.name
+
+        unit = float(self.price) if self.price else 0
+        addons_list = [a.to_dict() for a in (self.addons or [])]
+        addons_sum = sum(float(a.get('total') or 0) for a in addons_list)
         
         return {
             'id': self.id,
@@ -1465,10 +1703,12 @@ class OrderItem(db.Model):
             'variant_id': self.variant_id,
             'variant_name': variant_name,
             'quantity': self.quantity,
-            'price': float(self.price) if self.price else 0,
-            'total': float(self.quantity * self.price) if self.price else 0,
+            'price': unit,
+            'total': (unit * int(self.quantity or 0)) + addons_sum,
             'product_name': product.name if product else None,
-            'product_image_url': self.product_image  # Cloudinary only
+            'product_image_url': self.product_image,
+            'addons': addons_list,
+            'addons_total': addons_sum,
         }
 
 
@@ -1886,13 +2126,32 @@ class CartItem(db.Model):
     
     product = db.relationship('Product', backref=db.backref('cart_items', lazy='dynamic', passive_deletes=True))
     variant = db.relationship('ProductVariant', backref='cart_items', lazy=True)
+    addons = db.relationship(
+        'CartItemAddon',
+        back_populates='cart_item',
+        lazy=True,
+        cascade='all, delete-orphan',
+    )
     
     @property
+    def addons_subtotal(self):
+        # units on CartItemAddon × main line quantity
+        total = 0.0
+        main_qty = int(self.quantity or 1)
+        for row in (self.addons or []):
+            if row.addon_option:
+                units = int(row.quantity or 1)
+                total += float(row.addon_option.price or 0) * units * main_qty
+        return total
+
+    @property
     def subtotal(self):
-        # Use effective sale-aware price (variant takes precedence)
+        # Use effective sale-aware price (variant takes precedence) + structured add-ons
         if self.variant:
-            return self.variant.effective_price * self.quantity
-        return self.product.effective_price * self.quantity if self.product else 0
+            base = self.variant.effective_price * self.quantity
+        else:
+            base = self.product.effective_price * self.quantity if self.product else 0
+        return float(base) + float(self.addons_subtotal)
     
     @property
     def item_image(self):
@@ -1927,6 +2186,9 @@ class CartItem(db.Model):
             original  = 0.0
             disc_pct  = None
 
+        addons_list = [a.to_dict() for a in (self.addons or [])]
+        addons_sum = float(self.addons_subtotal)
+
         return {
             'id': self.id,
             'cart_id': self.cart_id,
@@ -1949,6 +2211,8 @@ class CartItem(db.Model):
             'price': effective,
             'original_price': original if disc_pct else None,
             'discount_pct': disc_pct,
+            'addons': addons_list,
+            'addons_total': addons_sum,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

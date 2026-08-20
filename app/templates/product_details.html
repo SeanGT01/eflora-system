@@ -239,9 +239,81 @@
     /* Stock tag on image */
     .gallery-stock-tag {
         position: absolute;
-        top: 1rem;
-        right: 1rem;
-        z-index: 2;
+        top: 0.9rem;
+        right: 0.9rem;
+        z-index: 3;
+        pointer-events: none;
+        max-width: calc(100% - 1.8rem);
+    }
+
+    .gallery-stock-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        max-width: 100%;
+        padding: 0.42rem 0.8rem 0.42rem 0.55rem;
+        border-radius: 999px;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        line-height: 1.2;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.45);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow:
+            0 8px 22px rgba(60, 30, 45, 0.18),
+            inset 0 1px 0 rgba(255, 255, 255, 0.35);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .gallery-stock-badge__icon {
+        flex-shrink: 0;
+        width: 1.35rem;
+        height: 1.35rem;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        background: rgba(255, 255, 255, 0.22);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+    }
+
+    .gallery-stock-badge__text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .gallery-stock-badge__count {
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .gallery-stock-badge.is-low {
+        background: linear-gradient(135deg, rgba(194, 78, 104, 0.92), rgba(196, 113, 75, 0.9));
+    }
+
+    .gallery-stock-badge.is-low.is-critical {
+        background: linear-gradient(135deg, rgba(176, 48, 72, 0.95), rgba(194, 78, 104, 0.92));
+        animation: galleryStockPulse 1.8s ease-in-out infinite;
+    }
+
+    .gallery-stock-badge.is-out {
+        background: linear-gradient(135deg, rgba(42, 35, 30, 0.88), rgba(70, 52, 58, 0.86));
+    }
+
+    @keyframes galleryStockPulse {
+        0%, 100% { box-shadow: 0 8px 22px rgba(60, 30, 45, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+        50% { box-shadow: 0 8px 26px rgba(176, 48, 72, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .gallery-stock-badge.is-critical { animation: none; }
     }
 
     /* Gallery Description Section */
@@ -344,7 +416,9 @@
         flex-direction: column;
         gap: 1.5rem;
         width: 100%;
-        overflow-x: hidden;
+        min-width: 0;
+        /* Avoid clipping 1.5px field borders on the right edge */
+        overflow-x: visible;
     }
 
     /* Product header */
@@ -675,6 +749,29 @@
         box-shadow: 0 6px 16px rgba(181, 68, 90, 0.25);
     }
 
+    /* Out of stock option — muted, still selectable */
+    .variant-btn.is-oos {
+        background: rgba(120, 110, 115, 0.16);
+        border-color: rgba(107, 96, 100, 0.28);
+        color: rgba(90, 82, 86, 0.72);
+        box-shadow: none;
+        cursor: pointer;
+        opacity: 1;
+    }
+
+    .variant-btn.is-oos:hover {
+        background: rgba(120, 110, 115, 0.24);
+        border-color: rgba(107, 96, 100, 0.4);
+        color: rgba(70, 64, 68, 0.88);
+    }
+
+    .variant-btn.is-oos.active {
+        background: linear-gradient(135deg, #9a9094, #b0a8ac, #8e868a);
+        border-color: transparent;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(90, 82, 86, 0.2);
+    }
+
     .variant-btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
@@ -741,7 +838,7 @@
         flex-shrink: 0;
     }
 
-    /* Add-ons section */
+    /* Add-ons section — single-row carousel */
     .addons-label {
         font-size: 11px;
         font-weight: 700;
@@ -752,48 +849,292 @@
         display: block;
     }
 
-    /* Category filter pills */
-    .addon-filters {
+    .ymal-tabs {
         display: flex;
-        gap: 0.5rem;
+        gap: 0.35rem;
+        margin-bottom: 0.85rem;
         flex-wrap: wrap;
-        margin-bottom: 1rem;
     }
 
-    .addon-filter-btn {
-        padding: 5px 14px;
-        border-radius: var(--radius-pill);
-        border: 1.5px solid rgba(230, 170, 195, 0.45);
+    .ymal-tab {
+        border: 1.5px solid rgba(230, 170, 195, 0.4);
         background: rgba(255, 255, 255, 0.55);
+        color: var(--muted);
         font-family: var(--font-sans);
         font-size: 12px;
         font-weight: 600;
-        color: var(--muted);
+        letter-spacing: 0.04em;
+        padding: 0.45rem 0.9rem;
+        border-radius: 999px;
         cursor: pointer;
         transition: var(--transition);
-        letter-spacing: 0.02em;
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
     }
 
-    .addon-filter-btn:hover { border-color: rgba(216, 120, 160, 0.65); color: var(--deep-rose); background: rgba(255, 255, 255, 0.8); }
+    .ymal-tab:hover {
+        border-color: rgba(216, 120, 160, 0.65);
+        color: var(--deep-rose);
+    }
 
-    .addon-filter-btn.active {
+    .ymal-tab.active {
         background: linear-gradient(135deg, #c24e68, #d878a0, #b070c8);
         border-color: transparent;
-        color: white;
-        box-shadow: 0 6px 16px rgba(181, 68, 90, 0.25);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(181, 68, 90, 0.22);
     }
 
-    /* Add-ons grid */
+    .ymal-panel {
+        display: none;
+    }
+
+    .ymal-panel.active {
+        display: block;
+    }
+
+    .ymal-empty {
+        font-size: 13px;
+        color: var(--muted);
+        padding: 0.75rem 0.25rem;
+    }
+
+    .structured-addons {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+    .structured-addon-row {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr);
+        gap: 0.85rem;
+        align-items: center;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+    .structured-addon-preview {
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-md);
+        border: 1.5px solid rgba(230, 170, 195, 0.45);
+        background: rgba(255, 248, 246, 0.9);
+        overflow: hidden;
+        flex-shrink: 0;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .structured-addon-preview img.addon-preview-photo {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: none;
+    }
+    .structured-addon-preview.has-image img.addon-preview-photo { display: block; }
+    .structured-addon-preview.has-image .structured-addon-placeholder { display: none; }
+    .structured-addon-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        overflow: hidden;
+        background: linear-gradient(145deg, #fff8f6, #f7e8ef);
+    }
+    .structured-addon-placeholder .structured-addon-none-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    .structured-addon-fields {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        min-width: 0;
+        width: 100%;
+        max-width: min(100%, 360px);
+        overflow: visible;
+    }
+    .structured-addon-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--charcoal);
+    }
+    .structured-addon-select {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+        padding: 0.55rem 2rem 0.55rem 0.75rem;
+        border-radius: var(--radius-md);
+        border: 1.5px solid rgba(230, 170, 195, 0.55);
+        background-color: rgba(255, 255, 255, 0.7);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.3;
+        color: var(--charcoal);
+        appearance: none;
+        -webkit-appearance: none;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23b5445a' d='M2.2 4.2L6 8l3.8-3.8' stroke='%23b5445a' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.7rem center;
+        background-size: 12px;
+    }
+    .structured-addon-select:focus {
+        outline: none;
+        border-color: rgba(181, 68, 90, 0.65);
+        box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.12);
+    }
+    .addon-ymal-badge {
+        position: absolute;
+        left: 0.4rem;
+        top: 0.4rem;
+        z-index: 3;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.85);
+        color: var(--deep-rose);
+        border: 1px solid rgba(216, 120, 160, 0.45);
+    }
+    @media (max-width: 900px) {
+        .structured-addon-fields {
+            max-width: 100%;
+        }
+    }
+    @media (max-width: 640px) {
+        .structured-addon-row {
+            grid-template-columns: 52px minmax(0, 1fr);
+            gap: 0.55rem;
+        }
+        .structured-addon-preview {
+            width: 52px;
+            height: 52px;
+        }
+        .structured-addon-label {
+            font-size: 12.5px;
+        }
+        .structured-addon-select {
+            font-size: 12.5px;
+            padding: 0.5rem 1.75rem 0.5rem 0.65rem;
+            background-position: right 0.55rem center;
+        }
+    }
+    @media (max-width: 380px) {
+        .structured-addon-row {
+            grid-template-columns: 1fr;
+            gap: 0.45rem;
+            align-items: stretch;
+        }
+        .structured-addon-preview {
+            width: 48px;
+            height: 48px;
+        }
+        .structured-addon-fields {
+            max-width: 100%;
+        }
+    }
+
+    .addons-carousel {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.35rem;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .addons-nav {
+        flex-shrink: 0;
+        align-self: flex-start;
+        width: 1.35rem;
+        height: 1.35rem;
+        margin-top: clamp(2.75rem, 22%, 5rem);
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        color: #e8a0b4;
+        font-size: 1.6rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: color 0.15s, opacity 0.15s;
+        box-shadow: none;
+        padding: 0;
+        line-height: 1;
+        position: static;
+        left: auto;
+        right: auto;
+        top: auto;
+        z-index: auto;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .addons-nav:hover { color: var(--deep-rose); }
+    .addons-nav:disabled {
+        opacity: 0.25;
+        cursor: default;
+        pointer-events: none;
+    }
+
+    .addons-track-wrap {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        /* Room for hover lift so top border isn't clipped */
+        padding-top: 4px;
+        margin-top: -4px;
+    }
+
     .addons-grid {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-auto-flow: column;
+        grid-auto-columns: calc((100% - 1.875rem) / 4);
+        align-items: start;
         gap: 0.625rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-behavior: smooth;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
         width: 100%;
+        touch-action: pan-x;
+        padding-top: 2px;
+        padding-bottom: 2px;
+        box-sizing: border-box;
+    }
+
+    .addons-grid::-webkit-scrollbar { display: none; }
+
+    .addon-slide {
+        width: 100%;
+        min-width: 0;
+        scroll-snap-align: start;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        box-sizing: border-box;
+        padding-top: 2px;
     }
 
     .addon-card {
+        width: 100%;
+        box-sizing: border-box;
         border: 2px solid rgba(255, 255, 255, 0.7);
         border-radius: var(--radius-md);
         padding: 0.75rem 0.625rem;
@@ -814,10 +1155,11 @@
             inset 0 1px 0 rgba(255, 255, 255, 0.75);
     }
 
-    .addon-card:hover { 
-        border-color: rgba(230, 170, 195, 0.7); 
+    .addon-card:hover {
+        border-color: rgba(230, 170, 195, 0.7);
         transform: translateY(-2px);
         background: rgba(255, 255, 255, 0.75);
+        z-index: 1;
     }
 
     .addon-card.selected {
@@ -835,6 +1177,7 @@
         border-radius: calc(var(--radius-md) - 2px) calc(var(--radius-md) - 2px) 0 0;
         display: block;
         background: linear-gradient(145deg, #f8eef2, #ebe4f4);
+        flex-shrink: 0;
     }
 
     .addon-card-name {
@@ -848,6 +1191,9 @@
         -webkit-box-orient: vertical;
         overflow: hidden;
         word-break: break-word;
+        width: 100%;
+        min-height: calc(1.3em * 2);
+        flex-shrink: 0;
     }
 
     .addon-card-price {
@@ -870,6 +1216,7 @@
         display: none;
         align-items: center;
         justify-content: center;
+        z-index: 3;
     }
 
     .addon-card.selected .addon-check { display: flex; }
@@ -895,6 +1242,96 @@
     }
 
     .addon-card.selected .addon-info-btn { display: none; }
+
+    .addon-card.is-oos {
+        opacity: 0.55;
+        filter: grayscale(0.45);
+        cursor: not-allowed;
+        pointer-events: none;
+        background: rgba(245, 245, 245, 0.7);
+        border-color: rgba(107, 76, 59, 0.12);
+        box-shadow: none;
+    }
+
+    .addon-card.is-oos:hover {
+        transform: none;
+        border-color: rgba(107, 76, 59, 0.12);
+        background: rgba(245, 245, 245, 0.7);
+    }
+
+    .addon-oos-badge {
+        position: absolute;
+        left: 50%;
+        top: 42%;
+        transform: translate(-50%, -50%);
+        z-index: 4;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(60, 40, 45, 0.78);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+
+    .addon-card.is-oos .addon-info-btn {
+        pointer-events: auto;
+        opacity: 1;
+        filter: none;
+    }
+
+    .addon-slide.is-oos .addon-qty {
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    .addon-qty {
+        display: flex;
+        visibility: hidden;
+        pointer-events: none;
+        align-items: center;
+        justify-content: center;
+        gap: 0.55rem;
+        margin-top: 0.45rem;
+        min-height: 26px;
+        color: var(--deep-rose);
+        font-family: var(--font-sans);
+        user-select: none;
+    }
+
+    .addon-slide.is-selected .addon-qty {
+        visibility: visible;
+        pointer-events: auto;
+    }
+
+    .addon-qty-btn {
+        width: 26px;
+        height: 26px;
+        border: none;
+        background: transparent;
+        color: var(--deep-rose);
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        padding: 0;
+    }
+
+    .addon-qty-btn:hover { background: rgba(255, 190, 210, 0.35); }
+
+    .addon-qty-val {
+        min-width: 1.1rem;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--deep-rose);
+    }
 
     /* Delivery date selector */
     .date-label {
@@ -1121,6 +1558,31 @@
         color: var(--deep-rose);
     }
 
+    /* Out of stock — muted look, still clickable */
+    .cta-row .btn.is-oos,
+    .cta-row .btn.is-oos:hover {
+        background: rgba(120, 110, 115, 0.22) !important;
+        border-color: rgba(107, 96, 100, 0.35) !important;
+        color: rgba(90, 82, 86, 0.85) !important;
+        box-shadow: none !important;
+        cursor: pointer;
+        opacity: 1;
+    }
+
+    .cta-row .btn.is-oos i {
+        color: rgba(90, 82, 86, 0.75);
+    }
+
+    .cta-row .btn.is-closed,
+    .cta-row .btn.is-closed:hover {
+        background: rgba(120, 110, 115, 0.18) !important;
+        border-color: rgba(107, 96, 100, 0.28) !important;
+        color: rgba(90, 82, 86, 0.7) !important;
+        box-shadow: none !important;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
     /* ─── COMPREHENSIVE RESPONSIVE DESIGN ─── */
     /* Mobile First: < 480px */
     @media (max-width: 479px) {
@@ -1142,6 +1604,23 @@
 
         .gallery-main {
             border-radius: var(--radius-lg);
+        }
+
+        .gallery-stock-tag {
+            top: 0.65rem;
+            right: 0.65rem;
+        }
+
+        .gallery-stock-badge {
+            font-size: 11px;
+            padding: 0.35rem 0.65rem 0.35rem 0.4rem;
+            gap: 0.3rem;
+        }
+
+        .gallery-stock-badge__icon {
+            width: 1.15rem;
+            height: 1.15rem;
+            font-size: 0.75rem;
         }
 
         .gallery-thumbs {
@@ -1227,21 +1706,70 @@
             height: 36px;
         }
 
+        .addons-carousel {
+            gap: 0.2rem;
+        }
+
         .addons-grid {
-            grid-template-columns: repeat(2, 1fr);
+            grid-auto-columns: calc((100% - 0.5rem) / 2);
             gap: 0.5rem;
         }
 
+        .addons-nav {
+            width: 1.1rem;
+            height: 1.1rem;
+            font-size: 1.25rem;
+            margin-top: clamp(2.2rem, 28vw, 3.6rem);
+        }
+
         .addon-card {
-            padding: 0.625rem;
+            padding: 0.55rem 0.45rem 0.6rem;
+            border-radius: 12px;
+        }
+
+        .addon-card-img {
+            width: calc(100% + 0.9rem);
+            margin: -0.55rem -0.45rem 0.4rem;
+            border-radius: 10px 10px 0 0;
         }
 
         .addon-card-name {
             font-size: 10px;
+            min-height: calc(1.25em * 2);
         }
 
         .addon-card-price {
             font-size: 12px;
+        }
+
+        .addon-info-btn,
+        .addon-check {
+            width: 16px;
+            height: 16px;
+            font-size: 10px;
+            top: 0.3rem;
+            right: 0.3rem;
+        }
+
+        .addon-oos-badge {
+            font-size: 8px;
+            padding: 3px 7px;
+        }
+
+        .addon-qty {
+            gap: 0.35rem;
+            margin-top: 0.35rem;
+            min-height: 24px;
+        }
+
+        .addon-qty-btn {
+            width: 24px;
+            height: 24px;
+            font-size: 16px;
+        }
+
+        .addon-qty-val {
+            font-size: 13px;
         }
 
         .date-options {
@@ -1365,8 +1893,33 @@
         }
 
         .addons-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.625rem;
+            /* Full-width column on large phones — 3 cards reads better than 2 */
+            grid-auto-columns: calc((100% - 1.1rem) / 3);
+            gap: 0.55rem;
+        }
+
+        .addons-nav {
+            margin-top: clamp(2.5rem, 14vw, 4.2rem);
+            font-size: 1.35rem;
+            width: 1.2rem;
+            height: 1.2rem;
+        }
+
+        .addon-card {
+            padding: 0.65rem 0.5rem 0.7rem;
+        }
+
+        .addon-card-img {
+            width: calc(100% + 1rem);
+            margin: -0.65rem -0.5rem 0.45rem;
+        }
+
+        .addon-card-name {
+            font-size: 11px;
+        }
+
+        .addon-card-price {
+            font-size: 13px;
         }
 
         .date-options {
@@ -1416,7 +1969,17 @@
         }
 
         .addons-grid {
-            grid-template-columns: repeat(3, 1fr);
+            /* Info column is half-width — 3 cards stays readable on tablets */
+            grid-auto-columns: calc((100% - 1.1rem) / 3);
+            gap: 0.55rem;
+        }
+
+        .addons-nav {
+            margin-top: clamp(2.8rem, 16%, 4.5rem);
+        }
+
+        .addon-card-name {
+            font-size: 11px;
         }
 
         .date-options {
@@ -1428,14 +1991,33 @@
         }
     }
 
-    /* Small Desktops: 1024px - 1279px */
+    /* Small Desktops / laptops: 1024px - 1279px */
     @media (min-width: 1024px) and (max-width: 1279px) {
         .product-detail-layout {
             gap: 2.75rem;
         }
 
         .addons-grid {
-            grid-template-columns: repeat(4, 1fr);
+            /* Half-width info col on laptops — prefer 3 cards over cramped 4 */
+            grid-auto-columns: calc((100% - 1.1rem) / 3);
+            gap: 0.55rem;
+        }
+
+        .addons-nav {
+            margin-top: clamp(3rem, 14%, 4.75rem);
+            font-size: 1.5rem;
+        }
+
+        .addon-card {
+            padding: 0.7rem 0.55rem;
+        }
+
+        .addon-card-name {
+            font-size: 11px;
+        }
+
+        .addon-card-price {
+            font-size: 13px;
         }
     }
 
@@ -1446,8 +2028,15 @@
         }
 
         .addons-grid {
-            grid-template-columns: repeat(4, 1fr);
+            grid-auto-columns: calc((100% - 1.875rem) / 4);
+            gap: 0.625rem;
         }
+    }
+
+    /* Prefer reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+        .addons-grid { scroll-behavior: auto; }
+        .addon-card { transition: none; }
     }
 </style>
 {% endblock %}
@@ -1702,7 +2291,7 @@
                 <span class="variants-label">Select Option</span>
                 <div class="variant-buttons" id="variantButtons">
                     <!-- Main Product Button (always first) -->
-                    <button class="variant-btn active" 
+                    <button class="variant-btn active{% if product.stock_quantity|default(0)|int <= 0 %} is-oos{% endif %}" 
                             data-variant-id="main"
                             data-variant-name="Standard"
                             data-variant-price="{{ product.price }}"
@@ -1714,7 +2303,7 @@
                     
                     <!-- Variant Buttons -->
                     {% for variant in active_variants %}
-                    <button class="variant-btn" 
+                    <button class="variant-btn{% if variant.stock_quantity|default(0)|int <= 0 %} is-oos{% endif %}" 
                             data-variant-id="{{ variant.id }}"
                             data-variant-name="{{ variant.name }}"
                             data-variant-price="{{ variant.price }}"
@@ -1728,6 +2317,51 @@
             </div>
             <hr class="info-divider">
             {% endif %}
+
+        <!-- Structured product add-ons (dropdown groups) -->
+        {% set product_addon_groups = product.addon_groups or [] %}
+        {% if product_addon_groups and product_addon_groups|length > 0 %}
+        <div id="structuredAddonsSection">
+            <span class="addons-label">Add-ons</span>
+            <div class="structured-addons">
+                {% for group in product_addon_groups %}
+                <div class="structured-addon-row" data-group-id="{{ group.id }}">
+                    <div class="structured-addon-preview" id="addon-preview-{{ group.id }}" aria-hidden="true">
+                        <img class="addon-preview-photo" src="" alt="" id="addon-preview-img-{{ group.id }}">
+                        <div class="structured-addon-placeholder">
+                            <img class="structured-addon-none-img"
+                                 src="{{ url_for('static', filename='images/no_addon_placeholder.png') }}"
+                                 alt="No add-on"
+                                 width="64" height="64"
+                                 loading="lazy"
+                                 decoding="async">
+                        </div>
+                    </div>
+                    <div class="structured-addon-fields">
+                        <label class="structured-addon-label" for="addon-group-{{ group.id }}">{{ group.name }}</label>
+                        <select class="structured-addon-select" id="addon-group-{{ group.id }}"
+                                data-group-id="{{ group.id }}"
+                                onchange="onStructuredAddonChange(this)">
+                            <option value="">Do not add</option>
+                            {% for opt in group.options or [] %}
+                            {% set opt_oos = (opt.stock_quantity|default(0)|int) <= 0 %}
+                            <option value="{{ opt.id }}"
+                                    data-price="{{ opt.price }}"
+                                    data-name="{{ opt.name }}"
+                                    data-stock="{{ opt.stock_quantity|default(0) }}"
+                                    data-image="{{ opt.image_url or '' }}"
+                                    {% if opt_oos %}disabled{% endif %}>
+                                {{ opt.name }} (+₱{{ "%.2f"|format(opt.price|float) }}){% if opt_oos %} — Out of stock{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <hr class="info-divider">
+        {% endif %}
 
         <!-- Quantity -->
         <div>
@@ -1748,59 +2382,161 @@
 
         <hr class="info-divider">
 
-    <!-- Add-ons -->
-{% if addon_products and addon_products|length > 0 %}
-<div>
+    <!-- You might also like — Add-ons / Flowers tabs -->
+{% set ymal_opts = ymal_addon_options or [] %}
+{% set has_ymal_addons = ymal_opts and ymal_opts|length > 0 %}
+{% set has_ymal_flowers = related_products and related_products|length > 0 %}
+{% if has_ymal_addons or has_ymal_flowers %}
+{% set default_ymal_tab = 'addons' if has_ymal_addons else 'flowers' %}
+<div id="ymalSection">
     <span class="addons-label">You might also like</span>
 
-    <div class="addon-filters" id="addonFilters">
-        <button class="addon-filter-btn active" data-filter="all" onclick="filterAddons('all', this)">All</button>
-        {% set addon_cats = [] %}
-        {% for ap in addon_products %}
-            {% if ap.main_category and ap.main_category.name not in addon_cats %}
-                {% set _ = addon_cats.append(ap.main_category.name) %}
-                <button class="addon-filter-btn" data-filter="{{ ap.main_category.name }}"
-                        onclick="filterAddons('{{ ap.main_category.name }}', this)">
-                    {{ ap.main_category.name }}
-                </button>
-            {% endif %}
-        {% endfor %}
+    <div class="ymal-tabs" role="tablist" aria-label="You might also like">
+        {% if has_ymal_addons %}
+        <button type="button"
+                class="ymal-tab{% if default_ymal_tab == 'addons' %} active{% endif %}"
+                id="ymalTabAddons"
+                role="tab"
+                aria-selected="{{ 'true' if default_ymal_tab == 'addons' else 'false' }}"
+                aria-controls="ymalPanelAddons"
+                onclick="switchYmalTab('addons')">
+            Add-ons
+        </button>
+        {% endif %}
+        {% if has_ymal_flowers %}
+        <button type="button"
+                class="ymal-tab{% if default_ymal_tab == 'flowers' %} active{% endif %}"
+                id="ymalTabFlowers"
+                role="tab"
+                aria-selected="{{ 'true' if default_ymal_tab == 'flowers' else 'false' }}"
+                aria-controls="ymalPanelFlowers"
+                onclick="switchYmalTab('flowers')">
+            Flowers
+        </button>
+        {% endif %}
     </div>
 
-    <div class="addons-grid" id="addonsGrid">
-        {% for ap in addon_products %}
-        <div class="addon-card" data-id="{{ ap.id }}"
-             data-price="{{ ap.special_price if ap.special_price and ap.special_price < ap.price else ap.price }}"
-             data-name="{{ ap.name }}" data-cat="{{ ap.main_category.name if ap.main_category else 'other' }}"
-             onclick="toggleAddon(this)">
-            {% if ap.images and ap.images[0] %}
-            <img class="addon-card-img"
-                 src="{{ ap.images[0].image_url }}"
-                 alt="{{ ap.name }}"
-                 loading="lazy"
-                 decoding="async"
-                 onerror="this.style.display='none'">
-            {% else %}
-            <div class="addon-card-img" style="display:flex;align-items:center;justify-content:center;font-size:24px;color:rgba(107,76,59,0.15);">
-                <i class="ri-gift-line"></i>
+    {% if has_ymal_addons %}
+    <div class="ymal-panel{% if default_ymal_tab == 'addons' %} active{% endif %}"
+         id="ymalPanelAddons"
+         role="tabpanel"
+         data-ymal-panel="addons"
+         {% if default_ymal_tab != 'addons' %}hidden{% endif %}>
+        <div class="addons-carousel">
+            <button type="button" class="addons-nav" data-ymal-prev="addons" aria-label="Previous add-ons" onclick="scrollAddons(-1)">
+                <i class="ri-arrow-left-s-line"></i>
+            </button>
+            <div class="addons-track-wrap">
+                <div class="addons-grid" id="ymalAddonsGrid" data-ymal-grid="addons">
+                    {% for opt in ymal_opts %}
+                    {% set opt_stock = opt.stock_quantity|default(0)|int %}
+                    {% set opt_oos = opt_stock <= 0 %}
+                    <div class="addon-slide{% if opt_oos %} is-oos{% endif %}" data-slide-id="ymal-opt-{{ opt.id }}">
+                        <div class="addon-card{% if opt_oos %} is-oos{% endif %}"
+                             data-ymal-type="addon_option"
+                             data-option-id="{{ opt.id }}"
+                             data-group-id="{{ opt.group_id }}"
+                             data-price="{{ opt.price }}"
+                             data-name="{{ opt.name }}"
+                             data-stock="{{ opt_stock }}"
+                             {% if not opt_oos %}onclick="selectYmalAddonOption(this)"{% endif %}>
+                            {% if opt.image_url %}
+                            <img class="addon-card-img" src="{{ opt.image_url }}" alt="{{ opt.name }}" loading="lazy" decoding="async"
+                                 onerror="this.style.display='none'">
+                            {% else %}
+                            <div class="addon-card-img" style="display:flex;align-items:center;justify-content:center;font-size:24px;color:rgba(107,76,59,0.15);">
+                                <i class="ri-gift-line"></i>
+                            </div>
+                            {% endif %}
+                            {% if opt_oos %}
+                            <div class="addon-oos-badge">Out of stock</div>
+                            {% endif %}
+                            <div class="addon-card-name">{{ opt.name }}</div>
+                            <div class="addon-card-price">₱{{ "%.0f"|format(opt.price|float) }}</div>
+                            <div class="addon-check"><i class="ri-check-line"></i></div>
+                        </div>
+                        <div class="addon-qty" aria-label="Quantity">
+                            <button type="button" class="addon-qty-btn" onclick="event.stopPropagation(); changeYmalAddonQty({{ opt.id }}, -1)" aria-label="Decrease quantity">−</button>
+                            <span class="addon-qty-val" data-ymal-qty-for="{{ opt.id }}">1</span>
+                            <button type="button" class="addon-qty-btn" onclick="event.stopPropagation(); changeYmalAddonQty({{ opt.id }}, 1)" aria-label="Increase quantity">+</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
-            {% endif %}
-            <div class="addon-card-name">{{ ap.name }}</div>
-            <div class="addon-card-price">
-                {% if ap.special_price and ap.special_price < ap.price %}
-                    ₱{{ "%.0f"|format(ap.special_price) }}
-                    <span style="text-decoration:line-through;font-size:0.8em;opacity:0.6;margin-left:2px;">₱{{ "%.0f"|format(ap.price) }}</span>
-                {% else %}
-                    ₱{{ "%.0f"|format(ap.price) }}
-                {% endif %}
-            </div>
-            <div class="addon-check"><i class="ri-check-line"></i></div>
-            <button class="addon-info-btn" onclick="event.stopPropagation(); showAddonInfo({{ ap.id }})">
-                <i class="ri-information-line"></i>
+            <button type="button" class="addons-nav" data-ymal-next="addons" aria-label="Next add-ons" onclick="scrollAddons(1)">
+                <i class="ri-arrow-right-s-line"></i>
             </button>
         </div>
-        {% endfor %}
     </div>
+    {% endif %}
+
+    {% if has_ymal_flowers %}
+    <div class="ymal-panel{% if default_ymal_tab == 'flowers' %} active{% endif %}"
+         id="ymalPanelFlowers"
+         role="tabpanel"
+         data-ymal-panel="flowers"
+         {% if default_ymal_tab != 'flowers' %}hidden{% endif %}>
+        <div class="addons-carousel">
+            <button type="button" class="addons-nav" data-ymal-prev="flowers" aria-label="Previous flowers" onclick="scrollAddons(-1)">
+                <i class="ri-arrow-left-s-line"></i>
+            </button>
+            <div class="addons-track-wrap">
+                <div class="addons-grid" id="ymalFlowersGrid" data-ymal-grid="flowers">
+                    {% for ap in related_products %}
+                    {% set ap_stock = ap.stock_quantity|default(0)|int %}
+                    {% set ap_oos = ap_stock <= 0 %}
+                    <div class="addon-slide{% if ap_oos %} is-oos{% endif %}" data-slide-id="{{ ap.id }}">
+                        <div class="addon-card{% if ap_oos %} is-oos{% endif %}" data-id="{{ ap.id }}"
+                             data-ymal-type="related_product"
+                             data-price="{{ ap.special_price if ap.special_price and ap.special_price < ap.price else ap.price }}"
+                             data-name="{{ ap.name }}" data-cat="{{ ap.main_category.name if ap.main_category else 'other' }}"
+                             data-stock="{{ ap_stock }}"
+                             {% if not ap_oos %}onclick="toggleAddon(this)"{% endif %}>
+                            {% if ap.images and ap.images[0] %}
+                            <img class="addon-card-img"
+                                 src="{{ ap.images[0].image_url }}"
+                                 alt="{{ ap.name }}"
+                                 loading="lazy"
+                                 decoding="async"
+                                 onerror="this.style.display='none'">
+                            {% else %}
+                            <div class="addon-card-img" style="display:flex;align-items:center;justify-content:center;font-size:24px;color:rgba(107,76,59,0.15);">
+                                <i class="ri-gift-line"></i>
+                            </div>
+                            {% endif %}
+                            {% if ap_oos %}
+                            <div class="addon-oos-badge">Out of stock</div>
+                            {% endif %}
+                            <div class="addon-card-name">{{ ap.name }}</div>
+                            <div class="addon-card-price">
+                                {% if ap.special_price and ap.special_price < ap.price %}
+                                    ₱{{ "%.0f"|format(ap.special_price) }}
+                                    <span style="text-decoration:line-through;font-size:0.8em;opacity:0.6;margin-left:2px;">₱{{ "%.0f"|format(ap.price) }}</span>
+                                {% else %}
+                                    ₱{{ "%.0f"|format(ap.price) }}
+                                {% endif %}
+                            </div>
+                            <div class="addon-check"><i class="ri-check-line"></i></div>
+                            <button class="addon-info-btn" type="button" onclick="event.stopPropagation(); showAddonInfo({{ ap.id }})" aria-label="Product info">
+                                <i class="ri-information-line"></i>
+                            </button>
+                        </div>
+                        <div class="addon-qty" aria-label="Quantity">
+                            <button type="button" class="addon-qty-btn" onclick="event.stopPropagation(); changeAddonQty({{ ap.id }}, -1)" aria-label="Decrease quantity">−</button>
+                            <span class="addon-qty-val" data-qty-for="{{ ap.id }}">1</span>
+                            <button type="button" class="addon-qty-btn" onclick="event.stopPropagation(); changeAddonQty({{ ap.id }}, 1)" aria-label="Increase quantity">+</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <button type="button" class="addons-nav" data-ymal-next="flowers" aria-label="Next flowers" onclick="scrollAddons(1)">
+                <i class="ri-arrow-right-s-line"></i>
+            </button>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <hr class="info-divider">
@@ -1939,13 +2675,25 @@ function updateGalleryStockTag() {
     if (!galleryStockTag) return;
 
     if (!{{ 'true' if product.is_available else 'false' }} || currentStock <= 0) {
-        galleryStockTag.innerHTML = '<span class="status-badge badge-out">Out of Stock</span>';
+        galleryStockTag.innerHTML = `
+            <span class="gallery-stock-badge is-out">
+                <span class="gallery-stock-badge__icon" aria-hidden="true"><i class="ri-close-circle-line"></i></span>
+                <span class="gallery-stock-badge__text">Out of stock</span>
+            </span>`;
         galleryStockTag.style.display = 'block';
         return;
     }
 
     if (currentStock <= 10) {
-        galleryStockTag.innerHTML = `<span class="status-badge badge-low">Only ${currentStock} left</span>`;
+        const critical = currentStock <= 3 ? ' is-critical' : '';
+        const label = currentStock === 1
+            ? `Only <span class="gallery-stock-badge__count">1</span> left`
+            : `Only <span class="gallery-stock-badge__count">${currentStock}</span> left`;
+        galleryStockTag.innerHTML = `
+            <span class="gallery-stock-badge is-low${critical}">
+                <span class="gallery-stock-badge__icon" aria-hidden="true"><i class="ri-flashlight-line"></i></span>
+                <span class="gallery-stock-badge__text">${label}</span>
+            </span>`;
         galleryStockTag.style.display = 'block';
         return;
     }
@@ -1968,45 +2716,29 @@ function syncPurchaseActions() {
     const outOfStockText = '<i class="ri-close-circle-line"></i> Out of Stock';
     const addToBasketText = '<i class="ri-shopping-bag-line"></i> Add to Basket';
     const buyNowText = '<i class="ri-secure-payment-line"></i> Buy Now';
-
     const closedText = '<i class="ri-close-circle-line"></i> Store Closed';
 
-    if (addToCartBtn) {
-        if (!storeIsOpen) {
-            addToCartBtn.innerHTML = closedText;
-            addToCartBtn.disabled = true;
-            addToCartBtn.style.opacity = '0.5';
-            addToCartBtn.style.cursor = 'not-allowed';
-        } else if (currentStock <= 0) {
-            addToCartBtn.innerHTML = outOfStockText;
-            addToCartBtn.disabled = true;
-            addToCartBtn.style.opacity = '0.5';
-            addToCartBtn.style.cursor = 'not-allowed';
-        } else {
-            addToCartBtn.innerHTML = addToBasketText;
-            addToCartBtn.disabled = false;
-            addToCartBtn.style.opacity = '1';
-            addToCartBtn.style.cursor = '';
-        }
+    function setCtaState(btn, { html, disabled, oos, closed }) {
+        if (!btn) return;
+        btn.innerHTML = html;
+        btn.disabled = !!disabled;
+        btn.classList.toggle('is-oos', !!oos);
+        btn.classList.toggle('is-closed', !!closed);
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+        btn.setAttribute('aria-disabled', oos || closed ? 'true' : 'false');
     }
 
-    if (buyNowBtn) {
-        if (!storeIsOpen) {
-            buyNowBtn.innerHTML = closedText;
-            buyNowBtn.disabled = true;
-            buyNowBtn.style.opacity = '0.5';
-            buyNowBtn.style.cursor = 'not-allowed';
-        } else if (currentStock <= 0) {
-            buyNowBtn.innerHTML = outOfStockText;
-            buyNowBtn.disabled = true;
-            buyNowBtn.style.opacity = '0.5';
-            buyNowBtn.style.cursor = 'not-allowed';
-        } else {
-            buyNowBtn.innerHTML = buyNowText;
-            buyNowBtn.disabled = false;
-            buyNowBtn.style.opacity = '1';
-            buyNowBtn.style.cursor = '';
-        }
+    if (!storeIsOpen) {
+        setCtaState(addToCartBtn, { html: closedText, disabled: true, closed: true });
+        setCtaState(buyNowBtn, { html: closedText, disabled: true, closed: true });
+    } else if (currentStock <= 0) {
+        // Greyed out but still clickable — handlers show a toast
+        setCtaState(addToCartBtn, { html: outOfStockText, disabled: false, oos: true });
+        setCtaState(buyNowBtn, { html: outOfStockText, disabled: false, oos: true });
+    } else {
+        setCtaState(addToCartBtn, { html: addToBasketText, disabled: false });
+        setCtaState(buyNowBtn, { html: buyNowText, disabled: false });
     }
 
     // Only allow quantity adjustment if in stock
@@ -2430,76 +3162,264 @@ function clearDelivery() {
  
 
     /* ════════════════════════════════
-       ADD-ONS
+       ADD-ONS / YOU MIGHT ALSO LIKE
     ════════════════════════════════ */
-    const selectedAddons = new Map(); // id -> {id, name, price, image_url}
+    const selectedAddons = new Map(); // id -> {id, name, price, image_url, quantity, stock}
+    // YMAL structured add-on cards — independent from dropdown (quantities can stack)
+    const selectedYmalAddonOptions = new Map(); // optionId -> {id, name, price, quantity, stock}
 let addonInfoTarget = null;
- 
+
+function getAddonStock(cardOrId) {
+    const card = typeof cardOrId === 'object'
+        ? cardOrId
+        : document.querySelector(`.addon-card[data-id="${cardOrId}"]`);
+    if (!card) return 0;
+    const stock = parseInt(card.dataset.stock, 10);
+    return Number.isFinite(stock) ? Math.max(0, stock) : 0;
+}
+
 function toggleAddon(card) {
+    if (!card || card.classList.contains('is-oos')) return;
+
     const id = parseInt(card.dataset.id, 10);
     const price = parseFloat(card.dataset.price);
     const name = card.dataset.name;
+    const stock = getAddonStock(card);
     const imageEl = card.querySelector('img');
     const imageUrl = imageEl ? imageEl.src : '';
- 
+    const slide = card.closest('.addon-slide');
+
+    if (stock <= 0) {
+        showToast(`"${name}" is out of stock.`, 'error');
+        return;
+    }
+
     if (card.classList.contains('selected')) {
         card.classList.remove('selected');
+        if (slide) slide.classList.remove('is-selected');
         selectedAddons.delete(id);
+        const qtyEl = document.querySelector(`[data-qty-for="${id}"]`);
+        if (qtyEl) qtyEl.textContent = '1';
     } else {
         card.classList.add('selected');
-        selectedAddons.set(id, { id, name, price, image_url: imageUrl });
+        if (slide) slide.classList.add('is-selected');
+        selectedAddons.set(id, { id, name, price, image_url: imageUrl, quantity: 1, stock });
+        const qtyEl = document.querySelector(`[data-qty-for="${id}"]`);
+        if (qtyEl) qtyEl.textContent = '1';
     }
     updateTotal();
 }
- 
+
+function changeAddonQty(addonId, delta) {
+    const addon = selectedAddons.get(addonId);
+    if (!addon) return;
+
+    const stock = getAddonStock(addonId);
+    const current = addon.quantity || 1;
+    const next = current + delta;
+
+    if (delta > 0 && next > stock) {
+        const name = addon.name || 'This item';
+        if (stock <= 0) {
+            showToast(`"${name}" is out of stock.`, 'error');
+        } else {
+            showToast(
+                `Only ${stock} available for "${name}". You can't add more than the available stock.`,
+                'error'
+            );
+        }
+        // Snap UI back to max available
+        addon.quantity = Math.max(1, Math.min(current, stock));
+        selectedAddons.set(addonId, addon);
+        const qtyEl = document.querySelector(`[data-qty-for="${addonId}"]`);
+        if (qtyEl) qtyEl.textContent = String(addon.quantity);
+        updateTotal();
+        return;
+    }
+
+    addon.quantity = Math.max(1, next);
+    addon.stock = stock;
+    selectedAddons.set(addonId, addon);
+
+    const qtyEl = document.querySelector(`[data-qty-for="${addonId}"]`);
+    if (qtyEl) qtyEl.textContent = String(addon.quantity);
+    updateTotal();
+}
+
+function getActiveYmalTrack() {
+    const panel = document.querySelector('.ymal-panel.active');
+    if (!panel) {
+        return document.getElementById('ymalAddonsGrid')
+            || document.getElementById('ymalFlowersGrid')
+            || document.getElementById('addonsGrid');
+    }
+    return panel.querySelector('.addons-grid');
+}
+
+function getActiveYmalNav() {
+    const panel = document.querySelector('.ymal-panel.active');
+    if (!panel) {
+        return {
+            prev: document.getElementById('addonsPrev'),
+            next: document.getElementById('addonsNext'),
+        };
+    }
+    return {
+        prev: panel.querySelector('[data-ymal-prev]'),
+        next: panel.querySelector('[data-ymal-next]'),
+    };
+}
+
+function switchYmalTab(tab) {
+    const section = document.getElementById('ymalSection');
+    if (!section) return;
+
+    section.querySelectorAll('.ymal-tab').forEach(btn => {
+        const isActive = (btn.id === 'ymalTabAddons' && tab === 'addons')
+            || (btn.id === 'ymalTabFlowers' && tab === 'flowers');
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
+    section.querySelectorAll('.ymal-panel').forEach(panel => {
+        const isActive = panel.dataset.ymalPanel === tab;
+        panel.classList.toggle('active', isActive);
+        if (isActive) panel.removeAttribute('hidden');
+        else panel.setAttribute('hidden', '');
+    });
+
+    updateAddonsNavState();
+}
+
+function getAddonsScrollStep() {
+    const track = getActiveYmalTrack();
+    if (!track) return 160;
+    const slide = track.querySelector('.addon-slide:not([style*="display: none"])')
+        || track.querySelector('.addon-slide');
+    if (!slide) return 160;
+    const styles = window.getComputedStyle(track);
+    const gap = parseFloat(styles.columnGap || styles.gap) || 0;
+    return slide.getBoundingClientRect().width + gap;
+}
+
+function scrollAddons(direction) {
+    const track = getActiveYmalTrack();
+    if (!track) return;
+    const amount = getAddonsScrollStep();
+    track.scrollBy({ left: direction * amount, behavior: 'smooth' });
+    setTimeout(updateAddonsNavState, 320);
+}
+
+function updateAddonsNavState() {
+    const track = getActiveYmalTrack();
+    const { prev, next } = getActiveYmalNav();
+    if (!track || !prev || !next) return;
+
+    const maxScroll = track.scrollWidth - track.clientWidth;
+    const atStart = track.scrollLeft <= 2;
+    const atEnd = track.scrollLeft >= maxScroll - 2;
+    const noScroll = maxScroll <= 2;
+    prev.disabled = atStart || noScroll;
+    next.disabled = atEnd || noScroll;
+    prev.style.visibility = noScroll ? 'hidden' : '';
+    next.style.visibility = noScroll ? 'hidden' : '';
+}
+
+function initAddonsCarousel() {
+    const tracks = Array.from(document.querySelectorAll('[data-ymal-grid]'));
+    if (!tracks.length) {
+        const legacy = document.getElementById('addonsGrid');
+        if (legacy) tracks.push(legacy);
+    }
+    if (!tracks.length) return;
+
+    updateAddonsNavState();
+    tracks.forEach(track => {
+        track.addEventListener('scroll', updateAddonsNavState, { passive: true });
+    });
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(updateAddonsNavState, 100);
+    });
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAddonsCarousel);
+} else {
+    initAddonsCarousel();
+}
+
 function filterAddons(cat, btn) {
     document.querySelectorAll('.addon-filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
- 
+
     document.querySelectorAll('.addon-card').forEach(card => {
         const cardCat = card.dataset.cat || 'other';
-        card.style.display = (cat === 'all' || cardCat === cat) ? '' : 'none';
+        const slide = card.closest('.addon-slide');
+        const show = (cat === 'all' || cardCat === cat);
+        if (slide) slide.style.display = show ? '' : 'none';
+        else card.style.display = show ? '' : 'none';
     });
+    updateAddonsNavState();
 }
     
     function showAddonInfo(addonId) {
     const card = document.querySelector(`.addon-card[data-id="${addonId}"]`);
     if (!card) return;
     addonInfoTarget = card;
- 
+    const stock = getAddonStock(card);
+    const isOos = stock <= 0 || card.classList.contains('is-oos');
+
     document.getElementById('addonInfoTitle').textContent = card.dataset.name;
     document.getElementById('addonInfoBody').innerHTML = `
         <div style="display:flex;gap:1rem;align-items:flex-start;">
-            <div style="width:90px;height:90px;border-radius:var(--radius-md);overflow:hidden;flex-shrink:0;background:linear-gradient(145deg,#f5ede6,#ede3d8);">
-                ${card.querySelector('img') ? `<img src="${card.querySelector('img').src}" style="width:100%;height:100%;object-fit:cover;">` : ''}
+            <div style="width:90px;height:90px;border-radius:var(--radius-md);overflow:hidden;flex-shrink:0;background:linear-gradient(145deg,#f5ede6,#ede3d8);position:relative;">
+                ${card.querySelector('img') ? `<img src="${card.querySelector('img').src}" style="width:100%;height:100%;object-fit:cover;${isOos ? 'filter:grayscale(0.5);opacity:0.7;' : ''}">` : ''}
             </div>
             <div>
                 <div style="font-family:var(--font-display);font-size:20px;margin-bottom:.4rem;">${card.dataset.name}</div>
                 <div style="font-family:var(--font-display);font-size:22px;color:var(--deep-rose);font-weight:600;">₱${parseFloat(card.dataset.price).toFixed(0)}</div>
-                <div style="font-size:13px;color:var(--muted);margin-top:.5rem;">Perfect add-on to complement your order.</div>
+                <div style="font-size:13px;color:var(--muted);margin-top:.5rem;">
+                    ${isOos
+                        ? '<span style="color:#9b1c1c;font-weight:600;">Out of stock</span>'
+                        : `Perfect add-on to complement your order. <span style="color:var(--charcoal);">${stock} available</span>`}
+                </div>
             </div>
         </div>`;
- 
-    document.getElementById('addonInfoAddBtn').onclick = async () => {
-        if (!addonInfoTarget) return;
-        const btn = document.getElementById('addonInfoAddBtn');
-        const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
-        btn.disabled = true;
 
-        try {
-            await addSingleAddonToCart(addonInfoTarget);
-            document.getElementById('addonInfoModal').classList.remove('active');
-            document.body.style.overflow = '';
-        } catch (error) {
-            console.error('❌ Failed to add add-on from modal:', error);
-            showToast('Could not add item. Please try again.', 'error');
-        } finally {
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
-        }
-    };
- 
+    const addBtn = document.getElementById('addonInfoAddBtn');
+    if (isOos) {
+        addBtn.disabled = true;
+        addBtn.style.opacity = '0.5';
+        addBtn.style.cursor = 'not-allowed';
+        addBtn.innerHTML = '<i class="ri-close-circle-line"></i> Out of Stock';
+        addBtn.onclick = null;
+    } else {
+        addBtn.disabled = false;
+        addBtn.style.opacity = '1';
+        addBtn.style.cursor = '';
+        addBtn.innerHTML = '<i class="ri-shopping-bag-line"></i> Add to Basket';
+        addBtn.onclick = async () => {
+            if (!addonInfoTarget) return;
+            const btn = document.getElementById('addonInfoAddBtn');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+            btn.disabled = true;
+
+            try {
+                await addSingleAddonToCart(addonInfoTarget);
+                document.getElementById('addonInfoModal').classList.remove('active');
+                document.body.style.overflow = '';
+            } catch (error) {
+                console.error('❌ Failed to add add-on from modal:', error);
+                showToast('Could not add item. Please try again.', 'error');
+            } finally {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        };
+    }
+
     document.getElementById('addonInfoModal').classList.add('active');
     document.body.style.overflow = 'hidden';
 }
@@ -2809,8 +3729,205 @@ function saveDeliveryPreferences() {
     
 function updateTotal() {
     let total = currentPrice * qty;
-    selectedAddons.forEach(addon => { total += addon.price; });
+    selectedAddons.forEach(addon => {
+        total += addon.price * (addon.quantity || 1);
+    });
+    total += getStructuredAddonsTotal() * qty;
     document.getElementById('orderTotal').textContent = '₱' + Math.round(total).toLocaleString();
+}
+
+function getDropdownAddonOptionIds() {
+    const ids = [];
+    document.querySelectorAll('.structured-addon-select').forEach(sel => {
+        const val = sel.value;
+        if (val) ids.push(parseInt(val, 10));
+    });
+    return ids.filter(n => !isNaN(n));
+}
+
+/** Merge dropdown (+1 each) and YMAL quantities for the same option id. */
+function getStructuredAddonSelectionMap() {
+    const map = new Map();
+    document.querySelectorAll('.structured-addon-select').forEach(sel => {
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) return;
+        const oid = parseInt(opt.value, 10);
+        if (isNaN(oid)) return;
+        const price = parseFloat(opt.dataset.price || '0');
+        const existing = map.get(oid);
+        map.set(oid, {
+            id: oid,
+            name: opt.dataset.name || (existing && existing.name) || '',
+            price: isNaN(price) ? ((existing && existing.price) || 0) : price,
+            quantity: (existing ? existing.quantity : 0) + 1,
+        });
+    });
+    selectedYmalAddonOptions.forEach((item, oid) => {
+        const existing = map.get(oid);
+        const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+        map.set(oid, {
+            id: oid,
+            name: item.name || (existing && existing.name) || '',
+            price: existing ? existing.price : (parseFloat(item.price) || 0),
+            quantity: (existing ? existing.quantity : 0) + qty,
+        });
+    });
+    return map;
+}
+
+function getSelectedAddonOptionIds() {
+    return Array.from(getStructuredAddonSelectionMap().values()).map(item => ({
+        addon_option_id: item.id,
+        quantity: item.quantity,
+    }));
+}
+
+function getStructuredAddonsTotal() {
+    let sum = 0;
+    getStructuredAddonSelectionMap().forEach(item => {
+        sum += (parseFloat(item.price) || 0) * (item.quantity || 1);
+    });
+    return sum;
+}
+
+function updateStructuredAddonPreview(selectEl) {
+    if (!selectEl) return;
+    const groupId = selectEl.dataset.groupId;
+    const preview = document.getElementById(`addon-preview-${groupId}`);
+    const img = document.getElementById(`addon-preview-img-${groupId}`);
+    if (!preview || !img) return;
+
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const imageUrl = opt && opt.value ? (opt.dataset.image || '') : '';
+    if (imageUrl) {
+        img.src = imageUrl;
+        img.alt = opt.dataset.name || 'Add-on';
+        preview.classList.add('has-image');
+    } else {
+        img.removeAttribute('src');
+        img.alt = '';
+        preview.classList.remove('has-image');
+    }
+}
+
+function onStructuredAddonChange(selectEl) {
+    updateStructuredAddonPreview(selectEl);
+    updateTotal();
+}
+
+function getYmalAddonCard(optionId) {
+    return document.querySelector(`.addon-card[data-ymal-type="addon_option"][data-option-id="${optionId}"]`);
+}
+
+function syncYmalAddonQtyDisplay(optionId, quantity) {
+    const qtyEl = document.querySelector(`[data-ymal-qty-for="${optionId}"]`);
+    if (qtyEl) qtyEl.textContent = String(Math.max(1, quantity || 1));
+}
+
+function selectYmalAddonOption(card) {
+    if (!card || card.classList.contains('is-oos')) return;
+    const optionId = parseInt(card.dataset.optionId, 10);
+    if (isNaN(optionId)) return;
+
+    const name = card.dataset.name || '';
+    const price = parseFloat(card.dataset.price || '0');
+    const stock = parseInt(card.dataset.stock, 10);
+    const slide = card.closest('.addon-slide');
+    const safeStock = Number.isFinite(stock) ? Math.max(0, stock) : 0;
+
+    if (selectedYmalAddonOptions.has(optionId)) {
+        selectedYmalAddonOptions.delete(optionId);
+        card.classList.remove('selected');
+        if (slide) slide.classList.remove('is-selected');
+        syncYmalAddonQtyDisplay(optionId, 1);
+    } else {
+        if (safeStock <= 0) {
+            showToast(`"${name}" is out of stock.`, 'error');
+            return;
+        }
+        const dropdownTaken = getDropdownAddonOptionIds().includes(optionId) ? 1 : 0;
+        if (dropdownTaken >= safeStock) {
+            showToast(`Only ${safeStock} available for "${name}".`, 'error');
+            return;
+        }
+        selectedYmalAddonOptions.set(optionId, {
+            id: optionId,
+            name,
+            price: isNaN(price) ? 0 : price,
+            quantity: 1,
+            stock: safeStock,
+        });
+        card.classList.add('selected');
+        if (slide) slide.classList.add('is-selected');
+        syncYmalAddonQtyDisplay(optionId, 1);
+    }
+    updateTotal();
+}
+
+function changeYmalAddonQty(optionId, delta) {
+    const card = getYmalAddonCard(optionId);
+    if (!card || card.classList.contains('is-oos')) return;
+
+    let item = selectedYmalAddonOptions.get(optionId);
+    if (!item) {
+        if (delta > 0) {
+            selectYmalAddonOption(card);
+            item = selectedYmalAddonOptions.get(optionId);
+        }
+        if (!item) return;
+        if (delta <= 1) {
+            updateTotal();
+            return;
+        }
+        // continue to apply remaining delta after selecting
+        delta -= 1;
+        if (delta === 0) {
+            updateTotal();
+            return;
+        }
+    }
+
+    const stock = parseInt(card.dataset.stock, 10);
+    const safeStock = Number.isFinite(stock) ? Math.max(0, stock) : 0;
+    const dropdownTaken = getDropdownAddonOptionIds().includes(optionId) ? 1 : 0;
+    const maxYmal = Math.max(0, safeStock - dropdownTaken);
+    const current = item.quantity || 1;
+    const next = current + delta;
+
+    if (next <= 0) {
+        selectedYmalAddonOptions.delete(optionId);
+        card.classList.remove('selected');
+        const slide = card.closest('.addon-slide');
+        if (slide) slide.classList.remove('is-selected');
+        syncYmalAddonQtyDisplay(optionId, 1);
+        updateTotal();
+        return;
+    }
+
+    if (next > maxYmal) {
+        const name = item.name || 'This add-on';
+        if (maxYmal <= 0) {
+            showToast(`Only ${safeStock} available for "${name}".`, 'error');
+        } else {
+            showToast(
+                `Only ${safeStock} available for "${name}". You can't add more than the available stock.`,
+                'error'
+            );
+        }
+        item.quantity = Math.max(1, Math.min(current, maxYmal));
+        selectedYmalAddonOptions.set(optionId, item);
+        syncYmalAddonQtyDisplay(optionId, item.quantity);
+        updateTotal();
+        return;
+    }
+
+    item.quantity = next;
+    selectedYmalAddonOptions.set(optionId, item);
+    card.classList.add('selected');
+    const slide = card.closest('.addon-slide');
+    if (slide) slide.classList.add('is-selected');
+    syncYmalAddonQtyDisplay(optionId, item.quantity);
+    updateTotal();
 }
 
 function buildAddonCartItem(addon) {
@@ -2821,7 +3938,7 @@ function buildAddonCartItem(addon) {
         store_id: mainProduct.store_id,
         store_name: mainProduct.store_name,
         image_url: addon.image_url || '',
-        quantity: 1
+        quantity: addon.quantity || 1
     };
 }
 
@@ -2830,11 +3947,29 @@ async function addSingleAddonToCart(addonCard) {
         throw new Error('addToCart function not found');
     }
 
+    const id = parseInt(addonCard.dataset.id, 10);
+    const stock = getAddonStock(addonCard);
+    if (stock <= 0) {
+        showToast('This item is out of stock.', 'error');
+        throw new Error('Out of stock');
+    }
+
+    const selected = selectedAddons.get(id);
+    let quantity = selected ? (selected.quantity || 1) : 1;
+    if (quantity > stock) {
+        showToast(
+            `Only ${stock} available. You can't add more than the available stock.`,
+            'error'
+        );
+        throw new Error('Exceeds stock');
+    }
+
     const addon = {
-        id: parseInt(addonCard.dataset.id, 10),
+        id,
         name: addonCard.dataset.name,
         price: parseFloat(addonCard.dataset.price),
-        image_url: addonCard.querySelector('img') ? addonCard.querySelector('img').src : ''
+        image_url: addonCard.querySelector('img') ? addonCard.querySelector('img').src : '',
+        quantity
     };
 
     const cartItem = buildAddonCartItem(addon);
@@ -2871,7 +4006,8 @@ async function addToCartWithVariant() {
                 store_id: mainProduct.store_id,
                 store_name: mainProduct.store_name,
                 image_url: selectedVariant.image_url || mainProduct.image_url,
-                quantity: qty
+                quantity: qty,
+                addon_option_ids: getSelectedAddonOptionIds(),
             };
             console.log('🔄 Adding VARIANT to cart:', product);
         } else {
@@ -2883,7 +4019,8 @@ async function addToCartWithVariant() {
                 store_id: mainProduct.store_id,
                 store_name: mainProduct.store_name,
                 image_url: mainProduct.image_url,
-                quantity: qty
+                quantity: qty,
+                addon_option_ids: getSelectedAddonOptionIds(),
             };
             console.log('🔄 Adding MAIN PRODUCT to cart:', product);
         }
@@ -2899,6 +4036,19 @@ async function addToCartWithVariant() {
 
         if (selectedAddons.size > 0) {
             for (const addon of selectedAddons.values()) {
+                const stock = getAddonStock(addon.id);
+                const qty = addon.quantity || 1;
+                if (stock <= 0) {
+                    showToast(`"${addon.name}" is out of stock.`, 'error');
+                    return;
+                }
+                if (qty > stock) {
+                    showToast(
+                        `Only ${stock} available for "${addon.name}". Please lower the quantity.`,
+                        'error'
+                    );
+                    return;
+                }
                 const addonItem = buildAddonCartItem(addon);
                 const addonAdded = await window.addToCart(addonItem);
                 if (!addonAdded) return;
@@ -2929,7 +4079,31 @@ async function addToCartWithVariant() {
         return;
     }
 
-    // Build item data from current selection
+    // Build item data from current selection + You might also like add-ons
+    const addons = [];
+    for (const addon of selectedAddons.values()) {
+        const stock = getAddonStock(addon.id);
+        const qty = addon.quantity || 1;
+        if (stock <= 0) {
+            showToast(`"${addon.name}" is out of stock and was removed from your selection.`, 'error');
+            continue;
+        }
+        if (qty > stock) {
+            showToast(
+                `Only ${stock} available for "${addon.name}". Please lower the quantity.`,
+                'error'
+            );
+            return;
+        }
+        addons.push({
+            product_id: addon.id,
+            quantity: qty,
+            price: addon.price,
+            name: addon.name,
+            image_url: addon.image_url || '',
+        });
+    }
+
     const item = {
         product_id: mainProduct.id,
         variant_id: selectedVariant ? selectedVariant.id : null,
@@ -2942,12 +4116,15 @@ async function addToCartWithVariant() {
         image_url: selectedVariant && selectedVariant.image_url
             ? selectedVariant.image_url
             : mainProduct.image_url,
+        addons: addons,
+        addon_option_ids: getSelectedAddonOptionIds(),
     };
 
     console.log('🛍️ Buy Now Item:', item);
     console.log('   - product_id:', item.product_id, typeof item.product_id);
     console.log('   - variant_id:', item.variant_id, typeof item.variant_id);
     console.log('   - quantity:', item.quantity, typeof item.quantity);
+    console.log('   - addons:', addons.length);
 
     // Open checkout modal in buy-now mode (defined in base.html)
     buyNowDirect(item);
