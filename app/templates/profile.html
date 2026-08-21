@@ -71,8 +71,9 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label">Birthday</label>
-                            <input type="date" class="form-control" name="birthday" 
+                            <input type="date" class="form-control" name="birthday" id="profileBirthday"
                                    value="{{ user.birthday if user else '' }}">
+                            <small class="form-hint">Must be at least 13 years old. Future dates are not allowed.</small>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Gender</label>
@@ -513,6 +514,18 @@
         });
 
         updateGenderOtherVisibility();
+
+        // Birthday date bounds: max = 13 years ago, min = 120 years ago
+        (function applyBirthdayLimits() {
+            const today = new Date();
+            const maxDate = new Date(today.getFullYear() - 13, today.getMonth(), today.getDate());
+            const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate());
+            const toIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            document.querySelectorAll('input[type="date"][name="birthday"]').forEach((el) => {
+                el.setAttribute('max', toIso(maxDate));
+                el.setAttribute('min', toIso(minDate));
+            });
+        })();
     }
 
     if (document.readyState === 'loading') {
@@ -530,6 +543,28 @@
 
                 const formData = new FormData(this);
                 const data = Object.fromEntries(formData);
+
+                const birthday = (data.birthday || '').trim();
+                if (birthday) {
+                    const picked = new Date(birthday + 'T00:00:00');
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    if (Number.isNaN(picked.getTime()) || picked > today) {
+                        alert('Birthday cannot be in the future.');
+                        return;
+                    }
+                    const age = today.getFullYear() - picked.getFullYear()
+                        - ((today.getMonth() < picked.getMonth()
+                            || (today.getMonth() === picked.getMonth() && today.getDate() < picked.getDate())) ? 1 : 0);
+                    if (age < 13) {
+                        alert('You must be at least 13 years old.');
+                        return;
+                    }
+                    if (age > 120) {
+                        alert('Please enter a valid birthday.');
+                        return;
+                    }
+                }
 
                 const otherInput = document.getElementById('gender_other');
                 if (data.gender === 'other' && otherInput && otherInput.value.trim()) {
@@ -555,7 +590,7 @@
                             if (userName) userName.textContent = result.user_name;
                         }
                     } else {
-                        alert('Error: ' + result.message);
+                        alert('Error: ' + (result.message || result.error || 'Unknown error'));
                     }
                 } catch (error) {
                     alert('Network error. Please try again.');

@@ -1603,7 +1603,7 @@ function posClickAddon(optionId, evt) {
     const ok = _posPushOrBump({
         id: parseInt(tile.dataset.id),
         name: o.name,
-        price: 0,
+        price: parseFloat(o.price) || 0,
         qty: 1,
         img: o.image_url || '',
         stock,
@@ -1757,9 +1757,14 @@ function addToCart(tile) {
 
 function cartLineTotal(item) {
     const qty = item.qty || 1;
-    const base = (item.price || 0) * qty;
+    // Add-on-only cart rows: line price is the add-on unit price
+    if (item.addons_only) {
+        return (Number(item.price) || 0) * qty;
+    }
+    const base = (Number(item.price) || 0) * qty;
+    // Structured add-ons do not scale with flower/variant qty
     const addons = (item.addons || []).reduce((sum, a) => {
-        return sum + (Number(a.price) || 0) * (Number(a.qty) || 1) * qty;
+        return sum + (Number(a.price) || 0) * (Number(a.qty) || 1);
     }, 0);
     return base + addons;
 }
@@ -1833,10 +1838,17 @@ function renderCart() {
 
         const variantInfo = item.variant_name
             ? `<div class="cart-item-variant">${esc(item.variant_name)}</div>` : '';
-        const addonsInfo = (item.addons && item.addons.length)
+        const addonsInfo = (item.addons && item.addons.length && !item.addons_only)
             ? `<div class="cart-item-variant" style="color:var(--muted);font-weight:500;">${
-                item.addons.map(a => `+ ${esc(a.name)}${a.qty > 1 ? ' ×' + a.qty : ''}`).join('<br>')
+                item.addons.map(a => {
+                    const aPrice = Number(a.price) || 0;
+                    const aQty = Number(a.qty) || 1;
+                    return `+ ${esc(a.name)}${aQty > 1 ? ' ×' + aQty : ''} · ₱${aPrice.toFixed(2)}`;
+                }).join('<br>')
               }</div>` : '';
+        const unitPrice = item.addons_only
+            ? (Number(item.price) || 0)
+            : (Number(item.price) || 0);
 
         div.innerHTML = `
             ${item.img
@@ -1845,10 +1857,10 @@ function renderCart() {
                    <div class="cart-item-thumb-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
                 : `<div class="cart-item-thumb-ph"><i class="ri-flower-line"></i></div>`}
             <div class="cart-item-info">
-                <div class="cart-item-name">${esc(item.name)}</div>
+                <div class="cart-item-name">${esc(item.name)}${item.addons_only ? ' <span style="color:var(--muted);font-size:11px;font-weight:600;">(add-on)</span>' : ''}</div>
                 ${variantInfo}
                 ${addonsInfo}
-                <div class="cart-item-unit">₱${item.price.toFixed(2)} each</div>
+                <div class="cart-item-unit">₱${unitPrice.toFixed(2)} each</div>
                 <div class="qty-stepper">
                     <button class="qty-btn" onclick="changeQtyAt(${idx},-1)"><i class="ri-subtract-line"></i></button>
                     <div class="qty-val">${item.qty}</div>
@@ -1959,11 +1971,15 @@ async function processOrder() {
             product_id: i.id,
             variant_id: i.variant_id || null,
             quantity:   i.qty,
-            price:      i.price,
+            // Add-on-only rows must persist real unit price (not 0)
+            price:      i.addons_only
+                ? (Number(i.price) || ((i.addons || []).reduce((s, a) => s + (Number(a.price) || 0) * (Number(a.qty) || 1), 0)) || 0)
+                : i.price,
             addons_only: !!i.addons_only,
             addons: (i.addons || []).map(a => ({
                 addon_option_id: a.option_id,
-                quantity: a.qty
+                // For add-on-only lines, line qty is the sold units
+                quantity: i.addons_only ? (i.qty || 1) : (a.qty || 1)
             }))
         }))
     };

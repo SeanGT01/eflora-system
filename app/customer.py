@@ -220,16 +220,24 @@ def get_products():
     else:
         include_outside = include_outside_arg in ('1', 'true', 'True', 'yes')
 
-    # NOTE: We used to filter by stock_quantity > 0, but now we return all available products.
-    # The frontend (web/mobile) handles visibility logic:
-    # - Show all products where is_available=true and store is active
-    # - Products with no main stock but variant stock show "Select Variant" button
-    # - Products with no sellable stock show "Out of Stock" overlay
-    # This matches the web landing page behavior exactly
+    # Catalog listings (home / browse / search without store scope): hide fully
+    # out-of-stock products (no main stock and no sellable variant). Store pages
+    # pass store_id and keep OOS products visible.
     q = Product.query.join(Store).filter(
         Product.is_available == True,
+        Product.is_archived == False,
         Store.status == 'active'
     )
+    if not store_id:
+        variant_in_stock_exists = db.session.query(ProductVariant.id).filter(
+            ProductVariant.product_id == Product.id,
+            ProductVariant.is_available == True,
+            ProductVariant.stock_quantity > 0
+        ).exists()
+        q = q.filter(db.or_(
+            Product.stock_quantity > 0,
+            variant_in_stock_exists,
+        ))
     
     # Filter by main category slug if provided
     if category and category != 'all':
@@ -349,17 +357,17 @@ def get_product(product_id):
     except Exception:
         data['related_products'] = []
 
-    # Rating summary for the product header / reviews entry point
+    # Rating summary — avg_rating/total_ratings = Standard (main) only.
+    # overall_* = all options; variant_ratings = per option buckets.
     try:
         from sqlalchemy import func
-        agg = db.session.query(
+        overall = db.session.query(
             func.avg(ProductRating.rating).label('avg'),
             func.count(ProductRating.id).label('count'),
         ).filter_by(product_id=product_id).first()
-        data['avg_rating'] = round(float(agg.avg or 0), 1) if agg else 0.0
-        data['total_ratings'] = int(agg.count or 0) if agg else 0
+        data['overall_avg_rating'] = round(float(overall.avg or 0), 1) if overall else 0.0
+        data['overall_total_ratings'] = int(overall.count or 0) if overall else 0
 
-        # Per-option aggregates: "main" = standard (variant_id IS NULL), else variant id
         variant_ratings = {}
         rows = db.session.query(
             ProductRating.variant_id,
@@ -373,9 +381,14 @@ def get_product(product_id):
                 'count': int(row.count or 0),
             }
         data['variant_ratings'] = variant_ratings
+        main_bucket = variant_ratings.get('main') or {'avg': 0.0, 'count': 0}
+        data['avg_rating'] = float(main_bucket['avg'])
+        data['total_ratings'] = int(main_bucket['count'])
     except Exception:
         data['avg_rating'] = 0.0
         data['total_ratings'] = 0
+        data['overall_avg_rating'] = 0.0
+        data['overall_total_ratings'] = 0
         data['variant_ratings'] = {}
 
     if p.store:
@@ -474,7 +487,7 @@ def get_store(store_id):
             StoreRating.query
             .filter_by(store_id=store_id)
             .order_by(StoreRating.created_at.desc())
-            .limit(10)
+            .limit(50)
             .all()
         )
     ]
@@ -485,7 +498,7 @@ def get_store(store_id):
             Testimonial.query
             .filter_by(store_id=store_id)
             .order_by(Testimonial.created_at.desc())
-            .limit(10)
+            .limit(50)
             .all()
         )
         reviews = [testimonial.to_dict() for testimonial in testimonials]
@@ -866,6 +879,7 @@ def get_orders():
             .options(
                 selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
                 selectinload(Order.items).joinedload(OrderItem.variant),
+                selectinload(Order.items).selectinload(OrderItem.addons),
                 joinedload(Order.store),
                 joinedload(Order.customer),
                 joinedload(Order.assigned_rider).joinedload(Rider.user),
@@ -943,6 +957,7 @@ def get_order(order_id):
             .options(
                 selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
                 selectinload(Order.items).joinedload(OrderItem.variant),
+                selectinload(Order.items).selectinload(OrderItem.addons),
                 joinedload(Order.store),
                 joinedload(Order.customer),
                 joinedload(Order.assigned_rider).joinedload(Rider.user),

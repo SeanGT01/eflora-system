@@ -259,10 +259,9 @@ def _build_stock_lookup(cart_items):
 
 
 def _cart_structured_addon_lines(cart_items):
-    """Resolved structured add-on lines for cart items (qty scaled by line qty)."""
+    """Resolved structured add-on lines for cart items (independent of flower qty)."""
     lines = []
     for cart_item in cart_items or []:
-        main_qty = max(1, int(cart_item.quantity or 1))
         for row in (cart_item.addons or []):
             opt = row.addon_option
             if not opt:
@@ -270,7 +269,7 @@ def _cart_structured_addon_lines(cart_items):
             unit_qty = max(1, int(row.quantity or 1))
             lines.append({
                 'option': opt,
-                'quantity': unit_qty * main_qty,
+                'quantity': unit_qty,
                 'price': Decimal(str(opt.price or 0)),
                 'name': opt.name,
                 'image_url': opt.image_url or '',
@@ -907,20 +906,20 @@ def validate_checkout():
                     opt = row.addon_option
                     if not opt:
                         continue
+                    # Cart stores fixed addon units; flower qty does not scale add-on price.
                     units = max(1, int(row.quantity or 1))
-                    need = units * int(item.quantity or 1)
-                    if not opt.is_available or int(opt.stock_quantity or 0) < need:
+                    if not opt.is_available or int(opt.stock_quantity or 0) < units:
                         raise Exception(
                             f'Insufficient stock for add-on "{opt.name}"'
                             if opt.is_available else f'Add-on "{opt.name}" is no longer available'
                         )
                     ap = Decimal(str(opt.price or 0))
-                    addons_sum += ap * need
+                    addons_sum += ap * units
                     line_addons.append({
                         'addon_option_id': opt.id,
                         'name': opt.name,
                         'price': float(ap),
-                        'quantity': need,
+                        'quantity': units,
                         'units': units,
                         'image_url': opt.image_url or '',
                         'group_name': opt.group.name if opt.group else None,
@@ -1245,7 +1244,6 @@ def create_orders():
                     None,
                 )
                 if cart_match:
-                    main_qty = max(1, int(item_data.get("quantity") or cart_match.quantity or 1))
                     lines = []
                     for row in (cart_match.addons or []):
                         opt = row.addon_option
@@ -1253,7 +1251,7 @@ def create_orders():
                             continue
                         lines.append({
                             'option': opt,
-                            'quantity': main_qty * max(1, int(row.quantity or 1)),
+                            'quantity': max(1, int(row.quantity or 1)),
                             'price': Decimal(str(opt.price or 0)),
                             'name': opt.name,
                             'image_url': opt.image_url or '',
@@ -1685,7 +1683,6 @@ def process_checkout():
                     None,
                 )
                 if cart_match:
-                    main_qty = max(1, int(item_data.get("quantity") or cart_match.quantity or 1))
                     lines = []
                     for row in (cart_match.addons or []):
                         opt = row.addon_option
@@ -1693,7 +1690,7 @@ def process_checkout():
                             continue
                         lines.append({
                             'option': opt,
-                            'quantity': main_qty * max(1, int(row.quantity or 1)),
+                            'quantity': max(1, int(row.quantity or 1)),
                             'price': Decimal(str(opt.price or 0)),
                             'name': opt.name,
                             'image_url': opt.image_url or '',

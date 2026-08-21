@@ -1021,23 +1021,23 @@
         }
 
         .modal-close {
-            width: 34px;
-            height: 34px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             border: none;
-            background: rgba(194, 78, 104, 0.08);
+            background: rgba(44, 37, 32, 0.06);
             display: inline-flex;
             align-items: center;
             justify-content: center;
             font-size: 18px;
-            color: var(--muted);
+            color: var(--charcoal);
             cursor: pointer;
-            transition: var(--transition);
+            transition: background 0.2s ease, color 0.2s ease;
             flex-shrink: 0;
         }
 
         .modal-close:hover {
-            background: rgba(194, 78, 104, 0.14);
+            background: rgba(44, 37, 32, 0.1);
             color: var(--deep-rose);
         }
 
@@ -1377,7 +1377,7 @@
             .modal-body { padding: 1rem; }
             .modal-footer { padding: 0.75rem 1rem 1rem; }
             
-            .modal-close { width: 28px; height: 28px; font-size: 14px; }
+            .modal-close { width: 32px; height: 32px; font-size: 18px; }
             
             .section-title { font-size: 20px; }
             
@@ -1775,6 +1775,7 @@
 
     {% block extra_css %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
+    <style>{% include 'partials/modal_close_styles.html' %}</style>
 </head>
 <body>
 
@@ -2361,16 +2362,22 @@
 
         const style = document.createElement('style');
         style.textContent = `
-            .app-confirm-overlay{position:fixed;inset:0;background:rgba(42,35,30,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1.25rem;z-index:12000}
+            .app-confirm-overlay{position:fixed;inset:0;background:rgba(42,35,30,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:clamp(.75rem,3vw,1.25rem);z-index:12000}
             .app-confirm-overlay.show{display:flex}
-            .app-confirm-card{width:min(440px,100%);background:rgba(255,255,255,.92);border:1px solid rgba(255,255,255,.7);border-radius:20px;box-shadow:0 20px 60px rgba(90,40,80,.18),inset 0 1px 0 rgba(255,255,255,.75);backdrop-filter:blur(18px) saturate(1.25);-webkit-backdrop-filter:blur(18px) saturate(1.25);padding:1.35rem 1.35rem 1.2rem}
-            .app-confirm-title{font-family:var(--font-display);font-size:1.35rem;font-weight:500;color:var(--charcoal);margin-bottom:.5rem;letter-spacing:-0.02em}
-            .app-confirm-message{font-size:.93rem;color:var(--muted);line-height:1.55;margin-bottom:1.1rem;white-space:pre-line}
-            .app-confirm-actions{display:flex;justify-content:flex-end;gap:.6rem}
-            .app-confirm-btn{border:1.5px solid rgba(194,78,104,.22);border-radius:999px;background:rgba(255,255,255,.9);color:var(--charcoal);padding:.5rem 1rem;font-weight:600;cursor:pointer;font-family:var(--font-sans);transition:var(--transition)}
-            .app-confirm-btn:hover{background:rgba(255,245,248,.95);border-color:var(--deep-rose);color:var(--deep-rose)}
-            .app-confirm-btn.primary{background:linear-gradient(135deg,#c24e68 0%,#d878a0 55%,#b070c8 100%);border-color:rgba(255,255,255,.35);color:#fff;box-shadow:0 6px 18px rgba(181,68,90,.25)}
+            .app-confirm-card{width:min(20.5rem,100%);max-width:100%;background:rgba(255,253,249,.94);border:1px solid rgba(255,255,255,.72);border-radius:18px;box-shadow:0 20px 48px rgba(90,40,80,.16),inset 0 1px 0 rgba(255,255,255,.8);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);padding:1.15rem 1.15rem 1.05rem}
+            .app-confirm-title{font-family:var(--font-display),Georgia,serif;font-size:1.35rem;font-weight:500;color:var(--charcoal,#2c2520);margin:0 0 .45rem;letter-spacing:-0.02em;line-height:1.25}
+            .app-confirm-message{font-family:var(--font-sans),'DM Sans',system-ui,sans-serif;font-size:.9rem;color:var(--muted,#9a8d85);line-height:1.55;margin:0 0 1.05rem;white-space:pre-line}
+            .app-confirm-actions{display:flex;justify-content:flex-end;align-items:center;gap:.5rem;flex-wrap:wrap}
+            .app-confirm-btn{border:1.5px solid rgba(181,68,90,.22);border-radius:999px;background:rgba(255,255,255,.92);color:var(--charcoal,#2c2520);padding:.48rem .95rem;font-size:.85rem;font-weight:600;cursor:pointer;font-family:var(--font-sans),'DM Sans',system-ui,sans-serif;transition:background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease}
+            .app-confirm-btn:hover{background:rgba(255,245,248,.96);border-color:var(--deep-rose,#b5445a);color:var(--deep-rose,#b5445a)}
+            .app-confirm-btn.primary{background:linear-gradient(135deg,#c24e68 0%,#d878a0 55%,#b070c8 100%);border-color:rgba(255,255,255,.35);color:#fff;box-shadow:0 6px 16px rgba(181,68,90,.22)}
             .app-confirm-btn.primary:hover{background:linear-gradient(135deg,#b04058 0%,#c86890 55%,#9f60b8 100%);border-color:rgba(255,255,255,.35);color:#fff}
+            @media (max-width:380px){
+                .app-confirm-card{padding:1rem .95rem .9rem;border-radius:16px}
+                .app-confirm-title{font-size:1.2rem}
+                .app-confirm-actions{flex-direction:column-reverse;align-items:stretch}
+                .app-confirm-btn{width:100%;text-align:center;justify-content:center}
+            }
         `;
         document.head.appendChild(style);
 
@@ -2630,5 +2637,6 @@
 {% endif %}
 
 {% block extra_js %}{% endblock %}
+<style>{% include 'partials/modal_close_styles.html' %}</style>
 </body>
 </html>

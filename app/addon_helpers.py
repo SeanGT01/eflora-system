@@ -69,7 +69,6 @@ def resolve_structured_addon_selections(product, option_ids, quantity_per_option
     if not selections:
         return [], None
 
-    main_qty = max(1, int(quantity_per_option or 1))
     lines = []
     store_id = getattr(product, 'store_id', None)
 
@@ -103,7 +102,8 @@ def resolve_structured_addon_selections(product, option_ids, quantity_per_option
                 'error': f'"{opt.name}" is no longer available'
             }), 400)
 
-        need = units * main_qty
+        # Add-on qty is independent of flower/variant qty
+        need = units
         if int(opt.stock_quantity or 0) < need:
             return None, (jsonify({
                 'error': (

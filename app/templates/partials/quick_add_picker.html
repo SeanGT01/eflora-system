@@ -1,4 +1,4 @@
-{# Shared quick-add picker (Standard + variants). Expects quick_add_products or products. #}
+{# Shared quick-add picker (multi Standard + variants + add-ons). Expects quick_add_products or products. #}
 <style>
     /* ─── Quick-add variant picker ─── */
     .qa-overlay {
@@ -22,7 +22,7 @@
     .qa-picker {
         position: fixed;
         z-index: 530;
-        width: min(340px, calc(100vw - 1.5rem));
+        width: min(420px, calc(100vw - 1.5rem));
         max-height: min(78vh, 560px);
         display: flex;
         flex-direction: column;
@@ -49,29 +49,25 @@
         gap: 0.85rem;
         align-items: flex-start;
         padding: 1rem 1rem 0.85rem;
-        border-bottom: 1px solid rgba(107, 76, 59, 0.1);
-        background: linear-gradient(180deg, rgba(250, 246, 240, 0.95), rgba(255, 253, 249, 0.7));
+        border-bottom: 1px solid rgba(107, 76, 59, 0.08);
+        flex-shrink: 0;
     }
     .qa-picker-img {
-        width: 64px;
-        height: 64px;
+        width: 56px;
+        height: 56px;
         border-radius: 14px;
         object-fit: cover;
-        background: linear-gradient(145deg, #f5ede6, #ede3d8);
         flex-shrink: 0;
+        background: linear-gradient(145deg, #f5ede6, #ede3d8);
     }
     .qa-picker-img-fallback {
         display: flex;
         align-items: center;
         justify-content: center;
         color: rgba(107, 76, 59, 0.28);
-        font-size: 26px;
+        font-size: 22px;
     }
-    .qa-picker-meta {
-        flex: 1;
-        min-width: 0;
-        padding-top: 0.1rem;
-    }
+    .qa-picker-meta { flex: 1; min-width: 0; }
     .qa-picker-store {
         font-size: 10px;
         font-weight: 700;
@@ -91,6 +87,46 @@
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
+    }
+    .qa-picker-rating {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        margin-top: 0.35rem;
+        font-family: var(--font-sans, 'DM Sans', system-ui, sans-serif);
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--charcoal, #2c2520);
+        line-height: 1;
+    }
+    .qa-picker-rating .ri-star-fill {
+        color: #f0b429;
+        font-size: 14px;
+    }
+    .qa-picker-rating-count {
+        color: var(--muted, #8a7a70);
+        font-weight: 500;
+    }
+    .qa-picker-rating.is-empty {
+        color: var(--muted, #8a7a70);
+        font-weight: 500;
+    }
+    .qa-option-rating {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        margin-top: 0.15rem;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--charcoal, #2c2520);
+    }
+    .qa-option-rating .ri-star-fill {
+        color: #f0b429;
+        font-size: 12px;
+    }
+    .qa-option-rating-count {
+        color: var(--muted, #8a7a70);
+        font-weight: 500;
     }
     .qa-picker-close {
         width: 32px;
@@ -131,36 +167,44 @@
     .qa-option-list {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.55rem;
     }
-    .qa-option {
+
+    /* Card = selectable row + YMAL-style qty below */
+    .qa-option-card {
+        border: 1.5px solid rgba(230, 170, 195, 0.4);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.7);
+        transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+        overflow: hidden;
+    }
+    .qa-option-card:hover:not(.is-disabled) {
+        border-color: rgba(216, 120, 160, 0.65);
+        background: rgba(255, 255, 255, 0.95);
+    }
+    .qa-option-card.is-selected {
+        border-color: transparent;
+        background: linear-gradient(135deg, rgba(194, 78, 104, 0.12), rgba(176, 112, 200, 0.12));
+        box-shadow: 0 0 0 1.5px #c24e68, 0 6px 16px rgba(181, 68, 90, 0.12);
+    }
+    .qa-option-card.is-disabled {
+        opacity: 0.48;
+        pointer-events: none;
+    }
+
+    .qa-option-row {
         width: 100%;
         display: grid;
         grid-template-columns: 44px 1fr auto;
         gap: 0.7rem;
         align-items: center;
         text-align: left;
-        padding: 0.65rem 0.75rem;
-        border: 1.5px solid rgba(230, 170, 195, 0.4);
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.7);
+        padding: 0.65rem 0.75rem 0.4rem;
+        border: none;
+        background: transparent;
         cursor: pointer;
-        transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
         font-family: var(--font-sans, 'DM Sans', sans-serif);
         color: var(--charcoal, #2c2520);
-    }
-    .qa-option:hover:not(:disabled) {
-        border-color: rgba(216, 120, 160, 0.65);
-        background: rgba(255, 255, 255, 0.95);
-    }
-    .qa-option.active {
-        border-color: transparent;
-        background: linear-gradient(135deg, rgba(194, 78, 104, 0.12), rgba(176, 112, 200, 0.12));
-        box-shadow: 0 0 0 1.5px #c24e68, 0 6px 16px rgba(181, 68, 90, 0.12);
-    }
-    .qa-option:disabled {
-        opacity: 0.48;
-        cursor: not-allowed;
     }
     .qa-option-thumb {
         width: 44px;
@@ -205,6 +249,54 @@
         text-decoration: line-through;
     }
 
+    /* YMAL-style − qty + under each card */
+    .qa-item-qty {
+        display: flex;
+        visibility: hidden;
+        pointer-events: none;
+        align-items: center;
+        justify-content: center;
+        gap: 0.55rem;
+        margin: 0 0.5rem 0.55rem;
+        min-height: 26px;
+        color: var(--deep-rose, #b5445a);
+        font-family: var(--font-sans, 'DM Sans', sans-serif);
+        user-select: none;
+    }
+    .qa-option-card.is-selected .qa-item-qty {
+        visibility: visible;
+        pointer-events: auto;
+    }
+    .qa-item-qty-btn {
+        width: 26px;
+        height: 26px;
+        border: none;
+        background: transparent;
+        color: var(--deep-rose, #b5445a);
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        padding: 0;
+    }
+    .qa-item-qty-btn:hover:not(:disabled) {
+        background: rgba(255, 190, 210, 0.35);
+    }
+    .qa-item-qty-btn:disabled {
+        opacity: 0.35;
+        cursor: default;
+    }
+    .qa-item-qty-val {
+        min-width: 1.1rem;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--deep-rose, #b5445a);
+    }
+
     .qa-picker-foot {
         padding: 0.85rem 1rem 1rem;
         border-top: 1px solid rgba(107, 76, 59, 0.1);
@@ -213,73 +305,56 @@
     .qa-foot-row {
         display: flex;
         align-items: center;
-        gap: 0.65rem;
+        gap: 0.75rem;
+        min-width: 0;
     }
-    .qa-qty-control {
-        display: inline-flex;
-        align-items: center;
-        flex-shrink: 0;
-        border: 1.5px solid rgba(230, 170, 195, 0.45);
-        border-radius: 14px;
-        overflow: hidden;
-        background: rgba(255, 255, 255, 0.72);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    .qa-foot-meta {
+        display: flex;
+        align-items: baseline;
+        gap: 0.55rem;
+        flex: 0 1 auto;
+        min-width: 0;
     }
-    .qa-qty-btn {
-        width: 40px;
-        height: 44px;
-        border: none;
-        background: transparent;
-        color: var(--charcoal, #3d2f2f);
-        font-size: 1.1rem;
-        font-weight: 600;
-        line-height: 1;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.15s ease, color 0.15s ease;
+    .qa-foot-meta.is-empty {
+        opacity: 0.45;
     }
-    .qa-qty-btn:hover:not(:disabled) {
-        background: rgba(255, 190, 210, 0.18);
-        color: var(--deep-rose, #b5445a);
+    .qa-foot-summary {
+        font-family: var(--font-sans, 'DM Sans', sans-serif);
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--charcoal, #2c2520);
+        white-space: nowrap;
+        line-height: 1.1;
     }
-    .qa-qty-btn:disabled {
-        color: rgba(107, 76, 59, 0.28);
-        cursor: default;
-    }
-    .qa-qty-value {
-        min-width: 36px;
-        height: 44px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-left: 1.5px solid rgba(230, 170, 195, 0.3);
-        border-right: 1.5px solid rgba(230, 170, 195, 0.3);
+    .qa-foot-amount {
         font-family: var(--font-display, 'Cormorant Garamond', Georgia, serif);
-        font-size: 1.15rem;
+        font-size: 1.45rem;
         font-weight: 600;
-        color: var(--charcoal, #3d2f2f);
-        user-select: none;
+        color: var(--deep-rose, #b5445a);
+        white-space: nowrap;
+        line-height: 1.1;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .qa-add-btn {
-        flex: 1;
-        min-width: 0;
+        flex: 1 1 auto;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 0.45rem;
-        padding: 0.85rem 1rem;
+        min-height: 48px;
+        padding: 0.9rem 1.25rem;
         border: none;
         border-radius: 999px;
         background: linear-gradient(135deg, #c24e68 0%, #d878a0 55%, #b070c8 100%);
         color: #fff;
         font-family: var(--font-sans, 'DM Sans', sans-serif);
-        font-size: 14px;
+        font-size: 15px;
         font-weight: 600;
         cursor: pointer;
         box-shadow: 0 8px 18px rgba(181, 68, 90, 0.28);
         transition: transform 0.18s ease, filter 0.18s ease;
+        white-space: nowrap;
     }
     .qa-add-btn:hover:not(:disabled) {
         filter: brightness(1.03);
@@ -291,32 +366,12 @@
         box-shadow: none;
         transform: none;
     }
-    .qa-addon-qty {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        margin-left: 0.35rem;
-    }
-    .qa-addon-qty button {
-        width: 26px;
-        height: 26px;
-        border-radius: 8px;
-        border: 1px solid rgba(107, 76, 59, 0.18);
-        background: #fff;
-        cursor: pointer;
-        font-size: 14px;
-        line-height: 1;
-    }
-    .qa-addon-qty button:disabled { opacity: 0.4; cursor: not-allowed; }
-    .qa-addon-qty span {
-        min-width: 18px;
-        text-align: center;
-        font-size: 12.5px;
-        font-weight: 600;
+    .qa-add-btn i {
+        font-size: 1.15em;
     }
 
     @media (max-width: 900px) {
-        .qa-picker { width: min(360px, calc(100vw - 1.25rem)); }
+        .qa-picker { width: min(400px, calc(100vw - 1.25rem)); }
     }
 
     @media (max-width: 640px) {
@@ -326,34 +381,21 @@
             bottom: 0 !important;
             top: auto !important;
             width: 100% !important;
-            max-width: 100%;
-            max-height: min(86vh, 640px);
+            max-height: min(88vh, 640px);
             border-radius: 22px 22px 0 0;
-            transform: translateY(24px);
+            transform: translateY(100%);
         }
         .qa-picker.open { transform: translateY(0); }
         .qa-picker-head { padding: 1.1rem 1.1rem 0.9rem; }
         .qa-picker-body { padding: 0.95rem 1.1rem 0.4rem; }
         .qa-picker-foot {
-            padding: 0.9rem 1.1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+            padding: 0.95rem 1.1rem calc(1rem + env(safe-area-inset-bottom, 0px));
         }
-        .qa-foot-row { gap: 0.55rem; }
-        .qa-qty-btn {
-            width: 38px;
-            height: 46px;
-        }
-        .qa-qty-value {
-            min-width: 34px;
-            height: 46px;
-            font-size: 1.2rem;
-        }
+        .qa-foot-row { gap: 0.7rem; }
         .qa-add-btn {
-            padding: 0.9rem 0.85rem;
-            font-size: 13.5px;
-        }
-        .qa-option {
-            grid-template-columns: 48px 1fr auto;
-            padding: 0.75rem;
+            min-height: 50px;
+            padding: 0.95rem 1.2rem;
+            font-size: 15px;
         }
     }
 </style>
@@ -368,25 +410,29 @@
         <div class="qa-picker-meta">
             <div class="qa-picker-store" id="qaPickerStore">Flower Shop</div>
             <h3 class="qa-picker-title" id="qaPickerTitle">Product</h3>
+            <div class="qa-picker-rating is-empty" id="qaPickerRating" aria-live="polite">
+                <i class="ri-star-fill" aria-hidden="true"></i>
+                <span id="qaPickerRatingAvg">0</span>
+                <span class="qa-picker-rating-count" id="qaPickerRatingCount">(0)</span>
+            </div>
         </div>
         <button type="button" class="qa-picker-close" onclick="closeQuickAddPicker()" aria-label="Close">
             <i class="ri-close-line"></i>
         </button>
     </div>
     <div class="qa-picker-body">
-        <span class="qa-picker-label">Select option</span>
+        <span class="qa-picker-label">Select options</span>
         <div class="qa-option-list" id="qaOptionList"></div>
         <div id="qaExtrasMount"></div>
     </div>
     <div class="qa-picker-foot">
         <div class="qa-foot-row">
-            <div class="qa-qty-control" role="group" aria-label="Quantity">
-                <button type="button" class="qa-qty-btn" id="qaQtyMinus" onclick="changeQuickAddQty(-1)" aria-label="Decrease quantity" disabled>−</button>
-                <span class="qa-qty-value" id="qaQtyValue" aria-live="polite">1</span>
-                <button type="button" class="qa-qty-btn" id="qaQtyPlus" onclick="changeQuickAddQty(1)" aria-label="Increase quantity">+</button>
+            <div class="qa-foot-meta is-empty" id="qaFootTotal">
+                <span class="qa-foot-summary" id="qaFootSummary">0 items</span>
+                <strong class="qa-foot-amount" id="qaFootAmount">₱0</strong>
             </div>
-            <button type="button" class="qa-add-btn" id="qaConfirmBtn" onclick="confirmQuickAdd()">
-                <i class="ri-shopping-bag-line"></i>
+            <button type="button" class="qa-add-btn" id="qaConfirmBtn" onclick="confirmQuickAdd()" disabled>
+                <i class="ri-shopping-bag-line" aria-hidden="true"></i>
                 <span id="qaConfirmLabel">Add to basket</span>
             </button>
         </div>
@@ -395,16 +441,16 @@
 
 <script type="application/json" id="quickAddProductsData">{{ quick_add_products|default(products)|tojson }}</script>
 <script>
-// Quick-add option picker (Standard + variants)
+// Quick-add: multi-select Standard/variants + add-ons with per-card qty
 (function () {
     let qaProductsById = {};
     let qaCurrentProduct = null;
-    let qaSelectedKey = 'main';
-    let qaQty = 1;
+    let qaFocusKey = 'main';
+    let qaOptionQty = {}; // option key -> qty
+    let qaAddonQty = {};  // addon option id -> qty
     let qaAnchorEl = null;
     let qaRepositionBound = null;
     let qaAdding = false;
-    let qaAddonQty = {}; // optionId -> qty
 
     function loadHomeProductsMap() {
         const el = document.getElementById('homeProductsQuickAdd')
@@ -455,6 +501,73 @@
         return '<div class="qa-option-price">' + qaMoney(Number.isFinite(eff) ? eff : reg) + '</div>';
     }
 
+    function qaRatingForKey(product, key) {
+        const map = (product && product.variant_ratings) || {};
+        let bucket = null;
+        if (key === 'main') {
+            bucket = map.main;
+        } else if (key && String(key).indexOf('v-') === 0) {
+            bucket = map[String(key).slice(2)];
+        }
+        const avg = bucket ? Number(bucket.avg) || 0 : 0;
+        const count = bucket ? Number(bucket.count) || 0 : 0;
+        return { avg: avg, count: count };
+    }
+
+    function qaRatingLabel(avg, count) {
+        if (!count) return { avgText: '0', countText: '(0)', empty: true };
+        const a = Number(avg) || 0;
+        const avgText = (Math.round(a * 10) / 10).toFixed(1);
+        return { avgText: avgText, countText: '(' + count + ')', empty: false };
+    }
+
+    function syncQuickAddRating(product, key) {
+        const el = document.getElementById('qaPickerRating');
+        const avgEl = document.getElementById('qaPickerRatingAvg');
+        const countEl = document.getElementById('qaPickerRatingCount');
+        if (!el || !avgEl || !countEl) return;
+        const r = qaRatingForKey(product, key || 'main');
+        const label = qaRatingLabel(r.avg, r.count);
+        avgEl.textContent = label.avgText;
+        countEl.textContent = label.countText;
+        el.classList.toggle('is-empty', label.empty);
+        el.setAttribute(
+            'title',
+            label.empty
+                ? 'No reviews for this option yet'
+                : (label.avgText + ' from ' + r.count + ' review' + (r.count === 1 ? '' : 's'))
+        );
+    }
+
+    function qaOptionRatingHtml(product, key) {
+        const r = qaRatingForKey(product, key);
+        const label = qaRatingLabel(r.avg, r.count);
+        return (
+            '<div class="qa-option-rating' + (label.empty ? ' is-empty' : '') + '">' +
+            '<i class="ri-star-fill" aria-hidden="true"></i>' +
+            '<span>' + qaEscape(label.avgText) + '</span>' +
+            '<span class="qa-option-rating-count">' + qaEscape(label.countText) + '</span>' +
+            '</div>'
+        );
+    }
+
+    function qaItemQtyHtml(kind, id, qty, maxStock) {
+        const max = Math.max(0, Number(maxStock) || 0);
+        const q = Math.max(0, Number(qty) || 0);
+        const plusDisabled = q >= max ? ' disabled' : '';
+        const minusDisabled = q <= 0 ? ' disabled' : '';
+        const idAttr = qaEscape(String(id));
+        return (
+            '<div class="qa-item-qty" aria-label="Quantity" onclick="event.stopPropagation()">' +
+            '<button type="button" class="qa-item-qty-btn" aria-label="Decrease quantity"' +
+            ' onclick="changeQuickAddLineQty(\'' + kind + '\',\'' + idAttr + '\',-1)"' + minusDisabled + '>−</button>' +
+            '<span class="qa-item-qty-val">' + q + '</span>' +
+            '<button type="button" class="qa-item-qty-btn" aria-label="Increase quantity"' +
+            ' onclick="changeQuickAddLineQty(\'' + kind + '\',\'' + idAttr + '\',1)"' + plusDisabled + '>+</button>' +
+            '</div>'
+        );
+    }
+
     function buildOptions(product) {
         const options = [];
         const mainStock = Number(product.stock_quantity) || 0;
@@ -488,57 +601,6 @@
         return options;
     }
 
-    function renderPicker(product) {
-        const storeEl = document.getElementById('qaPickerStore');
-        const titleEl = document.getElementById('qaPickerTitle');
-        const imgWrap = document.getElementById('qaPickerImgWrap');
-        const listEl = document.getElementById('qaOptionList');
-
-        storeEl.textContent = product.store_name || 'Flower Shop';
-        titleEl.textContent = product.name || 'Product';
-
-        if (product.image_url) {
-            imgWrap.className = 'qa-picker-img';
-            imgWrap.innerHTML = '<img class="qa-picker-img" src="' + qaEscape(product.image_url) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:14px;" onerror="this.parentElement.className=\'qa-picker-img qa-picker-img-fallback\';this.parentElement.innerHTML=\'<i class=\\\'ri-image-line\\\'></i>\';">';
-        } else {
-            imgWrap.className = 'qa-picker-img qa-picker-img-fallback';
-            imgWrap.innerHTML = '<i class="ri-image-line"></i>';
-        }
-
-        const options = buildOptions(product);
-        const firstInStock = options.find(function (o) { return o.in_stock; });
-        qaSelectedKey = firstInStock ? firstInStock.key : (options[0] ? options[0].key : 'main');
-
-        listEl.innerHTML = options.map(function (opt) {
-            const active = opt.key === qaSelectedKey ? ' active' : '';
-            const disabled = opt.in_stock ? '' : ' disabled';
-            const stockText = opt.in_stock
-                ? (opt.stock + ' available')
-                : 'Out of stock';
-            const stockClass = opt.in_stock ? '' : ' out';
-            return (
-                '<button type="button" class="qa-option' + active + '"' + disabled +
-                ' data-key="' + qaEscape(opt.key) + '"' +
-                ' onclick="selectQuickAddOption(this)">' +
-                qaThumbHtml(opt.image_url) +
-                '<div class="qa-option-info">' +
-                '<div class="qa-option-name">' + qaEscape(opt.name) + '</div>' +
-                '<div class="qa-option-stock' + stockClass + '">' + stockText + '</div>' +
-                '</div>' +
-                qaPriceHtml(opt.price, opt.regular_price) +
-                '</button>'
-            );
-        }).join('');
-
-        qaAddonQty = {};
-        renderQuickAddExtras(product);
-
-        const selected = options.find(function (o) { return o.key === qaSelectedKey; });
-        qaQty = 1;
-        syncQuickAddQtyUI(selected);
-        updateQuickAddConfirmBtn(selected);
-    }
-
     function qaCollectProductAddons(product) {
         const out = [];
         (product.addon_groups || []).forEach(function (g) {
@@ -559,30 +621,142 @@
         return out;
     }
 
+    function findAddonMeta(product, optionId) {
+        const id = String(optionId);
+        const fromProduct = qaCollectProductAddons(product).find(function (o) {
+            return String(o.id) === id;
+        });
+        if (fromProduct) return fromProduct;
+        const ymal = (product.ymal_addon_options || []).find(function (o) {
+            return o && String(o.id) === id;
+        });
+        if (!ymal) return null;
+        return {
+            id: ymal.id,
+            name: ymal.name,
+            price: ymal.price,
+            stock: Number(ymal.stock_quantity) || 0,
+            image_url: ymal.image_url || '',
+            group_name: ymal.group_name || 'Add-on',
+            in_stock: (Number(ymal.stock_quantity) || 0) > 0
+        };
+    }
+
+    function calcQuickAddTotals() {
+        if (!qaCurrentProduct) {
+            return { itemCount: 0, unitCount: 0, total: 0, hasSelection: false };
+        }
+        const options = buildOptions(qaCurrentProduct);
+        let itemCount = 0;
+        let unitCount = 0;
+        let total = 0;
+
+        options.forEach(function (opt) {
+            const qty = Number(qaOptionQty[opt.key]) || 0;
+            if (qty <= 0) return;
+            itemCount += 1;
+            unitCount += qty;
+            total += qty * (Number(opt.price) || 0);
+        });
+
+        Object.keys(qaAddonQty).forEach(function (id) {
+            const qty = Number(qaAddonQty[id]) || 0;
+            if (qty <= 0) return;
+            const meta = findAddonMeta(qaCurrentProduct, id);
+            if (!meta) return;
+            itemCount += 1;
+            unitCount += qty;
+            total += qty * (Number(meta.price) || 0);
+        });
+
+        return {
+            itemCount: itemCount,
+            unitCount: unitCount,
+            total: total,
+            hasSelection: unitCount > 0
+        };
+    }
+
+    function updateQuickAddConfirmBtn() {
+        const totals = calcQuickAddTotals();
+        const confirmBtn = document.getElementById('qaConfirmBtn');
+        const footMeta = document.getElementById('qaFootTotal');
+        const footSummary = document.getElementById('qaFootSummary');
+        const footAmount = document.getElementById('qaFootAmount');
+
+        if (footMeta) footMeta.classList.toggle('is-empty', !totals.hasSelection);
+        if (footSummary) {
+            footSummary.textContent = totals.unitCount === 1
+                ? '1 item'
+                : (totals.unitCount + ' items');
+        }
+        if (footAmount) footAmount.textContent = qaMoney(totals.total);
+
+        if (confirmBtn && !qaAdding) {
+            confirmBtn.disabled = !totals.hasSelection;
+            confirmBtn.innerHTML =
+                '<i class="ri-shopping-bag-line" aria-hidden="true"></i>' +
+                '<span id="qaConfirmLabel">Add to basket</span>';
+        }
+    }
+
+    function renderOptionCards(product) {
+        const listEl = document.getElementById('qaOptionList');
+        if (!listEl) return;
+        const options = buildOptions(product);
+
+        listEl.innerHTML = options.map(function (opt) {
+            const qty = Number(qaOptionQty[opt.key]) || 0;
+            const selected = qty > 0 ? ' is-selected' : '';
+            const disabled = opt.in_stock ? '' : ' is-disabled';
+            const stockText = opt.in_stock
+                ? (opt.stock + ' available')
+                : 'Out of stock';
+            const stockClass = opt.in_stock ? '' : ' out';
+            return (
+                '<div class="qa-option-card' + selected + disabled + '" data-key="' + qaEscape(opt.key) + '">' +
+                '<button type="button" class="qa-option-row"' +
+                (opt.in_stock ? '' : ' disabled') +
+                ' onclick="toggleQuickAddOption(\'' + qaEscape(opt.key) + '\')">' +
+                qaThumbHtml(opt.image_url) +
+                '<div class="qa-option-info">' +
+                '<div class="qa-option-name">' + qaEscape(opt.name) + '</div>' +
+                '<div class="qa-option-stock' + stockClass + '">' + stockText + '</div>' +
+                qaOptionRatingHtml(product, opt.key) +
+                '</div>' +
+                qaPriceHtml(opt.price, opt.regular_price) +
+                '</button>' +
+                qaItemQtyHtml('option', opt.key, qty, opt.stock) +
+                '</div>'
+            );
+        }).join('');
+    }
+
     function renderQuickAddExtras(product) {
         const mount = document.getElementById('qaExtrasMount');
         if (!mount) return;
         const productAddons = qaCollectProductAddons(product);
+        const productAddonIds = {};
+        productAddons.forEach(function (o) {
+            if (o && o.id != null) productAddonIds[String(o.id)] = true;
+        });
+        // Skip YMAL entries already listed under this product's Add-ons
         const ymal = (product.ymal_addon_options || []).filter(function (o) {
-            return o && o.is_available !== false;
+            if (!o || o.is_available === false) return false;
+            return !productAddonIds[String(o.id)];
         });
 
         function rowHtml(o, section) {
             const id = String(o.id);
-            const qty = qaAddonQty[id] || 0;
+            const qty = Number(qaAddonQty[id]) || 0;
             const stock = Number(o.stock != null ? o.stock : o.stock_quantity) || 0;
             const ok = stock > 0;
-            const active = qty > 0 ? ' active' : '';
-            const disabled = ok ? '' : ' disabled';
-            const qtyHtml = qty > 0
-                ? ('<div class="qa-addon-qty" onclick="event.stopPropagation()">' +
-                    '<button type="button" onclick="changeQuickAddAddonQty(' + o.id + ',-1,' + stock + ')">−</button>' +
-                    '<span>' + qty + '</span>' +
-                    '<button type="button" onclick="changeQuickAddAddonQty(' + o.id + ',1,' + stock + ')"' +
-                    (qty >= stock ? ' disabled' : '') + '>+</button></div>')
-                : '';
+            const selected = qty > 0 ? ' is-selected' : '';
+            const disabled = ok ? '' : ' is-disabled';
             return (
-                '<button type="button" class="qa-option' + active + '"' + disabled +
+                '<div class="qa-option-card' + selected + disabled + '" data-addon-id="' + qaEscape(id) + '">' +
+                '<button type="button" class="qa-option-row"' +
+                (ok ? '' : ' disabled') +
                 ' onclick="toggleQuickAddAddon(' + o.id + ',' + stock + ')">' +
                 qaThumbHtml(o.image_url) +
                 '<div class="qa-option-info">' +
@@ -591,8 +765,9 @@
                 qaEscape(o.group_name || section) + ' · ' + (ok ? (stock + ' left') : 'Out of stock') +
                 '</div></div>' +
                 qaPriceHtml(o.price, o.price) +
-                qtyHtml +
-                '</button>'
+                '</button>' +
+                qaItemQtyHtml('addon', id, qty, stock) +
+                '</div>'
             );
         }
 
@@ -619,81 +794,94 @@
         mount.innerHTML = html;
     }
 
+    function refreshQuickAddLists() {
+        if (!qaCurrentProduct) return;
+        renderOptionCards(qaCurrentProduct);
+        renderQuickAddExtras(qaCurrentProduct);
+        syncQuickAddRating(qaCurrentProduct, qaFocusKey);
+        updateQuickAddConfirmBtn();
+        if (qaAnchorEl) {
+            requestAnimationFrame(function () { positionPicker(qaAnchorEl); });
+        }
+    }
+
+    function renderPicker(product) {
+        const storeEl = document.getElementById('qaPickerStore');
+        const titleEl = document.getElementById('qaPickerTitle');
+        const imgWrap = document.getElementById('qaPickerImgWrap');
+
+        storeEl.textContent = product.store_name || 'Flower Shop';
+        titleEl.textContent = product.name || 'Product';
+
+        if (product.image_url) {
+            imgWrap.className = 'qa-picker-img';
+            imgWrap.innerHTML = '<img class="qa-picker-img" src="' + qaEscape(product.image_url) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:14px;" onerror="this.parentElement.className=\'qa-picker-img qa-picker-img-fallback\';this.parentElement.innerHTML=\'<i class=\\\'ri-image-line\\\'></i>\';">';
+        } else {
+            imgWrap.className = 'qa-picker-img qa-picker-img-fallback';
+            imgWrap.innerHTML = '<i class="ri-image-line"></i>';
+        }
+
+        qaOptionQty = {};
+        qaAddonQty = {};
+        const options = buildOptions(product);
+        const firstInStock = options.find(function (o) { return o.in_stock; });
+        qaFocusKey = firstInStock ? firstInStock.key : 'main';
+        // Start with nothing selected so multi-pick is intentional
+        refreshQuickAddLists();
+    }
+
+    window.toggleQuickAddOption = function (key) {
+        if (!qaCurrentProduct || qaAdding) return;
+        const opt = buildOptions(qaCurrentProduct).find(function (o) {
+            return o.key === key;
+        });
+        if (!opt || !opt.in_stock) return;
+        qaFocusKey = key;
+        const cur = Number(qaOptionQty[key]) || 0;
+        if (cur > 0) delete qaOptionQty[key];
+        else qaOptionQty[key] = 1;
+        refreshQuickAddLists();
+    };
+
     window.toggleQuickAddAddon = function (optionId, maxStock) {
+        if (qaAdding) return;
         const id = String(optionId);
+        const stock = Math.max(0, Number(maxStock) || 0);
+        if (stock <= 0) return;
         if (qaAddonQty[id]) delete qaAddonQty[id];
         else qaAddonQty[id] = 1;
-        if (qaCurrentProduct) renderQuickAddExtras(qaCurrentProduct);
-        if (qaAnchorEl) requestAnimationFrame(function () { positionPicker(qaAnchorEl); });
+        refreshQuickAddLists();
     };
 
-    window.changeQuickAddAddonQty = function (optionId, delta, maxStock) {
-        const id = String(optionId);
-        const cur = qaAddonQty[id] || 0;
-        const next = Math.max(0, Math.min(maxStock, cur + delta));
-        if (next <= 0) delete qaAddonQty[id];
-        else qaAddonQty[id] = next;
-        if (qaCurrentProduct) renderQuickAddExtras(qaCurrentProduct);
-        if (qaAnchorEl) requestAnimationFrame(function () { positionPicker(qaAnchorEl); });
-    };
-
-    function getSelectedQuickAddOption() {
-        if (!qaCurrentProduct) return null;
-        const options = buildOptions(qaCurrentProduct);
-        return options.find(function (o) { return o.key === qaSelectedKey; }) || null;
-    }
-
-    function syncQuickAddQtyUI(selected) {
-        const max = (selected && selected.in_stock) ? Math.max(1, Number(selected.stock) || 1) : 1;
-        if (!(selected && selected.in_stock)) {
-            qaQty = 1;
-        } else {
-            qaQty = Math.min(Math.max(1, qaQty), max);
-        }
-
-        const valueEl = document.getElementById('qaQtyValue');
-        const minusBtn = document.getElementById('qaQtyMinus');
-        const plusBtn = document.getElementById('qaQtyPlus');
-        if (valueEl) valueEl.textContent = String(qaQty);
-        if (minusBtn) minusBtn.disabled = !(selected && selected.in_stock) || qaQty <= 1;
-        if (plusBtn) plusBtn.disabled = !(selected && selected.in_stock) || qaQty >= max;
-    }
-
-    function updateQuickAddConfirmBtn(selected) {
-        const confirmBtn = document.getElementById('qaConfirmBtn');
-        const labelEl = document.getElementById('qaConfirmLabel');
-        const enabled = !!(selected && selected.in_stock);
-        if (labelEl) {
-            labelEl.textContent = (enabled && qaQty > 1)
-                ? ('Add ' + qaQty + ' to basket')
-                : 'Add to basket';
-        }
-        if (confirmBtn && !qaAdding) {
-            confirmBtn.disabled = !enabled;
-            confirmBtn.innerHTML =
-                '<i class="ri-shopping-bag-line"></i><span id="qaConfirmLabel">' +
-                ((enabled && qaQty > 1) ? ('Add ' + qaQty + ' to basket') : 'Add to basket') +
-                '</span>';
-        }
-    }
-
-    window.changeQuickAddQty = function (delta) {
+    window.changeQuickAddLineQty = function (kind, id, delta) {
         if (qaAdding) return;
-        const selected = getSelectedQuickAddOption();
-        if (!selected || !selected.in_stock) return;
-        const max = Math.max(1, Number(selected.stock) || 1);
-        const next = Math.min(max, Math.max(1, qaQty + Number(delta || 0)));
-        if (next === qaQty) return;
-        qaQty = next;
-        syncQuickAddQtyUI(selected);
-        updateQuickAddConfirmBtn(selected);
+        const key = String(id);
+        const d = Number(delta) || 0;
+        if (kind === 'option') {
+            if (!qaCurrentProduct) return;
+            const opt = buildOptions(qaCurrentProduct).find(function (o) {
+                return o.key === key;
+            });
+            if (!opt || !opt.in_stock) return;
+            qaFocusKey = key;
+            const max = Math.max(0, Number(opt.stock) || 0);
+            const next = Math.max(0, Math.min(max, (Number(qaOptionQty[key]) || 0) + d));
+            if (next <= 0) delete qaOptionQty[key];
+            else qaOptionQty[key] = next;
+        } else if (kind === 'addon') {
+            const meta = qaCurrentProduct ? findAddonMeta(qaCurrentProduct, key) : null;
+            const max = meta ? Math.max(0, Number(meta.stock) || 0) : 0;
+            const next = Math.max(0, Math.min(max, (Number(qaAddonQty[key]) || 0) + d));
+            if (next <= 0) delete qaAddonQty[key];
+            else qaAddonQty[key] = next;
+        }
+        refreshQuickAddLists();
     };
 
     function positionPicker(anchor) {
         const picker = document.getElementById('qaPicker');
         if (!picker || !anchor) return;
 
-        // Never touch opacity/visibility here — that caused a transparent stuck state on desktop.
         picker.style.opacity = '';
         picker.style.visibility = '';
         picker.style.transform = '';
@@ -709,7 +897,7 @@
 
         const rect = anchor.getBoundingClientRect();
         const margin = 10;
-        const width = Math.min(340, window.innerWidth - 24);
+        const width = Math.min(420, window.innerWidth - 24);
         picker.style.width = width + 'px';
 
         let left = rect.right - width;
@@ -718,7 +906,6 @@
         picker.style.right = 'auto';
         picker.style.bottom = 'auto';
 
-        // Prefer below the button; flip above if needed.
         const height = Math.min(picker.offsetHeight || 360, window.innerHeight - 24);
         let top = rect.bottom + margin;
         if (top + height > window.innerHeight - 12) {
@@ -727,18 +914,6 @@
         if (top < 12) top = 12;
         picker.style.top = top + 'px';
     }
-
-    window.selectQuickAddOption = function (btn) {
-        if (!btn || btn.disabled) return;
-        qaSelectedKey = btn.getAttribute('data-key') || 'main';
-        document.querySelectorAll('#qaOptionList .qa-option').forEach(function (el) {
-            el.classList.toggle('active', el === btn);
-        });
-        const selected = getSelectedQuickAddOption();
-        qaQty = 1;
-        syncQuickAddQtyUI(selected);
-        updateQuickAddConfirmBtn(selected);
-    };
 
     window.openQuickAddPicker = function (anchorEl, productId) {
         if (!Object.keys(qaProductsById).length) loadHomeProductsMap();
@@ -752,6 +927,13 @@
         qaAnchorEl = anchorEl || null;
         renderPicker(product);
 
+        const header = document.querySelector('.main-header');
+        if (header) {
+            header.style.setProperty('--header-hide-offset', header.offsetHeight + 'px');
+            header.classList.remove('header-hidden');
+        }
+        document.body.classList.add('qa-picker-open');
+
         const overlay = document.getElementById('qaOverlay');
         const picker = document.getElementById('qaPicker');
         overlay.classList.add('open');
@@ -763,7 +945,6 @@
         if (typeof updateChatFabVisibility === 'function') updateChatFabVisibility();
 
         if (qaAnchorEl) {
-            // Position after paint so height is accurate
             requestAnimationFrame(function () {
                 positionPicker(qaAnchorEl);
             });
@@ -811,28 +992,32 @@
             picker.style.visibility = '';
         }
         if (confirmBtn) {
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '<i class="ri-shopping-bag-line"></i><span id="qaConfirmLabel">Add to basket</span>';
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML =
+                '<i class="ri-shopping-bag-line" aria-hidden="true"></i>' +
+                '<span id="qaConfirmLabel">Add to basket</span>';
         }
+        const footMeta = document.getElementById('qaFootTotal');
+        const footSummary = document.getElementById('qaFootSummary');
+        const footAmount = document.getElementById('qaFootAmount');
+        if (footMeta) footMeta.classList.add('is-empty');
+        if (footSummary) footSummary.textContent = '0 items';
+        if (footAmount) footAmount.textContent = '₱0';
         qaCurrentProduct = null;
-        qaSelectedKey = 'main';
-        qaQty = 1;
+        qaFocusKey = 'main';
+        qaOptionQty = {};
         qaAddonQty = {};
         qaAnchorEl = null;
         qaAdding = false;
-        const qtyValue = document.getElementById('qaQtyValue');
-        const qtyMinus = document.getElementById('qaQtyMinus');
-        const qtyPlus = document.getElementById('qaQtyPlus');
-        if (qtyValue) qtyValue.textContent = '1';
-        if (qtyMinus) qtyMinus.disabled = true;
-        if (qtyPlus) qtyPlus.disabled = false;
+        document.body.classList.remove('qa-picker-open');
+        const header = document.querySelector('.main-header');
+        if (header) header.classList.remove('header-hidden');
+
         document.removeEventListener('keydown', qaOnKeydown);
         if (typeof updateChatFabVisibility === 'function') updateChatFabVisibility();
     };
 
     async function qaAddToCart(payload) {
-        // Prefer a dedicated request so we always get a real success/failure
-        // (global addToCart is fire-and-forget and does not return a Promise).
         {% if session.get('user_id') %}
         const body = {
             product_id: payload.id,
@@ -888,54 +1073,69 @@
     window.confirmQuickAdd = async function () {
         if (!qaCurrentProduct || qaAdding) return;
         const options = buildOptions(qaCurrentProduct);
-        const selected = options.find(function (o) { return o.key === qaSelectedKey; });
-        if (!selected || !selected.in_stock) {
-            if (typeof showToast === 'function') showToast('Please select an available option');
+        const selectedOptions = options.filter(function (o) {
+            return (Number(qaOptionQty[o.key]) || 0) > 0 && o.in_stock;
+        });
+        const addonIds = Object.keys(qaAddonQty).map(function (id) {
+            return { addon_option_id: parseInt(id, 10), quantity: qaAddonQty[id] };
+        }).filter(function (row) { return row.quantity > 0; });
+
+        if (!selectedOptions.length && !addonIds.length) {
+            if (typeof showToast === 'function') showToast('Please select at least one option');
+            return;
+        }
+        if (!selectedOptions.length && addonIds.length) {
+            if (typeof showToast === 'function') {
+                showToast('Select a Standard or variant to attach add-ons');
+            }
             return;
         }
 
-        const max = Math.max(1, Number(selected.stock) || 1);
-        const quantity = Math.min(Math.max(1, qaQty || 1), max);
-
+        const totals = calcQuickAddTotals();
         const confirmBtn = document.getElementById('qaConfirmBtn');
-        const originalHtml = '<i class="ri-shopping-bag-line"></i><span id="qaConfirmLabel">' +
-            (quantity > 1 ? ('Add ' + quantity + ' to basket') : 'Add to basket') + '</span>';
+        const idleBtnHtml =
+            '<i class="ri-shopping-bag-line" aria-hidden="true"></i>' +
+            '<span id="qaConfirmLabel">Add to basket</span>';
         qaAdding = true;
         if (confirmBtn) {
             confirmBtn.disabled = true;
             confirmBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i><span>Adding…</span>';
         }
-        const qtyMinus = document.getElementById('qaQtyMinus');
-        const qtyPlus = document.getElementById('qaQtyPlus');
-        if (qtyMinus) qtyMinus.disabled = true;
-        if (qtyPlus) qtyPlus.disabled = true;
-
-        const displayName = selected.variant_id
-            ? (qaCurrentProduct.name + ' — ' + selected.name)
-            : qaCurrentProduct.name;
-
-        const payload = {
-            id: qaCurrentProduct.id,
-            name: displayName,
-            price: selected.price,
-            effective_price: selected.price,
-            store_id: qaCurrentProduct.store_id || null,
-            store_name: qaCurrentProduct.store_name || 'Flower Shop',
-            image_url: selected.image_url || qaCurrentProduct.image_url || '',
-            quantity: quantity
-        };
-        if (selected.variant_id) payload.variant_id = selected.variant_id;
-        const addonIds = Object.keys(qaAddonQty).map(function (id) {
-            return { addon_option_id: parseInt(id, 10), quantity: qaAddonQty[id] };
-        }).filter(function (row) { return row.quantity > 0; });
-        if (addonIds.length) payload.addon_option_ids = addonIds;
 
         try {
-            await qaAddToCart(payload);
+            for (let i = 0; i < selectedOptions.length; i++) {
+                const selected = selectedOptions[i];
+                const quantity = Math.min(
+                    Math.max(1, Number(qaOptionQty[selected.key]) || 1),
+                    Math.max(1, Number(selected.stock) || 1)
+                );
+                const displayName = selected.variant_id
+                    ? (qaCurrentProduct.name + ' — ' + selected.name)
+                    : qaCurrentProduct.name;
+                const payload = {
+                    id: qaCurrentProduct.id,
+                    name: displayName,
+                    price: selected.price,
+                    effective_price: selected.price,
+                    store_id: qaCurrentProduct.store_id || null,
+                    store_name: qaCurrentProduct.store_name || 'Flower Shop',
+                    image_url: selected.image_url || qaCurrentProduct.image_url || '',
+                    quantity: quantity
+                };
+                if (selected.variant_id) payload.variant_id = selected.variant_id;
+                // Attach add-ons once to the first product line only
+                if (i === 0 && addonIds.length) payload.addon_option_ids = addonIds;
+                await qaAddToCart(payload);
+            }
+
             if (typeof showToast === 'function') {
-                showToast(quantity > 1
-                    ? (displayName + ' ×' + quantity + ' added to basket')
-                    : (displayName + ' added to basket'));
+                showToast(totals.unitCount > 1
+                    ? (totals.unitCount + ' items added to basket')
+                    : ((selectedOptions[0]
+                        ? (selectedOptions[0].variant_id
+                            ? (qaCurrentProduct.name + ' — ' + selectedOptions[0].name)
+                            : qaCurrentProduct.name)
+                        : 'Item') + ' added to basket'));
             }
             closeQuickAddPicker();
         } catch (err) {
@@ -945,16 +1145,25 @@
                 : ((err && err.message) ? err.message : 'Could not add to cart');
             if (typeof showToast === 'function') showToast(msg, 'error');
             if (confirmBtn) {
-                confirmBtn.innerHTML = originalHtml;
+                confirmBtn.innerHTML = idleBtnHtml;
                 confirmBtn.disabled = false;
             }
-            syncQuickAddQtyUI(selected);
+            updateQuickAddConfirmBtn();
         } finally {
             qaAdding = false;
         }
     };
 
-    // Legacy helper kept for any leftover callers
+    // Legacy helpers
+    window.selectQuickAddOption = function (btn) {
+        if (!btn) return;
+        const key = btn.getAttribute('data-key') || 'main';
+        toggleQuickAddOption(key);
+    };
+    window.changeQuickAddQty = function () { /* footer qty removed */ };
+    window.changeQuickAddAddonQty = function (optionId, delta) {
+        changeQuickAddLineQty('addon', String(optionId), delta);
+    };
     window.quickAdd = function (productId) {
         openQuickAddPicker(null, productId);
     };

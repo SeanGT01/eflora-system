@@ -3608,12 +3608,10 @@ function setGalleryImages(nextImages) {
        RATING DISPLAY UPDATE
     ════════════════════════════════ */
     function updateRatingDisplay(variantKey) {
-        // "main" / Standard = base listing: show ALL product reviews (matches server avg/total).
-        // Per-variant buttons use only ratings tied to that variant_id.
+        // Standard ("main") = only ratings with variant_id NULL.
+        // Variant keys = only that variant's ratings. Never mix.
         const key = String(variantKey);
-        const data = key === 'main'
-            ? overallRating
-            : (variantRatings[key] || { avg: 0, count: 0 });
+        const data = variantRatings[key] || { avg: 0, count: 0 };
         const avg = Number(data.avg) || 0;
         const count = Number(data.count) || 0;
         const fullStars = Math.floor(avg);
@@ -3669,8 +3667,9 @@ function buildReviewStars(rating, { allowHalf = false } = {}) {
 }
 
 function getCurrentVariantFilter() {
-    if (!selectedVariant || !selectedVariant.id) return null;
-    return Number(selectedVariant.id);
+    // 'main' = Standard only; number = that variant; null = no filter (legacy)
+    if (selectedVariant && selectedVariant.id) return Number(selectedVariant.id);
+    return 'main';
 }
 
 function buildRatingBreakdown(ratings) {
@@ -3698,9 +3697,14 @@ function renderReviewsInModal(payload) {
     if (!body) return;
     const activeVariantId = getCurrentVariantFilter();
     const allRatings = Array.isArray(payload?.ratings) ? payload.ratings : [];
-    const ratings = activeVariantId
-        ? allRatings.filter(r => Number(r.variant_id) === activeVariantId)
-        : allRatings;
+    let ratings;
+    if (activeVariantId === 'main') {
+        ratings = allRatings.filter(r => r.variant_id == null || r.variant_id === '');
+    } else if (activeVariantId) {
+        ratings = allRatings.filter(r => Number(r.variant_id) === activeVariantId);
+    } else {
+        ratings = allRatings;
+    }
 
     const count = ratings.length;
     const avg = count
@@ -3708,9 +3712,11 @@ function renderReviewsInModal(payload) {
         : 0;
     const avgLabel = count ? (Math.round(avg * 10) / 10).toFixed(1).replace(/\.0$/, '') : '0';
 
-    const variantNote = activeVariantId && selectedVariant
+    const variantNote = activeVariantId && activeVariantId !== 'main' && selectedVariant
         ? `<p class="reviews-modal-note">Showing reviews for <strong>${esc(selectedVariant.name)}</strong>.</p>`
-        : '';
+        : (activeVariantId === 'main'
+            ? `<p class="reviews-modal-note">Showing reviews for <strong>Standard</strong>.</p>`
+            : '');
 
     const overview = `
         <div class="ratings-overview">

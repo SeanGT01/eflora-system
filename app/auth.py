@@ -1241,10 +1241,12 @@ def update_profile():
         if first_name or last_name:
             user.full_name = f"{first_name} {last_name}".strip()
         if birthday:
-            try:
-                user.birthday = datetime.strptime(birthday, '%Y-%m-%d').date()
-            except ValueError:
-                return jsonify({'error': 'Invalid birthday format. Use YYYY-MM-DD.'}), 400
+            from app.utils import parse_and_validate_birthday
+            parsed_bday, bday_err = parse_and_validate_birthday(birthday)
+            if bday_err:
+                return jsonify({'error': bday_err}), 400
+            if parsed_bday is not None:
+                user.birthday = parsed_bday
         if gender:
             user.gender = gender
 

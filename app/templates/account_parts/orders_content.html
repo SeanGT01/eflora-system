@@ -1085,11 +1085,37 @@
     max-height: 90vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+.rating-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-shrink: 0;
+    padding: clamp(0.85rem, 2vw, 1.15rem) clamp(1rem, 3vw, 1.5rem);
+}
+.rating-modal .modal-header h3 {
+    font-family: var(--font-display);
+    font-size: clamp(17px, 4.2vw, 20px);
+    font-weight: 500;
+    margin: 0;
+    line-height: 1.25;
+    min-width: 0;
+}
+.rating-modal .modal-body {
+    padding: clamp(0.85rem, 2.5vw, 1.35rem) clamp(1rem, 3vw, 1.5rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
 }
 .rating-items-list {
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: clamp(0.85rem, 2vw, 1.25rem);
 }
 .rating-item-card {
     background: rgba(255, 255, 255, 0.55);
@@ -1107,16 +1133,16 @@
     margin-bottom: 0.75rem;
 }
 .rating-item-img {
-    width: 48px;
-    height: 48px;
+    width: clamp(40px, 10vw, 48px);
+    height: clamp(40px, 10vw, 48px);
     border-radius: 8px;
     object-fit: cover;
     background: var(--warm-white);
     flex-shrink: 0;
 }
 .rating-item-img-ph {
-    width: 48px;
-    height: 48px;
+    width: clamp(40px, 10vw, 48px);
+    height: clamp(40px, 10vw, 48px);
     border-radius: 8px;
     background: var(--warm-white);
     display: flex;
@@ -1132,7 +1158,7 @@
 }
 .rating-item-name {
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: clamp(12.5px, 3.2vw, 14px);
     font-weight: 600;
     color: var(--charcoal);
     white-space: nowrap;
@@ -1154,21 +1180,25 @@
 }
 .rating-stars-row {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: clamp(4px, 1.5vw, 8px);
     margin-bottom: 0.5rem;
+    justify-content: flex-start;
 }
 .rating-star {
-    font-size: 28px;
+    font-size: clamp(26px, 7vw, 32px);
     cursor: pointer;
     color: var(--border-strong);
     transition: color 0.15s, transform 0.15s;
     user-select: none;
     line-height: 1;
+    padding: 2px;
+    -webkit-tap-highlight-color: transparent;
 }
 .rating-star:hover,
 .rating-star.active {
     color: #f0b429;
-    transform: scale(1.15);
+    transform: scale(1.12);
 }
 .rating-star.hovered {
     color: #f0b429;
@@ -1177,7 +1207,7 @@
     width: 100%;
     min-height: 52px;
     padding: 8px 10px;
-    font-size: 12px;
+    font-size: clamp(12px, 3.2vw, 13px);
     font-family: var(--font-sans);
     border: 1px solid rgba(255, 255, 255, 0.7);
     border-radius: 8px;
@@ -1185,6 +1215,7 @@
     resize: vertical;
     color: var(--charcoal);
     transition: border-color 0.2s;
+    box-sizing: border-box;
 }
 .rating-comment:focus {
     outline: none;
@@ -1194,17 +1225,20 @@
     color: var(--muted);
 }
 .rating-submit-btn {
-    width: 100%;
-    padding: 0.75rem;
+    min-width: min(100%, 160px);
+    width: auto;
+    flex: 0 1 auto;
+    padding: 0.7rem 1.15rem;
     background: linear-gradient(135deg, #c24e68 0%, #d878a0 55%, #b070c8 100%);
     color: white;
     border: none;
-    border-radius: 10px;
+    border-radius: 999px;
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: clamp(13px, 3.4vw, 14px);
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.2s;
+    white-space: nowrap;
 }
 .rating-submit-btn:hover { opacity: 0.9; }
 .rating-submit-btn:disabled {
@@ -1219,6 +1253,91 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--border) !important;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+    align-items: center;
+    flex-shrink: 0;
+    padding: clamp(0.75rem, 2vw, 1.1rem) clamp(1rem, 3vw, 1.5rem)
+        calc(clamp(0.75rem, 2vw, 1.1rem) + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+#ratingModal.modal-overlay {
+    align-items: center;
+    justify-content: center;
+    padding: clamp(0.75rem, 2vw, 1.5rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+#ratingModal .rating-modal {
+    width: min(520px, 100%);
+    max-width: 100%;
+    max-height: min(88vh, 760px);
+    margin: auto;
+}
+
+@media (max-width: 1100px) {
+    #ratingModal .rating-modal {
+        width: min(480px, 100%);
+        max-height: min(90vh, 700px);
+    }
+}
+
+@media (max-width: 768px) {
+    #ratingModal.modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+    #ratingModal .rating-modal {
+        width: 100%;
+        max-width: 100%;
+        max-height: min(92vh, 100%);
+        border-radius: 16px 16px 0 0;
+        margin: 0;
+    }
+    #ratingModal .rating-modal .modal-header {
+        padding: 0.9rem 1rem;
+    }
+    #ratingModal .rating-modal .modal-body {
+        padding: 0.85rem 1rem;
+    }
+    #ratingModalFooter {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    #ratingSkipStoreBtn {
+        margin-right: 0 !important;
+        width: 100%;
+        justify-content: center;
+    }
+    .rating-submit-btn {
+        width: 100%;
+        min-width: 0;
+        padding: 0.8rem 1rem;
+    }
+    .rating-stars-row {
+        justify-content: center;
+        gap: 10px;
+    }
+    .rating-star {
+        font-size: 34px;
+    }
+}
+
+@media (max-width: 420px) {
+    #ratingModal .rating-modal {
+        max-height: min(94vh, 100%);
+        border-radius: 14px 14px 0 0;
+    }
+    .rating-item-name {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
 }
 
 .order-details-modal-surface .modal-footer,
@@ -1227,6 +1346,31 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--border);
+}
+
+.sdm-rider-chat {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-start;
+}
+.sdm-rider-chat-btn {
+    width: auto !important;
+    max-width: 100%;
+    padding: 0.4rem 0.85rem !important;
+    min-height: 30px !important;
+    font-size: 11px !important;
+    gap: 0.28rem !important;
+}
+.sdm-rider-chat-btn i {
+    font-size: 13px;
+}
+
+@media (max-width: 768px) {
+    .sdm-rider-chat-btn {
+        padding: 0.45rem 0.95rem !important;
+        min-height: 32px !important;
+        font-size: 11.5px !important;
+    }
 }
 
 /* Order detail modal: laptop + phone */
@@ -1374,17 +1518,16 @@
 </div>
 
 <!-- Rating Modal -->
-<div class="modal-overlay" id="ratingModal" style="display:none;">
-    <div class="modal rating-modal">
+<div class="modal-overlay" id="ratingModal" style="display:none;" onclick="if(event.target===this)closeRatingModal()">
+    <div class="modal rating-modal order-details-modal-surface" onclick="event.stopPropagation()">
         <div class="modal-header">
-            <h3 id="ratingModalTitle" style="font-family:var(--font-display);font-size:clamp(18px, 5vw, 20px);font-weight:500;margin:0;">Rate your order</h3>
-            <button class="cart-close" onclick="closeRatingModal()" style="font-size:clamp(20px, 5vw, 24px);"><i class="ri-close-line"></i></button>
+            <h3 id="ratingModalTitle">Rate your order</h3>
+            <button type="button" class="cart-close" onclick="closeRatingModal()" aria-label="Close"><i class="ri-close-line"></i></button>
         </div>
-        <div class="modal-body" id="ratingModalBody" style="padding:clamp(1rem, 3vw, 1.5rem) clamp(1rem, 3vw, 2rem);max-height:calc(90vh - 180px);overflow-y:auto;">
-        </div>
-        <div class="modal-footer" id="ratingModalFooter" style="padding:clamp(1rem, 2vw, 1.5rem) clamp(1rem, 3vw, 2rem);border-top:1px solid var(--border);background:var(--cream);display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center;">
-            <button type="button" class="btn-order-action" id="ratingSkipStoreBtn" style="display:none;margin-right:auto;" onclick="skipStoreRatingStep()">Skip, rate products only</button>
-            <button class="rating-submit-btn" id="ratingSubmitBtn" onclick="ratingPrimaryAction()" disabled>Continue</button>
+        <div class="modal-body" id="ratingModalBody"></div>
+        <div class="modal-footer" id="ratingModalFooter">
+            <button type="button" class="btn-order-action" id="ratingSkipStoreBtn" style="display:none;" onclick="skipStoreRatingStep()">Skip, rate products only</button>
+            <button type="button" class="rating-submit-btn" id="ratingSubmitBtn" onclick="ratingPrimaryAction()" disabled>Continue</button>
         </div>
     </div>
 </div>
@@ -1514,7 +1657,10 @@ const PROGRESS_STEPS = [
 ═══════════════════════════════════════ */
 async function loadOrders() {
     try {
-        const res  = await fetch('/api/account/orders/data');
+        const res  = await fetch(`/api/account/orders/data?_=${Date.now()}`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+        });
         const data = await res.json();
 
         // Normalise — handle both array response and {orders:[]} wrapper
@@ -1523,8 +1669,10 @@ async function loadOrders() {
         console.error('Failed to load orders:', err);
         _allOrders = [];
     } finally {
-        document.getElementById('ordersSkeleton').style.display = 'none';
-        document.getElementById('ordersContent').style.display  = 'block';
+        const skeleton = document.getElementById('ordersSkeleton');
+        const content = document.getElementById('ordersContent');
+        if (skeleton) skeleton.style.display = 'none';
+        if (content) content.style.display = 'block';
     }
 }
 
@@ -1559,7 +1707,7 @@ function normaliseCartGroups(cartItems) {
             const units = Math.max(1, Number(a.quantity || a.units || 1));
             return s + Number(a.price || 0) * units;
         }, 0);
-        const addonsTotal = Number(item.addons_total != null ? item.addons_total : (unitAddons * quantity));
+        const addonsTotal = Number(item.addons_total != null ? item.addons_total : unitAddons);
         const lineTotal = (price * quantity) + addonsTotal;
 
         if (!groups.has(key)) {
@@ -2228,9 +2376,8 @@ function buildOrderDetailHTML(order) {
                 <div class="sdm-row"><span class="sdm-k">Vehicle</span><span class="sdm-v">${esc(order.rider_vehicle || '—')}</span></div>
             </div>
             ${riderAssigned ? `
-            <div style="margin-top:12px;">
-                <button type="button" class="btn-order-action primary"
-                    style="width:100%;"
+            <div class="sdm-rider-chat">
+                <button type="button" class="btn-order-action primary sdm-rider-chat-btn"
                     onclick="chatWidget.openWithRiderOrder(${Number(order.id) || 0})">
                     <i class="ri-chat-3-line"></i> Chat with rider
                 </button>
@@ -2444,10 +2591,58 @@ async function completeOrder(orderId) {
         const d = await res.json();
         if (d.success) {
             showOrderToast('Order marked as completed.');
-            try { sessionStorage.removeItem('ratingPromptDismissed_' + orderId); } catch (e) {}
-            await loadOrders();
+
+            // Update local list immediately (same pattern as cancel) — don't wait on reload
+            const completed = d.order || null;
+            const idx = _allOrders.findIndex(o => Number(o.id) === Number(orderId));
+            if (idx >= 0) {
+                _allOrders[idx] = completed
+                    ? { ..._allOrders[idx], ...completed, status: 'completed' }
+                    : { ..._allOrders[idx], status: 'completed' };
+            }
+
+            // If viewing Delivered, follow the order into Completed
+            if (_activeStatus === 'delivered') {
+                _activeStatus = 'completed';
+                document.querySelectorAll('.order-tab').forEach(t => {
+                    t.classList.toggle('active', t.getAttribute('data-status') === 'completed');
+                });
+            }
+
             refreshOrdersView();
-            rateOrder(orderId, false);
+
+            // Refresh open detail modal if this order is showing
+            const detailModal = document.getElementById('orderDetailModal');
+            if (detailModal && detailModal.classList.contains('active')) {
+                const updated = _allOrders.find(o => Number(o.id) === Number(orderId));
+                if (updated) {
+                    const title = document.getElementById('orderDetailTitle');
+                    const body = document.getElementById('orderDetailBody');
+                    if (title) title.textContent = `Order #${updated.order_number || String(orderId).padStart(4,'0')}`;
+                    if (body) body.innerHTML = buildOrderDetailHTML(updated);
+                }
+            }
+
+            const localOrder = _allOrders.find(o => Number(o.id) === Number(orderId));
+            const alreadyRated = !!(localOrder && localOrder.all_rated);
+
+            // Background refresh to stay in sync; keep local completed if fetch is stale
+            loadOrders().then(() => {
+                const still = _allOrders.find(o => Number(o.id) === Number(orderId));
+                if (still && still.status !== 'completed' && completed) {
+                    const i = _allOrders.findIndex(o => Number(o.id) === Number(orderId));
+                    if (i >= 0) {
+                        _allOrders[i] = { ..._allOrders[i], ...completed, status: 'completed' };
+                    }
+                }
+                refreshOrdersView();
+            });
+
+            // Only prompt for ratings when something is still unrated
+            if (!alreadyRated) {
+                try { sessionStorage.removeItem('ratingPromptDismissed_' + orderId); } catch (e) {}
+                rateOrder(orderId, false);
+            }
         } else {
             showOrderToast(d.message || 'Could not complete order.');
         }
@@ -2553,11 +2748,17 @@ function updateRatingFooterChrome() {
     const title = document.getElementById('ratingModalTitle');
     if (!submitBtn) return;
     if (_ratingPhase === 'store') {
-        if (skipBtn) skipBtn.style.display = 'inline-flex';
+        if (skipBtn) {
+            skipBtn.style.display = 'inline-flex';
+            skipBtn.style.marginRight = 'auto';
+        }
         submitBtn.textContent = 'Continue';
         if (title) title.textContent = 'Rate your experience';
     } else {
-        if (skipBtn) skipBtn.style.display = 'none';
+        if (skipBtn) {
+            skipBtn.style.display = 'none';
+            skipBtn.style.marginRight = '';
+        }
         submitBtn.textContent = 'Submit ratings';
         if (title) title.textContent = 'Rate your products';
     }
@@ -2643,24 +2844,33 @@ async function rateOrder(orderId, fromAuto) {
     _ratingUnratedItems = [];
     _storeRatingState = { rating: 0, comment: '' };
 
+    // Fast path: local list already knows this order is fully rated
+    const local = (_allOrders || []).find(o => Number(o.id) === Number(orderId));
+    if (local && local.all_rated) {
+        _ratingOrderId = null;
+        _ratingAutoOpened = false;
+        return;
+    }
+
     const modal = document.getElementById('ratingModal');
     const body = document.getElementById('ratingModalBody');
     const submitBtn = document.getElementById('ratingSubmitBtn');
+    if (!modal || !body || !submitBtn) return;
     submitBtn.disabled = true;
 
-    modal.style.display = 'flex';
-    modal.classList.add('active');
+    // Load ratings before showing the modal so already-rated orders never flash open
     body.innerHTML = `<div style="text-align:center;padding:2rem;"><div class="loading-spinner" style="margin:0 auto;"></div></div>`;
 
     try {
         const [orderRes, ratingsRes] = await Promise.all([
-            fetch(`/api/account/orders/${orderId}`).then(r => r.json()),
-            fetch(`/api/account/orders/${orderId}/ratings`).then(r => r.json()),
+            fetch(`/api/account/orders/${orderId}?_=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()),
+            fetch(`/api/account/orders/${orderId}/ratings?_=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()),
         ]);
 
         const items = orderRes.items || [];
         if (!items.length) {
-            body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">No items to rate.</div>`;
+            _ratingOrderId = null;
+            _ratingAutoOpened = false;
             return;
         }
 
@@ -2676,9 +2886,17 @@ async function rateOrder(orderId, fromAuto) {
         const needProducts = _ratingUnratedItems.length > 0;
 
         if (!needStore && !needProducts) {
-            closeRatingModal();
+            // Keep local list in sync so Rate button disappears
+            const i = _allOrders.findIndex(o => Number(o.id) === Number(orderId));
+            if (i >= 0) _allOrders[i].all_rated = true;
+            refreshOrdersView();
+            _ratingOrderId = null;
+            _ratingAutoOpened = false;
             return;
         }
+
+        modal.style.display = 'flex';
+        modal.classList.add('active');
 
         if (needStore) {
             _ratingPhase = 'store';
@@ -2688,6 +2906,8 @@ async function rateOrder(orderId, fromAuto) {
             renderProductRatingStep();
         }
     } catch (err) {
+        modal.style.display = 'flex';
+        modal.classList.add('active');
         body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">Failed to load order details.</div>`;
     }
 }
@@ -2837,7 +3057,6 @@ async function submitRatings() {
         }));
 
     try {
-        const ratedOrderId = _ratingOrderId;
         const res = await fetch(`/api/account/orders/${_ratingOrderId}/rate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2850,8 +3069,8 @@ async function submitRatings() {
             await loadOrders();
             refreshOrdersView();
             closeRatingModal();
-            const rateBtn = document.querySelector(`#order-card-${ratedOrderId} button[onclick*="rateOrder"]`);
-            if (rateBtn) rateBtn.style.display = 'none';
+            // Keep Rate visible when products/store remain unrated (partial submit).
+            // refreshOrdersView already shows/hides via order.all_rated.
             queueMicrotask(() => maybeAutoOpenRatingModal());
         } else {
             showOrderToast(data.error || 'Failed to submit rating.');
@@ -2908,6 +3127,23 @@ async function reorderItems(orderId) {
                 };
                 if (item.variant_id) {
                     payload.variant_id = item.variant_id;
+                }
+                const addons = Array.isArray(item.addons) ? item.addons : [];
+                const productQty = Math.max(1, Number(item.quantity) || 1);
+                const addonOptionIds = [];
+                for (const a of addons) {
+                    const optionId = Number(a && a.addon_option_id);
+                    if (!Number.isFinite(optionId) || optionId <= 0) continue;
+                    // Scale addon units back to a single product qty=1 reorder.
+                    const lineUnits = Math.max(1, Number(a.quantity) || 1);
+                    const perProduct = Math.max(1, Math.round(lineUnits / productQty));
+                    addonOptionIds.push({
+                        addon_option_id: optionId,
+                        quantity: perProduct,
+                    });
+                }
+                if (addonOptionIds.length) {
+                    payload.addon_option_ids = addonOptionIds;
                 }
                 const r = await fetch('/api/cart/items', {
                     method: 'POST',

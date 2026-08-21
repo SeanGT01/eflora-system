@@ -1178,13 +1178,6 @@
             grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 0.75rem;
         }
-
-        /* Touch: overlay actions visible without hover */
-        .product-overlay { background: rgba(80, 40, 70, 0.12); }
-        .overlay-btn {
-            opacity: 1;
-            transform: none;
-        }
     }
 
     @media (max-width: 768px) {
@@ -1283,12 +1276,8 @@
         .product-price .ep-price__regular { font-size: 14px; }
     }
 
+    /* Match landing page: overlay actions only on hover (not always-on for touch) */
     @media (hover: none), (pointer: coarse) {
-        .product-overlay { background: rgba(80, 40, 70, 0.12); }
-        .overlay-btn {
-            opacity: 1;
-            transform: none;
-        }
         .product-card:hover { transform: none; }
     }
 </style>
@@ -1468,7 +1457,7 @@
                                     title="View Details">
                                 <i class="ri-eye-line"></i>
                             </button>
-                            {% if product.is_available and product.stock_quantity > 0 %}
+                            {% if session.get('role') not in ['seller', 'admin'] %}
                             <button class="overlay-btn"
                                     onclick="event.stopPropagation(); openQuickAddPicker(event.currentTarget, {{ product.id }})"
                                     title="Quick Add">
@@ -1600,218 +1589,363 @@
 
 {% block extra_js %}
 
-<!-- Reviews Modal — inside extra_js block so Jinja renders it -->
 {% set review_list = reviews if reviews is defined else testimonials %}
-<div id="reviewsModal" class="rv-modal" aria-hidden="true">
-    <div class="rv-backdrop" onclick="closeReviewsModal()"></div>
-    <section class="rv-dialog" role="dialog" aria-modal="true" aria-labelledby="reviewsModalTitle">
-        <div class="rv-head">
-            <div style="display:flex;align-items:center;gap:.75rem;min-width:0;">
-                <div class="rv-icon"><i class="ri-star-half-line"></i></div>
-                <div style="min-width:0;">
-                    <h2 id="reviewsModalTitle" class="rv-title">{{ store.name }} Reviews</h2>
-                    {% if avg_rating and avg_rating > 0 %}
-                    <div class="rv-meta">
-                        <span style="color:#f0b429;">★</span>
-                        <strong style="color:var(--charcoal);">{{ avg_rating }}</strong>
-                        <span>·</span>
-                        <span>{{ total_reviews|default(0) }} review{{ 's' if total_reviews|default(0) != 1 else '' }}</span>
-                    </div>
-                    {% endif %}
-                </div>
+{% set review_count = review_list|length if review_list else 0 %}
+{% set ns = namespace(c5=0, c4=0, c3=0, c2=0, c1=0) %}
+{% if review_list %}
+  {% for t in review_list %}
+    {% set r = (t.rating or 0)|int %}
+    {% if r == 5 %}{% set ns.c5 = ns.c5 + 1 %}
+    {% elif r == 4 %}{% set ns.c4 = ns.c4 + 1 %}
+    {% elif r == 3 %}{% set ns.c3 = ns.c3 + 1 %}
+    {% elif r == 2 %}{% set ns.c2 = ns.c2 + 1 %}
+    {% elif r == 1 %}{% set ns.c1 = ns.c1 + 1 %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+{% set denom = review_count if review_count > 0 else 1 %}
+
+<!-- Store Reviews Modal (same design as product details ratings modal) -->
+<div class="modal-overlay" id="storeReviewsModal" role="dialog" aria-modal="true" aria-labelledby="storeReviewsTitle" onclick="if (event.target === this) closeReviewsModal()">
+    <div class="modal reviews-modal order-details-modal-surface" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title-wrap">
+                <h3 class="modal-title" id="storeReviewsTitle">Store Ratings</h3>
             </div>
-            <button onclick="closeReviewsModal()" type="button" aria-label="Close reviews" class="rv-close">
+            <button type="button" class="modal-close" onclick="closeReviewsModal()" aria-label="Close">
                 <i class="ri-close-line"></i>
             </button>
         </div>
-        <div class="rv-body">
-            {% if review_list and review_list|length > 0 %}
-                {% for t in review_list %}
-                <div class="rv-item">
-                    <div class="rv-item-top">
-                        <div style="display:flex;align-items:center;gap:.6rem;">
-                            <img class="rv-avatar" src="{{ url_for('static', filename='images/default-customer-avatar.svg') }}" alt="{{ t.customer_name or 'Customer' }}" style="object-fit:cover;">
-                            <div>
-                                <div class="rv-name">{{ t.customer_name or 'Customer' }}</div>
-                                {% if t.created_at %}
-                                <div class="rv-date">
-                                    {{ t.created_at.strftime('%b %d, %Y') if t.created_at is not string else t.created_at[:10] }}
-                                </div>
-                                {% endif %}
+        <div class="modal-body reviews-modal-body" id="storeReviewsModalBody">
+            <p class="reviews-modal-note">Reviews for <strong>{{ store.name }}</strong>.</p>
+            <div class="ratings-overview">
+                <div class="ratings-avg-block">
+                    <div class="ratings-avg-label">Average user rating</div>
+                    <div class="ratings-avg-value">
+                        {% if avg_rating and avg_rating > 0 %}{{ avg_rating }}{% else %}0{% endif %}
+                        <span>/ 5</span>
+                    </div>
+                    <div class="ratings-avg-stars" aria-label="{{ avg_rating|default(0) }} out of 5">
+                        {% set avg = avg_rating|float if avg_rating else 0 %}
+                        {% set full = avg|int %}
+                        {% set has_half = (avg - full) >= 0.3 and full < 5 %}
+                        {% for i in range(full) %}<i class="ri-star-fill"></i>{% endfor %}
+                        {% if has_half %}<i class="ri-star-half-fill"></i>{% endif %}
+                        {% for i in range(5 - full - (1 if has_half else 0)) %}<i class="ri-star-line"></i>{% endfor %}
+                    </div>
+                </div>
+                <div class="ratings-breakdown">
+                    <div class="ratings-breakdown-label">Rating breakdown</div>
+                    <div class="ratings-breakdown-rows">
+                        {% for star, cnt in [(5, ns.c5), (4, ns.c4), (3, ns.c3), (2, ns.c2), (1, ns.c1)] %}
+                        <div class="ratings-bar-row">
+                            <span class="ratings-bar-star">{{ star }}</span>
+                            <div class="ratings-bar-track" aria-hidden="true">
+                                <div class="ratings-bar-fill" style="width:{{ ((cnt / denom) * 100)|round|int }}%"></div>
                             </div>
                         </div>
-                        <div class="rv-stars">
-                            {% for i in range(t.rating|int) %}<i class="ri-star-fill"></i>{% endfor %}
-                            {% for i in range(5 - (t.rating|int)) %}<i class="ri-star-line" style="opacity:0.3;"></i>{% endfor %}
-                        </div>
+                        {% endfor %}
                     </div>
-                    {% if t.comment %}
-                    <p class="rv-comment">"{{ t.comment }}"</p>
-                    {% endif %}
                 </div>
+            </div>
+
+            {% if review_list and review_count > 0 %}
+            <div class="reviews-list">
+                {% for t in review_list %}
+                {% set rating = (t.rating or 0)|int %}
+                {% set name = t.customer_name or 'Anonymous' %}
+                {% set raw_comment = (t.comment or '')|trim %}
+                <article class="review-row">
+                    <div class="review-stars" aria-label="{{ rating }} out of 5 stars">
+                        {% for i in range(rating) %}<i class="ri-star-fill"></i>{% endfor %}
+                        {% for i in range(5 - rating) %}<i class="ri-star-line"></i>{% endfor %}
+                    </div>
+                    <p class="review-comment">{{ raw_comment if raw_comment else 'No written comment.' }}</p>
+                    <p class="review-by">— Reviewed by {{ name }}</p>
+                </article>
                 {% endfor %}
+            </div>
             {% else %}
-                <div class="rv-empty">
-                    <i class="ri-star-line"></i>
-                    <p>No reviews yet for this store.</p>
-                </div>
+            <div class="reviews-empty">
+                <i class="ri-chat-smile-3-line"></i>
+                No reviews yet for this store.
+            </div>
             {% endif %}
         </div>
-    </section>
+    </div>
 </div>
 
 <style>
-/* Reviews modal */
-.rv-modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 12200;
+/* Store reviews modal — mirrors product details ratings modal */
+#storeReviewsModal.modal-overlay {
     align-items: center;
     justify-content: center;
-    padding: max(.75rem, env(safe-area-inset-top, .75rem))
-             max(.75rem, env(safe-area-inset-right, .75rem))
-             max(.75rem, env(safe-area-inset-bottom, .75rem))
-             max(.75rem, env(safe-area-inset-left, .75rem));
+    padding: clamp(0.75rem, 2.5vw, 1.5rem);
+    overscroll-behavior: contain;
 }
-.rv-modal.is-open { display: flex; }
-.rv-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(35,27,31,.58);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-}
-.rv-dialog {
-    position: relative;
-    display: grid;
-    grid-template-rows: auto minmax(0,1fr);
-    width: min(560px, 100%);
-    max-height: min(680px, calc(100dvh - 1.5rem));
-    background: #fffdf9;
-    border-radius: 22px;
+#storeReviewsModal .reviews-modal.order-details-modal-surface {
+    width: min(720px, 100%);
+    max-width: min(720px, 100%);
+    max-height: min(88vh, 860px);
+    margin: 0 auto;
     overflow: hidden;
-    border: 1px solid rgba(107,76,59,.16);
-    box-shadow: 0 24px 70px rgba(35,27,31,.32);
 }
-.rv-head {
+#storeReviewsModal .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: .75rem;
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid rgba(107,76,59,.12);
-    background: linear-gradient(90deg,rgba(240,180,41,.06),rgba(255,253,249,.9));
-    flex-shrink: 0;
+    gap: 0.75rem;
 }
-.rv-icon {
-    width: 36px; height: 36px;
-    border-radius: 10px;
-    background: rgba(240,180,41,.12);
-    display: flex; align-items: center; justify-content: center;
-    color: #a07000; font-size: 17px; flex-shrink: 0;
+#storeReviewsModal .modal-header .modal-title-wrap {
+    min-width: 0;
+    flex: 1;
 }
-.rv-title {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: clamp(1rem, 3vw, 1.25rem);
+#storeReviewsModal .modal-header .modal-title {
+    font-family: var(--font-sans);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     color: var(--charcoal);
-    line-height: 1.2;
-    overflow-wrap: anywhere;
+    margin: 0;
+    line-height: 1.3;
 }
-.rv-meta {
+#storeReviewsModal .modal-close {
+    flex-shrink: 0;
+    border: none;
+    background: rgba(44, 37, 32, 0.06);
+    color: var(--charcoal);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
-    gap: .35rem;
-    margin-top: .2rem;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+#storeReviewsModal .modal-close:hover {
+    background: rgba(44, 37, 32, 0.1);
+    color: var(--deep-rose);
+}
+#storeReviewsModal .modal-close i {
+    font-size: 18px;
+    line-height: 1;
+}
+#storeReviewsModal .reviews-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    padding: 0.35rem 1.35rem 1.35rem;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+#storeReviewsModal .reviews-modal-note {
+    font-family: var(--font-sans);
     font-size: 12px;
     color: var(--muted);
-    font-family: var(--font-sans);
+    margin: 0;
 }
-.rv-close {
-    width: 36px; height: 36px;
-    flex-shrink: 0;
-    border: 0;
-    border-radius: 50%;
-    background: rgba(181,68,90,.1);
-    color: var(--deep-rose);
-    cursor: pointer;
-    font-size: 20px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background .15s;
+#storeReviewsModal .reviews-modal-note strong {
+    color: var(--charcoal);
+    font-weight: 600;
 }
-.rv-close:hover { background: rgba(181,68,90,.2); }
-.rv-body {
-    overflow-y: auto;
-    padding: .25rem 1.25rem 1.25rem;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(107,76,59,.25) transparent;
+#storeReviewsModal .ratings-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 1.25rem 2rem;
+    padding: 0.15rem 0 1.15rem;
+    border-bottom: 1px solid rgba(44, 37, 32, 0.08);
 }
-.rv-item {
-    padding: 1rem 0;
-    border-bottom: 1px solid var(--border);
-}
-.rv-item:last-child { border-bottom: none; }
-.rv-item-top {
+#storeReviewsModal .ratings-avg-block {
     display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+}
+#storeReviewsModal .ratings-avg-label,
+#storeReviewsModal .ratings-breakdown-label {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--charcoal);
+}
+#storeReviewsModal .ratings-avg-value {
+    font-family: var(--font-sans);
+    font-size: clamp(1.75rem, 4vw, 2.15rem);
+    font-weight: 700;
+    color: var(--charcoal);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+}
+#storeReviewsModal .ratings-avg-value span {
+    font-weight: 500;
+    color: var(--muted);
+    font-size: 0.72em;
+}
+#storeReviewsModal .ratings-avg-stars {
+    color: #e8b923;
+    font-size: 1.15rem;
+    display: inline-flex;
+    gap: 2px;
+    line-height: 1;
+}
+#storeReviewsModal .ratings-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-width: 0;
+}
+#storeReviewsModal .ratings-breakdown-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.32rem;
+}
+#storeReviewsModal .ratings-bar-row {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    margin-bottom: .5rem;
+    gap: 0.55rem;
 }
-.rv-avatar {
-    width: 36px; height: 36px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    object-fit: cover;
+#storeReviewsModal .ratings-bar-star {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--charcoal);
+    text-align: right;
 }
-.rv-name { font-size: 13px; font-weight: 600; color: var(--charcoal); }
-.rv-date { font-size: 11px; color: var(--muted); margin-top: 1px; }
-.rv-stars { display: flex; gap: 2px; color: #f0b429; font-size: 13px; flex-shrink: 0; }
-.rv-comment { margin: 0; font-size: 13px; color: var(--charcoal); line-height: 1.6; font-style: italic; }
-.rv-empty { text-align: center; padding: 3rem 1rem; color: var(--muted); }
-.rv-empty i { font-size: 40px; display: block; margin-bottom: .75rem; opacity: .3; }
-.rv-empty p { margin: 0; font-size: 14px; }
+#storeReviewsModal .ratings-bar-track {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(44, 37, 32, 0.08);
+    overflow: hidden;
+}
+#storeReviewsModal .ratings-bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: #e8b923;
+}
+#storeReviewsModal .reviews-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+#storeReviewsModal .review-row {
+    border: none;
+    border-radius: 0;
+    padding: 1rem 0;
+    background: transparent;
+    box-shadow: none;
+    border-bottom: 1px solid rgba(44, 37, 32, 0.07);
+}
+#storeReviewsModal .review-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0.25rem;
+}
+#storeReviewsModal .review-stars {
+    color: #e8b923;
+    font-size: 14px;
+    display: inline-flex;
+    gap: 1px;
+    margin-bottom: 0.45rem;
+}
+#storeReviewsModal .review-comment {
+    font-family: var(--font-sans);
+    color: var(--charcoal);
+    font-size: 14px;
+    line-height: 1.55;
+    word-break: break-word;
+    margin: 0 0 0.4rem;
+}
+#storeReviewsModal .review-by {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-style: italic;
+    color: #9a8d85;
+    margin: 0;
+}
+#storeReviewsModal .reviews-empty {
+    text-align: center;
+    color: var(--muted);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 1.75rem 0.75rem;
+    border-radius: 12px;
+    border: 1px dashed rgba(216, 120, 160, 0.3);
+    background: rgba(255, 248, 246, 0.55);
+}
+#storeReviewsModal .reviews-empty i {
+    display: block;
+    font-size: 1.75rem;
+    color: rgba(181, 68, 90, 0.4);
+    margin-bottom: 0.5rem;
+}
 
-/* Mobile: slide up from bottom */
-@media (max-width: 600px) {
-    .rv-modal { align-items: flex-end; justify-content: stretch; padding: 0; }
-    .rv-dialog {
-        width: 100%;
-        max-height: 88dvh;
-        border-radius: 20px 20px 0 0;
-        border-left: 0; border-right: 0; border-bottom: 0;
+@media (max-width: 900px) {
+    #storeReviewsModal .reviews-modal.order-details-modal-surface {
+        width: min(640px, 100%);
+        max-height: min(90vh, 780px);
+    }
+    #storeReviewsModal .reviews-modal-body {
+        padding: 0.25rem 1.1rem 1.15rem;
+        gap: 1rem;
+    }
+    #storeReviewsModal .ratings-overview {
+        gap: 1rem 1.35rem;
     }
 }
-body.reviews-modal-open { overflow: hidden; }
+
+@media (max-width: 640px) {
+    #storeReviewsModal.modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+    #storeReviewsModal .reviews-modal.order-details-modal-surface {
+        width: 100%;
+        max-width: 100%;
+        max-height: min(92vh, 100%);
+        border-radius: 16px 16px 0 0;
+        margin: 0;
+    }
+    #storeReviewsModal .modal-header {
+        padding: 0.9rem 1rem;
+    }
+    #storeReviewsModal .reviews-modal-body {
+        padding: 0.15rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+    #storeReviewsModal .ratings-overview {
+        grid-template-columns: 1fr;
+        gap: 1.1rem;
+    }
+    #storeReviewsModal .review-comment { font-size: 13.5px; }
+}
 </style>
 <script>
     /* ── Reviews modal ───────────────────────────────── */
     let _reviewsLastFocus = null;
     function openReviewsModal() {
         _reviewsLastFocus = document.activeElement;
-        const modal = document.getElementById('reviewsModal');
-        modal.classList.add('is-open');
-        modal.setAttribute('aria-hidden', 'false');
+        const modal = document.getElementById('storeReviewsModal');
+        if (!modal) return;
+        modal.classList.add('active');
+        modal.style.display = 'flex';
         document.body.classList.add('reviews-modal-open');
-        const closeBtn = modal.querySelector('button[aria-label="Close reviews"]');
+        const closeBtn = modal.querySelector('.modal-close');
         if (closeBtn) setTimeout(() => closeBtn.focus(), 0);
     }
     function closeReviewsModal() {
-        const modal = document.getElementById('reviewsModal');
-        if (!modal.classList.contains('is-open')) return;
-        modal.classList.remove('is-open');
-        modal.setAttribute('aria-hidden', 'true');
+        const modal = document.getElementById('storeReviewsModal');
+        if (!modal || !modal.classList.contains('active')) return;
+        modal.classList.remove('active');
+        modal.style.display = 'none';
         document.body.classList.remove('reviews-modal-open');
         if (_reviewsLastFocus && typeof _reviewsLastFocus.focus === 'function') _reviewsLastFocus.focus();
     }
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            const modal = document.getElementById('reviewsModal');
-            if (modal && modal.classList.contains('is-open')) closeReviewsModal();
+            const modal = document.getElementById('storeReviewsModal');
+            if (modal && modal.classList.contains('active')) closeReviewsModal();
         }
     });
 

@@ -806,13 +806,13 @@ def _public_storefront_sellable_filter():
     )
 
 
-def _public_storefront_product_base_query():
+def _public_storefront_product_base_query(require_sellable=False):
     """Products eligible for the public storefront: active store, not archived, and available.
 
-    Stock-state rendering (in stock / variant-only stock / out of stock) is handled
-    by the frontend cards, so we do not hide products here based on stock quantity.
+    When require_sellable=True (landing / browse catalog), hide products that have
+    no main stock and no sellable variant stock. Store detail pages keep OOS products.
     """
-    return (
+    q = (
         Product.query
         .join(Store, Product.store_id == Store.id)
         .options(
@@ -828,6 +828,9 @@ def _public_storefront_product_base_query():
             Store.status == 'active',
         )
     )
+    if require_sellable:
+        q = q.filter(_public_storefront_sellable_filter())
+    return q
 
 
 def _product_list_for_storefront(orm_products):
@@ -836,9 +839,16 @@ def _product_list_for_storefront(orm_products):
 
     product_list = []
     product_ids = [p.id for p in orm_products if getattr(p, 'id', None) is not None]
-    rating_map = {}
+
+    # Per-option aggregates: card shows Standard (main) only; variants stay separate.
+    # variant_ratings keys: "main" | "<variant_id>" → {avg, count}
+    # overall_* = all ratings for the product (main + variants) for reference if needed.
+    rating_map = {}          # product_id → (main_avg, main_count)
+    overall_map = {}         # product_id → (overall_avg, overall_count)
+    variant_ratings_map = {} # product_id → {key: {avg, count}}
+
     if product_ids:
-        rows = (
+        overall_rows = (
             db.session.query(
                 ProductRating.product_id,
                 db.func.avg(ProductRating.rating),
@@ -848,11 +858,32 @@ def _product_list_for_storefront(orm_products):
             .group_by(ProductRating.product_id)
             .all()
         )
-        for product_id, avg_rating, review_count in rows:
-            rating_map[product_id] = (
+        for product_id, avg_rating, review_count in overall_rows:
+            overall_map[product_id] = (
                 round(float(avg_rating or 0), 1),
                 int(review_count or 0),
             )
+
+        option_rows = (
+            db.session.query(
+                ProductRating.product_id,
+                ProductRating.variant_id,
+                db.func.avg(ProductRating.rating),
+                db.func.count(ProductRating.id),
+            )
+            .filter(ProductRating.product_id.in_(product_ids))
+            .group_by(ProductRating.product_id, ProductRating.variant_id)
+            .all()
+        )
+        for product_id, variant_id, avg_rating, review_count in option_rows:
+            key = str(variant_id) if variant_id else 'main'
+            bucket = {
+                'avg': round(float(avg_rating or 0), 1),
+                'count': int(review_count or 0),
+            }
+            variant_ratings_map.setdefault(product_id, {})[key] = bucket
+            if key == 'main':
+                rating_map[product_id] = (bucket['avg'], bucket['count'])
 
     ymal_by_store = {}
     for product in orm_products:
@@ -873,9 +904,14 @@ def _product_list_for_storefront(orm_products):
                 'name': product.store_category.name,
                 'slug': product.store_category.slug
             }
+        # Listing card = Standard / main-product ratings only (not variants)
         avg_rating, review_count = rating_map.get(product.id, (0.0, 0))
+        overall_avg, overall_count = overall_map.get(product.id, (0.0, 0))
         product_dict['avg_rating'] = avg_rating
         product_dict['review_count'] = review_count
+        product_dict['overall_avg_rating'] = overall_avg
+        product_dict['overall_review_count'] = overall_count
+        product_dict['variant_ratings'] = variant_ratings_map.get(product.id) or {}
         store_id = getattr(product, 'store_id', None)
         if store_id not in ymal_by_store:
             ymal_by_store[store_id] = ymal_addon_option_dicts(product) if store_id else []
@@ -1034,7 +1070,7 @@ def index():
         # Over-fetch when filtering so the featured strip still fills with in-range items.
         product_fetch_limit = 200 if location_filter_on else 40
         products = (
-            _public_storefront_product_base_query()
+            _public_storefront_product_base_query(require_sellable=True)
             .order_by(Product.created_at.desc())
             .limit(product_fetch_limit)
             .all()
@@ -1741,10 +1777,12 @@ def update_profile():
         
         # Login identity (email or phone) is set at registration and is not editable here.
         if birthday:
-            try:
-                user.birthday = datetime.strptime(birthday, '%Y-%m-%d').date()
-            except:
-                pass
+            from app.utils import parse_and_validate_birthday
+            parsed_bday, bday_err = parse_and_validate_birthday(birthday)
+            if bday_err:
+                return jsonify({'success': False, 'error': bday_err}), 400
+            if parsed_bday is not None:
+                user.birthday = parsed_bday
         if gender:
             user.gender = gender
         
@@ -3422,7 +3460,10 @@ def orders_data():
         order_dict['date'] = order_dict['created_at']
         orders_payload.append(order_dict)
 
-    return jsonify(orders_payload)
+    resp = jsonify(orders_payload)
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @templates_bp.route('/api/account/orders/<int:order_id>')
 def order_details(order_id):
@@ -3529,7 +3570,12 @@ def complete_order(order_id):
         reference_id=order.id,
     )
     db.session.commit()
-    return jsonify({'success': True, 'message': 'Order marked as completed.'})
+    db.session.refresh(order)
+    return jsonify({
+        'success': True,
+        'message': 'Order marked as completed.',
+        'order': _serialize_customer_order(order),
+    })
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -3900,7 +3946,7 @@ def browse_products():
         location_filter_on = bool(is_customer and customer_address and not browse_all_mode)
 
         products = (
-            _public_storefront_product_base_query()
+            _public_storefront_product_base_query(require_sellable=True)
             .order_by(Product.created_at.desc())
             .limit(500)
             .all()
@@ -8286,8 +8332,16 @@ def pos_create_order():
     # Calculate subtotal (product lines + structured add-ons)
     subtotal = Decimal('0')
     for item in validated_items:
-        subtotal += item['price'] * item['quantity']
-        subtotal += structured_addons_subtotal(item.get('addon_lines'))
+        if item.get('addons_only'):
+            # Add-on-only: charge from resolved addon lines (or client unit × qty)
+            addons_total = structured_addons_subtotal(item.get('addon_lines'))
+            if addons_total > 0:
+                subtotal += addons_total
+            else:
+                subtotal += item['price'] * item['quantity']
+        else:
+            subtotal += item['price'] * item['quantity']
+            subtotal += structured_addons_subtotal(item.get('addon_lines'))
     total = subtotal - discount
     
     # Validate total is not negative
@@ -8347,12 +8401,21 @@ def pos_create_order():
                             base = f'{base} - {v.name}'
                     line_name = f"{base} (+ {', '.join(addon_names)})"
 
+            if item.get('addons_only'):
+                # Unit price is the add-on price. Prefer client price; fall back to resolved lines.
+                unit_price = item['price'] if item['price'] and item['price'] > 0 else extra_per_unit
+                if (not unit_price or unit_price <= 0) and addon_lines:
+                    unit_price = Decimal(str(addon_lines[0].get('price') or 0))
+            else:
+                # Flower/variant line: bake structured add-on cost into unit price for history totals
+                unit_price = item['price'] + extra_per_unit
+
             pos_item = POSOrderItem(
                 pos_order=pos_order,
                 product_id=product_id_for_row,
                 variant_id=item['variant_id'],
                 quantity=item['quantity'],
-                price=item['price'] + extra_per_unit,
+                price=unit_price,
                 line_name=line_name,
                 line_image_url=line_image_url,
                 addon_option_id=addon_option_id,
@@ -9753,6 +9816,38 @@ def update_cart_item(item_id):
         print(f"❌ Error updating cart: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@templates_bp.route('/api/cart/items/<int:item_id>/addons/<int:addon_option_id>', methods=['DELETE'])
+@limiter.exempt
+def remove_cart_item_addon(item_id, addon_option_id):
+    """Remove a single structured add-on from a cart line."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    try:
+        cart_item = CartItem.query.get_or_404(item_id)
+        if cart_item.cart.user_id != user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        row = CartItemAddon.query.filter_by(
+            cart_item_id=cart_item.id,
+            addon_option_id=addon_option_id,
+        ).first()
+        if not row:
+            return jsonify({'error': 'Add-on not found on this cart item'}), 404
+
+        db.session.delete(row)
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Add-on removed',
+            'cart': cart_item.cart.to_dict(),
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @templates_bp.route('/api/cart/items/<int:item_id>', methods=['DELETE'])
 @limiter.exempt
 def remove_from_cart(item_id):
@@ -10369,7 +10464,7 @@ def store_detail(store_id):
             StoreRating.query
             .filter_by(store_id=store.id)
             .order_by(StoreRating.created_at.desc())
-            .limit(10)
+            .limit(50)
             .all()
         )
         reviews = [r.to_dict() for r in store_ratings]
@@ -10380,7 +10475,7 @@ def store_detail(store_id):
                 Testimonial.query
                 .filter_by(store_id=store.id)
                 .order_by(Testimonial.created_at.desc())
-                .limit(10)
+                .limit(50)
                 .all()
             )
             reviews = [t.to_dict() for t in testimonials]
@@ -12546,7 +12641,12 @@ def pos_order_detail_api(order_id):
                 if item.addon_option_id and item.addon_option:
                     product_name = item.addon_option.name
 
-            item_subtotal = float(item.price * item.quantity)
+            item_subtotal = float(item.price * item.quantity) if item.price is not None else 0.0
+            unit_price = float(item.price) if item.price is not None else 0.0
+            # Legacy add-on-only rows were sometimes saved with price=0; recover from option.
+            if unit_price <= 0 and item.addon_option_id and item.addon_option:
+                unit_price = float(item.addon_option.price or 0)
+                item_subtotal = unit_price * float(item.quantity or 0)
             subtotal += item_subtotal
             items.append({
                 'id': item.id,
@@ -12556,7 +12656,7 @@ def pos_order_detail_api(order_id):
                 'product_image_url': item.product_image,
                 'is_addon': bool(item.addon_option_id),
                 'quantity': item.quantity,
-                'unit_price': float(item.price),
+                'unit_price': unit_price,
                 'subtotal': item_subtotal
             })
 

@@ -2264,13 +2264,12 @@ class CartItem(db.Model):
     
     @property
     def addons_subtotal(self):
-        # units on CartItemAddon × main line quantity
+        # Add-ons are independent of flower/variant quantity
         total = 0.0
-        main_qty = int(self.quantity or 1)
         for row in (self.addons or []):
             if row.addon_option:
                 units = int(row.quantity or 1)
-                total += float(row.addon_option.price or 0) * units * main_qty
+                total += float(row.addon_option.price or 0) * units
         return total
 
     @property

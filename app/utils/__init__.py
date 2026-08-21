@@ -8,6 +8,7 @@ from .cloudinary_helper import (
     upload_variant_image,
     get_optimized_url
 )
+from .validators import parse_and_validate_birthday
 
 __all__ = [
     'should_use_cloudinary',
@@ -15,5 +16,6 @@ __all__ = [
     'upload_to_cloudinary',
     'upload_product_image',
     'upload_variant_image',
-    'get_optimized_url'
+    'get_optimized_url',
+    'parse_and_validate_birthday',
 ]

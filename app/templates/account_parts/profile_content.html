@@ -1869,22 +1869,6 @@
         color: rgb(0, 0, 0);
     }
 
-    #termsModal .modal-close {
-        background: none;
-        border: none;
-        color: rgb(0, 0, 0);
-        font-size: 2rem;
-        cursor: pointer;
-        line-height: 1;
-        opacity: 0.8;
-        transition: var(--transition);
-    }
-
-    #termsModal .modal-close:hover {
-        opacity: 1;
-        transform: scale(1.1);
-    }
-
     #termsModal .modal-body {
         padding: 2rem;
         overflow-y: auto;
@@ -2124,8 +2108,9 @@
 
                 <div class="form-group">
                     <label class="form-label">Birthday</label>
-                    <input type="date" class="form-control" name="birthday"
+                    <input type="date" class="form-control" name="birthday" id="profileBirthday"
                            value="{% if user and user.birthday %}{{ user.birthday if user.birthday is string else user.birthday.strftime('%Y-%m-%d') }}{% else %}{% endif %}">
+                    <div class="form-hint">Must be at least 13 years old. Future dates are not allowed.</div>
                 </div>
 
                 <div class="form-group form-group-full">
@@ -2273,7 +2258,7 @@
                 <i class="ri-file-text-line"></i>
                 Seller Terms & Conditions
             </h3>
-            <button class="modal-close" onclick="closeTermsModal()">&times;</button>
+            <button class="modal-close" onclick="closeTermsModal()" aria-label="Close"><i class="ri-close-line"></i></button>
         </div>
         <div class="modal-body" id="termsModalBody" onscroll="checkTermsScroll()">
             <div class="terms-content">
@@ -2563,6 +2548,7 @@
             <div id="onboardingStepBirthday" style="display:none;">
                 <label class="form-label" for="onboardingBirthday">Date of birth <span style="color:var(--deep-rose)">*</span></label>
                 <input type="date" id="onboardingBirthday" class="form-control" required>
+                <p class="form-hint" style="margin-top:0.35rem;">Must be at least 13 years old.</p>
                 <p id="onboardingBirthdayError" style="display:none;color:var(--deep-rose);font-size:12.5px;margin:0.75rem 0 0;"></p>
                 <div class="profile-onboarding-actions">
                     <button type="button" class="btn btn-outline" id="onboardingBirthdayPrevBtn" onclick="goToPreviousOnboardingStep('birthday')">
@@ -3342,6 +3328,7 @@ function showOnboardingProfileModal(step) {
         if (sidebarTitle) sidebarTitle.textContent = 'Date of birth';
         if (icon) icon.className = 'ri-cake-2-line';
         setOnboardingProgress('birthday');
+        applyBirthdayDateLimits();
         const bday = document.getElementById('onboardingBirthday');
         if (bday && !bday.max) {
             const today = new Date();
@@ -3469,7 +3456,7 @@ async function submitOnboardingBirthday() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (Number.isNaN(picked.getTime()) || picked > today) {
-        err.textContent = 'Please enter a valid birthday.';
+        err.textContent = 'Birthday cannot be in the future.';
         err.style.display = 'block';
         return;
     }
@@ -3477,6 +3464,11 @@ async function submitOnboardingBirthday() {
         - ((today.getMonth() < picked.getMonth() || (today.getMonth() === picked.getMonth() && today.getDate() < picked.getDate())) ? 1 : 0);
     if (age < 13) {
         err.textContent = 'You must be at least 13 years old.';
+        err.style.display = 'block';
+        return;
+    }
+    if (age > 120) {
+        err.textContent = 'Please enter a valid birthday.';
         err.style.display = 'block';
         return;
     }
@@ -4476,9 +4468,38 @@ function syncProfileUI(user) {
     updateGenderOtherVisibility();
 }
 
+function applyBirthdayDateLimits() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const maxDate = new Date(today.getFullYear() - 13, today.getMonth(), today.getDate());
+    const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate());
+    const toIso = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+    const maxStr = toIso(maxDate);
+    const minStr = toIso(minDate);
+    ['profileBirthday', 'onboardingBirthday'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.setAttribute('max', maxStr);
+        el.setAttribute('min', minStr);
+        if (el.value && (el.value > maxStr || el.value < minStr)) {
+            // Keep existing value visible but browser will flag on submit if invalid.
+        }
+    });
+    document.querySelectorAll('input[type="date"][name="birthday"]').forEach((el) => {
+        el.setAttribute('max', maxStr);
+        el.setAttribute('min', minStr);
+    });
+}
+
 function setupProfileForm() {
     // Ensure custom gender field is correct on load
     updateGenderOtherVisibility();
+    applyBirthdayDateLimits();
 
     // Re-run visibility logic whenever gender selection changes
     document.querySelectorAll('input[name="gender"]').forEach(radio => {
@@ -4503,6 +4524,22 @@ function setupProfileForm() {
     function isValidName(value) {
         const trimmed = (value || '').trim();
         return /^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmed);
+    }
+
+    function validateBirthdayValue(value) {
+        const raw = (value || '').trim();
+        if (!raw) return null; // optional on profile form
+        const picked = new Date(raw + 'T00:00:00');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (Number.isNaN(picked.getTime())) return 'Please enter a valid birthday.';
+        if (picked > today) return 'Birthday cannot be in the future.';
+        const age = today.getFullYear() - picked.getFullYear()
+            - ((today.getMonth() < picked.getMonth()
+                || (today.getMonth() === picked.getMonth() && today.getDate() < picked.getDate())) ? 1 : 0);
+        if (age < 13) return 'You must be at least 13 years old.';
+        if (age > 120) return 'Please enter a valid birthday.';
+        return null;
     }
 
     function wireNameValidation(inputEl) {
@@ -4543,6 +4580,18 @@ function setupProfileForm() {
         }
         if (firstNameInput) firstNameInput.setCustomValidity('');
         if (lastNameInput) lastNameInput.setCustomValidity('');
+
+        const birthdayInput = this.querySelector('[name="birthday"]');
+        if (birthdayInput) {
+            const birthdayErr = validateBirthdayValue(birthdayInput.value);
+            if (birthdayErr) {
+                birthdayInput.setCustomValidity(birthdayErr);
+                birthdayInput.reportValidity();
+                birthdayInput.focus();
+                return;
+            }
+            birthdayInput.setCustomValidity('');
+        }
 
         const btn = this.querySelector('button[type="submit"]');
         const orig = btn.innerHTML;
