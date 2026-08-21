@@ -1183,6 +1183,7 @@
         width: 100%;
         height: 100%;
         object-fit: cover;
+        object-position: center;
         display: block;
     }
     .structured-addon-fields {
@@ -1262,6 +1263,12 @@
         border: 1px solid rgba(230, 170, 195, 0.4);
         background: #fff8f6;
     }
+    .addon-dd-trigger-ph img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
     .addon-dd-trigger-thumb.is-hidden { display: none; }
     .addon-dd-trigger-ph.is-hidden { display: none; }
     .addon-dd-trigger-thumb.is-zoomable {
@@ -1332,6 +1339,12 @@
         object-fit: cover;
         border: 1px solid rgba(230, 170, 195, 0.4);
         background: #fff8f6;
+    }
+    .addon-dd-opt-ph img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
     }
     .addon-dd-opt-thumb.is-zoomable {
         cursor: zoom-in;
@@ -1468,6 +1481,14 @@
         gap: 0.35rem;
         width: 100%;
         max-width: 100%;
+        min-width: 0;
+    }
+
+    #ymalSection {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
     }
 
     .addons-nav {
@@ -1576,6 +1597,18 @@
         transform: translateY(-2px);
         background: rgba(255, 255, 255, 0.75);
         z-index: 1;
+    }
+
+    @media (hover: none) {
+        .addon-card:hover {
+            transform: none;
+            border-color: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.55);
+        }
+        .addon-card.selected:hover {
+            border-color: #d878a0;
+            background: rgba(255, 190, 210, 0.18);
+        }
     }
 
     .addon-card.selected {
@@ -2124,48 +2157,87 @@
         }
 
         .addons-carousel {
-            gap: 0.2rem;
+            gap: 0;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+        }
+
+        /* Side arrows steal width on phones — swipe is the primary control */
+        #ymalSection .addons-nav {
+            display: none;
+        }
+
+        .addons-track-wrap {
+            width: 100%;
+            max-width: 100%;
+            padding-top: 2px;
+            margin-top: 0;
         }
 
         .addons-grid {
-            grid-auto-columns: calc((100% - 0.5rem) / 2);
-            gap: 0.5rem;
+            /* ~2 cards + peek of the next so swipe is obvious */
+            grid-auto-columns: minmax(118px, calc((100% - 0.55rem) / 2.2));
+            gap: 0.55rem;
+            padding-left: 2px;
+            padding-right: 0.75rem;
+            padding-bottom: 4px;
+            scroll-padding-inline: 2px;
         }
 
-        .addons-nav {
-            width: 1.1rem;
-            height: 1.1rem;
-            font-size: 1.25rem;
-            margin-top: clamp(2.2rem, 28vw, 3.6rem);
+        .ymal-tabs {
+            gap: 0.4rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .ymal-tab {
+            flex: 1 1 auto;
+            text-align: center;
+            font-size: 12.5px;
+            padding: 0.55rem 0.75rem;
+            min-height: 40px;
         }
 
         .addon-card {
-            padding: 0.55rem 0.45rem 0.6rem;
+            padding: 0.5rem 0.4rem 0.55rem;
             border-radius: 12px;
+            border-width: 1.5px;
+            /* Avoid sticky hover lift on touch */
+            transform: none;
+        }
+
+        .addon-card:hover {
+            transform: none;
+        }
+
+        .addon-card.selected {
+            border-width: 1.5px;
         }
 
         .addon-card-img {
-            width: calc(100% + 0.9rem);
-            margin: -0.55rem -0.45rem 0.4rem;
+            width: calc(100% + 0.8rem);
+            margin: -0.5rem -0.4rem 0.4rem;
             border-radius: 10px 10px 0 0;
         }
 
         .addon-card-name {
-            font-size: 10px;
+            font-size: 11px;
+            line-height: 1.25;
             min-height: calc(1.25em * 2);
+            margin-bottom: 2px;
         }
 
         .addon-card-price {
-            font-size: 12px;
+            font-size: 13px;
         }
 
         .addon-info-btn,
         .addon-check {
-            width: 16px;
-            height: 16px;
-            font-size: 10px;
-            top: 0.3rem;
-            right: 0.3rem;
+            width: 18px;
+            height: 18px;
+            font-size: 11px;
+            top: 0.35rem;
+            right: 0.35rem;
         }
 
         .addon-oos-badge {
@@ -2174,19 +2246,22 @@
         }
 
         .addon-qty {
-            gap: 0.35rem;
-            margin-top: 0.35rem;
-            min-height: 24px;
+            gap: 0.45rem;
+            margin-top: 0.4rem;
+            min-height: 32px;
         }
 
         .addon-qty-btn {
-            width: 24px;
-            height: 24px;
-            font-size: 16px;
+            width: 32px;
+            height: 32px;
+            font-size: 18px;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .addon-qty-val {
-            font-size: 13px;
+            font-size: 14px;
+            min-width: 1.25rem;
+            text-align: center;
         }
 
         .date-options {
@@ -2243,6 +2318,42 @@
             padding: 0.4rem 0.75rem;
             font-size: 12px;
             margin-right: 0.5rem;
+        }
+    }
+
+    /* Narrow phones: keep cards readable, still show a peek */
+    @media (max-width: 360px) {
+        .addons-grid {
+            grid-auto-columns: minmax(110px, calc((100% - 0.45rem) / 2.05));
+            gap: 0.45rem;
+            padding-right: 0.6rem;
+        }
+
+        .addon-card {
+            padding: 0.45rem 0.35rem 0.5rem;
+        }
+
+        .addon-card-img {
+            width: calc(100% + 0.7rem);
+            margin: -0.45rem -0.35rem 0.35rem;
+        }
+
+        .addon-card-name {
+            font-size: 10.5px;
+        }
+
+        .addon-card-price {
+            font-size: 12px;
+        }
+
+        .addon-qty-btn {
+            width: 30px;
+            height: 30px;
+        }
+
+        .ymal-tab {
+            font-size: 12px;
+            padding: 0.5rem 0.6rem;
         }
     }
 
@@ -2310,16 +2421,30 @@
         }
 
         .addons-grid {
-            /* Full-width column on large phones — 3 cards reads better than 2 */
-            grid-auto-columns: calc((100% - 1.1rem) / 3);
+            /* Large phones / small tablets in portrait: ~2.5 cards + peek */
+            grid-auto-columns: minmax(120px, calc((100% - 1rem) / 2.5));
             gap: 0.55rem;
+            padding-right: 0.5rem;
+            scroll-padding-inline: 2px;
         }
 
-        .addons-nav {
-            margin-top: clamp(2.5rem, 14vw, 4.2rem);
-            font-size: 1.35rem;
-            width: 1.2rem;
-            height: 1.2rem;
+        #ymalSection .addons-nav {
+            display: none;
+        }
+
+        .addons-carousel {
+            gap: 0;
+        }
+
+        .ymal-tab {
+            min-height: 40px;
+            padding: 0.5rem 0.85rem;
+        }
+
+        .addon-qty-btn {
+            width: 30px;
+            height: 30px;
+            font-size: 17px;
         }
 
         .addon-card {

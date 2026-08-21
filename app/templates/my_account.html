@@ -1202,9 +1202,41 @@
     }
 
     async function cancelOrder(orderId) {
-        if (!await window.openConfirmModal('Cancel this order?')) return;
+        // Prefer shared cancel-reason modal from orders_content when available
+        if (typeof openCancelOrderModal === 'function') {
+            openCancelOrderModal(orderId);
+            return;
+        }
+        const reasons = [
+            { code: 'changed_mind', label: 'I changed my mind' },
+            { code: 'ordered_by_mistake', label: 'Ordered by mistake' },
+            { code: 'wrong_details', label: 'Wrong item / address details' },
+            { code: 'delivery_time', label: 'Delivery time no longer works' },
+            { code: 'found_alternative', label: 'Found another store / product' },
+            { code: 'payment_issue', label: 'Payment / checkout issue' },
+            { code: 'other', label: 'Other' },
+        ];
+        const picked = window.prompt(
+            'Select a reason code:\n' + reasons.map((r, i) => `${i + 1}. ${r.label}`).join('\n') +
+            '\n\nEnter number (1-7):'
+        );
+        const idx = parseInt(picked, 10) - 1;
+        if (!picked || Number.isNaN(idx) || idx < 0 || idx >= reasons.length) return;
+        const reason = reasons[idx];
+        let details = '';
+        if (reason.code === 'other') {
+            details = (window.prompt('Please tell us specifically why you are cancelling:') || '').trim();
+            if (details.length < 5) {
+                showToast('Please provide a more specific reason.');
+                return;
+            }
+        }
         try {
-            const r = await fetch(`/api/account/orders/${orderId}/cancel`, { method: 'POST' });
+            const r = await fetch(`/api/account/orders/${orderId}/cancel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason_code: reason.code, reason: details || undefined }),
+            });
             const d = await r.json();
             if (d.success) { showToast('Order cancelled'); loadOrdersData(); }
             else showToast('Error: ' + d.message);

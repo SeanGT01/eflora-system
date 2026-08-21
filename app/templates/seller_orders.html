@@ -1407,6 +1407,16 @@
         return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function lineItemThumb(url) {
         const u = (url && String(url).trim()) ? String(url).trim() : '';
         if (!u) {
@@ -1769,6 +1779,17 @@
             const mt = document.getElementById('sellerOrderDetailsModalTitle');
             if (mt) mt.textContent = `Order #${order.id}`;
 
+            const isCancelled = String(order.status || '').toLowerCase() === 'cancelled';
+            const cancelReason = (order.cancellation_reason || '').trim();
+            const cancelSection = isCancelled ? `
+                        <section class="sdm-block sdm-block--full" style="border-color:rgba(225,29,72,0.28);background:rgba(225,29,72,0.04);">
+                            <h4 style="color:#be123c;"><i class="ri-close-circle-line" style="vertical-align:-2px;"></i> Cancellation</h4>
+                            <div class="sdm-rows">
+                                <div class="sdm-row"><span class="sdm-k">Reason</span><span class="sdm-v">${escapeHtml(cancelReason) || 'No reason provided'}</span></div>
+                                <div class="sdm-row"><span class="sdm-k">Cancelled</span><span class="sdm-v">${order.cancelled_at ? formatDateTime(order.cancelled_at) : '—'}</span></div>
+                            </div>
+                        </section>` : '';
+
             body.innerHTML = `
                     <div class="sdm">
                         <header class="sdm-topbar">
@@ -1779,12 +1800,14 @@
                             <span class="sdm-when">${formatDateTime(order.created_at)} · ${titleCaseStatus(order.order_type)}</span>
                         </header>
 
+                        ${cancelSection}
+
                         <div class="sdm-grid">
                             <section class="sdm-block">
                                 <h4>Customer</h4>
                                 <div class="sdm-rows">
-                                    <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${order.customer_name || '—'}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">${order.customer_contact_label || 'Contact'}</span><span class="sdm-v">${order.customer_contact || '—'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${escapeHtml(order.customer_name) || '—'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">${escapeHtml(order.customer_contact_label) || 'Contact'}</span><span class="sdm-v">${escapeHtml(order.customer_contact) || '—'}</span></div>
                                 </div>
                             </section>
                             <section class="sdm-block">
@@ -1800,8 +1823,8 @@
                             <section class="sdm-block">
                                 <h4>Rider</h4>
                                 <div class="sdm-rows">
-                                    <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${order.rider_name || 'Not assigned'}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Vehicle</span><span class="sdm-v">${order.rider_vehicle || '—'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${escapeHtml(order.rider_name) || 'Not assigned'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Vehicle</span><span class="sdm-v">${escapeHtml(order.rider_vehicle) || '—'}</span></div>
                                 </div>
                             </section>
                             <section class="sdm-block">
@@ -1817,8 +1840,8 @@
                         <section class="sdm-block sdm-block--full">
                             <h4>Delivery</h4>
                             <div class="sdm-rows">
-                                <div class="sdm-row"><span class="sdm-k">Address</span><span class="sdm-v">${order.delivery_address || '—'}</span></div>
-                                <div class="sdm-row"><span class="sdm-k">Notes</span><span class="sdm-v">${order.delivery_notes || '—'}</span></div>
+                                <div class="sdm-row"><span class="sdm-k">Address</span><span class="sdm-v">${escapeHtml(order.delivery_address) || '—'}</span></div>
+                                <div class="sdm-row"><span class="sdm-k">Notes</span><span class="sdm-v">${escapeHtml(order.delivery_notes) || '—'}</span></div>
                             </div>
                         </section>
 

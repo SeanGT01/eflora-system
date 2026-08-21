@@ -1501,6 +1501,11 @@ class Order(db.Model):
     on_delivery_at = db.Column(db.DateTime, nullable=True)  # DEPRECATED - use confirmed_at
     delivered_at = db.Column(db.DateTime, nullable=True)  # When rider submits proofs and marks delivered
     completed_at = db.Column(db.DateTime, nullable=True)  # When customer confirms completion
+
+    # Customer cancellation details
+    cancellation_reason_code = db.Column(db.String(50), nullable=True)
+    cancellation_reason = db.Column(db.Text, nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1652,6 +1657,9 @@ class Order(db.Model):
             'confirmed_at': self.confirmed_at.isoformat() if self.confirmed_at else None,
             'delivered_at': self.delivered_at.isoformat() if self.delivered_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'cancellation_reason_code': self.cancellation_reason_code,
+            'cancellation_reason': self.cancellation_reason,
+            'cancelled_at': self.cancelled_at.isoformat() if self.cancelled_at else None,
             'customer_name': self.customer.full_name if self.customer else None,
             'customer_avatar': self.customer.avatar_url if self.customer else None,  # Cloudinary only
             'store_name': self.store.name if self.store else None,

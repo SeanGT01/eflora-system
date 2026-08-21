@@ -994,17 +994,26 @@ def cancel_order(order_id):
                 'message': 'Only pending orders can be cancelled.',
             }), 400
 
+        from app.order_cancel_reasons import normalize_customer_cancel_reason
+        payload = request.get_json(silent=True) or {}
+        reason_code, reason_text, reason_err = normalize_customer_cancel_reason(payload)
+        if reason_err:
+            return jsonify({'success': False, 'message': reason_err}), 400
+
         # Ensure product/variant/add-on rows are available for stock restore
         _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(user_id)
         order.status = 'cancelled'
+        order.cancellation_reason_code = reason_code
+        order.cancellation_reason = reason_text
+        order.cancelled_at = datetime.utcnow()
         if hasattr(order, 'updated_at'):
             order.updated_at = datetime.utcnow()
         from app.utils.seller_notifications import notify_store_seller
         notify_store_seller(
             store_id=order.store_id,
             title='Order cancelled',
-            message=f'Customer cancelled Order #{order.id}.',
+            message=f'Customer cancelled Order #{order.id}. Reason: {reason_text}',
             type='order_cancelled',
             reference_id=order.id,
         )
@@ -1017,6 +1026,13 @@ def cancel_order(order_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@customer_bp.route('/orders/cancel-reasons', methods=['GET'])
+def list_cancel_reasons():
+    """Public list of customer cancel reason chips for Flutter/web clients."""
+    from app.order_cancel_reasons import CUSTOMER_CANCEL_REASONS
+    return jsonify({'success': True, 'reasons': CUSTOMER_CANCEL_REASONS})
 
 
 # ══════════════════════════════════════════════════════════════════════════

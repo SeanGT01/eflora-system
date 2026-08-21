@@ -553,6 +553,11 @@ def _serialize_customer_order(
         'store_rating_value': int(store_val) if store_val is not None else None,
         'avg_product_rating': avg_product_rating,
         'customer_rating': customer_rating,
+        'cancellation_reason_code': getattr(order, 'cancellation_reason_code', None),
+        'cancellation_reason': getattr(order, 'cancellation_reason', None),
+        'cancelled_at': order.cancelled_at.isoformat()
+        if getattr(order, 'cancelled_at', None)
+        else None,
     }
 
 
@@ -563,6 +568,9 @@ def _ensure_order_fulfillment_columns():
         'done_preparing_proof_public_id': "ALTER TABLE orders ADD COLUMN done_preparing_proof_public_id VARCHAR(255)",
         'done_preparing_proof_url': "ALTER TABLE orders ADD COLUMN done_preparing_proof_url VARCHAR(500)",
         'completed_at': "ALTER TABLE orders ADD COLUMN completed_at TIMESTAMP",
+        'cancellation_reason_code': "ALTER TABLE orders ADD COLUMN cancellation_reason_code VARCHAR(50)",
+        'cancellation_reason': "ALTER TABLE orders ADD COLUMN cancellation_reason TEXT",
+        'cancelled_at': "ALTER TABLE orders ADD COLUMN cancelled_at TIMESTAMP",
     }
     try:
         cols = {c['name'] for c in inspect(db.engine).get_columns('orders')}
@@ -3403,17 +3411,27 @@ def cancel_order(order_id):
             'message': 'Only pending orders can be cancelled.'
         }), 400
 
+    from app.order_cancel_reasons import normalize_customer_cancel_reason
+    payload = request.get_json(silent=True) or {}
+    reason_code, reason_text, reason_err = normalize_customer_cancel_reason(payload)
+    if reason_err:
+        return jsonify({'success': False, 'message': reason_err}), 400
+
     try:
+        _ensure_order_fulfillment_columns()
         # Ensure add-on rows are loaded before stock restore
         _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(user_id)
         order.status = 'cancelled'
+        order.cancellation_reason_code = reason_code
+        order.cancellation_reason = reason_text
+        order.cancelled_at = datetime.utcnow()
         order.updated_at = datetime.utcnow()
         from app.utils.seller_notifications import notify_store_seller
         notify_store_seller(
             store_id=order.store_id,
             title='Order cancelled',
-            message=f'Customer cancelled Order #{order.id}.',
+            message=f'Customer cancelled Order #{order.id}. Reason: {reason_text}',
             type='order_cancelled',
             reference_id=order.id,
         )
