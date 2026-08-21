@@ -798,6 +798,45 @@ def update_cart_item(item_id):
         return jsonify({'error': str(e)}), 500
 
 
+@customer_bp.route('/cart/items/<int:item_id>/addons/<int:addon_option_id>', methods=['DELETE'])
+@customer_only
+def remove_cart_item_addon(item_id, addon_option_id):
+    """Remove a single structured add-on from a cart line (parity with web cart)."""
+    try:
+        user_id = int(get_jwt_identity())
+        item = CartItem.query.get_or_404(item_id)
+        if item.cart.user_id != user_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        row = CartItemAddon.query.filter_by(
+            cart_item_id=item.id,
+            addon_option_id=addon_option_id,
+        ).first()
+        if not row:
+            return jsonify({'error': 'Add-on not found on this cart item'}), 404
+
+        db.session.delete(row)
+        db.session.commit()
+
+        cart = item.cart
+        cart_data = {
+            'id': cart.id,
+            'user_id': cart.user_id,
+            'created_at': cart.created_at.isoformat() if cart.created_at else None,
+            'updated_at': cart.updated_at.isoformat() if cart.updated_at else None,
+            'items': [
+                cart_item.to_dict()
+                for cart_item in cart.items
+                if cart_item.product
+            ],
+        }
+        return jsonify({'success': True, 'message': 'Add-on removed', 'cart': cart_data})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception('remove_cart_item_addon: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
 @customer_bp.route('/cart/items/<int:item_id>', methods=['DELETE'])
 @customer_only
 def remove_cart_item(item_id):
