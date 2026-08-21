@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
-from app.models import User, Rider, Order, RiderLocation, Store
+from app.models import User, Rider, Order, OrderItem, RiderLocation, Store, Product
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload
 from app.utils.cloudinary_helper import upload_delivery_proof
 
 rider_bp = Blueprint('rider', __name__)
@@ -111,10 +112,21 @@ def get_assigned_orders():
     
     status = request.args.get('status', 'on_delivery')
     
-    orders = Order.query.filter_by(
-        rider_id=rider.id,
-        status=status
-    ).order_by(Order.created_at.desc()).all()
+    orders = (
+        Order.query
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.addons),
+            selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
+            joinedload(Order.customer),
+            joinedload(Order.store),
+        )
+        .filter_by(
+            rider_id=rider.id,
+            status=status
+        )
+        .order_by(Order.created_at.desc())
+        .all()
+    )
     
     order_data = []
     for order in orders:
@@ -146,11 +158,22 @@ def get_available_orders():
         return jsonify({'error': 'Rider profile not found'}), 404
     
     # Get orders from rider's store that are ready for pickup (accepted or done_preparing) and not assigned
-    orders = Order.query.filter(
-        Order.store_id == rider.store_id,
-        Order.status.in_(['accepted', 'done_preparing']),
-        Order.rider_id.is_(None)
-    ).order_by(Order.created_at).all()
+    orders = (
+        Order.query
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.addons),
+            selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
+            joinedload(Order.customer),
+            joinedload(Order.store),
+        )
+        .filter(
+            Order.store_id == rider.store_id,
+            Order.status.in_(['accepted', 'done_preparing']),
+            Order.rider_id.is_(None)
+        )
+        .order_by(Order.created_at)
+        .all()
+    )
     
     order_data = []
     for order in orders:

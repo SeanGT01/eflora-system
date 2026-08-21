@@ -330,6 +330,38 @@ def get_product(product_id):
         data['ymal_addon_options'] = ymal_addon_option_dicts(p)
     except Exception:
         data['ymal_addon_options'] = []
+
+    # Related flowers (same store + same main category) for YMAL
+    try:
+        related = (
+            Product.query.filter(
+                Product.store_id == p.store_id,
+                Product.main_category_id == p.main_category_id,
+                Product.id != product_id,
+                Product.is_available == True,
+                Product.is_archived == False,
+            )
+            .order_by(Product.stock_quantity.desc(), Product.name.asc())
+            .limit(8)
+            .all()
+        )
+        data['related_products'] = [rp.to_dict() for rp in related]
+    except Exception:
+        data['related_products'] = []
+
+    # Rating summary for the product header / reviews entry point
+    try:
+        from sqlalchemy import func
+        agg = db.session.query(
+            func.avg(ProductRating.rating).label('avg'),
+            func.count(ProductRating.id).label('count'),
+        ).filter_by(product_id=product_id).first()
+        data['avg_rating'] = round(float(agg.avg or 0), 1) if agg else 0.0
+        data['total_ratings'] = int(agg.count or 0) if agg else 0
+    except Exception:
+        data['avg_rating'] = 0.0
+        data['total_ratings'] = 0
+
     if p.store:
         data['store'] = p.store.to_dict()
         _, address = _resolve_optional_customer_address()
@@ -831,11 +863,14 @@ def get_orders():
 
         page_order_ids = [o.id for o in orders.items]
         rated_by_order = defaultdict(set)
+        item_ratings = {}
         store_rated_ids = set()
         if page_order_ids:
             for pr in ProductRating.query.filter(ProductRating.order_id.in_(page_order_ids)).all():
                 if pr.order_item_id is not None:
                     rated_by_order[pr.order_id].add(pr.order_item_id)
+                    if pr.rating is not None:
+                        item_ratings[pr.order_item_id] = int(pr.rating)
             store_rated_ids = {
                 r.order_id for r in StoreRating.query.filter(StoreRating.order_id.in_(page_order_ids)).all()
             }
@@ -844,7 +879,14 @@ def get_orders():
         for o in orders.items:
             d = o.to_dict()
             items = list(o.items or [])
-            d['items'] = [i.to_dict() for i in items]
+            item_dicts = []
+            for i in items:
+                idict = i.to_dict()
+                rating = item_ratings.get(i.id)
+                idict['rating'] = rating
+                idict['is_rated'] = i.id in rated_by_order.get(o.id, set())
+                item_dicts.append(idict)
+            d['items'] = item_dicts
             if o.store:
                 d['store_name'] = o.store.name
             elif o.store_id:
@@ -892,7 +934,17 @@ def get_order(order_id):
             .first_or_404()
         )
         d = order.to_dict()
-        d['items'] = [i.to_dict() for i in (order.items or [])]
+        item_ratings = {
+            pr.order_item_id: int(pr.rating)
+            for pr in ProductRating.query.filter_by(order_id=order.id).all()
+            if pr.order_item_id is not None and pr.rating is not None
+        }
+        d['items'] = []
+        for i in (order.items or []):
+            idict = i.to_dict()
+            idict['rating'] = item_ratings.get(i.id)
+            idict['is_rated'] = i.id in item_ratings
+            d['items'].append(idict)
         return jsonify(d)
     except Exception as e:
         current_app.logger.exception('get_order: %s', e)
@@ -1107,9 +1159,8 @@ def submit_order_ratings(order_id):
 
 
 @customer_bp.route('/products/<int:product_id>/ratings', methods=['GET'])
-@customer_only
 def get_product_ratings(product_id):
-    """Get all ratings for a product."""
+    """Get all ratings for a product (public — matches web storefront)."""
     try:
         product = Product.query.get_or_404(product_id)
 
@@ -1142,7 +1193,7 @@ def get_product_ratings(product_id):
             'distribution': distribution,
             'ratings': [r.to_dict() for r in ratings],
             'page': page,
-            'total_pages': (total + per_page - 1) // per_page,
+            'total_pages': (total + per_page - 1) // per_page if total else 0,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
