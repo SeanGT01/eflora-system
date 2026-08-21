@@ -1806,6 +1806,14 @@ class POSOrderItem(db.Model):
     variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
     quantity = db.Column(db.Integer, default=1)
     price = db.Column(db.Numeric(10, 2))
+    # Snapshot label/image for add-on (or custom) lines — product_id alone shows the flower name
+    line_name = db.Column(db.String(255), nullable=True)
+    line_image_url = db.Column(db.String(500), nullable=True)
+    addon_option_id = db.Column(
+        db.Integer,
+        db.ForeignKey('product_addon_options.id', ondelete='SET NULL'),
+        nullable=True,
+    )
     
     # FIXED: Use back_populates to match the relationship in POSOrder
     pos_order = db.relationship('POSOrder', back_populates='items', lazy=True)
@@ -1815,12 +1823,17 @@ class POSOrderItem(db.Model):
     
     # This one can stay as backref since it's a simple one-way relationship
     variant = db.relationship('ProductVariant', backref='pos_order_items', lazy=True)
+    addon_option = db.relationship('ProductAddonOption', foreign_keys=[addon_option_id], lazy=True)
     
     @property
     def product_image(self):
-        """Get the appropriate product image (variant or main) - Cloudinary only"""
+        """Get the appropriate product image (variant, line snapshot, or main) - Cloudinary only"""
+        if self.line_image_url:
+            return self.line_image_url
         if self.variant and self.variant.image_url:
             return self.variant.image_url
+        if self.addon_option and self.addon_option.image_url:
+            return self.addon_option.image_url
         elif self.product and self.product.images:
             primary = next((img for img in self.product.images if img.is_primary), self.product.images[0] if self.product.images else None)
             return primary.image_url if primary else None
@@ -1832,6 +1845,15 @@ class POSOrderItem(db.Model):
         
         if self.variant:
             variant_name = self.variant.name
+
+        if self.line_name:
+            display_name = self.line_name
+        elif product:
+            display_name = product.name
+            if variant_name:
+                display_name = f'{display_name} - {variant_name}'
+        else:
+            display_name = None
         
         return {
             'id': self.id,
@@ -1842,7 +1864,10 @@ class POSOrderItem(db.Model):
             'quantity': self.quantity,
             'price': float(self.price) if self.price else 0,
             'total': float(self.quantity * self.price) if self.price else 0,
-            'product_name': product.name if product else None,
+            'product_name': display_name,
+            'line_name': self.line_name,
+            'is_addon': bool(self.addon_option_id),
+            'addon_option_id': self.addon_option_id,
             'product_image_url': self.product_image,  # Cloudinary only
             # ADD THESE LINES - Category information
             'main_category_name': product.main_category.name if product and product.main_category else None,

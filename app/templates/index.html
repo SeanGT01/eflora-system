@@ -3654,6 +3654,7 @@
     <div class="qa-picker-body">
         <span class="qa-picker-label">Select option</span>
         <div class="qa-option-list" id="qaOptionList"></div>
+        <div id="qaExtrasMount"></div>
     </div>
     <div class="qa-picker-foot">
         <div class="qa-foot-row">
@@ -4388,6 +4389,7 @@ function scrollStores(direction) {
     let qaAnchorEl = null;
     let qaRepositionBound = null;
     let qaAdding = false;
+    let qaAddonQty = {};
 
     function loadHomeProductsMap() {
         const el = document.getElementById('homeProductsQuickAdd')
@@ -4513,11 +4515,112 @@ function scrollStores(direction) {
             );
         }).join('');
 
+        qaAddonQty = {};
+        renderQuickAddExtras(product);
+
         const selected = options.find(function (o) { return o.key === qaSelectedKey; });
         qaQty = 1;
         syncQuickAddQtyUI(selected);
         updateQuickAddConfirmBtn(selected);
     }
+
+    function qaCollectProductAddons(product) {
+        const out = [];
+        (product.addon_groups || []).forEach(function (g) {
+            if (!g || g.is_active === false) return;
+            (g.options || []).forEach(function (o) {
+                if (!o || o.is_available === false) return;
+                out.push({
+                    id: o.id,
+                    name: o.name,
+                    price: o.price,
+                    stock: Number(o.stock_quantity) || 0,
+                    image_url: o.image_url || '',
+                    group_name: g.name || 'Add-on',
+                    in_stock: (Number(o.stock_quantity) || 0) > 0
+                });
+            });
+        });
+        return out;
+    }
+
+    function renderQuickAddExtras(product) {
+        const mount = document.getElementById('qaExtrasMount');
+        if (!mount) return;
+        const productAddons = qaCollectProductAddons(product);
+        const ymal = (product.ymal_addon_options || []).filter(function (o) {
+            return o && o.is_available !== false;
+        });
+
+        function rowHtml(o, section) {
+            const id = String(o.id);
+            const qty = qaAddonQty[id] || 0;
+            const stock = Number(o.stock != null ? o.stock : o.stock_quantity) || 0;
+            const ok = stock > 0;
+            const active = qty > 0 ? ' active' : '';
+            const disabled = ok ? '' : ' disabled';
+            const qtyHtml = qty > 0
+                ? ('<div class="qa-addon-qty" onclick="event.stopPropagation()">' +
+                    '<button type="button" onclick="changeQuickAddAddonQty(' + o.id + ',-1,' + stock + ')">−</button>' +
+                    '<span>' + qty + '</span>' +
+                    '<button type="button" onclick="changeQuickAddAddonQty(' + o.id + ',1,' + stock + ')"' +
+                    (qty >= stock ? ' disabled' : '') + '>+</button></div>')
+                : '';
+            return (
+                '<button type="button" class="qa-option' + active + '"' + disabled +
+                ' onclick="toggleQuickAddAddon(' + o.id + ',' + stock + ')">' +
+                qaThumbHtml(o.image_url) +
+                '<div class="qa-option-info">' +
+                '<div class="qa-option-name">' + qaEscape(o.name) + '</div>' +
+                '<div class="qa-option-stock' + (ok ? '' : ' out') + '">' +
+                qaEscape(o.group_name || section) + ' · ' + (ok ? (stock + ' left') : 'Out of stock') +
+                '</div></div>' +
+                qaPriceHtml(o.price, o.price) +
+                qtyHtml +
+                '</button>'
+            );
+        }
+
+        let html = '';
+        if (productAddons.length) {
+            html += '<span class="qa-picker-label" style="margin-top:0.85rem;">Add-ons</span>';
+            html += '<div class="qa-option-list">' + productAddons.map(function (o) {
+                return rowHtml(o, 'Add-on');
+            }).join('') + '</div>';
+        }
+        if (ymal.length) {
+            html += '<span class="qa-picker-label" style="margin-top:0.85rem;">You may also like</span>';
+            html += '<div class="qa-option-list">' + ymal.map(function (o) {
+                return rowHtml({
+                    id: o.id,
+                    name: o.name,
+                    price: o.price,
+                    stock: o.stock_quantity,
+                    image_url: o.image_url,
+                    group_name: o.group_name || 'Add-on'
+                }, 'YMAL');
+            }).join('') + '</div>';
+        }
+        mount.innerHTML = html;
+    }
+
+    window.toggleQuickAddAddon = function (optionId, maxStock) {
+        const id = String(optionId);
+        if (qaAddonQty[id]) delete qaAddonQty[id];
+        else qaAddonQty[id] = 1;
+        if (qaCurrentProduct) renderQuickAddExtras(qaCurrentProduct);
+        if (qaAnchorEl) requestAnimationFrame(function () { positionPicker(qaAnchorEl); });
+    };
+
+    window.changeQuickAddAddonQty = function (optionId, delta, maxStock) {
+        const id = String(optionId);
+        const cur = qaAddonQty[id] || 0;
+        const next = Math.max(0, Math.min(maxStock, cur + delta));
+        if (next <= 0) delete qaAddonQty[id];
+        else qaAddonQty[id] = next;
+        if (qaCurrentProduct) renderQuickAddExtras(qaCurrentProduct);
+        if (qaAnchorEl) requestAnimationFrame(function () { positionPicker(qaAnchorEl); });
+    };
 
     function getSelectedQuickAddOption() {
         if (!qaCurrentProduct) return null;
@@ -4699,6 +4802,7 @@ function scrollStores(direction) {
         qaCurrentProduct = null;
         qaSelectedKey = 'main';
         qaQty = 1;
+        qaAddonQty = {};
         qaAnchorEl = null;
         qaAdding = false;
         const qtyValue = document.getElementById('qaQtyValue');
@@ -4720,6 +4824,9 @@ function scrollStores(direction) {
             quantity: payload.quantity || 1
         };
         if (payload.variant_id) body.variant_id = payload.variant_id;
+        if (payload.addon_option_ids && payload.addon_option_ids.length) {
+            body.addon_option_ids = payload.addon_option_ids;
+        }
 
         const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
         const timeoutId = controller ? setTimeout(function () { controller.abort(); }, 15000) : null;
@@ -4803,6 +4910,10 @@ function scrollStores(direction) {
             quantity: quantity
         };
         if (selected.variant_id) payload.variant_id = selected.variant_id;
+        const addonIds = Object.keys(qaAddonQty).map(function (id) {
+            return { addon_option_id: parseInt(id, 10), quantity: qaAddonQty[id] };
+        }).filter(function (row) { return row.quantity > 0; });
+        if (addonIds.length) payload.addon_option_ids = addonIds;
 
         try {
             await qaAddToCart(payload);

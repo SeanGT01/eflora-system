@@ -594,6 +594,57 @@ def _ensure_order_fulfillment_columns():
         return False
 
 
+def _ensure_pos_order_item_line_columns():
+    """Add line_name / line_image_url / addon_option_id for accurate POS add-on display."""
+    required = {
+        'line_name': "ALTER TABLE pos_order_items ADD COLUMN line_name VARCHAR(255)",
+        'line_image_url': "ALTER TABLE pos_order_items ADD COLUMN line_image_url VARCHAR(500)",
+        'addon_option_id': (
+            "ALTER TABLE pos_order_items ADD COLUMN addon_option_id INTEGER "
+            "REFERENCES product_addon_options(id) ON DELETE SET NULL"
+        ),
+    }
+    try:
+        cols = {c['name'] for c in inspect(db.engine).get_columns('pos_order_items')}
+        for column_name, stmt in required.items():
+            if column_name in cols:
+                continue
+            try:
+                db.session.execute(text(stmt))
+                db.session.commit()
+            except Exception as col_exc:
+                db.session.rollback()
+                msg = str(col_exc).lower()
+                if 'duplicate column' in msg or 'already exists' in msg:
+                    continue
+                # Some DBs reject REFERENCES in ADD COLUMN; retry without FK
+                if column_name == 'addon_option_id':
+                    try:
+                        db.session.execute(text(
+                            "ALTER TABLE pos_order_items ADD COLUMN addon_option_id INTEGER"
+                        ))
+                        db.session.commit()
+                        continue
+                    except Exception as retry_exc:
+                        db.session.rollback()
+                        msg2 = str(retry_exc).lower()
+                        if 'duplicate column' in msg2 or 'already exists' in msg2:
+                            continue
+                        current_app.logger.warning(
+                            'Could not add pos_order_items.%s: %s', column_name, retry_exc
+                        )
+                        continue
+                current_app.logger.warning(
+                    'Could not add pos_order_items.%s: %s', column_name, col_exc
+                )
+        refreshed = {c['name'] for c in inspect(db.engine).get_columns('pos_order_items')}
+        return all(col in refreshed for col in required.keys())
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.warning('Failed ensuring pos_order_items line columns: %s', exc)
+        return False
+
+
 @templates_bp.route('/health')
 @limiter.exempt
 def health_check():
@@ -781,6 +832,8 @@ def _public_storefront_product_base_query():
 
 def _product_list_for_storefront(orm_products):
     """Match landing-page dict shape (store_name, nested categories) for Jinja cards."""
+    from app.addon_helpers import ymal_addon_option_dicts
+
     product_list = []
     product_ids = [p.id for p in orm_products if getattr(p, 'id', None) is not None]
     rating_map = {}
@@ -801,6 +854,7 @@ def _product_list_for_storefront(orm_products):
                 int(review_count or 0),
             )
 
+    ymal_by_store = {}
     for product in orm_products:
         product_dict = product.to_dict()
         if product.store:
@@ -822,6 +876,10 @@ def _product_list_for_storefront(orm_products):
         avg_rating, review_count = rating_map.get(product.id, (0.0, 0))
         product_dict['avg_rating'] = avg_rating
         product_dict['review_count'] = review_count
+        store_id = getattr(product, 'store_id', None)
+        if store_id not in ymal_by_store:
+            ymal_by_store[store_id] = ymal_addon_option_dicts(product) if store_id else []
+        product_dict['ymal_addon_options'] = list(ymal_by_store.get(store_id) or [])
         product_list.append(product_dict)
     return product_list
 
@@ -8057,6 +8115,13 @@ def seller_pos():
     # Fetch all products for this store, ordered by main category then name
     products_query = (
         Product.query
+        .options(
+            selectinload(Product.images),
+            selectinload(Product.variants),
+            selectinload(Product.addon_groups).selectinload(ProductAddonGroup.options),
+            joinedload(Product.main_category),
+            joinedload(Product.store_category),
+        )
         .filter_by(store_id=store.id, is_archived=False)
         .join(Category, Product.main_category_id == Category.id)
         .order_by(Category.sort_order.asc(), Product.name.asc())
@@ -8078,6 +8143,9 @@ def seller_pos():
             product_dict['store_category_name'] = product.store_category.name
             product_dict['store_category_id'] = product.store_category.id
         products.append(product_dict)
+
+    from app.addon_helpers import ymal_addon_option_dicts
+    ymal_addon_options = ymal_addon_option_dicts(products_query[0]) if products_query else []
     
     # Organize products by main category for easier template access
     products_by_category = {}
@@ -8100,7 +8168,8 @@ def seller_pos():
         main_categories=main_categories,
         store_categories=store_categories,
         products_by_category=products_by_category,
-        subcategories_by_main=subcategories_by_main
+        subcategories_by_main=subcategories_by_main,
+        ymal_addon_options=ymal_addon_options,
     )
 
 @templates_bp.route('/seller/pos/order', methods=['POST'])
@@ -8126,12 +8195,19 @@ def pos_create_order():
         return jsonify({'error': 'Order must contain at least one item.'}), 400
 
     # ── Validate every item before touching the DB ────────────────────────────
+    from app.addon_helpers import (
+        resolve_structured_addon_selections,
+        structured_addons_subtotal,
+        decrement_addon_option_stock,
+    )
+
     validated_items = []
     for entry in items_payload:
         product_id = entry.get('product_id')
         variant_id = entry.get('variant_id')  # May be None
         quantity   = int(entry.get('quantity', 1))
         unit_price = Decimal(str(entry.get('price', 0)))
+        addon_raw  = entry.get('addons') or entry.get('addon_option_ids') or []
 
         if quantity < 1:
             return jsonify({'error': f'Quantity must be at least 1 (product id {product_id}).'}), 400
@@ -8144,8 +8220,10 @@ def pos_create_order():
         if not product.is_available:
             return jsonify({'error': f'"{product.name}" is currently unavailable.'}), 400
 
+        addons_only = bool(entry.get('addons_only'))
+
         # If variant_id is provided, validate variant
-        if variant_id:
+        if not addons_only and variant_id:
             variant = ProductVariant.query.filter_by(id=variant_id, product_id=product_id).first()
             if not variant:
                 return jsonify({'error': f'Variant #{variant_id} not found for product "{product.name}".'}), 404
@@ -8160,7 +8238,7 @@ def pos_create_order():
                         f'Available: {variant.stock_quantity}, requested: {quantity}.'
                     )
                 }), 400
-        else:
+        elif not addons_only:
             # Check main product stock
             if product.stock_quantity < quantity:
                 return jsonify({
@@ -8170,14 +8248,27 @@ def pos_create_order():
                     )
                 }), 400
 
+        addon_lines, addon_err = resolve_structured_addon_selections(
+            product, addon_raw, quantity_per_option=quantity
+        )
+        if addon_err:
+            return addon_err
+
+        if addons_only and not addon_lines:
+            return jsonify({'error': 'Add-on only lines must include add-ons.'}), 400
+
         validated_items.append({
             'product': product,
-            'variant_id': variant_id,
+            'variant_id': None if addons_only else variant_id,
             'quantity': quantity,
             'price': unit_price,
+            'addon_lines': addon_lines or [],
+            'addons_only': addons_only,
         })
 
     # ── Create POS order ───────────────────────────────────────────────────────
+    _ensure_pos_order_item_line_columns()
+
     customer_name = data.get('customer_name', '').strip()
     customer_contact = data.get('customer_contact')
     payment_method = data.get('payment_method', 'cash')
@@ -8192,8 +8283,11 @@ def pos_create_order():
         return jsonify({'error': 'Discount cannot be negative'}), 400
     # ===========================
 
-    # Calculate subtotal
-    subtotal = sum(item['price'] * item['quantity'] for item in validated_items)
+    # Calculate subtotal (product lines + structured add-ons)
+    subtotal = Decimal('0')
+    for item in validated_items:
+        subtotal += item['price'] * item['quantity']
+        subtotal += structured_addons_subtotal(item.get('addon_lines'))
     total = subtotal - discount
     
     # Validate total is not negative
@@ -8218,43 +8312,91 @@ def pos_create_order():
     # ── Add items and update stock ─────────────────────────────────────────────
     try:
         for item in validated_items:
+            addons_total = structured_addons_subtotal(item.get('addon_lines'))
+            qty = Decimal(item['quantity'])
+            extra_per_unit = (addons_total / qty) if qty else Decimal('0')
+
+            line_name = None
+            line_image_url = None
+            addon_option_id = None
+            product_id_for_row = item['product'].id
+            addon_lines = item.get('addon_lines') or []
+
+            if item.get('addons_only') and addon_lines:
+                names = [str(l.get('name') or '').strip() for l in addon_lines if l.get('name')]
+                line_name = ', '.join(n for n in names if n) or 'Add-on'
+                first = addon_lines[0]
+                line_image_url = (first.get('image_url') or '').strip() or None
+                opt = first.get('option')
+                if opt is not None:
+                    addon_option_id = opt.id
+                    if getattr(opt, 'group', None) and opt.group.product_id:
+                        product_id_for_row = opt.group.product_id
+                    if not line_image_url and getattr(opt, 'image_url', None):
+                        line_image_url = opt.image_url
+            elif addon_lines and not item.get('addons_only'):
+                # Flower/variant line that also includes add-ons: keep product name;
+                # append add-on names for clarity in order history
+                addon_names = [str(l.get('name') or '').strip() for l in addon_lines if l.get('name')]
+                addon_names = [n for n in addon_names if n]
+                if addon_names:
+                    base = item['product'].name
+                    if item.get('variant_id'):
+                        v = ProductVariant.query.get(item['variant_id'])
+                        if v:
+                            base = f'{base} - {v.name}'
+                    line_name = f"{base} (+ {', '.join(addon_names)})"
+
             pos_item = POSOrderItem(
                 pos_order=pos_order,
-                product_id=item['product'].id,
+                product_id=product_id_for_row,
                 variant_id=item['variant_id'],
                 quantity=item['quantity'],
-                price=item['price']
+                price=item['price'] + extra_per_unit,
+                line_name=line_name,
+                line_image_url=line_image_url,
+                addon_option_id=addon_option_id,
             )
             db.session.add(pos_item)
 
-            # Update stock based on variant or product
-            if item['variant_id']:
-                variant = ProductVariant.query.get(item['variant_id'])
-                variant.stock_quantity -= item['quantity']
-                
-                # Create StockReduction record for variant
-                stock_reduction = StockReduction(
-                    product_id=item['product'].id,
-                    variant_id=item['variant_id'],
-                    reduction_amount=item['quantity'],
+            # Update stock based on variant or product (skip for add-on-only lines)
+            if not item.get('addons_only'):
+                if item['variant_id']:
+                    variant = ProductVariant.query.get(item['variant_id'])
+                    variant.stock_quantity -= item['quantity']
+                    
+                    # Create StockReduction record for variant
+                    stock_reduction = StockReduction(
+                        product_id=item['product'].id,
+                        variant_id=item['variant_id'],
+                        reduction_amount=item['quantity'],
+                        reason='pos_sale',
+                        reason_notes=f'POS Sale - Order #{pos_order.id}',
+                        reduced_by=user_id
+                    )
+                    db.session.add(stock_reduction)
+                else:
+                    item['product'].stock_quantity -= item['quantity']
+                    
+                    # Create StockReduction record for main product
+                    stock_reduction = StockReduction(
+                        product_id=item['product'].id,
+                        variant_id=None,
+                        reduction_amount=item['quantity'],
+                        reason='pos_sale',
+                        reason_notes=f'POS Sale - Order #{pos_order.id}',
+                        reduced_by=user_id
+                    )
+                    db.session.add(stock_reduction)
+
+            # Structured add-ons: include cost in order total (already) and decrement stock
+            if item.get('addon_lines'):
+                decrement_addon_option_stock(
+                    item['addon_lines'],
+                    user_id=user_id,
                     reason='pos_sale',
-                    reason_notes=f'POS Sale - Order #{pos_order.id}',
-                    reduced_by=user_id
+                    reason_notes=f'POS Sale add-on - Order #{pos_order.id}',
                 )
-                db.session.add(stock_reduction)
-            else:
-                item['product'].stock_quantity -= item['quantity']
-                
-                # Create StockReduction record for main product
-                stock_reduction = StockReduction(
-                    product_id=item['product'].id,
-                    variant_id=None,
-                    reduction_amount=item['quantity'],
-                    reason='pos_sale',
-                    reason_notes=f'POS Sale - Order #{pos_order.id}',
-                    reduced_by=user_id
-                )
-                db.session.add(stock_reduction)
 
         db.session.commit()
     except Exception as e:
@@ -8290,6 +8432,8 @@ def pos_orders():
     if not store:
         flash('Please set up your store first.', 'warning')
         return redirect(url_for('templates.dashboard'))
+
+    _ensure_pos_order_item_line_columns()
 
     # Mark unseen POS orders as seen once seller opens POS order history.
     POSOrder.query.filter_by(store_id=store.id, is_seen_by_seller=False).update(
@@ -12374,10 +12518,12 @@ def pos_order_detail_api(order_id):
         return jsonify({'error': 'No active store found'}), 403
     
     try:
+        _ensure_pos_order_item_line_columns()
         order = (
             POSOrder.query.options(
                 joinedload(POSOrder.items).joinedload(POSOrderItem.product).joinedload(Product.images),
                 joinedload(POSOrder.items).joinedload(POSOrderItem.variant),
+                joinedload(POSOrder.items).joinedload(POSOrderItem.addon_option),
             )
             .filter_by(id=order_id, store_id=store.id)
             .first()
@@ -12388,11 +12534,18 @@ def pos_order_detail_api(order_id):
         items = []
         subtotal = 0
         for item in order.items:
-            product_name = 'Unknown Product'
-            if item.product:
-                product_name = item.product.name
-            if item.variant_id and item.variant:
-                product_name = f"{product_name} - {item.variant.name}"
+            if item.line_name:
+                product_name = item.line_name
+            else:
+                product_name = 'Unknown Product'
+                if item.product:
+                    product_name = item.product.name
+                if item.variant_id and item.variant:
+                    product_name = f"{product_name} - {item.variant.name}"
+                # Legacy add-on-only rows (no line_name): prefer linked option name
+                if item.addon_option_id and item.addon_option:
+                    product_name = item.addon_option.name
+
             item_subtotal = float(item.price * item.quantity)
             subtotal += item_subtotal
             items.append({
@@ -12401,6 +12554,7 @@ def pos_order_detail_api(order_id):
                 'variant_id': item.variant_id,
                 'product_name': product_name,
                 'product_image_url': item.product_image,
+                'is_addon': bool(item.addon_option_id),
                 'quantity': item.quantity,
                 'unit_price': float(item.price),
                 'subtotal': item_subtotal

@@ -358,9 +358,25 @@ def get_product(product_id):
         ).filter_by(product_id=product_id).first()
         data['avg_rating'] = round(float(agg.avg or 0), 1) if agg else 0.0
         data['total_ratings'] = int(agg.count or 0) if agg else 0
+
+        # Per-option aggregates: "main" = standard (variant_id IS NULL), else variant id
+        variant_ratings = {}
+        rows = db.session.query(
+            ProductRating.variant_id,
+            func.avg(ProductRating.rating).label('avg'),
+            func.count(ProductRating.id).label('count'),
+        ).filter_by(product_id=product_id).group_by(ProductRating.variant_id).all()
+        for row in rows:
+            key = str(row.variant_id) if row.variant_id else 'main'
+            variant_ratings[key] = {
+                'avg': round(float(row.avg or 0), 1),
+                'count': int(row.count or 0),
+            }
+        data['variant_ratings'] = variant_ratings
     except Exception:
         data['avg_rating'] = 0.0
         data['total_ratings'] = 0
+        data['variant_ratings'] = {}
 
     if p.store:
         data['store'] = p.store.to_dict()
@@ -1176,40 +1192,73 @@ def submit_order_ratings(order_id):
 
 @customer_bp.route('/products/<int:product_id>/ratings', methods=['GET'])
 def get_product_ratings(product_id):
-    """Get all ratings for a product (public — matches web storefront)."""
+    """Get ratings for a product (public). Optional variant_id filter:
+    - omit / empty: all ratings for the product
+    - 'main': only standard (variant_id IS NULL)
+    - integer: only that variant
+    """
     try:
         product = Product.query.get_or_404(product_id)
 
         page = request.args.get('page', 1, type=int)
         per_page = min(request.args.get('per_page', 10, type=int), 50)
+        variant_raw = request.args.get('variant_id')
 
-        ratings_query = ProductRating.query.filter_by(product_id=product_id)\
-            .order_by(ProductRating.created_at.desc())
+        ratings_query = ProductRating.query.filter_by(product_id=product_id)
+        if variant_raw is not None and str(variant_raw).strip() != '':
+            if str(variant_raw).strip().lower() == 'main':
+                ratings_query = ratings_query.filter(ProductRating.variant_id.is_(None))
+            else:
+                try:
+                    vid = int(variant_raw)
+                    ratings_query = ratings_query.filter_by(variant_id=vid)
+                except (TypeError, ValueError):
+                    return jsonify({'error': 'Invalid variant_id'}), 400
+
+        ratings_query = ratings_query.order_by(ProductRating.created_at.desc())
 
         total = ratings_query.count()
         ratings = ratings_query.offset((page - 1) * per_page).limit(per_page).all()
 
         from sqlalchemy import func
-        agg = db.session.query(
+        agg_q = db.session.query(
             func.avg(ProductRating.rating).label('avg'),
             func.count(ProductRating.id).label('count')
-        ).filter_by(product_id=product_id).first()
-
-        dist = db.session.query(
+        ).filter_by(product_id=product_id)
+        dist_q = db.session.query(
             ProductRating.rating, func.count(ProductRating.id)
-        ).filter_by(product_id=product_id).group_by(ProductRating.rating).all()
+        ).filter_by(product_id=product_id)
+        if variant_raw is not None and str(variant_raw).strip() != '':
+            if str(variant_raw).strip().lower() == 'main':
+                agg_q = agg_q.filter(ProductRating.variant_id.is_(None))
+                dist_q = dist_q.filter(ProductRating.variant_id.is_(None))
+            else:
+                vid = int(variant_raw)
+                agg_q = agg_q.filter_by(variant_id=vid)
+                dist_q = dist_q.filter_by(variant_id=vid)
+
+        agg = agg_q.first()
+        dist = dist_q.group_by(ProductRating.rating).all()
         distribution = {str(i): 0 for i in range(1, 6)}
         for star, count in dist:
             distribution[str(star)] = count
 
+        filter_key = None
+        if variant_raw is not None and str(variant_raw).strip() != '':
+            if str(variant_raw).strip().lower() == 'main':
+                filter_key = 'main'
+            else:
+                filter_key = int(variant_raw)
+
         return jsonify({
             'success': True,
-            'avg_rating': round(float(agg.avg or 0), 1),
-            'total_ratings': agg.count or 0,
+            'avg_rating': round(float(agg.avg or 0), 1) if agg else 0.0,
+            'total_ratings': int(agg.count or 0) if agg else 0,
             'distribution': distribution,
             'ratings': [r.to_dict() for r in ratings],
             'page': page,
             'total_pages': (total + per_page - 1) // per_page if total else 0,
+            'variant_id': filter_key,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

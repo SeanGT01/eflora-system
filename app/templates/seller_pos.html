@@ -185,12 +185,20 @@
     box-shadow: 0 0 0 3px rgba(181,68,90,0.15);
 }
 
-.pos-tile-img {
-    width: 100%; aspect-ratio: 1; object-fit: cover; display: block;
+.pos-tile-media {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    flex-shrink: 0;
     background: linear-gradient(145deg, #f5ede6, #ede3d8);
 }
+
+.pos-tile-img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+}
 .pos-tile-img-ph {
-    width: 100%; aspect-ratio: 1;
+    width: 100%; height: 100%;
     background: linear-gradient(145deg, #f5ede6, #ede3d8);
     display: flex; align-items: center; justify-content: center;
     font-size: 40px; color: rgba(107,76,59,0.12);
@@ -206,32 +214,45 @@
 .pos-tile-stock { font-size: 10.5px; color: var(--muted); font-weight: 500; }
 
 .pos-tile-badge {
-    position: absolute; top: 0.5rem; left: 0.5rem;
+    position: absolute; top: 0.45rem; left: 0.45rem;
+    max-width: calc(55% - 0.5rem);
     background: rgba(42,35,30,0.55); backdrop-filter: blur(6px);
     color: rgba(250,246,240,0.9); font-size: 9px; font-weight: 700;
-    letter-spacing: 0.1em; text-transform: uppercase;
+    letter-spacing: 0.08em; text-transform: uppercase;
     padding: 2px 7px; border-radius: var(--radius-pill);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    z-index: 2;
 }
 .pos-tile-subcat-badge {
-    position: absolute; top: 0.5rem; right: 0.5rem;
+    position: absolute; top: 0.45rem; right: 0.45rem;
+    max-width: calc(45% - 0.5rem);
     background: var(--sage); color: white; font-size: 8px; font-weight: 600;
-    padding: 2px 6px; border-radius: var(--radius-pill); opacity: 0.9;
+    padding: 2px 6px; border-radius: var(--radius-pill); opacity: 0.95;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    z-index: 2;
+    transition: opacity 0.15s ease;
 }
 .pos-tile-variant-badge {
-    position: absolute; bottom: 0.5rem; right: 0.5rem;
+    position: absolute; bottom: 0.45rem; left: 0.45rem;
     background: var(--deep-rose); color: white; font-size: 9px; font-weight: 700;
-    padding: 2px 6px; border-radius: var(--radius-pill); opacity: 0.9;
+    padding: 2px 6px; border-radius: var(--radius-pill); opacity: 0.95;
+    z-index: 2;
+    max-width: calc(100% - 0.9rem);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 .pos-tile-add {
-    position: absolute; top: 0.5rem; right: 0.5rem;
+    position: absolute; top: 0.4rem; right: 0.4rem;
     width: 26px; height: 26px; border-radius: 50%;
     background: var(--deep-rose); color: white;
     display: flex; align-items: center; justify-content: center;
     font-size: 15px; opacity: 0; transform: scale(0.6);
     transition: opacity 0.18s, transform 0.18s; pointer-events: none;
+    z-index: 3;
 }
 .pos-tile:hover .pos-tile-add { opacity: 1; transform: scale(1); }
+/* Avoid + button colliding with subcategory chip */
+.pos-tile:hover .pos-tile-subcat-badge { opacity: 0; }
 
 /* ── OOS overlay ── */
 .pos-tile-oos {
@@ -266,79 +287,175 @@
 .pos-category-header:first-of-type { margin-top: 0; }
 
 /* ═══════════════════════════════════════════
-   VARIANT MODAL
+   VARIANT HOVER PICKER (landing-style popover)
 ═══════════════════════════════════════════ */
 .variant-modal {
-    position: fixed; inset: 0; z-index: 600;
-    background: rgba(42,35,30,0.62); backdrop-filter: blur(5px);
-    display: flex; align-items: center; justify-content: center;
-    padding: 1.5rem; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    position: fixed;
+    z-index: 700;
+    width: min(340px, calc(100vw - 1.25rem));
+    max-height: min(72vh, 480px);
+    display: flex;
+    flex-direction: column;
+    background: #fffdf9;
+    border: 1px solid rgba(107, 76, 59, 0.14);
+    border-radius: 16px;
+    box-shadow: 0 16px 40px rgba(44, 37, 32, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(6px) scale(0.98);
+    transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+    overflow: visible;
 }
-.variant-modal.active { opacity: 1; pointer-events: all; z-index: 9999 !important; }
+.variant-modal.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+.variant-modal[data-placement="above"].active {
+    transform: translateY(0) scale(1);
+}
+.variant-modal[data-placement="above"]:not(.active) {
+    transform: translateY(-6px) scale(0.98);
+}
+
+/* Caret pointing at the product card */
+.variant-modal::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #fffdf9;
+    border: 1px solid rgba(107, 76, 59, 0.14);
+    left: var(--arrow-x, 50%);
+    transform: translateX(-50%) rotate(45deg);
+    z-index: 1;
+    pointer-events: none;
+}
+.variant-modal[data-placement="below"]::before {
+    top: -6px;
+    border-right: none;
+    border-bottom: none;
+    background: linear-gradient(135deg, rgba(250, 246, 240, 0.98) 50%, #fffdf9 50%);
+}
+.variant-modal[data-placement="above"]::before {
+    bottom: -6px;
+    top: auto;
+    border-left: none;
+    border-top: none;
+}
 
 .variant-card {
-    background: var(--warm-white); border-radius: var(--radius-xl);
-    width: 100%; max-width: 480px; max-height: 80vh; overflow-y: auto;
-    box-shadow: var(--shadow-deep);
-    animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-height: min(72vh, 480px);
+    overflow: hidden;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 16px;
+    animation: none;
+    position: relative;
+    z-index: 2;
 }
 
 .variant-hdr {
-    padding: 1.5rem; border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 1rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(107, 76, 59, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, rgba(250, 246, 240, 0.95), rgba(255, 253, 249, 0.7));
 }
 .variant-hdr-img {
-    width: 60px !important; height: 60px !important;
-    border-radius: var(--radius-md); object-fit: cover !important;
+    width: 52px !important; height: 52px !important;
+    border-radius: 12px; object-fit: cover !important;
     display: block !important; visibility: visible !important; opacity: 1 !important;
     background: linear-gradient(145deg, #f5ede6, #ede3d8);
+    flex-shrink: 0;
 }
 .variant-hdr-img-ph {
-    width: 60px; height: 60px; border-radius: var(--radius-md);
+    width: 52px; height: 52px; border-radius: 12px;
     background: linear-gradient(145deg, #f5ede6, #ede3d8);
     display: flex !important; align-items: center; justify-content: center;
-    font-size: 24px; color: rgba(107,76,59,0.12); flex-shrink: 0;
+    font-size: 22px; color: rgba(107,76,59,0.12); flex-shrink: 0;
 }
-.variant-hdr-info { flex: 1; }
-.variant-hdr-title { font-family: var(--font-display); font-size: 18px; font-weight: 500; color: var(--charcoal); margin-bottom: 4px; }
-.variant-hdr-base { font-size: 13px; color: var(--muted); }
+.variant-hdr-info { flex: 1; min-width: 0; }
+.variant-hdr-title {
+    font-family: var(--font-display); font-size: 16px; font-weight: 500;
+    color: var(--charcoal); margin-bottom: 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.variant-hdr-base { font-size: 12px; color: var(--muted); }
 .variant-hdr-close {
-    width: 32px; height: 32px; border-radius: 50%; border: none;
-    background: var(--cream); color: var(--muted);
+    width: 30px; height: 30px; border-radius: 50%; border: none;
+    background: rgba(107, 76, 59, 0.06); color: var(--muted);
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: var(--transition);
+    cursor: pointer; transition: var(--transition); flex-shrink: 0;
 }
 .variant-hdr-close:hover { background: var(--deep-rose); color: white; }
 
-.variant-list { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.variant-list {
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    min-height: 0;
+}
 
 .variant-item {
-    display: flex; align-items: center; gap: 1rem; padding: 0.875rem;
-    border: 1.5px solid var(--border); border-radius: var(--radius-lg);
+    display: flex; align-items: center; gap: 0.7rem; padding: 0.65rem 0.7rem;
+    border: 1.5px solid rgba(230, 170, 195, 0.4); border-radius: 12px;
     cursor: pointer; transition: var(--transition);
+    background: rgba(255, 255, 255, 0.7);
 }
-.variant-item:hover { border-color: var(--dusty-rose); background: rgba(181,68,90,0.02); }
+.variant-item:hover { border-color: rgba(216, 120, 160, 0.65); background: rgba(255, 255, 255, 0.95); }
 .variant-item.selected { border-color: var(--deep-rose); background: rgba(181,68,90,0.05); }
 .variant-item.unavailable { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
 .variant-item-img {
-    width: 50px !important; height: 50px !important;
-    border-radius: var(--radius-md); object-fit: cover !important;
+    width: 42px !important; height: 42px !important;
+    border-radius: 10px; object-fit: cover !important;
     display: block !important; visibility: visible !important; opacity: 1 !important;
     background: linear-gradient(145deg, #f5ede6, #ede3d8);
+    flex-shrink: 0;
 }
 .variant-item-img-ph {
-    width: 50px; height: 50px; border-radius: var(--radius-md);
+    width: 42px; height: 42px; border-radius: 10px;
     background: linear-gradient(145deg, #f5ede6, #ede3d8);
     display: flex !important; align-items: center; justify-content: center;
-    font-size: 20px; color: rgba(107,76,59,0.12); flex-shrink: 0;
+    font-size: 18px; color: rgba(107,76,59,0.12); flex-shrink: 0;
 }
-.variant-item-info { flex: 1; }
-.variant-item-name { font-family: var(--font-display); font-size: 16px; font-weight: 500; color: var(--charcoal); margin-bottom: 4px; }
-.variant-item-details { display: flex; gap: 1rem; font-size: 12px; color: var(--muted); }
-.variant-item-price { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--deep-rose); white-space: nowrap; }
+.variant-item-info { flex: 1; min-width: 0; }
+.variant-item-name { font-size: 13.5px; font-weight: 600; color: var(--charcoal); margin-bottom: 2px; }
+.variant-item-details { display: flex; gap: 0.65rem; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+.variant-item-price { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--deep-rose); white-space: nowrap; }
 
-.variant-ftr { padding: 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; }
+.variant-ftr { display: none; }
+.variant-hdr-close { display: none !important; }
+
+.pos-picker-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0.35rem 0 0.45rem;
+}
+.pos-picker-section-label:first-child { margin-top: 0; }
+
+.variant-item.flash-add {
+    animation: posOptFlash 0.28s ease;
+}
+@keyframes posOptFlash {
+    0% { background: rgba(194, 78, 104, 0.18); }
+    100% { background: #fff; }
+}
 
 .variant-modal img { display: block !important; visibility: visible !important; opacity: 1 !important; }
 
@@ -661,9 +778,10 @@
 
 {% block content %}
 <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+<script type="application/json" id="posYmalAddonsData">{{ ymal_addon_options|default([])|tojson }}</script>
 
-<!-- Variant Selection Modal -->
-<div class="variant-modal" id="variantModal">
+<!-- Variant / add-on hover picker -->
+<div class="variant-modal" id="variantModal" role="dialog" aria-label="Select options" hidden>
     <div class="variant-card" id="variantModalContent"></div>
 </div>
 
@@ -749,10 +867,14 @@
                      data-is-available="{{ 'true' if p.is_available else 'false' }}"
                      data-has-variants="{{ 'true' if p.variants else 'false' }}"
                      data-variants='{{ p.variants|tojson|safe if p.variants else "[]" }}'
+                     data-addon-groups='{{ p.addon_groups|tojson|safe if p.addon_groups else "[]" }}'
                      data-img="{{ img_url }}"
                      data-display-name="{{ p.name }}"
-                     onclick="handleProductClick(this)">
+                     onclick="handleProductClick(this)"
+                     onmouseenter="onPosTileHoverEnter(this)"
+                     onmouseleave="onPosTileHoverLeave(this)">
 
+                    <div class="pos-tile-media">
                     {% if img_url %}
                     <img class="pos-tile-img"
                          src="{{ img_url }}"
@@ -778,9 +900,6 @@
 
                     <div class="pos-tile-add"><i class="ri-add-line"></i></div>
 
-                    {# ════════════════════════════════════════════════
-                       OOS OVERLAY — 3 visual states
-                    ════════════════════════════════════════════════ #}
                     {% if not p.is_available %}
                         <div class="pos-tile-oos oos-unavailable">Unavailable</div>
                     {% elif p.stock_quantity <= 0 and not p.variants %}
@@ -788,6 +907,7 @@
                     {% elif p.stock_quantity <= 0 and p.variants %}
                         <div class="pos-tile-oos oos-variants-only">Variants Only</div>
                     {% endif %}
+                    </div>
 
                     <div class="pos-tile-body">
                         <div class="pos-tile-name">{{ p.name }}</div>
@@ -1069,203 +1189,477 @@ function clearSearch() {
 }
 
 /* ════════════════════════════════════════════
-   PRODUCT CLICK HANDLER  ← UPDATED
-   ─────────────────────────────────────────
-   Decision tree:
-   1. data-is-available === 'false'  → toast "unavailable", return
-   2. Has variants                   → ALWAYS open variant modal
-      (even if main stock = 0; individual variants may still have stock)
-   3. No variants + stock = 0        → toast "out of stock", return
-   4. No variants + stock > 0        → addToCart()
+   PRODUCT CLICK / HOVER PICKER
+   Variants + product add-ons + store YMAL.
+   Stays open while choosing; Add to order commits.
 ════════════════════════════════════════════ */
+let _posHoverOpenTimer = null;
+let _posHoverCloseTimer = null;
+let _posHoverTile = null;
+let _posPickerAnchor = null;
+let _posPickerSticky = false;
+let _posPickerState = null; // { tile, mainKey, addons: {id: qty} }
+
+function getPosYmalAddons() {
+    try {
+        const el = document.getElementById('posYmalAddonsData');
+        if (!el) return [];
+        const data = JSON.parse(el.textContent || '[]');
+        return Array.isArray(data) ? data : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function parseTileJson(tile, key, fallback) {
+    try {
+        const raw = tile.dataset[key];
+        if (!raw || raw === 'null') return fallback;
+        const parsed = JSON.parse(raw);
+        return parsed == null ? fallback : parsed;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function tileProductAddons(tile) {
+    const groups = parseTileJson(tile, 'addonGroups', []);
+    const opts = [];
+    (groups || []).forEach(g => {
+        if (!g || g.is_active === false) return;
+        (g.options || []).forEach(o => {
+            if (!o || o.is_available === false) return;
+            opts.push({
+                ...o,
+                group_name: g.name || o.group_name || 'Add-on',
+                source: 'product',
+            });
+        });
+    });
+    return opts;
+}
+
+function canUsePosHoverOpen() {
+    return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+}
+
+function tileNeedsSelectionModal(tile) {
+    if (!tile || tile.dataset.isAvailable === 'false') return false;
+    if (tile.dataset.hasVariants === 'true') {
+        const variants = parseTileJson(tile, 'variants', []);
+        if (Array.isArray(variants) && variants.length) return true;
+    }
+    if (tileProductAddons(tile).length) return true;
+    if (getPosYmalAddons().length) return true;
+    return false;
+}
+
+function clearPosHoverTimers() {
+    clearTimeout(_posHoverOpenTimer);
+    clearTimeout(_posHoverCloseTimer);
+    _posHoverOpenTimer = null;
+    _posHoverCloseTimer = null;
+}
+
+function onPosTileHoverEnter(tile) {
+    if (!canUsePosHoverOpen() || !tileNeedsSelectionModal(tile)) return;
+    clearTimeout(_posHoverCloseTimer);
+    _posHoverCloseTimer = null;
+    _posHoverTile = tile;
+    clearTimeout(_posHoverOpenTimer);
+    _posHoverOpenTimer = setTimeout(() => {
+        if (_posHoverTile !== tile) return;
+        if (!document.body.contains(tile)) return;
+        showVariantModal(tile);
+    }, 120);
+}
+
+function onPosTileHoverLeave(tile) {
+    if (!canUsePosHoverOpen()) return;
+    clearTimeout(_posHoverOpenTimer);
+    _posHoverOpenTimer = null;
+    scheduleClosePosPicker();
+}
+
+function onPosPickerHoverEnter() {
+    clearTimeout(_posHoverCloseTimer);
+    _posHoverCloseTimer = null;
+}
+
+function onPosPickerHoverLeave() {
+    scheduleClosePosPicker();
+}
+
+function scheduleClosePosPicker() {
+    clearTimeout(_posHoverCloseTimer);
+    _posHoverCloseTimer = setTimeout(() => {
+        closeVariantModal();
+    }, 180);
+}
+
+function positionPosVariantPicker(anchorEl) {
+    const picker = document.getElementById('variantModal');
+    if (!picker || !anchorEl) return;
+
+    const rect = anchorEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+    const width = Math.round(Math.min(340, vw - margin * 2));
+    picker.style.width = `${width}px`;
+
+    const ph = Math.min(picker.offsetHeight || 280, vh - margin * 2);
+
+    let placement = 'below';
+    let top = rect.bottom - 2;
+    if (top + ph > vh - margin) {
+        placement = 'above';
+        top = rect.top - ph + 2;
+    }
+    if (top < margin) top = margin;
+
+    let left = rect.left + (rect.width - width) / 2;
+    left = Math.max(margin, Math.min(left, vw - width - margin));
+
+    const arrowX = Math.max(16, Math.min(width - 16, rect.left + rect.width / 2 - left));
+    picker.dataset.placement = placement;
+    picker.style.setProperty('--arrow-x', `${Math.round(arrowX)}px`);
+    picker.style.left = `${Math.round(left)}px`;
+    picker.style.top = `${Math.round(top)}px`;
+    picker.style.right = 'auto';
+    picker.style.bottom = 'auto';
+}
+
 function handleProductClick(tile) {
-    // 1. Seller marked product as unavailable — block entirely
+    clearPosHoverTimers();
+
     if (!tile.dataset.isAvailable || tile.dataset.isAvailable === 'false') {
         showToast('This product is currently unavailable.', 'error');
         return;
     }
 
-    const hasVariants  = tile.dataset.hasVariants === 'true';
-    const variantsData = tile.dataset.variants;
-
-    // 2. Has variants → always open the modal regardless of main product stock
-    if (hasVariants && variantsData && variantsData !== '[]' && variantsData !== 'null') {
-        try {
-            const variants = JSON.parse(variantsData);
-            if (variants && variants.length > 0) {
-                showVariantModal(tile);
-                return;
-            }
-        } catch (e) {
-            console.error('Error parsing variants:', e);
-        }
+    if (tileNeedsSelectionModal(tile)) {
+        showVariantModal(tile);
+        return;
     }
 
-    // 3. No variants — check main stock
     const stock = parseInt(tile.dataset.stock);
     if (stock <= 0) {
         showToast('This item is out of stock.', 'error');
         return;
     }
 
-    // 4. In stock, no variants — add directly
     addToCart(tile);
 }
 
-/* ════════════════════════════════════════════
-   SHOW VARIANT MODAL
-════════════════════════════════════════════ */
-function showVariantModal(tile) {
-    const productId    = tile.dataset.id;
-    const productName  = tile.dataset.displayName;
-    const productImg   = tile.dataset.img;
-    const variantsData = tile.dataset.variants;
+function _posOptImg(url, name) {
+    if (url && String(url).trim()) {
+        return `<img class="variant-item-img" src="${url}" alt="${esc(name || '')}">`;
+    }
+    return `<div class="variant-item-img-ph"><i class="ri-flower-line"></i></div>`;
+}
 
-    if (!variantsData || variantsData === '[]' || variantsData === 'null') {
-        addToCart(tile);
-        return;
+function _posPriceHtml(price, was) {
+    const p = parseFloat(price) || 0;
+    const w = parseFloat(was);
+    if (Number.isFinite(w) && w > p) {
+        return `<div class="variant-item-price">₱${p.toFixed(2)} <span style="text-decoration:line-through;font-size:11px;opacity:0.65;">₱${w.toFixed(2)}</span></div>`;
+    }
+    return `<div class="variant-item-price">₱${p.toFixed(2)}</div>`;
+}
+
+function renderPosPickerBody() {
+    if (!_posPickerState || !_posPickerState.tile) return;
+    const tile = _posPickerState.tile;
+    const productName = tile.dataset.displayName;
+    const productImg = tile.dataset.img || '';
+    const variants = parseTileJson(tile, 'variants', []) || [];
+    const productAddons = tileProductAddons(tile);
+    const ymal = getPosYmalAddons().filter(o => o && o.is_available !== false);
+
+    const mainStock = parseInt(tile.dataset.stock) || 0;
+    const mainOk = tile.dataset.isAvailable === 'true' && mainStock > 0;
+    const mainPrice = parseFloat(tile.dataset.price) || 0;
+
+    let html = `<div class="variant-list">`;
+    html += `<div class="pos-picker-section-label">Product option</div>`;
+
+    html += `
+        <div class="variant-item ${mainOk ? '' : 'unavailable'}"
+             onclick="${mainOk ? `posClickMain(event)` : ''}">
+            ${_posOptImg(productImg, productName)}
+            <div class="variant-item-info">
+                <div class="variant-item-name">Standard</div>
+                <div class="variant-item-details"><span>${mainOk ? mainStock + ' in stock' : 'Out of stock'}</span></div>
+            </div>
+            ${_posPriceHtml(mainPrice)}
+        </div>`;
+
+    variants.forEach(v => {
+        const inStock = (v.stock_quantity || 0) > 0 && v.is_available !== false;
+        const eff = (v.special_price && parseFloat(v.special_price) > 0 && parseFloat(v.special_price) < parseFloat(v.price))
+            ? parseFloat(v.special_price) : parseFloat(v.price);
+        const img = (v.image_url && String(v.image_url).trim()) ? v.image_url : productImg;
+        html += `
+            <div class="variant-item ${inStock ? '' : 'unavailable'}"
+                 onclick="${inStock ? `posClickVariant(${v.id}, event)` : ''}">
+                ${_posOptImg(img, v.name)}
+                <div class="variant-item-info">
+                    <div class="variant-item-name">${esc(v.name)}</div>
+                    <div class="variant-item-details"><span>${inStock ? (v.stock_quantity + ' in stock') : 'Out of stock'}</span></div>
+                </div>
+                ${_posPriceHtml(eff, v.price)}
+            </div>`;
+    });
+
+    if (productAddons.length) {
+        html += `<div class="pos-picker-section-label">Add-ons</div>`;
+        productAddons.forEach(o => {
+            const stock = parseInt(o.stock_quantity) || 0;
+            const ok = stock > 0 && o.is_available !== false;
+            html += `
+                <div class="variant-item ${ok ? '' : 'unavailable'}"
+                     onclick="${ok ? `posClickAddon(${o.id}, event)` : ''}">
+                    ${_posOptImg(o.image_url, o.name)}
+                    <div class="variant-item-info">
+                        <div class="variant-item-name">${esc(o.name)}</div>
+                        <div class="variant-item-details"><span>${esc(o.group_name || 'Add-on')}</span><span>${ok ? stock + ' left' : 'Out of stock'}</span></div>
+                    </div>
+                    ${_posPriceHtml(o.price)}
+                </div>`;
+        });
     }
 
-    let variants;
-    try {
-        variants = JSON.parse(variantsData);
-    } catch (e) {
-        console.error('Error parsing variants:', e);
-        addToCart(tile);
-        return;
+    if (ymal.length) {
+        html += `<div class="pos-picker-section-label">You may also like</div>`;
+        ymal.forEach(o => {
+            const stock = parseInt(o.stock_quantity) || 0;
+            const ok = stock > 0 && o.is_available !== false;
+            html += `
+                <div class="variant-item ${ok ? '' : 'unavailable'}"
+                     onclick="${ok ? `posClickAddon(${o.id}, event)` : ''}">
+                    ${_posOptImg(o.image_url, o.name)}
+                    <div class="variant-item-info">
+                        <div class="variant-item-name">${esc(o.name)}</div>
+                        <div class="variant-item-details"><span>${esc(o.group_name || 'Add-on')}</span><span>${ok ? stock + ' left' : 'Out of stock'}</span></div>
+                    </div>
+                    ${_posPriceHtml(o.price)}
+                </div>`;
+        });
     }
 
-    if (!variants || !variants.length) { addToCart(tile); return; }
+    html += `</div>`;
 
-    const modal   = document.getElementById('variantModal');
     const content = document.getElementById('variantModalContent');
-
     const headerImgHtml = (productImg && productImg.trim())
         ? `<img class="variant-hdr-img" src="${productImg}" alt="${esc(productName)}">`
         : `<div class="variant-hdr-img-ph"><i class="ri-flower-line"></i></div>`;
 
-    let html = `
+    content.innerHTML = `
         <div class="variant-hdr">
             ${headerImgHtml}
             <div class="variant-hdr-info">
                 <div class="variant-hdr-title">${esc(productName)}</div>
-                <div class="variant-hdr-base">Select a variant to add to order</div>
+                <div class="variant-hdr-base">Click an item to add</div>
             </div>
-            <button class="variant-hdr-close" onclick="closeVariantModal()">
-                <i class="ri-close-line"></i>
-            </button>
         </div>
-        <div class="variant-list">`;
-
-    variants.forEach(v => {
-        const variantImg     = (v.image_url && v.image_url.trim()) ? v.image_url : productImg;
-        const inStock        = v.stock_quantity > 0;
-        const isAvailable    = v.is_available && inStock;
-        const stockLabel     = inStock ? `${v.stock_quantity} in stock` : 'Out of stock';
-        const effectivePrice = (v.special_price && parseFloat(v.special_price) > 0 && parseFloat(v.special_price) < parseFloat(v.price))
-            ? parseFloat(v.special_price) : parseFloat(v.price);
-        const priceHtml = (effectivePrice < parseFloat(v.price))
-            ? `<div class="variant-item-price">₱${effectivePrice.toFixed(2)} <span style="text-decoration:line-through;font-size:11px;opacity:0.65;">₱${parseFloat(v.price).toFixed(2)}</span></div>`
-            : `<div class="variant-item-price">₱${parseFloat(v.price).toFixed(2)}</div>`;
-
-        const variantImgHtml = (variantImg && variantImg.trim())
-            ? `<img class="variant-item-img" src="${variantImg}" alt="${esc(v.name)}">`
-            : `<div class="variant-item-img-ph"><i class="ri-flower-line"></i></div>`;
-
-        html += `
-            <div class="variant-item ${isAvailable ? '' : 'unavailable'}"
-                 onclick="${isAvailable ? `selectVariant(${productId}, ${v.id}, '${esc(v.name)}', ${effectivePrice}, '${variantImg || ''}', ${v.stock_quantity})` : ''}">
-                ${variantImgHtml}
-                <div class="variant-item-info">
-                    <div class="variant-item-name">${esc(v.name)}</div>
-                    <div class="variant-item-details">
-                        <span>SKU: ${v.sku || '—'}</span>
-                        <span>${stockLabel}</span>
-                    </div>
-                </div>
-                ${priceHtml}
-            </div>`;
-    });
-
-    // Always show "main product" row — grayed out when OOS, exactly like variant items
-    const mainProductStock     = parseInt(tile.dataset.stock);
-    const mainProductAvailable = tile.dataset.isAvailable === 'true';
-    const mainInStock          = mainProductStock > 0 && mainProductAvailable;
-    const mainStockLabel       = mainInStock ? `${mainProductStock} in stock` : 'Out of stock';
-
-    const mainProductImgHtml = (productImg && productImg.trim())
-        ? `<img class="variant-item-img" src="${productImg}" alt="${esc(productName)}"
-               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-           <div class="variant-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
-        : `<div class="variant-item-img-ph"><i class="ri-flower-line"></i></div>`;
-
-    html += `
-        <div class="variant-item ${mainInStock ? '' : 'unavailable'}" style="${mainInStock ? 'border-color: var(--sage);' : ''}"
-             onclick="${mainInStock ? `addMainProductFromModal(${productId}, '${esc(productName)}', ${tile.dataset.price}, '${productImg || ''}', ${mainProductStock})` : ''}">
-            ${mainProductImgHtml}
-            <div class="variant-item-info">
-                <div class="variant-item-name">Main Product (No Variant)</div>
-                <div class="variant-item-details">
-                    <span>Standard option</span>
-                    <span>${mainStockLabel}</span>
-                </div>
-            </div>
-            <div class="variant-item-price">₱${parseFloat(tile.dataset.price).toFixed(2)}</div>
-        </div>`;
-
-    html += `
-        </div>
-        <div class="variant-ftr">
-            <button class="btn btn-outline" style="flex:1;" onclick="closeVariantModal()">Cancel</button>
-        </div>`;
-
-    content.innerHTML = html;
-    modal.classList.add('active');
-
-    // Force images visible
-    setTimeout(() => {
-        content.querySelectorAll('img').forEach(img => {
-            img.style.display     = 'block';
-            img.style.visibility  = 'visible';
-            img.style.opacity     = '1';
-        });
-    }, 50);
+        ${html}`;
 }
 
-/* ════════════════════════════════════════════
-   MODAL ACTIONS
-════════════════════════════════════════════ */
-function addMainProductFromModal(productId, productName, price, img, stock) {
-    const existing = cart.find(i => i.id === parseInt(productId) && !i.variant_id);
+function showVariantModal(tile) {
+    const modal = document.getElementById('variantModal');
+    // Same tile already open — keep scroll & content
+    if (
+        modal.classList.contains('active') &&
+        _posPickerState &&
+        _posPickerState.tile === tile
+    ) {
+        _posPickerAnchor = tile;
+        _posHoverTile = tile;
+        positionPosVariantPicker(tile);
+        return;
+    }
+
+    _posPickerAnchor = tile;
+    _posHoverTile = tile;
+    _posPickerSticky = false;
+    _posPickerState = { tile };
+
+    modal.hidden = false;
+    renderPosPickerBody();
+    positionPosVariantPicker(tile);
+    modal.classList.add('active');
+    requestAnimationFrame(() => {
+        positionPosVariantPicker(tile);
+        requestAnimationFrame(() => positionPosVariantPicker(tile));
+    });
+}
+
+function _posFlashClickTarget(evt) {
+    const el = evt && evt.currentTarget ? evt.currentTarget : null;
+    if (!el) return;
+    el.classList.remove('flash-add');
+    void el.offsetWidth;
+    el.classList.add('flash-add');
+}
+
+function _posPushOrBump(line) {
+    const existing = cart.find(i => {
+        if (line.addons_only) {
+            const a = (line.addons || [])[0];
+            const b = (i.addons || [])[0];
+            return i.addons_only && a && b && a.option_id === b.option_id;
+        }
+        return (
+            !i.addons_only &&
+            i.id === line.id &&
+            (i.variant_id || null) === (line.variant_id || null) &&
+            !(i.addons && i.addons.length)
+        );
+    });
     if (existing) {
-        if (existing.qty >= existing.stock) { showToast('Maximum stock reached for this item.', 'error'); closeVariantModal(); return; }
+        if (existing.qty >= existing.stock) {
+            showToast('Maximum stock reached for this item.', 'error');
+            return false;
+        }
         existing.qty++;
     } else {
-        cart.push({ id: parseInt(productId), name: productName, price: parseFloat(price), qty: 1, img, stock: parseInt(stock), variant_id: null, variant_name: null });
+        cart.push(line);
     }
-    closeVariantModal();
+    return true;
+}
+
+function posClickMain(evt) {
+    if (!_posPickerState || !_posPickerState.tile) return;
+    const tile = _posPickerState.tile;
+    const stock = parseInt(tile.dataset.stock) || 0;
+    if (!(tile.dataset.isAvailable === 'true' && stock > 0)) {
+        showToast('Out of stock.', 'error');
+        return;
+    }
+    const ok = _posPushOrBump({
+        id: parseInt(tile.dataset.id),
+        name: tile.dataset.displayName,
+        price: parseFloat(tile.dataset.price) || 0,
+        qty: 1,
+        img: tile.dataset.img || '',
+        stock,
+        variant_id: null,
+        variant_name: null,
+        addons: [],
+    });
+    if (!ok) return;
+    _posFlashClickTarget(evt || window.event);
+    tile.classList.add('flash');
+    setTimeout(() => tile.classList.remove('flash'), 280);
     renderCart();
     scrollToBottom();
 }
 
-function selectVariant(productId, variantId, variantName, price, img, stock) {
-    const existing = cart.find(i => i.variant_id === variantId && i.id === parseInt(productId));
-    if (existing) {
-        if (existing.qty >= stock) { showToast('Maximum stock reached for this variant.', 'error'); closeVariantModal(); return; }
-        existing.qty++;
-    } else {
-        const tile = document.querySelector(`.pos-tile[data-id="${productId}"]`);
-        const mainProductName = tile ? tile.dataset.displayName : 'Product';
-        cart.push({ id: parseInt(productId), variant_id: parseInt(variantId), variant_name: variantName, name: mainProductName, price: parseFloat(price), qty: 1, img, stock: parseInt(stock) });
+function posClickVariant(variantId, evt) {
+    if (!_posPickerState || !_posPickerState.tile) return;
+    const tile = _posPickerState.tile;
+    const variants = parseTileJson(tile, 'variants', []) || [];
+    const v = variants.find(x => Number(x.id) === Number(variantId));
+    if (!v || !(v.stock_quantity > 0) || v.is_available === false) {
+        showToast('Out of stock.', 'error');
+        return;
     }
-    closeVariantModal();
+    const price = (v.special_price && parseFloat(v.special_price) > 0 && parseFloat(v.special_price) < parseFloat(v.price))
+        ? parseFloat(v.special_price) : parseFloat(v.price);
+    const img = (v.image_url && String(v.image_url).trim()) ? v.image_url : (tile.dataset.img || '');
+    const ok = _posPushOrBump({
+        id: parseInt(tile.dataset.id),
+        name: tile.dataset.displayName,
+        price,
+        qty: 1,
+        img,
+        stock: parseInt(v.stock_quantity) || 0,
+        variant_id: parseInt(v.id),
+        variant_name: v.name,
+        addons: [],
+    });
+    if (!ok) return;
+    _posFlashClickTarget(evt || window.event);
+    tile.classList.add('flash');
+    setTimeout(() => tile.classList.remove('flash'), 280);
+    renderCart();
+    scrollToBottom();
+}
+
+function posClickAddon(optionId, evt) {
+    if (!_posPickerState || !_posPickerState.tile) return;
+    const tile = _posPickerState.tile;
+    const meta = {};
+    tileProductAddons(tile).forEach(o => { meta[String(o.id)] = o; });
+    getPosYmalAddons().forEach(o => { meta[String(o.id)] = o; });
+    const o = meta[String(optionId)];
+    if (!o) return;
+    const stock = parseInt(o.stock_quantity) || 0;
+    if (stock <= 0 || o.is_available === false) {
+        showToast('Out of stock.', 'error');
+        return;
+    }
+    const ok = _posPushOrBump({
+        id: parseInt(tile.dataset.id),
+        name: o.name,
+        price: 0,
+        qty: 1,
+        img: o.image_url || '',
+        stock,
+        variant_id: null,
+        variant_name: null,
+        addons_only: true,
+        addons: [{
+            option_id: parseInt(o.id),
+            name: o.name,
+            price: parseFloat(o.price) || 0,
+            qty: 1,
+            img: o.image_url || '',
+            group_name: o.group_name || '',
+        }],
+    });
+    if (!ok) return;
+    _posFlashClickTarget(evt || window.event);
+    tile.classList.add('flash');
+    setTimeout(() => tile.classList.remove('flash'), 280);
     renderCart();
     scrollToBottom();
 }
 
 function closeVariantModal() {
-    document.getElementById('variantModal').classList.remove('active');
+    clearPosHoverTimers();
+    const modal = document.getElementById('variantModal');
+    if (!modal) return;
+
+    modal.classList.remove('active');
+    _posPickerSticky = false;
+    _posPickerState = null;
+
+    const finishClose = () => {
+        if (modal.classList.contains('active')) return;
+        modal.hidden = true;
+        modal.style.left = '';
+        modal.style.top = '';
+        modal.style.right = '';
+        modal.style.bottom = '';
+        modal.style.width = '';
+        modal.style.removeProperty('--arrow-x');
+        modal.removeAttribute('data-placement');
+        _posPickerAnchor = null;
+        _posHoverTile = null;
+    };
+
+    const onEnd = (e) => {
+        if (e && e.target !== modal) return;
+        modal.removeEventListener('transitionend', onEnd);
+        finishClose();
+    };
+    modal.addEventListener('transitionend', onEnd);
+    setTimeout(finishClose, 220);
 }
+
+/* Modal add actions live in posConfirmPickerAdd */
 
 /* ════════════════════════════════════════════
    INITIALIZATION
@@ -1289,8 +1683,33 @@ document.addEventListener('DOMContentLoaded', function () {
     fetchNextOrderId();
     renderCart();
 
-    document.getElementById('variantModal').addEventListener('click', function (e) {
-        if (e.target === this) closeVariantModal();
+    const variantModal = document.getElementById('variantModal');
+    if (variantModal) {
+        variantModal.addEventListener('mouseenter', onPosPickerHoverEnter);
+        variantModal.addEventListener('mouseleave', onPosPickerHoverLeave);
+    }
+
+    document.addEventListener('click', function (e) {
+        const modal = document.getElementById('variantModal');
+        if (!modal || !modal.classList.contains('active')) return;
+        if (modal.contains(e.target)) return;
+        if (e.target.closest && e.target.closest('.pos-tile')) return;
+        closeVariantModal();
+    });
+
+    window.addEventListener('resize', function () {
+        if (_posPickerAnchor && document.getElementById('variantModal')?.classList.contains('active')) {
+            positionPosVariantPicker(_posPickerAnchor);
+        }
+    });
+    window.addEventListener('scroll', function () {
+        if (_posPickerAnchor && document.getElementById('variantModal')?.classList.contains('active')) {
+            positionPosVariantPicker(_posPickerAnchor);
+        }
+    }, true);
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeVariantModal();
     });
 });
 
@@ -1336,36 +1755,45 @@ function addToCart(tile) {
     scrollToBottom();
 }
 
-function changeQty(id, delta, variantId = null) {
-    const item = variantId
-        ? cart.find(i => i.id === id && i.variant_id === variantId)
-        : cart.find(i => i.id === id && !i.variant_id);
+function cartLineTotal(item) {
+    const qty = item.qty || 1;
+    const base = (item.price || 0) * qty;
+    const addons = (item.addons || []).reduce((sum, a) => {
+        return sum + (Number(a.price) || 0) * (Number(a.qty) || 1) * qty;
+    }, 0);
+    return base + addons;
+}
+
+function cartSubtotal() {
+    return cart.reduce((s, i) => s + cartLineTotal(i), 0);
+}
+
+function changeQtyAt(idx, delta) {
+    const item = cart[idx];
     if (!item) return;
     item.qty += delta;
-    if (item.qty <= 0) { removeItem(id, variantId); return; }
+    if (item.qty <= 0) { removeItemAt(idx); return; }
     if (item.qty > item.stock) { item.qty = item.stock; showToast('Max stock reached.', 'error'); }
     renderCart();
 }
 
+function removeItemAt(idx) {
+    cart.splice(idx, 1);
+    renderCart();
+}
+
+function changeQty(id, delta, variantId = null) {
+    const idx = cart.findIndex(i =>
+        i.id === id && ((i.variant_id || null) === (variantId || null))
+    );
+    if (idx >= 0) changeQtyAt(idx, delta);
+}
+
 function removeItem(id, variantId = null) {
-    const selector = variantId
-        ? `.cart-item[data-id="${id}"][data-variant-id="${variantId}"]`
-        : `.cart-item[data-id="${id}"]:not([data-variant-id])`;
-    const el = document.querySelector(selector);
-    if (el) {
-        el.classList.add('removing');
-        setTimeout(() => {
-            cart = variantId
-                ? cart.filter(i => !(i.id === id && i.variant_id === variantId))
-                : cart.filter(i => !(i.id === id && !i.variant_id));
-            renderCart();
-        }, 200);
-    } else {
-        cart = variantId
-            ? cart.filter(i => !(i.id === id && i.variant_id === variantId))
-            : cart.filter(i => !(i.id === id && !i.variant_id));
-        renderCart();
-    }
+    const idx = cart.findIndex(i =>
+        i.id === id && ((i.variant_id || null) === (variantId || null))
+    );
+    if (idx >= 0) removeItemAt(idx);
 }
 
 async function voidOrder() {
@@ -1398,14 +1826,17 @@ function renderCart() {
     summary.style.display = 'flex';
     btn.disabled = false;
 
-    cart.forEach(item => {
+    cart.forEach((item, idx) => {
         const div = document.createElement('div');
         div.className = 'cart-item';
-        div.dataset.id = item.id;
-        if (item.variant_id) div.dataset.variantId = item.variant_id;
+        div.dataset.idx = String(idx);
 
         const variantInfo = item.variant_name
             ? `<div class="cart-item-variant">${esc(item.variant_name)}</div>` : '';
+        const addonsInfo = (item.addons && item.addons.length)
+            ? `<div class="cart-item-variant" style="color:var(--muted);font-weight:500;">${
+                item.addons.map(a => `+ ${esc(a.name)}${a.qty > 1 ? ' ×' + a.qty : ''}`).join('<br>')
+              }</div>` : '';
 
         div.innerHTML = `
             ${item.img
@@ -1416,16 +1847,17 @@ function renderCart() {
             <div class="cart-item-info">
                 <div class="cart-item-name">${esc(item.name)}</div>
                 ${variantInfo}
+                ${addonsInfo}
                 <div class="cart-item-unit">₱${item.price.toFixed(2)} each</div>
                 <div class="qty-stepper">
-                    <button class="qty-btn" onclick="changeQty(${item.id},-1,${item.variant_id || null})"><i class="ri-subtract-line"></i></button>
+                    <button class="qty-btn" onclick="changeQtyAt(${idx},-1)"><i class="ri-subtract-line"></i></button>
                     <div class="qty-val">${item.qty}</div>
-                    <button class="qty-btn" onclick="changeQty(${item.id},1,${item.variant_id || null})"><i class="ri-add-line"></i></button>
+                    <button class="qty-btn" onclick="changeQtyAt(${idx},1)"><i class="ri-add-line"></i></button>
                 </div>
             </div>
             <div class="cart-item-right">
-                <div class="cart-item-total">₱${(item.price * item.qty).toFixed(2)}</div>
-                <button class="cart-item-del" onclick="removeItem(${item.id},${item.variant_id || null})" title="Remove">
+                <div class="cart-item-total">₱${cartLineTotal(item).toFixed(2)}</div>
+                <button class="cart-item-del" onclick="removeItemAt(${idx})" title="Remove">
                     <i class="ri-close-line"></i>
                 </button>
             </div>`;
@@ -1435,11 +1867,8 @@ function renderCart() {
     recalc();
 }
 
-/* ════════════════════════════════════════════
-   TOTALS
-════════════════════════════════════════════ */
 function recalc() {
-    const sub   = cart.reduce((s, i) => s + i.price * i.qty, 0);
+    const sub   = cartSubtotal();
     const disc  = Math.max(0, parseFloat(document.getElementById('discountInput').value) || 0);
     const total = Math.max(0, sub - disc);
     document.getElementById('summSubtotal').textContent = '₱' + sub.toFixed(2);
@@ -1451,7 +1880,7 @@ function recalc() {
 function calcChange() {
     if (payMethod !== 'cash') { document.getElementById('changeLbl').textContent = ''; return; }
     const tendered = parseFloat(document.getElementById('cashTendered').value) || 0;
-    const sub      = cart.reduce((s, i) => s + i.price * i.qty, 0);
+    const sub      = cartSubtotal();
     const disc     = Math.max(0, parseFloat(document.getElementById('discountInput').value) || 0);
     const total    = Math.max(0, sub - disc);
     const change   = tendered - total;
@@ -1506,7 +1935,7 @@ async function processOrder() {
     btn.innerHTML = '<i class="ri-spin ri-loader-4-line"></i> Processing…';
     btn.disabled  = true;
 
-    const sub      = cart.reduce((s, i) => s + i.price * i.qty, 0);
+    const sub      = cartSubtotal();
     const disc     = Math.max(0, parseFloat(document.getElementById('discountInput').value) || 0);
     const total    = Math.max(0, sub - disc);
     const tendered = parseFloat(document.getElementById('cashTendered').value) || 0;
@@ -1530,7 +1959,12 @@ async function processOrder() {
             product_id: i.id,
             variant_id: i.variant_id || null,
             quantity:   i.qty,
-            price:      i.price
+            price:      i.price,
+            addons_only: !!i.addons_only,
+            addons: (i.addons || []).map(a => ({
+                addon_option_id: a.option_id,
+                quantity: a.qty
+            }))
         }))
     };
 
@@ -1598,7 +2032,7 @@ function showReceipt(d) {
                 ${thumb}
                 <span class="receipt-line-name">${esc(name)} × ${i.qty}</span>
             </div>
-            <span class="receipt-line-amt">₱${(i.price * i.qty).toFixed(2)}</span>
+            <span class="receipt-line-amt">₱${cartLineTotal(i).toFixed(2)}</span>
         </div>`;
     }).join('');
 

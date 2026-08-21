@@ -124,6 +124,29 @@ def create_app(config_class='default'):
                     db.session.commit()
         except Exception:
             db.session.rollback()
+
+    def _ensure_pos_order_item_line_columns():
+        try:
+            with app.app_context():
+                existing_tables = inspect(db.engine).get_table_names()
+                if 'pos_order_items' not in existing_tables:
+                    return
+                cols = {c['name'] for c in inspect(db.engine).get_columns('pos_order_items')}
+                stmts = []
+                if 'line_name' not in cols:
+                    stmts.append("ALTER TABLE pos_order_items ADD COLUMN line_name VARCHAR(255)")
+                if 'line_image_url' not in cols:
+                    stmts.append("ALTER TABLE pos_order_items ADD COLUMN line_image_url VARCHAR(500)")
+                if 'addon_option_id' not in cols:
+                    stmts.append("ALTER TABLE pos_order_items ADD COLUMN addon_option_id INTEGER")
+                for stmt in stmts:
+                    try:
+                        db.session.execute(text(stmt))
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+        except Exception:
+            db.session.rollback()
     
     # Log mail config for debugging (mask password)
     mail_user = app.config.get('MAIL_USERNAME', '')
@@ -153,6 +176,7 @@ def create_app(config_class='default'):
     with app.app_context():
         _ensure_order_fulfillment_columns()
         _ensure_store_free_delivery_column()
+        _ensure_pos_order_item_line_columns()
     
     # ====================================================
     # INITIALIZE CLOUDINARY
