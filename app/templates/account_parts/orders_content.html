@@ -255,6 +255,14 @@
     gap: 0.4rem;
 }
 
+.order-item-name-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
 .order-item-name {
     font-size: clamp(11px, 1.8vw, 12px);
     font-weight: 600;
@@ -264,6 +272,23 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.3;
+    min-width: 0;
+    flex: 1;
+}
+
+.order-item-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex-shrink: 0;
+    line-height: 1;
+    color: #f0b429;
+    font-size: 12px;
+    margin-top: 1px;
+}
+.order-item-rating i { line-height: 1; }
+.order-item-rating .ri-star-line {
+    color: rgba(44, 37, 32, 0.22);
 }
 
 .order-item-variant {
@@ -286,6 +311,70 @@
     flex-shrink: 0;
     align-self: flex-start;
     margin-top: 0.3rem;
+}
+
+/* Per-item price breakdown (main / variant / add-ons) */
+.order-item-breakdown {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(44, 37, 32, 0.1);
+}
+.order-item-breakdown--compact {
+    margin-top: 4px;
+    padding-top: 0;
+    border-top: none;
+    gap: 3px;
+}
+.oi-bd-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 6px 8px;
+    align-items: baseline;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.35;
+}
+.order-item-breakdown--compact .oi-bd-row {
+    font-size: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+.order-item-breakdown--compact .oi-bd-calc {
+    display: none;
+}
+.oi-bd-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.oi-bd-label--main {
+    color: var(--charcoal);
+    font-weight: 500;
+}
+.oi-bd-calc {
+    white-space: nowrap;
+    color: rgba(44, 37, 32, 0.45);
+    font-variant-numeric: tabular-nums;
+}
+.oi-bd-amt {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: var(--charcoal);
+    font-weight: 500;
+    text-align: right;
+}
+.oi-bd-thumb {
+    width: 18px;
+    height: 18px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid rgba(107, 76, 59, 0.12);
+    flex-shrink: 0;
+    vertical-align: middle;
+    margin-right: 4px;
 }
 
 /* Footer */
@@ -331,6 +420,7 @@
     gap: 0.75rem;
     flex-wrap: wrap;
     justify-content: flex-end;
+    align-items: center;
 }
 
 .btn-order-action {
@@ -1138,6 +1228,73 @@
     -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--border);
 }
+
+/* Order detail modal: laptop + phone */
+#orderDetailModal.modal-overlay {
+    align-items: center;
+    justify-content: center;
+    padding: clamp(0.75rem, 2vw, 1.5rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+#orderDetailModal .order-detail-modal.order-details-modal-surface {
+    width: min(720px, 100%);
+    max-width: 100%;
+    max-height: min(88vh, 900px);
+    margin: auto;
+}
+
+@media (max-width: 1100px) {
+    #orderDetailModal .order-detail-modal.order-details-modal-surface {
+        width: min(640px, 100%);
+        max-height: min(90vh, 820px);
+    }
+    #orderDetailModal .order-details-modal-surface .modal-header,
+    #orderDetailModal .order-details-modal-surface .modal-body {
+        padding-left: 1.1rem;
+        padding-right: 1.1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    #orderDetailModal.modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+    #orderDetailModal .order-detail-modal.order-details-modal-surface {
+        width: 100%;
+        max-width: 100%;
+        max-height: min(92vh, 100%);
+        border-radius: 16px 16px 0 0;
+        margin: 0;
+    }
+    #orderDetailModal .order-details-modal-surface .modal-header {
+        padding: 0.9rem 1rem;
+    }
+    #orderDetailModal .order-details-modal-surface .modal-body {
+        padding: 0.85rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+    #orderDetailModal .sdm-item-rows .order-item-row {
+        padding: 0.55rem 0.65rem !important;
+    }
+    #orderDetailModal .oi-bd-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2px 8px;
+    }
+    #orderDetailModal .oi-bd-calc {
+        display: none;
+    }
+}
+
+@media (max-width: 420px) {
+    #orderDetailModal .sdm-topbar {
+        gap: 0.45rem;
+    }
+    #orderDetailModal .sdm-when {
+        font-size: 11px;
+    }
+}
 </style>
 
 <div class="orders-page">
@@ -1515,7 +1672,7 @@ function renderOrderCard(order) {
         const name   = item.name || item.product_name || 'Product';
         const variant = item.variant_name ? `<div class="order-item-variant">${esc(item.variant_name)}</div>` : '';
         const qty    = item.quantity || 1;
-        const price  = formatPeso(orderItemLineTotal(item));
+        const ratingHtml = orderItemRatingStarsHtml(item);
         const imgHtml = img
             ? `<img class="order-item-img" src="${img}" alt="${esc(name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
                <div class="order-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
@@ -1524,12 +1681,14 @@ function renderOrderCard(order) {
             <div class="order-item-row">
                 ${imgHtml}
                 <div class="order-item-info">
-                    <div class="order-item-name">${esc(name)}</div>
+                    <div class="order-item-name-row">
+                        <div class="order-item-name">${esc(name)}</div>
+                        ${ratingHtml}
+                    </div>
                     ${variant}
                     <div class="order-item-qty">Qty: ${qty}</div>
                     ${orderItemAddonsHtml(item, true)}
                 </div>
-                <div class="order-item-price">${price}</div>
             </div>`;
     }).join('');
 
@@ -1688,6 +1847,15 @@ function buildCTAButtons(order) {
     return btns;
 }
 
+function orderItemRatingStarsHtml(item) {
+    const rating = Math.round(Number(item && item.rating != null ? item.rating : 0));
+    if (!(rating >= 1 && rating <= 5)) return '';
+    const stars = [1, 2, 3, 4, 5].map(s =>
+        `<i class="ri-star-${s <= rating ? 'fill' : 'line'}" aria-hidden="true"></i>`
+    ).join('');
+    return `<span class="order-item-rating" title="Your rating: ${rating}/5" aria-label="Your rating ${rating} out of 5">${stars}</span>`;
+}
+
 /* ═══════════════════════════════════════
    ORDER DETAIL MODAL
 ═══════════════════════════════════════ */
@@ -1817,13 +1985,12 @@ function buildCartDetailHTML(group, estimate = {}) {
         return `
             <div class="order-item-row" style="padding:.625rem .75rem;">
                 ${imgHtml}
-                <div class="order-item-info">
+                <div class="order-item-info" style="min-width:0;flex:1;">
                     <div class="order-item-name" style="font-size:13px;">${esc(name)}</div>
-                    ${item.variant_name ? `<div class="order-item-variant" style="font-size:11px;">${esc(item.variant_name)}</div>` : ''}
+                    ${item.variant_name ? `<div class="order-item-variant" style="font-size:11px;">Variant: ${esc(item.variant_name)}</div>` : ''}
                     <div class="order-item-qty" style="font-size:12px;">Qty: ${item.quantity || 1}${item.is_selected ? ' • Selected' : ''}</div>
-                    ${orderItemAddonsHtml(item, false)}
+                    ${orderItemPriceBreakdownHtml(item, false)}
                 </div>
-                <div class="order-item-price" style="font-size:15px;">${formatPeso(orderItemLineTotal(item))}</div>
             </div>`;
     }).join('');
 
@@ -1916,17 +2083,18 @@ function buildOrderDetailHTML(order) {
             ? `<img class="order-item-img" src="${esc(img)}" alt="${esc(name)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
                <div class="order-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
             : `<div class="order-item-img-ph"><i class="ri-flower-line"></i></div>`;
-        const variantHtml = item.variant_name ? `<div class="order-item-variant" style="font-size:11px;">${esc(item.variant_name)}</div>` : '';
+        const variantHtml = item.variant_name
+            ? `<div class="order-item-variant" style="font-size:11px;">Variant: ${esc(item.variant_name)}</div>`
+            : '';
         return `
             <div class="order-item-row" style="padding:.625rem .75rem;">
                 ${imgHtml}
-                <div class="order-item-info">
+                <div class="order-item-info" style="min-width:0;flex:1;">
                     <div class="order-item-name" style="font-size:13px;">${esc(name)}</div>
                     ${variantHtml}
                     <div class="order-item-qty" style="font-size:12px;">Qty: ${item.quantity || 1}</div>
-                    ${orderItemAddonsHtml(item, false)}
+                    ${orderItemPriceBreakdownHtml(item, false)}
                 </div>
-                <div class="order-item-price" style="font-size:15px;">${formatPeso(orderItemLineTotal(item))}</div>
             </div>`;
     }).join('');
 
@@ -2597,23 +2765,62 @@ function orderItemLineTotal(item) {
     return (qty * price) + addonsTotal;
 }
 
-function orderItemAddonsHtml(item, compact) {
-    const addons = Array.isArray(item && item.addons) ? item.addons : [];
-    if (!addons.length) return '';
-    const fontSize = compact ? '10px' : '11px';
-    return `<div style="margin-top:4px;display:flex;flex-direction:column;gap:3px;">
-        ${addons.map(a => {
-            const aName = a.name || 'Add-on';
-            const aQty = Math.max(1, Number(a.quantity || 1));
-            const aImg = a.image_url
-                ? `<img src="${esc(a.image_url)}" alt="${esc(aName)}" style="width:18px;height:18px;object-fit:cover;border-radius:4px;border:1px solid rgba(107,76,59,0.12);flex-shrink:0;">`
-                : '';
-            return `<div style="display:flex;align-items:center;gap:5px;font-size:${fontSize};color:var(--muted);">
-                ${aImg}
-                <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">+ ${esc(aName)}${aQty > 1 ? ` ×${aQty}` : ''}</span>
+function orderItemPriceBreakdownHtml(item, compact) {
+    if (!item) return '';
+    const addons = Array.isArray(item.addons) ? item.addons : [];
+
+    // Order cards: names only — no priced breakdown.
+    if (compact) {
+        if (!addons.length) return '';
+        return `<div style="margin-top:4px;display:flex;flex-direction:column;gap:3px;">
+            ${addons.map(a => {
+                const aName = a.name || 'Add-on';
+                const aQty = Math.max(1, Number(a.quantity || 1));
+                return `<div style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    + ${esc(aName)}${aQty > 1 ? ` ×${aQty}` : ''}
+                </div>`;
+            }).join('')}
+        </div>`;
+    }
+
+    const qty = Math.max(1, Number(item.quantity || 1));
+    const unitPrice = Number(item.price || 0);
+    const productSub = unitPrice * qty;
+    const productName = String(item.name || item.product_name || 'Product').trim() || 'Product';
+    const variantName = item.variant_name ? String(item.variant_name).trim() : '';
+
+    const mainLabel = variantName
+        ? `${productName} · ${variantName}`
+        : productName;
+
+    const mainRow = `
+        <div class="oi-bd-row">
+            <span class="oi-bd-label oi-bd-label--main">${esc(mainLabel)}</span>
+            <span class="oi-bd-calc">${formatPeso(unitPrice)} × ${qty}</span>
+            <span class="oi-bd-amt">${formatPeso(productSub)}</span>
+        </div>`;
+
+    const addonRows = addons.map(a => {
+        const aName = a.name || 'Add-on';
+        const aQty = Math.max(1, Number(a.quantity || 1));
+        const aUnit = Number(a.price || 0);
+        const aTotal = Number(a.total != null ? a.total : (aUnit * aQty));
+        const aImg = a.image_url
+            ? `<img class="oi-bd-thumb" src="${esc(a.image_url)}" alt="">`
+            : '';
+        return `
+            <div class="oi-bd-row">
+                <span class="oi-bd-label">${aImg}+ ${esc(aName)}${aQty > 1 ? ` ×${aQty}` : ''}</span>
+                <span class="oi-bd-calc">${formatPeso(aUnit)} × ${aQty}</span>
+                <span class="oi-bd-amt">${formatPeso(aTotal)}</span>
             </div>`;
-        }).join('')}
-    </div>`;
+    }).join('');
+
+    return `<div class="order-item-breakdown">${mainRow}${addonRows}</div>`;
+}
+
+function orderItemAddonsHtml(item, compact) {
+    return orderItemPriceBreakdownHtml(item, compact);
 }
 
 function parseApiDateTime(value) {

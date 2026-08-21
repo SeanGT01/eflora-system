@@ -571,6 +571,11 @@
                         <i class="ri-shopping-bag-3-line"></i> Purchase History
                     </a>
                 </li>
+                <li class="menu-item" data-page="wishlist">
+                    <a href="#" class="menu-link" onclick="loadAccountPage('wishlist'); return false;">
+                        <i class="ri-heart-3-line"></i> Wishlist
+                    </a>
+                </li>
             </ul>
 
             <hr class="sidebar-divider">
@@ -591,6 +596,8 @@
             {% include 'account_parts/profile_content.html' with context %}
         {% elif initial_page == 'orders' %}
             {% include 'account_parts/orders_content.html' with context %}
+        {% elif initial_page == 'wishlist' %}
+            {% include 'account_parts/wishlist_content.html' with context %}
         {% else %}
             {% include 'account_parts/profile_content.html' with context %}
         {% endif %}
@@ -618,7 +625,8 @@
 
     const pageInfo = {
         profile:  { title: 'My Profile',        breadcrumb: 'My Profile' },
-        orders:   { title: 'Purchase History',   breadcrumb: 'Purchase History' }
+        orders:   { title: 'Purchase History',   breadcrumb: 'Purchase History' },
+        wishlist: { title: 'Wishlist',           breadcrumb: 'Wishlist' }
     };
 
     async function loadAccountPage(page) {
@@ -701,8 +709,91 @@
         switch (page) {
             case 'profile':  initProfilePage();  break;
             case 'orders':   initOrdersPage();   break;
+            case 'wishlist': initWishlistPage(); break;
         }
     }
+
+    async function initWishlistPage() {
+        const container = document.getElementById('wishlistContainer');
+        if (!container) return;
+        container.className = 'wishlist-loading';
+        container.textContent = 'Loading your wishlist…';
+        try {
+            const r = await fetch('/api/account/wishlist/data');
+            if (r.status === 401) {
+                window.location.href = '{{ url_for("templates.login") }}';
+                return;
+            }
+            const data = await r.json();
+            const items = data.items || [];
+            if (!items.length) {
+                container.className = 'wishlist-empty';
+                container.innerHTML = `
+                    <i class="ri-heart-3-line"></i>
+                    <p>No saved items yet</p>
+                    <p style="font-size:13px;margin-top:.25rem;">Tap the heart on a product to save it here.</p>
+                    <a href="{{ url_for('templates.index') }}">Browse flowers</a>
+                `;
+                return;
+            }
+            container.className = 'wishlist-grid';
+            container.innerHTML = items.map(item => {
+                const href = `/products/${item.product_id}`;
+                const img = item.image_url
+                    ? `<img class="wishlist-card-img" src="${item.image_url}" alt="${(item.name || '').replace(/"/g, '&quot;')}" loading="lazy">`
+                    : `<div class="wishlist-card-img" style="display:flex;align-items:center;justify-content:center;color:rgba(181,68,90,.35);font-size:2rem;"><i class="ri-image-line"></i></div>`;
+                const variant = item.variant_name
+                    ? `<div class="wishlist-card-variant">${item.variant_name}</div>`
+                    : '';
+                const price = Number(item.price || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                const orig = item.original_price
+                    ? `<span class="orig">₱${Number(item.original_price).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>`
+                    : '';
+                return `
+                    <div class="wishlist-card-wrap" style="position:relative;">
+                        <button type="button" class="wishlist-remove" title="Remove from wishlist"
+                                onclick="removeWishlistItem(${item.id}, this)">
+                            <i class="ri-heart-fill"></i>
+                        </button>
+                        <a class="wishlist-card" href="${href}">
+                            ${img}
+                            <div class="wishlist-card-body">
+                                <div class="wishlist-card-store">${item.store_name || ''}</div>
+                                <div class="wishlist-card-name">${item.product_name || item.name || 'Product'}</div>
+                                ${variant}
+                                <div class="wishlist-card-price">₱${price}${orig}</div>
+                            </div>
+                        </a>
+                    </div>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error('Wishlist load error:', err);
+            container.className = 'wishlist-empty';
+            container.innerHTML = `<p>Could not load wishlist. Please try again.</p>`;
+        }
+    }
+
+    window.removeWishlistItem = async function(itemId, btn) {
+        try {
+            const r = await fetch(`/api/account/wishlist/${itemId}`, { method: 'DELETE' });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                showToast(data.error || 'Could not remove item', 'error');
+                return;
+            }
+            const wrap = btn?.closest('.wishlist-card-wrap');
+            wrap?.remove();
+            const grid = document.getElementById('wishlistContainer');
+            if (grid && !grid.querySelector('.wishlist-card-wrap')) {
+                initWishlistPage();
+            }
+            showToast('Removed from wishlist');
+        } catch (err) {
+            console.error(err);
+            showToast('Could not remove item', 'error');
+        }
+    };
 
     // ===== PROFILE PAGE INIT (CLOUDINARY AVATAR SUPPORT) =====
     const DEFAULT_CUSTOMER_AVATAR_URL = "{{ url_for('static', filename='images/default-customer-avatar.svg') }}";

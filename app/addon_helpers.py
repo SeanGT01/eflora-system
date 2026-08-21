@@ -54,6 +54,9 @@ def normalize_addon_option_ids(raw):
 def resolve_structured_addon_selections(product, option_ids, quantity_per_option=1):
     """
     Validate option selections for this product.
+    Allows:
+      - options that belong to this product (dropdown add-ons)
+      - YMAL-flagged options from any product in the same store
     Each selection may include a unit count (stack from dropdown + YMAL).
     line['quantity'] = units * quantity_per_option (stock / order charge units).
     line['units'] = stacked selection count stored on cart rows.
@@ -68,15 +71,29 @@ def resolve_structured_addon_selections(product, option_ids, quantity_per_option
 
     main_qty = max(1, int(quantity_per_option or 1))
     lines = []
+    store_id = getattr(product, 'store_id', None)
 
     for sel in selections:
         oid = sel['id']
         units = int(sel['units'])
         opt = ProductAddonOption.query.get(oid)
-        if not opt or not opt.group or opt.group.product_id != product.id:
+        if not opt or not opt.group or not opt.group.product:
             return None, (jsonify({
                 'error': f'Add-on option #{oid} is not valid for this product'
             }), 400)
+
+        source_product = opt.group.product
+        same_product = source_product.id == product.id
+        same_store_ymal = (
+            store_id is not None
+            and source_product.store_id == store_id
+            and bool(opt.show_in_you_may_also_like)
+        )
+        if not same_product and not same_store_ymal:
+            return None, (jsonify({
+                'error': f'Add-on option #{oid} is not valid for this product'
+            }), 400)
+
         if not opt.group.is_active:
             return None, (jsonify({
                 'error': f'Add-on "{opt.group.name}" is no longer available'
@@ -182,17 +199,48 @@ def decrement_addon_option_stock(lines, user_id=None, reason='other', reason_not
 
 
 def ymal_addon_option_dicts(product):
-    """Options flagged for You might also like on this product."""
+    """
+    YMAL add-on options for the product page carousel.
+    Includes every active YMAL-flagged option from products in the same store
+    (not only options defined on this product).
+    """
+    from sqlalchemy.orm import joinedload
+
+    from app.models import Product, ProductAddonGroup
+
+    if not product or not getattr(product, 'store_id', None):
+        return []
+
+    rows = (
+        ProductAddonOption.query
+        .join(ProductAddonGroup, ProductAddonOption.group_id == ProductAddonGroup.id)
+        .join(Product, ProductAddonGroup.product_id == Product.id)
+        .options(joinedload(ProductAddonOption.group).joinedload(ProductAddonGroup.product))
+        .filter(
+            Product.store_id == product.store_id,
+            ProductAddonOption.show_in_you_may_also_like.is_(True),
+            ProductAddonOption.is_available.is_(True),
+            ProductAddonGroup.is_active.is_(True),
+            Product.is_available.is_(True),
+        )
+        .order_by(
+            ProductAddonGroup.sort_order.asc(),
+            ProductAddonOption.sort_order.asc(),
+            ProductAddonOption.id.asc(),
+        )
+        .all()
+    )
+
     out = []
-    for group in sorted(product.addon_groups or [], key=lambda g: g.sort_order or 0):
-        if not group.is_active:
+    seen = set()
+    for opt in rows:
+        if opt.id in seen:
             continue
-        for opt in sorted(group.options or [], key=lambda o: o.sort_order or 0):
-            if not opt.is_available or not opt.show_in_you_may_also_like:
-                continue
-            d = opt.to_dict()
-            d['group_id'] = group.id
-            d['group_name'] = group.name
-            d['ymal_type'] = 'addon_option'
-            out.append(d)
+        seen.add(opt.id)
+        d = opt.to_dict()
+        d['group_id'] = opt.group_id
+        d['group_name'] = opt.group.name if opt.group else None
+        d['source_product_id'] = opt.group.product_id if opt.group else None
+        d['ymal_type'] = 'addon_option'
+        out.append(d)
     return out

@@ -239,6 +239,7 @@ def update_order_status(order_id):
 
     previous_status = order.status
     if new_status == 'cancelled' and previous_status != 'cancelled':
+        _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(user_id)
     
     order.set_status(new_status)

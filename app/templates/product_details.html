@@ -6,6 +6,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
+{% include 'partials/order_detail_sdm_styles.html' %}
     /* ─── Page wash (E-FLORA glass / pastel) ─── */
     body {
         background:
@@ -183,6 +184,60 @@
             inset 0 1px 0 rgba(255, 255, 255, 0.75);
     }
 
+    .wishlist-heart-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 5;
+        width: 42px;
+        height: 42px;
+        border: none;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--deep-rose);
+        box-shadow: 0 6px 16px rgba(80, 40, 70, 0.14);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+    }
+    .wishlist-heart-btn:hover {
+        transform: scale(1.06);
+        background: #fff;
+    }
+    .wishlist-heart-btn.is-active {
+        color: #c0392b;
+    }
+    .wishlist-heart-btn.is-active i {
+        font-weight: normal;
+    }
+    .wishlist-heart-btn:disabled {
+        opacity: 0.65;
+        cursor: wait;
+    }
+    .wishlist-heart-tooltip {
+        position: absolute;
+        right: calc(100% + 8px);
+        top: 50%;
+        transform: translateY(-50%);
+        white-space: nowrap;
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 600;
+        color: #fff;
+        background: rgba(44, 37, 32, 0.92);
+        padding: 0.35rem 0.65rem;
+        border-radius: 8px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+    }
+    .wishlist-heart-btn:hover .wishlist-heart-tooltip {
+        opacity: 1;
+    }
+
     .gallery-main-img {
         width: 100%;
         height: 100%;
@@ -236,11 +291,13 @@
     .gallery-arrow.next { right: 0.875rem; }
     .gallery-arrow:disabled { opacity: 0.3; cursor: default; }
 
-    /* Stock tag on image */
+    /* Stock tag on image — bottom-right so it clears the wishlist heart */
     .gallery-stock-tag {
         position: absolute;
-        top: 0.9rem;
+        top: auto;
+        bottom: 0.9rem;
         right: 0.9rem;
+        left: auto;
         z-index: 3;
         pointer-events: none;
         max-width: calc(100% - 1.8rem);
@@ -497,71 +554,243 @@
         background: var(--border-strong);
     }
 
-    .reviews-modal {
-        width: min(680px, 96vw);
-        max-height: 85vh;
-        display: flex;
-        flex-direction: column;
-        background: rgba(255, 255, 255, 0.55);
-        border: 1px solid rgba(255, 255, 255, 0.7);
-        box-shadow:
-            0 20px 60px rgba(90, 40, 80, 0.16),
-            inset 0 1px 0 rgba(255, 255, 255, 0.75);
-        backdrop-filter: blur(16px) saturate(1.3);
-        -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    /* ── Product Reviews modal (matches order-details SDM surface) ── */
+    #productReviewsModal.modal-overlay {
+        align-items: center;
+        justify-content: center;
+        padding: clamp(0.75rem, 2.5vw, 1.5rem);
+        overscroll-behavior: contain;
     }
-    .reviews-modal-headline {
-        font-size: 13px;
-        color: var(--muted);
-        margin-top: 0.3rem;
+    #productReviewsModal .reviews-modal.order-details-modal-surface {
+        width: min(720px, 100%);
+        max-width: min(720px, 100%);
+        max-height: min(88vh, 860px);
+        margin: 0 auto;
+        overflow: hidden;
+    }
+    #productReviewsModal .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+    #productReviewsModal .modal-header .modal-title-wrap {
+        min-width: 0;
+        flex: 1;
+    }
+    #productReviewsModal .modal-header .modal-title {
+        font-family: var(--font-sans);
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--charcoal);
+        margin: 0;
+        line-height: 1.3;
+    }
+    #productReviewsModal .modal-close {
+        flex-shrink: 0;
     }
     .reviews-modal-body {
         display: flex;
         flex-direction: column;
-        gap: 0.9rem;
+        gap: 1.15rem;
+        padding: 0.35rem 1.35rem 1.35rem;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
-    .review-row {
-        border: 1px solid rgba(255, 255, 255, 0.7);
-        border-radius: var(--radius-md);
-        padding: 0.8rem 0.95rem;
-        background: rgba(255, 255, 255, 0.55);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    .reviews-modal-note {
+        font-family: var(--font-sans);
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0;
     }
-    .review-row-top {
+    .reviews-modal-note strong {
+        color: var(--charcoal);
+        font-weight: 600;
+    }
+
+    /* Summary: average + breakdown */
+    .ratings-overview {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+        gap: 1.25rem 2rem;
+        padding: 0.15rem 0 0.35rem;
+        border-bottom: 1px solid rgba(44, 37, 32, 0.08);
+        padding-bottom: 1.15rem;
+    }
+    .ratings-avg-block {
         display: flex;
-        justify-content: space-between;
-        gap: 0.75rem;
-        margin-bottom: 0.35rem;
-        flex-wrap: wrap;
+        flex-direction: column;
+        gap: 0.45rem;
+        min-width: 0;
     }
-    .review-author {
+    .ratings-avg-label,
+    .ratings-breakdown-label {
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--charcoal);
+    }
+    .ratings-avg-value {
+        font-family: var(--font-sans);
+        font-size: clamp(1.75rem, 4vw, 2.15rem);
+        font-weight: 700;
+        color: var(--charcoal);
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+    }
+    .ratings-avg-value span {
+        font-weight: 500;
+        color: var(--muted);
+        font-size: 0.72em;
+    }
+    .ratings-avg-stars {
+        color: #e8b923;
+        font-size: 1.15rem;
+        display: inline-flex;
+        gap: 2px;
+        line-height: 1;
+    }
+    .ratings-breakdown {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        min-width: 0;
+    }
+    .ratings-breakdown-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 0.32rem;
+    }
+    .ratings-bar-row {
+        display: grid;
+        grid-template-columns: 1rem minmax(0, 1fr);
+        align-items: center;
+        gap: 0.55rem;
+    }
+    .ratings-bar-star {
+        font-family: var(--font-sans);
+        font-size: 12.5px;
         font-weight: 600;
         color: var(--charcoal);
-        font-size: 13px;
+        text-align: right;
     }
-    .review-date {
-        color: var(--muted);
-        font-size: 11px;
+    .ratings-bar-track {
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(44, 37, 32, 0.08);
+        overflow: hidden;
+    }
+    .ratings-bar-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: #e8b923;
+        width: 0%;
+        transition: width 0.35s ease;
+    }
+
+    /* Review list */
+    .reviews-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+    .review-row {
+        border: none;
+        border-radius: 0;
+        padding: 1rem 0;
+        background: transparent;
+        box-shadow: none;
+        border-bottom: 1px solid rgba(44, 37, 32, 0.07);
+    }
+    .review-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0.25rem;
     }
     .review-stars {
-        color: #f0b429;
-        font-size: 13px;
+        color: #e8b923;
+        font-size: 14px;
         display: inline-flex;
         gap: 1px;
-        margin-bottom: 0.4rem;
+        margin-bottom: 0.45rem;
     }
     .review-comment {
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.5;
+        font-family: var(--font-sans);
+        color: var(--charcoal);
+        font-size: 14px;
+        line-height: 1.55;
+        word-break: break-word;
+        margin: 0 0 0.4rem;
+    }
+    .review-by {
+        font-family: var(--font-sans);
+        font-size: 12.5px;
+        font-style: italic;
+        color: #9a8d85;
+        margin: 0;
     }
     .reviews-empty {
         text-align: center;
         color: var(--muted);
+        font-family: var(--font-sans);
         font-size: 13px;
-        padding: 1.25rem 0.5rem;
+        padding: 1.75rem 0.75rem;
+        border-radius: 12px;
+        border: 1px dashed rgba(216, 120, 160, 0.3);
+        background: rgba(255, 248, 246, 0.55);
+    }
+    .reviews-empty i {
+        display: block;
+        font-size: 1.75rem;
+        color: rgba(181, 68, 90, 0.4);
+        margin-bottom: 0.5rem;
+    }
+
+    @media (max-width: 900px) {
+        #productReviewsModal .reviews-modal.order-details-modal-surface {
+            width: min(640px, 100%);
+            max-height: min(90vh, 780px);
+        }
+        .reviews-modal-body {
+            padding: 0.25rem 1.1rem 1.15rem;
+            gap: 1rem;
+        }
+        .ratings-overview {
+            gap: 1rem 1.35rem;
+        }
+    }
+
+    @media (max-width: 640px) {
+        #productReviewsModal.modal-overlay {
+            align-items: flex-end;
+            padding: 0;
+        }
+        #productReviewsModal .reviews-modal.order-details-modal-surface {
+            width: 100%;
+            max-width: 100%;
+            max-height: min(92vh, 100%);
+            border-radius: 16px 16px 0 0;
+            margin: 0;
+        }
+        #productReviewsModal .modal-header {
+            padding: 0.9rem 1rem;
+        }
+        .reviews-modal-body {
+            padding: 0.15rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+        }
+        .ratings-overview {
+            grid-template-columns: 1fr;
+            gap: 1.1rem;
+        }
+        .review-comment { font-size: 13.5px; }
+    }
+
+    @media (max-width: 380px) {
+        .ratings-avg-value {
+            font-size: 1.55rem;
+        }
     }
 
     .store-link {
@@ -1794,7 +2023,8 @@
         }
 
         .gallery-stock-tag {
-            top: 0.65rem;
+            top: auto;
+            bottom: 0.65rem;
             right: 0.65rem;
         }
 
@@ -2285,6 +2515,14 @@
             <!-- Main image -->
             <div class="gallery-main" id="galleryMain">
                 <div class="gallery-stock-tag" id="galleryStockTag"></div>
+                <button type="button"
+                        class="wishlist-heart-btn"
+                        id="wishlistHeartBtn"
+                        aria-label="Add to wishlist"
+                        onclick="toggleProductWishlist(event)">
+                    <span class="wishlist-heart-tooltip" id="wishlistHeartTip">Add to wishlist</span>
+                    <i class="ri-heart-line" id="wishlistHeartIcon"></i>
+                </button>
 
                 {% if product.images and product.images|length > 0 %}
                     <img class="gallery-main-img" id="mainImage"
@@ -2892,16 +3130,18 @@
 </div>
 
 <!-- ─── Product Reviews Modal ─── -->
-<div class="modal-overlay" id="productReviewsModal">
-    <div class="modal reviews-modal">
+<div class="modal-overlay" id="productReviewsModal" role="dialog" aria-modal="true" aria-labelledby="productReviewsTitle" onclick="if (event.target === this) closeReviewsModal()">
+    <div class="modal reviews-modal order-details-modal-surface" onclick="event.stopPropagation()">
         <div class="modal-header">
-            <h3 class="modal-title">Product Reviews</h3>
-            <button class="modal-close" onclick="closeReviewsModal()">
+            <div class="modal-title-wrap">
+                <h3 class="modal-title" id="productReviewsTitle">Ratings</h3>
+            </div>
+            <button type="button" class="modal-close" onclick="closeReviewsModal()" aria-label="Close">
                 <i class="ri-close-line"></i>
             </button>
         </div>
         <div class="modal-body reviews-modal-body" id="reviewsModalBody">
-            <div class="reviews-empty">Loading reviews...</div>
+            <div class="reviews-empty"><i class="ri-loader-4-line"></i>Loading reviews...</div>
         </div>
     </div>
 </div>
@@ -3234,6 +3474,7 @@ function setGalleryImages(nextImages) {
     // UPDATE TOTAL
     // ═══════════════════════════════════════════════════════════
     updateTotal();
+    updateWishlistHeartUI();
     
     console.groupEnd();
 }
@@ -3290,17 +3531,41 @@ function esc(text) {
         .replace(/'/g, '&#39;');
 }
 
-function buildReviewStars(rating) {
-    const r = Math.max(0, Math.min(5, Number(rating) || 0));
+function buildReviewStars(rating, { allowHalf = false } = {}) {
+    const raw = Math.max(0, Math.min(5, Number(rating) || 0));
+    const full = allowHalf ? Math.floor(raw) : Math.round(raw);
+    const hasHalf = allowHalf && (raw - full) >= 0.3 && full < 5;
+    const empty = 5 - full - (hasHalf ? 1 : 0);
     let stars = '';
-    for (let i = 0; i < r; i += 1) stars += '<i class="ri-star-fill"></i>';
-    for (let i = r; i < 5; i += 1) stars += '<i class="ri-star-line"></i>';
+    for (let i = 0; i < full; i += 1) stars += '<i class="ri-star-fill"></i>';
+    if (hasHalf) stars += '<i class="ri-star-half-fill"></i>';
+    for (let i = 0; i < empty; i += 1) stars += '<i class="ri-star-line"></i>';
     return stars;
 }
 
 function getCurrentVariantFilter() {
     if (!selectedVariant || !selectedVariant.id) return null;
     return Number(selectedVariant.id);
+}
+
+function buildRatingBreakdown(ratings) {
+    const counts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    ratings.forEach(r => {
+        const star = Math.max(1, Math.min(5, Math.round(Number(r.rating) || 0)));
+        counts[star] += 1;
+    });
+    const total = ratings.length || 1;
+    return [5, 4, 3, 2, 1].map(star => {
+        const pct = Math.round((counts[star] / total) * 100);
+        return `
+            <div class="ratings-bar-row">
+                <span class="ratings-bar-star">${star}</span>
+                <div class="ratings-bar-track" aria-hidden="true">
+                    <div class="ratings-bar-fill" style="width:${pct}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 function renderReviewsInModal(payload) {
@@ -3312,27 +3577,54 @@ function renderReviewsInModal(payload) {
         ? allRatings.filter(r => Number(r.variant_id) === activeVariantId)
         : allRatings;
 
+    const count = ratings.length;
+    const avg = count
+        ? (ratings.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) / count)
+        : 0;
+    const avgLabel = count ? (Math.round(avg * 10) / 10).toFixed(1).replace(/\.0$/, '') : '0';
+
     const variantNote = activeVariantId && selectedVariant
-        ? `<div class="reviews-modal-headline">Showing reviews for <strong>${esc(selectedVariant.name)}</strong> variant.</div>`
+        ? `<p class="reviews-modal-note">Showing reviews for <strong>${esc(selectedVariant.name)}</strong>.</p>`
         : '';
 
+    const overview = `
+        <div class="ratings-overview">
+            <div class="ratings-avg-block">
+                <div class="ratings-avg-label">Average user rating</div>
+                <div class="ratings-avg-value">${esc(avgLabel)} <span>/ 5</span></div>
+                <div class="ratings-avg-stars" aria-label="${esc(avgLabel)} out of 5">
+                    ${buildReviewStars(avg, { allowHalf: true })}
+                </div>
+            </div>
+            <div class="ratings-breakdown">
+                <div class="ratings-breakdown-label">Rating breakdown</div>
+                <div class="ratings-breakdown-rows">
+                    ${buildRatingBreakdown(ratings)}
+                </div>
+            </div>
+        </div>
+    `;
+
     if (!ratings.length) {
-        body.innerHTML = `${variantNote}<div class="reviews-empty">No reviews yet for this selection.</div>`;
+        body.innerHTML = `${variantNote}${overview}<div class="reviews-empty"><i class="ri-chat-smile-3-line"></i>No reviews yet for this selection.</div>`;
         return;
     }
 
-    const rows = ratings.map(r => `
-        <div class="review-row">
-            <div class="review-row-top">
-                <div class="review-author">${esc(r.customer_name || 'Anonymous')}</div>
-                <div class="review-date">${esc(formatReviewDate(r.created_at))}</div>
-            </div>
-            <div class="review-stars">${buildReviewStars(r.rating)}</div>
-            <div class="review-comment">${esc(r.comment || 'No written comment.')}</div>
-        </div>
-    `).join('');
+    const rows = ratings.map(r => {
+        const name = r.customer_name || 'Anonymous';
+        const comment = (r.comment && String(r.comment).trim())
+            ? r.comment
+            : 'No written comment.';
+        return `
+            <article class="review-row">
+                <div class="review-stars" aria-label="${esc(String(r.rating || 0))} out of 5 stars">${buildReviewStars(r.rating)}</div>
+                <p class="review-comment">${esc(comment)}</p>
+                <p class="review-by">— Reviewed by ${esc(name)}</p>
+            </article>
+        `;
+    }).join('');
 
-    body.innerHTML = `${variantNote}${rows}`;
+    body.innerHTML = `${variantNote}${overview}<div class="reviews-list">${rows}</div>`;
 }
 
 async function openReviewsModal() {
@@ -3342,7 +3634,7 @@ async function openReviewsModal() {
 
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
-    body.innerHTML = '<div class="reviews-empty">Loading reviews...</div>';
+    body.innerHTML = '<div class="reviews-empty"><i class="ri-loader-4-line"></i>Loading reviews...</div>';
 
     try {
         if (!productReviewsCache) {
@@ -3351,7 +3643,7 @@ async function openReviewsModal() {
         }
         renderReviewsInModal(productReviewsCache || {});
     } catch (error) {
-        body.innerHTML = '<div class="reviews-empty">Unable to load reviews right now.</div>';
+        body.innerHTML = '<div class="reviews-empty"><i class="ri-error-warning-line"></i>Unable to load reviews right now.</div>';
     }
 }
 
@@ -4557,6 +4849,95 @@ function viewProduct(productId) {
 }
 
 /* ════════════════════════════════
+   WISHLIST
+════════════════════════════════ */
+const WISHLIST_LOGGED_IN = {{ 'true' if session.get('user_id') and session.get('role') == 'customer' else 'false' }};
+const WISHLIST_LOGIN_URL = {{ url_for('templates.login') | tojson }};
+/** Set of keys: 'main' or 'v:<id>' currently wishlisted for this product */
+const wishlistKeys = new Set();
+
+function currentWishlistKey() {
+    return selectedVariant && selectedVariant.id ? `v:${selectedVariant.id}` : 'main';
+}
+
+function updateWishlistHeartUI() {
+    const btn = document.getElementById('wishlistHeartBtn');
+    const icon = document.getElementById('wishlistHeartIcon');
+    const tip = document.getElementById('wishlistHeartTip');
+    if (!btn || !icon) return;
+    const active = wishlistKeys.has(currentWishlistKey());
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-label', active ? 'Remove from wishlist' : 'Add to wishlist');
+    icon.className = active ? 'ri-heart-fill' : 'ri-heart-line';
+    if (tip) tip.textContent = active ? 'Remove from wishlist' : 'Add to wishlist';
+}
+
+async function loadWishlistStateForProduct() {
+    if (!WISHLIST_LOGGED_IN) {
+        updateWishlistHeartUI();
+        return;
+    }
+    try {
+        const r = await fetch(`/api/account/wishlist/product/${mainProduct.id}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        wishlistKeys.clear();
+        (data.variant_ids || []).forEach(vid => {
+            if (vid === null || vid === undefined) wishlistKeys.add('main');
+            else wishlistKeys.add(`v:${vid}`);
+        });
+        updateWishlistHeartUI();
+    } catch (err) {
+        console.warn('Wishlist state load failed', err);
+    }
+}
+
+async function toggleProductWishlist(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (!WISHLIST_LOGGED_IN) {
+        window.location.href = WISHLIST_LOGIN_URL + '?next=' + encodeURIComponent(window.location.pathname);
+        return;
+    }
+    const btn = document.getElementById('wishlistHeartBtn');
+    if (btn) btn.disabled = true;
+    try {
+        const payload = {
+            product_id: mainProduct.id,
+            variant_id: selectedVariant ? selectedVariant.id : null,
+        };
+        const r = await fetch('/api/account/wishlist/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.status === 401) {
+            window.location.href = WISHLIST_LOGIN_URL;
+            return;
+        }
+        if (!r.ok) {
+            if (typeof showToast === 'function') showToast(data.error || 'Could not update wishlist', 'error');
+            return;
+        }
+        const key = currentWishlistKey();
+        if (data.wished) wishlistKeys.add(key);
+        else wishlistKeys.delete(key);
+        updateWishlistHeartUI();
+        if (typeof showToast === 'function') {
+            showToast(data.message || (data.wished ? 'Added to wishlist' : 'Removed from wishlist'));
+        }
+    } catch (err) {
+        console.error(err);
+        if (typeof showToast === 'function') showToast('Could not update wishlist', 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+/* ════════════════════════════════
    INITIALIZATION
 ════════════════════════════════ */
  
@@ -4579,6 +4960,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     syncPurchaseActions();
     initAddonDropdowns();
+    loadWishlistStateForProduct();
     
     // Verify addToCart exists
     if (typeof window.addToCart !== 'function') {

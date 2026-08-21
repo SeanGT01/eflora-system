@@ -1593,13 +1593,20 @@ class Order(db.Model):
                 if opt is None:
                     continue
                 opt.stock_quantity = int(opt.stock_quantity or 0) + addon_qty
-                opt.updated_at = datetime.utcnow()
-                product_id = item.product_id
-                if not product_id and opt.group:
-                    product_id = opt.group.product_id
-                if product_id and user_id:
+                if hasattr(opt, 'updated_at'):
+                    opt.updated_at = datetime.utcnow()
+
+                # Always attribute audit to the product that owns the add-on option
+                # (matches checkout decrement + inventory history lookup).
+                owner_product_id = None
+                if opt.group and opt.group.product_id:
+                    owner_product_id = opt.group.product_id
+                elif item.product_id:
+                    owner_product_id = item.product_id
+
+                if owner_product_id and user_id:
                     db.session.add(StockReduction(
-                        product_id=product_id,
+                        product_id=owner_product_id,
                         variant_id=None,
                         addon_option_id=opt.id,
                         reduction_amount=addon_qty,
@@ -2109,6 +2116,95 @@ class Cart(db.Model):
             'item_count': sum(item['quantity'] for item in items_list),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class WishlistItem(db.Model):
+    """Saved product/variant for a customer (wishlist)."""
+    __tablename__ = 'wishlist_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id', ondelete='CASCADE'), nullable=False, index=True)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='CASCADE'), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('wishlist_items', lazy='dynamic', cascade='all, delete-orphan'))
+    product = db.relationship('Product', backref=db.backref('wishlist_items', lazy='dynamic', passive_deletes=True))
+    variant = db.relationship('ProductVariant', backref='wishlist_items', lazy=True)
+
+    @property
+    def item_image(self):
+        if self.variant and self.variant.image_url:
+            return self.variant.image_url
+        if self.product and self.product.images:
+            primary = next(
+                (img for img in self.product.images if img.is_primary),
+                self.product.images[0] if self.product.images else None,
+            )
+            return primary.image_url if primary else None
+        return None
+
+    @property
+    def display_name(self):
+        if not self.product:
+            return 'Product'
+        if self.variant:
+            return f'{self.product.name} — {self.variant.name}'
+        return self.product.name
+
+    @property
+    def display_price(self):
+        if self.variant:
+            return float(self.variant.effective_price)
+        if self.product:
+            return float(self.product.effective_price)
+        return 0.0
+
+    def to_dict(self):
+        product_dict = self.product.to_dict() if self.product else None
+        variant_dict = self.variant.to_dict() if self.variant else None
+        store_name = 'Unknown Store'
+        store_id = None
+        if self.product:
+            store_id = self.product.store_id
+            if self.product.store:
+                store_name = self.product.store.name
+
+        if self.variant:
+            effective = float(self.variant.effective_price)
+            original = float(self.variant.price)
+            disc_pct = self.variant.discount_pct
+            stock = int(self.variant.stock_quantity or 0)
+        elif self.product:
+            effective = float(self.product.effective_price)
+            original = float(self.product.price)
+            disc_pct = self.product.discount_pct
+            stock = int(self.product.stock_quantity or 0)
+        else:
+            effective = 0.0
+            original = 0.0
+            disc_pct = None
+            stock = 0
+
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'product_id': self.product_id,
+            'variant_id': self.variant_id,
+            'store_id': store_id,
+            'store_name': store_name,
+            'name': self.display_name,
+            'product_name': self.product.name if self.product else None,
+            'variant_name': self.variant.name if self.variant else None,
+            'product': product_dict,
+            'variant': variant_dict,
+            'image_url': self.item_image,
+            'price': effective,
+            'original_price': original if disc_pct else None,
+            'discount_pct': disc_pct,
+            'stock_quantity': stock,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 

@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from collections import defaultdict
 
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating, CartItemAddon, ProductAddonOption
+from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating, CartItemAddon, ProductAddonOption, WishlistItem
 from app.extensions import db
 from sqlalchemy.orm import joinedload, selectinload
 from functools import wraps
@@ -325,6 +325,11 @@ def get_product(product_id):
     p = Product.query.get_or_404(product_id)
     data = p.to_dict()
     data['store_name'] = p.store.name if p.store else None
+    try:
+        from app.addon_helpers import ymal_addon_option_dicts
+        data['ymal_addon_options'] = ymal_addon_option_dicts(p)
+    except Exception:
+        data['ymal_addon_options'] = []
     if p.store:
         data['store'] = p.store.to_dict()
         _, address = _resolve_optional_customer_address()
@@ -1400,6 +1405,70 @@ def get_store_time_slots(store_id):
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
     return jsonify(build_store_time_slots(store, target_date))
+
+
+# ── Wishlist ─────────────────────────────────────────────────────────────────
+
+@customer_bp.route('/wishlist', methods=['GET'])
+@customer_only
+def get_wishlist():
+    try:
+        user_id = int(get_jwt_identity())
+        from app.wishlist_helpers import list_wishlist_items
+        items = list_wishlist_items(user_id)
+        return jsonify({'success': True, 'items': items, 'count': len(items)})
+    except Exception as e:
+        current_app.logger.exception('get_wishlist: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@customer_bp.route('/wishlist/product/<int:product_id>', methods=['GET'])
+@customer_only
+def get_wishlist_for_product(product_id):
+    try:
+        user_id = int(get_jwt_identity())
+        from app.wishlist_helpers import wishlist_variant_keys_for_product
+        keys = wishlist_variant_keys_for_product(user_id, product_id)
+        return jsonify({'success': True, 'variant_ids': keys})
+    except Exception as e:
+        current_app.logger.exception('get_wishlist_for_product: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@customer_bp.route('/wishlist/toggle', methods=['POST'])
+@customer_only
+def toggle_wishlist_api():
+    try:
+        user_id = int(get_jwt_identity())
+        data = request.get_json(silent=True) or {}
+        from app.wishlist_helpers import toggle_wishlist
+        item, wished, err = toggle_wishlist(user_id, data.get('product_id'), data.get('variant_id'))
+        if err:
+            return jsonify(err[0]), err[1]
+        return jsonify({
+            'success': True,
+            'wished': wished,
+            'item': item,
+            'message': 'Added to wishlist' if wished else 'Removed from wishlist',
+        })
+    except Exception as e:
+        current_app.logger.exception('toggle_wishlist_api: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@customer_bp.route('/wishlist/<int:item_id>', methods=['DELETE'])
+@customer_only
+def delete_wishlist_item(item_id):
+    try:
+        user_id = int(get_jwt_identity())
+        from app.wishlist_helpers import remove_wishlist_item
+        ok, err = remove_wishlist_item(user_id, item_id)
+        if err:
+            return jsonify(err[0]), err[1]
+        return jsonify({'success': True, 'message': 'Removed from wishlist'})
+    except Exception as e:
+        current_app.logger.exception('delete_wishlist_item: %s', e)
+        return jsonify({'error': str(e)}), 500
 
 
 def _format_time_label(hour, minute):

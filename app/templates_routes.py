@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
 from app.archive_routes import get_seller_store
-from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting, Conversation, PasswordResetOTP, ProductAddonGroup, ProductAddonOption, CartItemAddon, OrderItemAddon
+from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting, Conversation, PasswordResetOTP, ProductAddonGroup, ProductAddonOption, CartItemAddon, OrderItemAddon, WishlistItem
 from app.extensions import db
 import os
 from werkzeug.utils import secure_filename
@@ -393,35 +393,74 @@ def get_authenticated_user_id():
     return None
 
 
-def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
+def _serialize_customer_order(
+    order,
+    rated_item_ids=None,
+    store_rated=None,
+    store_rating_value=None,
+    product_rating_values=None,
+    item_ratings=None,
+):
     """Shape order data for the customer account order UI.
 
-    When listing many orders, pass rated_item_ids (set of order_item_id) and
-    store_rated (bool) to avoid N+1 queries.
+    When listing many orders, pass rated_item_ids / store_rated / rating values
+    to avoid N+1 queries.
     """
     items_payload = []
     total_quantity = 0
+    product_vals = list(product_rating_values or [])
+    store_val = store_rating_value
+    ratings_by_item = dict(item_ratings or {})
 
     if order.status in ('delivered', 'completed'):
-        if rated_item_ids is None:
+        if rated_item_ids is None or product_rating_values is None or item_ratings is None:
             try:
                 ratings = ProductRating.query.filter_by(order_id=order.id).all()
-                rated_item_ids = {r.order_item_id for r in ratings if r.order_item_id}
+                if rated_item_ids is None:
+                    rated_item_ids = {r.order_item_id for r in ratings if r.order_item_id}
+                if product_rating_values is None:
+                    product_vals = [int(r.rating) for r in ratings if r.rating]
+                if item_ratings is None:
+                    ratings_by_item = {
+                        r.order_item_id: int(r.rating)
+                        for r in ratings
+                        if r.order_item_id is not None and r.rating is not None
+                    }
             except Exception:
-                rated_item_ids = set()
+                if rated_item_ids is None:
+                    rated_item_ids = set()
+                if product_rating_values is None:
+                    product_vals = []
+                if item_ratings is None:
+                    ratings_by_item = {}
         if store_rated is None:
             try:
-                store_rated_flag = (
-                    StoreRating.query.filter_by(order_id=order.id, customer_id=order.customer_id).first()
-                    is not None
-                )
+                store_row = StoreRating.query.filter_by(
+                    order_id=order.id, customer_id=order.customer_id
+                ).first()
+                store_rated_flag = store_row is not None
+                if store_rating_value is None:
+                    store_val = int(store_row.rating) if store_row and store_row.rating else None
             except Exception:
                 store_rated_flag = False
+                if store_rating_value is None:
+                    store_val = None
         else:
             store_rated_flag = bool(store_rated)
+            if store_rating_value is None and store_rated_flag:
+                try:
+                    store_row = StoreRating.query.filter_by(
+                        order_id=order.id, customer_id=order.customer_id
+                    ).first()
+                    store_val = int(store_row.rating) if store_row and store_row.rating else None
+                except Exception:
+                    store_val = None
     else:
         rated_item_ids = set()
         store_rated_flag = True  # N/A for non-delivered; treat as satisfied for all_rated
+        store_val = None
+        product_vals = []
+        ratings_by_item = {}
 
     for item in order.items:
         quantity = item.quantity or 0
@@ -429,6 +468,9 @@ def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
         total_quantity += quantity
         addons_list = [a.to_dict() for a in (item.addons or [])]
         addons_sum = float(item.addons_total or 0)
+        item_rating = ratings_by_item.get(item.id)
+        if item_rating is not None:
+            item_rating = max(1, min(5, int(item_rating)))
 
         items_payload.append({
             'id': item.id,
@@ -443,6 +485,7 @@ def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
             'product_image_url': item.product_image,
             'image_url': item.product_image,
             'is_rated': item.id in rated_item_ids,
+            'rating': item_rating,
             'addons': addons_list,
             'addons_total': addons_sum,
         })
@@ -453,6 +496,17 @@ def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
         all_rated = bool(store_rated_flag) and products_all_rated
     else:
         all_rated = True
+
+    avg_product_rating = None
+    if product_vals:
+        avg_product_rating = round(sum(product_vals) / len(product_vals), 1)
+
+    # Card display: prefer store rating, else rounded product average.
+    customer_rating = None
+    if store_val is not None:
+        customer_rating = max(1, min(5, int(store_val)))
+    elif avg_product_rating is not None:
+        customer_rating = max(1, min(5, int(round(avg_product_rating))))
 
     return {
         'id': order.id,
@@ -496,6 +550,9 @@ def _serialize_customer_order(order, rated_item_ids=None, store_rated=None):
         'store_rated': bool(store_rated_flag),
         'all_rated': all_rated,
         'rated_count': len(rated_item_ids),
+        'store_rating_value': int(store_val) if store_val is not None else None,
+        'avg_product_rating': avg_product_rating,
+        'customer_rating': customer_rating,
     }
 
 
@@ -1573,6 +1630,9 @@ def account_content(page):
         elif page == 'orders':
             return render_template('account_parts/orders_content.html', 
                                  user=user.to_dict() if user else None)
+        elif page == 'wishlist':
+            return render_template('account_parts/wishlist_content.html',
+                                 user=user.to_dict() if user else None)
         elif page == 'settings':
             return redirect(url_for('templates.my_account', page='profile'))
         else:
@@ -1768,15 +1828,71 @@ def my_account():
 
 
 
+
+
+
+# ── Wishlist (session / web) — register before catch-all ─────────────────────
+
+@templates_bp.route('/api/account/wishlist/data', methods=['GET'])
+def account_wishlist_data():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    from app.wishlist_helpers import list_wishlist_items
+    items = list_wishlist_items(int(session['user_id']))
+    return jsonify({'success': True, 'items': items, 'count': len(items)})
+
+
+@templates_bp.route('/api/account/wishlist/product/<int:product_id>', methods=['GET'])
+def account_wishlist_for_product(product_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    from app.wishlist_helpers import wishlist_variant_keys_for_product
+    keys = wishlist_variant_keys_for_product(int(session['user_id']), product_id)
+    return jsonify({'success': True, 'variant_ids': keys})
+
+
+@templates_bp.route('/api/account/wishlist/toggle', methods=['POST'])
+def account_wishlist_toggle():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    if session.get('role') != 'customer':
+        return jsonify({'error': 'Customer access required'}), 403
+    data = request.get_json(silent=True) or {}
+    product_id = data.get('product_id')
+    variant_id = data.get('variant_id')
+    from app.wishlist_helpers import toggle_wishlist
+    item, wished, err = toggle_wishlist(int(session['user_id']), product_id, variant_id)
+    if err:
+        return jsonify(err[0]), err[1]
+    return jsonify({
+        'success': True,
+        'wished': wished,
+        'item': item,
+        'message': 'Added to wishlist' if wished else 'Removed from wishlist',
+    })
+
+
+@templates_bp.route('/api/account/wishlist/<int:item_id>', methods=['DELETE'])
+def account_wishlist_remove(item_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not logged in'}), 401
+    from app.wishlist_helpers import remove_wishlist_item
+    ok, err = remove_wishlist_item(int(session['user_id']), item_id)
+    if err:
+        return jsonify(err[0]), err[1]
+    return jsonify({'success': True, 'message': 'Removed from wishlist'})
+
+
 @templates_bp.route('/api/account/<path:path>')
 def catch_api_navigation(path):
     """Redirect any accidental navigation to API URLs back to the proper page"""
     print(f"⚠️ Warning: Someone navigated directly to API URL: /api/account/{path}")
     # Extract the page name
     page = path.split('/')[0]
-    if page in ['profile', 'orders']:
+    if page in ['profile', 'orders', 'wishlist']:
         return redirect(url_for('templates.my_account', page=page))
     return redirect(url_for('templates.my_account'))
+
 
 @templates_bp.route('/home')
 def home():
@@ -3201,24 +3317,42 @@ def orders_data():
 
     order_ids = [o.id for o in orders]
     rated_by_order = defaultdict(set)
-    store_rated_ids = set()
+    product_ratings_by_order = defaultdict(list)
+    item_ratings_by_order = defaultdict(dict)
+    store_rating_by_order = {}
     if order_ids:
         for pr in ProductRating.query.filter(ProductRating.order_id.in_(order_ids)).all():
             if pr.order_item_id is not None:
                 rated_by_order[pr.order_id].add(pr.order_item_id)
-        store_rated_ids = {
-            r.order_id for r in StoreRating.query.filter(StoreRating.order_id.in_(order_ids)).all()
-        }
+                if pr.rating is not None:
+                    item_ratings_by_order[pr.order_id][pr.order_item_id] = int(pr.rating)
+            if pr.rating is not None:
+                product_ratings_by_order[pr.order_id].append(int(pr.rating))
+        for r in StoreRating.query.filter(StoreRating.order_id.in_(order_ids)).all():
+            store_rating_by_order[r.order_id] = int(r.rating) if r.rating is not None else None
 
     orders_payload = []
     for order in orders:
         if order.status in ('delivered', 'completed'):
             rid = rated_by_order.get(order.id, set())
-            sr = order.id in store_rated_ids
+            sr = order.id in store_rating_by_order
+            srv = store_rating_by_order.get(order.id)
+            prv = product_ratings_by_order.get(order.id, [])
+            irm = item_ratings_by_order.get(order.id, {})
         else:
             rid = set()
             sr = True
-        order_dict = _serialize_customer_order(order, rated_item_ids=rid, store_rated=sr)
+            srv = None
+            prv = []
+            irm = {}
+        order_dict = _serialize_customer_order(
+            order,
+            rated_item_ids=rid,
+            store_rated=sr,
+            store_rating_value=srv,
+            product_rating_values=prv,
+            item_ratings=irm,
+        )
         order_dict['date'] = order_dict['created_at']
         orders_payload.append(order_dict)
 
@@ -6701,19 +6835,35 @@ def get_stock_history(product_id):
         # Get reductions for variants (where variant_id is NOT NULL)
         variant_q = StockReduction.query.filter(
             StockReduction.product_id == product.id,
-            StockReduction.variant_id != None,
+            StockReduction.variant_id.isnot(None),
         )
         if filter_variant_id:
             variant_q = variant_q.filter(StockReduction.variant_id == filter_variant_id)
         variant_reductions = variant_q.order_by(StockReduction.created_at.desc()).all()
 
-        # Get reductions for add-on options
-        addon_q = StockReduction.query.filter(
-            StockReduction.product_id == product.id,
-            StockReduction.addon_option_id != None,
-        )
+        # Add-on history: look up by owned option ids so restore/sale rows still
+        # appear even if product_id was previously logged as the ordered product.
+        owned_addon_ids = [
+            int(o.id)
+            for g in (product.addon_groups or [])
+            for o in (g.options or [])
+            if o and o.id
+        ]
         if filter_addon_option_id:
-            addon_q = addon_q.filter(StockReduction.addon_option_id == filter_addon_option_id)
+            if owned_addon_ids and filter_addon_option_id not in owned_addon_ids:
+                return jsonify({'error': 'Add-on option not found on this product'}), 404
+            addon_q = StockReduction.query.filter(
+                StockReduction.addon_option_id == filter_addon_option_id,
+            )
+        elif owned_addon_ids:
+            addon_q = StockReduction.query.filter(
+                StockReduction.addon_option_id.in_(owned_addon_ids),
+            )
+        else:
+            addon_q = StockReduction.query.filter(
+                StockReduction.product_id == product.id,
+                StockReduction.addon_option_id.isnot(None),
+            )
         addon_reductions = addon_q.order_by(StockReduction.created_at.desc()).all()
 
         # When scoped to a variant/add-on, hide unrelated main history
@@ -7186,6 +7336,8 @@ def seller_order_status_api(order_id):
 
     previous_status = order.status
     if new_status == 'cancelled' and previous_status != 'cancelled':
+        # Ensure add-on rows are loaded before stock restore / history audit
+        _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(session['user_id'])
 
     order.set_status(new_status)
@@ -7265,6 +7417,7 @@ def seller_order_update_status(order_id):
         return jsonify({'error': 'Order must be in accepted status to mark as preparing'}), 400
 
     if new_status == 'cancelled' and current_status != 'cancelled':
+        _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(session['user_id'])
     
     # Log status update
