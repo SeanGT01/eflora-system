@@ -4449,6 +4449,8 @@ function getStructuredAddonSelectionMap() {
             name: opt.dataset.name || (existing && existing.name) || '',
             price: isNaN(price) ? ((existing && existing.price) || 0) : price,
             quantity: (existing ? existing.quantity : 0) + 1,
+            image_url: opt.dataset.image || (existing && existing.image_url) || '',
+            group_name: opt.dataset.groupName || (existing && existing.group_name) || '',
         });
     });
     selectedYmalAddonOptions.forEach((item, oid) => {
@@ -4459,6 +4461,8 @@ function getStructuredAddonSelectionMap() {
             name: item.name || (existing && existing.name) || '',
             price: existing ? existing.price : (parseFloat(item.price) || 0),
             quantity: (existing ? existing.quantity : 0) + qty,
+            image_url: item.image_url || (existing && existing.image_url) || '',
+            group_name: item.group_name || (existing && existing.group_name) || '',
         });
     });
     return map;
@@ -4468,6 +4472,18 @@ function getSelectedAddonOptionIds() {
     return Array.from(getStructuredAddonSelectionMap().values()).map(item => ({
         addon_option_id: item.id,
         quantity: item.quantity,
+    }));
+}
+
+function getStructuredAddonsForCart() {
+    return Array.from(getStructuredAddonSelectionMap().values()).map(item => ({
+        id: item.id,
+        addon_option_id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        image_url: item.image_url || '',
+        group_name: item.group_name || '',
     }));
 }
 
@@ -4698,6 +4714,8 @@ function selectYmalAddonOption(card) {
             price: isNaN(price) ? 0 : price,
             quantity: 1,
             stock: safeStock,
+            image_url: (card.querySelector('img') && card.querySelector('img').src) || '',
+            group_name: card.dataset.groupName || card.dataset.group || '',
         });
         card.classList.add('selected');
         if (slide) slide.classList.add('is-selected');
@@ -4850,6 +4868,7 @@ async function addToCartWithVariant() {
                 image_url: selectedVariant.image_url || mainProduct.image_url,
                 quantity: qty,
                 addon_option_ids: getSelectedAddonOptionIds(),
+                addons: getStructuredAddonsForCart(),
             };
             console.log('🔄 Adding VARIANT to cart:', product);
         } else {
@@ -4863,6 +4882,7 @@ async function addToCartWithVariant() {
                 image_url: mainProduct.image_url,
                 quantity: qty,
                 addon_option_ids: getSelectedAddonOptionIds(),
+                addons: getStructuredAddonsForCart(),
             };
             console.log('🔄 Adding MAIN PRODUCT to cart:', product);
         }

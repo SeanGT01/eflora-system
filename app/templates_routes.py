@@ -9544,12 +9544,15 @@ def add_to_cart():
             return struct_err
 
         address = _get_default_customer_address(user.id)
-        delivery = _store_delivery_match(product.store, address)
-        if not delivery.get('can_deliver'):
-            return jsonify({
-                'error': delivery.get('reason') or 'This store cannot deliver to your default address.',
-                'code': 'OUTSIDE_DELIVERY_AREA'
-            }), 400
+        # New accounts often have no address yet (guest-cart transfer after
+        # signup). Allow the line into the cart; checkout still enforces coverage.
+        if address:
+            delivery = _store_delivery_match(product.store, address)
+            if not delivery.get('can_deliver'):
+                return jsonify({
+                    'error': delivery.get('reason') or 'This store cannot deliver to your default address.',
+                    'code': 'OUTSIDE_DELIVERY_AREA'
+                }), 400
         
         # If variant_id is provided, check variant exists and has stock
         variant = None
