@@ -2037,18 +2037,41 @@ def login():
                 return _seller_home_redirect(u.id)
             return redirect(url_for('templates.seller_signup_complete'))
         if role == 'rider':
-            return redirect(url_for('templates.rider_dashboard'))
-        return redirect(url_for('templates.index'))
+            # Riders sign in via the mobile app. There is no web rider dashboard.
+            session.pop('user_id', None)
+            session.pop('user_name', None)
+            session.pop('role', None)
+            session.pop('email', None)
+        else:
+            return redirect(url_for('templates.index'))
 
     if request.method == 'POST':
         raw_id = (request.form.get('identifier') or request.form.get('email') or '').strip()
         password = request.form.get('password')
-        
+        invalid_login = lambda: render_template(
+            'login.html',
+            error='Invalid email/phone or password',
+            form_data={'identifier': raw_id or ''},
+            login_next=request.form.get('next') or request.args.get('next'),
+        )
+
         # Find user by email or PH mobile
         user = _find_user_by_login_identifier_web(raw_id)
-        
+
+        password_ok = False
+        try:
+            password_ok = bool(
+                user and password and user.password_hash and user.check_password(password)
+            )
+        except Exception:
+            password_ok = False
+
+        # Riders are app-only; do not create a web session or hit a missing dashboard route.
+        if password_ok and (user.role or '').lower() == 'rider':
+            return invalid_login()
+
         # Check if user exists and password is correct
-        if user and user.check_password(password):
+        if password_ok:
             if (user.status or '').lower() == 'banned' and _ensure_account_bans_table():
                 active_ban = AccountBan.query.filter_by(user_id=user.id, is_active=True).order_by(AccountBan.created_at.desc()).first()
                 if active_ban and active_ban.banned_until and active_ban.banned_until <= datetime.utcnow():
@@ -2089,17 +2112,10 @@ def login():
                 return redirect(url_for('templates.admin_users'))
             elif user.role == 'seller':
                 return _seller_home_redirect(user.id)
-            elif user.role == 'rider':
-                return redirect(url_for('templates.rider_dashboard'))
             else:  # customer
                 return redirect(url_for('templates.index'))
         else:
-            return render_template(
-                'login.html',
-                error='Invalid email/phone or password',
-                form_data={'identifier': raw_id or ''},
-                login_next=request.form.get('next') or request.args.get('next'),
-            )
+            return invalid_login()
 
     verified = request.args.get('verified') == '1'
     reset_ok = request.args.get('reset') == '1'
