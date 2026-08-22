@@ -1048,6 +1048,16 @@ def _store_delivery_match(store, address):
         return {'can_deliver': False, 'reason': 'Could not validate delivery coverage right now.'}
 
 
+@templates_bp.route('/googlea5dba4f15d616309.html')
+def google_site_verification():
+    """Google Search Console HTML-file ownership check (keep after verify)."""
+    return (
+        'google-site-verification: googlea5dba4f15d616309.html\n',
+        200,
+        {'Content-Type': 'text/html; charset=UTF-8'},
+    )
+
+
 @templates_bp.route('/')
 @limiter.limit("5 per minute")
 def index():

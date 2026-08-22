@@ -22,8 +22,8 @@
     .qa-picker {
         position: fixed;
         z-index: 530;
-        width: min(420px, calc(100vw - 1.5rem));
-        max-height: min(78vh, 560px);
+        width: min(640px, calc(100vw - 1.5rem));
+        max-height: min(82vh, 680px);
         display: flex;
         flex-direction: column;
         background: #fffdf9;
@@ -170,7 +170,6 @@
         gap: 0.55rem;
     }
 
-    /* Card = selectable row + YMAL-style qty below */
     .qa-option-card {
         border: 1.5px solid rgba(230, 170, 195, 0.4);
         border-radius: 14px;
@@ -195,7 +194,7 @@
     .qa-option-row {
         width: 100%;
         display: grid;
-        grid-template-columns: 44px 1fr auto;
+        grid-template-columns: 52px 1fr auto;
         gap: 0.7rem;
         align-items: center;
         text-align: left;
@@ -207,10 +206,10 @@
         color: var(--charcoal, #2c2520);
     }
     .qa-option-thumb {
-        width: 44px;
-        height: 44px;
+        width: 52px;
+        height: 52px;
         border-radius: 10px;
-        object-fit: cover;
+        object-fit: contain;
         background: linear-gradient(145deg, #f5ede6, #ede3d8);
     }
     .qa-option-thumb-fallback {
@@ -247,6 +246,79 @@
         font-weight: 500;
         color: #9e9e9e;
         text-decoration: line-through;
+    }
+
+    /* Add-ons / YMAL: 5 tiles per row, full product image (not cropped) */
+    .qa-extras-list {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0.45rem;
+        align-items: stretch;
+    }
+    .qa-extras-list .qa-option-card {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .qa-extras-list .qa-option-row {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+        gap: 0.28rem;
+        padding: 0.4rem 0.3rem 0.2rem;
+        grid-template-columns: none;
+        flex: 1;
+        min-width: 0;
+    }
+    .qa-extras-list .qa-option-thumb,
+    .qa-extras-list .qa-option-thumb-fallback {
+        width: 100%;
+        height: 72px;
+        max-height: none;
+        aspect-ratio: auto;
+        object-fit: contain;
+        align-self: stretch;
+        background: #fff;
+        border-radius: 8px;
+    }
+    .qa-extras-list .qa-option-name {
+        font-size: 10.5px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        margin-bottom: 0;
+    }
+    .qa-extras-list .qa-option-stock {
+        font-size: 9.5px;
+        -webkit-line-clamp: 1;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .qa-extras-list .qa-option-price {
+        text-align: center;
+        font-size: 0.88rem;
+    }
+    .qa-extras-list .qa-option-price .was {
+        display: inline;
+        font-size: 0.58rem;
+        margin-right: 0.15rem;
+    }
+    .qa-extras-list .qa-item-qty {
+        margin: 0 0.15rem 0.3rem;
+        min-height: 22px;
+        gap: 0.25rem;
+    }
+    .qa-extras-list .qa-item-qty-btn {
+        width: 22px;
+        height: 22px;
+        font-size: 15px;
+    }
+    .qa-extras-list .qa-item-qty-val {
+        font-size: 12px;
+        min-width: 0.9rem;
     }
 
     /* YMAL-style − qty + under each card */
@@ -371,7 +443,8 @@
     }
 
     @media (max-width: 900px) {
-        .qa-picker { width: min(400px, calc(100vw - 1.25rem)); }
+        .qa-picker { width: min(620px, calc(100vw - 1.25rem)); }
+        .qa-extras-list { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     }
 
     @media (max-width: 640px) {
@@ -388,6 +461,9 @@
         .qa-picker.open { transform: translateY(0); }
         .qa-picker-head { padding: 1.1rem 1.1rem 0.9rem; }
         .qa-picker-body { padding: 0.95rem 1.1rem 0.4rem; }
+        .qa-extras-list { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.35rem; }
+        .qa-extras-list .qa-option-thumb,
+        .qa-extras-list .qa-option-thumb-fallback { height: 58px; }
         .qa-picker-foot {
             padding: 0.95rem 1.1rem calc(1rem + env(safe-area-inset-bottom, 0px));
         }
@@ -774,13 +850,13 @@
         let html = '';
         if (productAddons.length) {
             html += '<span class="qa-picker-label" style="margin-top:0.85rem;">Add-ons</span>';
-            html += '<div class="qa-option-list">' + productAddons.map(function (o) {
+            html += '<div class="qa-extras-list">' + productAddons.map(function (o) {
                 return rowHtml(o, 'Add-on');
             }).join('') + '</div>';
         }
         if (ymal.length) {
             html += '<span class="qa-picker-label" style="margin-top:0.85rem;">You may also like</span>';
-            html += '<div class="qa-option-list">' + ymal.map(function (o) {
+            html += '<div class="qa-extras-list">' + ymal.map(function (o) {
                 return rowHtml({
                     id: o.id,
                     name: o.name,

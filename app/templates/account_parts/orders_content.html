@@ -18,6 +18,14 @@
     letter-spacing: -0.5px;
 }
 
+.orders-page-header {
+    display: block;
+}
+
+.orders-status-dropdown {
+    display: none;
+}
+
 /* ── Status Tab Bar ── */
 .order-tabs {
     display: flex;
@@ -1078,6 +1086,173 @@
     
 }
 
+/* Mobile: compact status dropdown + bottom sheet (desktop tabs unchanged) */
+@media (max-width: 768px) {
+    .orders-page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.85rem;
+    }
+    .orders-page-header .orders-page-title {
+        margin-bottom: 0;
+        flex: 1;
+        min-width: 0;
+    }
+    .order-tabs {
+        display: none !important;
+    }
+    .orders-status-dropdown {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-shrink: 0;
+        max-width: min(58%, 220px);
+        min-height: 40px;
+        padding: 0.4rem 0.7rem 0.4rem 0.9rem;
+        background: rgba(255, 252, 248, 0.92);
+        border: 1.5px solid rgba(194, 78, 104, 0.28);
+        border-radius: 999px;
+        color: var(--deep-rose);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 650;
+        box-shadow: 0 4px 14px rgba(181, 68, 90, 0.08);
+        cursor: pointer;
+    }
+    .orders-status-dropdown span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .orders-status-dropdown i {
+        font-size: 18px;
+        color: var(--deep-rose);
+    }
+    .orders-status-dropdown[aria-expanded="true"] i {
+        transform: rotate(180deg);
+    }
+}
+
+.orders-status-sheet-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 520;
+    background: rgba(42, 35, 30, 0.42);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    align-items: flex-end;
+    justify-content: center;
+}
+.orders-status-sheet-overlay.active {
+    display: flex;
+}
+.orders-status-sheet {
+    width: 100%;
+    max-width: 560px;
+    background: rgba(255, 252, 248, 0.97);
+    border-radius: 24px 24px 0 0;
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow: 0 -12px 40px rgba(90, 40, 80, 0.16);
+    padding: 0.4rem 0 calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    animation: ordersStatusSheetUp 0.28s ease;
+}
+@keyframes ordersStatusSheetUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+.orders-status-sheet-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 99px;
+    background: rgba(194, 78, 104, 0.28);
+    margin: 0.55rem auto 0.35rem;
+}
+.orders-status-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.35rem 1rem 0.65rem;
+}
+.orders-status-sheet-head h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--charcoal);
+    flex: 1;
+    text-align: center;
+}
+.orders-status-sheet-close {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    cursor: pointer;
+    border-radius: 50%;
+}
+.orders-status-sheet-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    width: 100%;
+    min-height: 48px;
+    padding: 0.55rem 1.1rem;
+    border: none;
+    background: transparent;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    color: var(--charcoal);
+    cursor: pointer;
+    text-align: left;
+}
+.orders-status-sheet-row:hover,
+.orders-status-sheet-row:focus-visible {
+    background: rgba(194, 78, 104, 0.06);
+    outline: none;
+}
+.orders-status-sheet-row.is-active {
+    background: rgba(194, 78, 104, 0.1);
+    color: var(--deep-rose);
+    font-weight: 700;
+}
+.orders-status-sheet-ico {
+    width: 22px;
+    font-size: 18px;
+    color: var(--muted);
+    flex-shrink: 0;
+}
+.orders-status-sheet-row.is-active .orders-status-sheet-ico {
+    color: var(--deep-rose);
+}
+.orders-status-sheet-label {
+    flex: 1;
+    min-width: 0;
+}
+.orders-status-sheet-count {
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--muted);
+    min-width: 1.5rem;
+    text-align: right;
+}
+.orders-status-sheet-row.is-active .orders-status-sheet-count {
+    color: var(--deep-rose);
+}
+.orders-status-sheet-end {
+    width: 18px;
+    font-size: 16px;
+    color: var(--muted);
+    text-align: right;
+}
+.orders-status-sheet-row.is-active .orders-status-sheet-end {
+    color: var(--deep-rose);
+}
+
 /* ── Rating Modal ── */
 .rating-modal {
     max-width: 560px;
@@ -1442,9 +1617,22 @@
 </style>
 
 <div class="orders-page">
-    <h1 class="orders-page-title">My Orders</h1>
+    <div class="orders-page-header">
+        <h1 class="orders-page-title">My Orders</h1>
+        <button type="button"
+                class="orders-status-dropdown"
+                id="ordersStatusDropdown"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls="ordersStatusSheet"
+                aria-label="Filter orders. Current filter: All Orders"
+                onclick="openOrderStatusSheet()">
+            <span id="ordersStatusDropdownLabel">All Orders</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+        </button>
+    </div>
 
-    <!-- Status Tabs -->
+    <!-- Status Tabs (desktop / tablet) -->
     <div class="order-tabs" id="orderTabs">
         <button class="order-tab active" data-status="all" onclick="filterOrdersByStatus('all', this)">
             All <span class="tab-count" id="count-all">0</span>
@@ -1467,6 +1655,20 @@
         <button class="order-tab" data-status="cancelled" onclick="filterOrdersByStatus('cancelled', this)">
             Cancelled
         </button>
+    </div>
+
+    <div class="orders-status-sheet-overlay" id="ordersStatusSheetOverlay" onclick="if(event.target===this)closeOrderStatusSheet()">
+        <div class="orders-status-sheet" id="ordersStatusSheet" role="dialog" aria-modal="true" aria-labelledby="ordersStatusSheetTitle">
+            <div class="orders-status-sheet-handle" aria-hidden="true"></div>
+            <div class="orders-status-sheet-head">
+                <span style="width:36px;"></span>
+                <h2 id="ordersStatusSheetTitle">Filter Orders</h2>
+                <button type="button" class="orders-status-sheet-close" onclick="closeOrderStatusSheet()" aria-label="Close filter">
+                    <i class="ri-close-line" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div id="ordersStatusSheetList" role="listbox" aria-label="Order status"></div>
+        </div>
     </div>
 
     <!-- Search -->
@@ -1623,6 +1825,16 @@ let _activeStatus    = 'all';
 let _searchQuery     = '';
 let _cartGroups      = [];
 
+const STATUS_FILTER_OPTIONS = [
+    { key: 'all',          label: 'All Orders' },
+    { key: 'pending',      label: 'To Pay' },
+    { key: 'processing',   label: 'To Ship' },
+    { key: 'on_delivery',  label: 'To Receive' },
+    { key: 'delivered',    label: 'Delivered' },
+    { key: 'completed',    label: 'Completed' },
+    { key: 'cancelled',    label: 'Cancelled' },
+];
+
 const STATUS_CONFIG = {
     pending:     { label: 'To Pay',      badge: 'badge-pending',     icon: 'ri-time-line',           progress: 0 },
     accepted:    { label: 'Preparing',  badge: 'badge-preparing',   icon: 'ri-box-1-line',          progress: 1 },
@@ -1761,9 +1973,81 @@ function refreshOrdersView() {
 function filterOrdersByStatus(status, btn) {
     _activeStatus = status;
     document.querySelectorAll('.order-tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
+    const tabBtn = btn && btn.classList && btn.classList.contains('order-tab')
+        ? btn
+        : document.querySelector(`.order-tab[data-status="${status}"]`);
+    if (tabBtn) tabBtn.classList.add('active');
+    syncMobileStatusFilter();
     applyFilters();
+    closeOrderStatusSheet();
 }
+
+function currentStatusFilterLabel() {
+    const opt = STATUS_FILTER_OPTIONS.find(o => o.key === _activeStatus);
+    return opt ? opt.label : 'All Orders';
+}
+
+function countForStatusFilter(key) {
+    if (key === 'all') {
+        return _cartGroups.length + _allOrders.filter(o => getDisplayState(o).key !== 'pending').length;
+    }
+    if (key === 'pending') return _cartGroups.length;
+    return _allOrders.filter(o => getDisplayState(o).key === key).length;
+}
+
+function syncMobileStatusFilter() {
+    const label = currentStatusFilterLabel();
+    const ddLabel = document.getElementById('ordersStatusDropdownLabel');
+    const dd = document.getElementById('ordersStatusDropdown');
+    if (ddLabel) ddLabel.textContent = label;
+    if (dd) dd.setAttribute('aria-label', `Filter orders. Current filter: ${label}`);
+
+    const list = document.getElementById('ordersStatusSheetList');
+    if (!list) return;
+    list.innerHTML = STATUS_FILTER_OPTIONS.map(opt => {
+        const active = opt.key === _activeStatus;
+        const count = countForStatusFilter(opt.key);
+        const ico = active ? 'ri-checkbox-fill' : 'ri-checkbox-blank-line';
+        const end = active ? 'ri-check-line' : 'ri-arrow-right-s-line';
+        return `<button type="button"
+            class="orders-status-sheet-row${active ? ' is-active' : ''}"
+            role="option"
+            aria-selected="${active ? 'true' : 'false'}"
+            aria-label="Filter orders by ${opt.label}"
+            onclick="filterOrdersByStatus('${opt.key}')">
+            <i class="${ico} orders-status-sheet-ico" aria-hidden="true"></i>
+            <span class="orders-status-sheet-label">${opt.label}</span>
+            <span class="orders-status-sheet-count">${count}</span>
+            <i class="${end} orders-status-sheet-end" aria-hidden="true"></i>
+        </button>`;
+    }).join('');
+}
+
+function openOrderStatusSheet() {
+    syncMobileStatusFilter();
+    const overlay = document.getElementById('ordersStatusSheetOverlay');
+    const dd = document.getElementById('ordersStatusDropdown');
+    if (!overlay) return;
+    overlay.classList.add('active');
+    if (dd) dd.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+    if (typeof updateChatFabVisibility === 'function') updateChatFabVisibility();
+}
+
+function closeOrderStatusSheet() {
+    const overlay = document.getElementById('ordersStatusSheetOverlay');
+    const dd = document.getElementById('ordersStatusDropdown');
+    if (overlay) overlay.classList.remove('active');
+    if (dd) dd.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+    if (typeof updateChatFabVisibility === 'function') updateChatFabVisibility();
+}
+
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    const overlay = document.getElementById('ordersStatusSheetOverlay');
+    if (overlay && overlay.classList.contains('active')) closeOrderStatusSheet();
+});
 
 function filterOrdersBySearch(q) {
     _searchQuery = q.toLowerCase().trim();
@@ -1800,20 +2084,19 @@ function applyFilters() {
    TAB COUNTS
 ═══════════════════════════════════════ */
 function updateTabCounts() {
-    const total = _cartGroups.length + _allOrders.filter(o => getDisplayState(o).key !== 'pending').length;
+    const total = countForStatusFilter('all');
     const el    = document.getElementById('count-all');
     if (el) el.textContent = total;
 
     ['pending','processing','on_delivery','delivered','completed'].forEach(s => {
-        const n = s === 'pending'
-            ? _cartGroups.length
-            : _allOrders.filter(o => getDisplayState(o).key === s).length;
+        const n = countForStatusFilter(s);
         const cnt = document.getElementById(`count-${s}`);
         if (cnt) {
             if (n > 0) { cnt.textContent = n; cnt.style.display = 'inline-flex'; }
             else        { cnt.style.display = 'none'; }
         }
     });
+    syncMobileStatusFilter();
 }
 
 /* ═══════════════════════════════════════
@@ -2607,6 +2890,7 @@ async function completeOrder(orderId) {
                 document.querySelectorAll('.order-tab').forEach(t => {
                     t.classList.toggle('active', t.getAttribute('data-status') === 'completed');
                 });
+                syncMobileStatusFilter();
             }
 
             refreshOrdersView();
