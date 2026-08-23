@@ -366,6 +366,11 @@ def create_app(config_class='default'):
     @app.context_processor
     def inject_mapbox_token():
         return dict(mapbox_public_token=app.config.get('MAPBOX_PUBLIC_TOKEN', ''))
+
+    @app.context_processor
+    def inject_seo():
+        from app.seo import template_seo_context
+        return template_seo_context()
     
     # ====================================================
     # ADD CLOUDINARY UTILITIES TO TEMPLATE CONTEXT

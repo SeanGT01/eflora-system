@@ -1058,8 +1058,91 @@ def google_site_verification():
     )
 
 
+@templates_bp.route('/favicon.ico')
+@limiter.exempt
+def favicon():
+    return redirect('/static/favicon.svg', code=301)
+
+
+@templates_bp.route('/robots.txt')
+@limiter.exempt
+def robots_txt():
+    from app.seo import site_base_url
+    body = (
+        'User-agent: *\n'
+        'Allow: /\n'
+        'Disallow: /api/\n'
+        'Disallow: /my-account\n'
+        'Disallow: /dashboard\n'
+        'Disallow: /orders\n'
+        'Disallow: /cart\n'
+        'Disallow: /checkout\n'
+        'Disallow: /wishlist\n'
+        'Disallow: /settings\n'
+        'Disallow: /admin/\n'
+        'Disallow: /seller/\n'
+        'Allow: /seller/signup\n'
+        'Disallow: /login\n'
+        'Disallow: /register\n'
+        'Disallow: /logout\n'
+        'Disallow: /home\n'
+        f'Sitemap: {site_base_url()}/sitemap.xml\n'
+    )
+    return body, 200, {'Content-Type': 'text/plain; charset=UTF-8'}
+
+
+@templates_bp.route('/sitemap.xml')
+@limiter.exempt
+def sitemap_xml():
+    from xml.sax.saxutils import escape
+    from app.seo import canonical_url
+    from app.models import Category
+
+    urls = [
+        ('/', '1.0', 'daily'),
+        ('/browse', '0.9', 'daily'),
+        ('/stores', '0.8', 'daily'),
+        ('/contact', '0.4', 'monthly'),
+        ('/faq', '0.4', 'monthly'),
+        ('/shipping', '0.3', 'monthly'),
+        ('/returns', '0.3', 'monthly'),
+    ]
+    try:
+        for cat in Category.query.filter_by(is_active=True).order_by(Category.sort_order).all():
+            if cat.slug:
+                urls.append((f'/category/{cat.slug}', '0.7', 'weekly'))
+        for store in Store.query.filter_by(status='active').order_by(Store.id).all():
+            urls.append((f'/store/{store.id}', '0.6', 'weekly'))
+        products = (
+            _public_storefront_product_base_query(require_sellable=True)
+            .order_by(Product.updated_at.desc())
+            .limit(2000)
+            .all()
+        )
+        for product in products:
+            urls.append((f'/product/{product.id}', '0.8', 'weekly'))
+    except Exception:
+        current_app.logger.exception('sitemap.xml catalog query failed')
+
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for path, priority, changefreq in urls:
+        loc = escape(canonical_url(path))
+        parts.append(
+            '<url>'
+            f'<loc>{loc}</loc>'
+            f'<changefreq>{changefreq}</changefreq>'
+            f'<priority>{priority}</priority>'
+            '</url>'
+        )
+    parts.append('</urlset>')
+    return ''.join(parts), 200, {'Content-Type': 'application/xml; charset=UTF-8'}
+
+
 @templates_bp.route('/')
-@limiter.limit("5 per minute")
+@limiter.exempt
 def index():
     """Show the e-commerce landing page to everyone"""
     try:
@@ -4043,11 +4126,9 @@ def browse_products():
 @templates_bp.route('/products')
 def products():
     """Legacy URL used by marketing links; public catalog is /browse."""
-    qs = request.query_string.decode('utf-8') if request.query_string else ''
-    dest = url_for('templates.browse_products')
-    if qs:
-        dest = f'{dest}?{qs}'
-    return redirect(dest, code=302)
+    params = {k: v for k, v in request.args.items() if k != 'browse_all'}
+    dest = url_for('templates.browse_products', **params)
+    return redirect(dest, code=301)
 
 
 @templates_bp.route('/product/<int:product_id>')
