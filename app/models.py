@@ -92,7 +92,7 @@ class User(db.Model):
     
     def to_dict(self):
         # Split on last space: everything before = first name, last word = last name
-        from app.utils.phone_utils import display_login_id
+        from app.utils.phone_utils import display_login_id, is_valid_ph_mobile
 
         _name_parts = self.full_name.rsplit(' ', 1) if ' ' in self.full_name else [self.full_name]
         login_id = display_login_id(email=self.email, phone=self.phone)
@@ -107,6 +107,7 @@ class User(db.Model):
             'role': self.role,
             'status': self.status,
             'phone': self.phone,
+            'needs_phone': not is_valid_ph_mobile(self.phone),
             'birthday': self.birthday.isoformat() if self.birthday else None,
             'gender': self.gender,
             'avatar_url': self.avatar_url,  # Cloudinary only
@@ -762,6 +763,35 @@ class StoreCategory(db.Model):
         return data
 
 
+def coerce_positive_user_id(value):
+    """Return a positive integer user id, or None if value cannot be used as one."""
+    if value is None or value is False or value == '':
+        return None
+    if isinstance(value, dict):
+        value = value.get('id') or value.get('sub') or value.get('user_id')
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def stock_audit_actor_id(user_id, product=None, store=None):
+    """User id for stock_reductions.reduced_by (NOT NULL). Prefer the actor, else the store seller."""
+    actor = coerce_positive_user_id(user_id)
+    if actor:
+        return actor
+    store_obj = store
+    if store_obj is None and product is not None:
+        store_obj = getattr(product, 'store', None)
+        if store_obj is None and getattr(product, 'store_id', None):
+            store_obj = Store.query.get(product.store_id)
+    actor = coerce_positive_user_id(getattr(store_obj, 'seller_id', None) if store_obj else None)
+    if actor:
+        return actor
+    raise ValueError('Cannot record a stock change without a user id (reduced_by)')
+
+
 class Product(db.Model):
     __tablename__ = 'products'
     
@@ -869,6 +899,8 @@ class Product(db.Model):
         """
         if amount <= 0:
             raise ValueError("Reduction amount must be positive")
+
+        actor_id = stock_audit_actor_id(user_id, product=self)
         
         if variant:
             # Reduce variant stock
@@ -884,7 +916,7 @@ class Product(db.Model):
                 reduction_amount=amount,
                 reason=reason,
                 reason_notes=reason_notes,
-                reduced_by=user_id
+                reduced_by=actor_id
             )
         else:
             # Reduce main product stock
@@ -899,7 +931,7 @@ class Product(db.Model):
                 reduction_amount=amount,
                 reason=reason,
                 reason_notes=reason_notes,
-                reduced_by=user_id
+                reduced_by=actor_id
             )
         
         db.session.add(reduction)
@@ -914,6 +946,7 @@ class Product(db.Model):
         if amount <= 0:
             raise ValueError("Restore amount must be positive")
 
+        actor_id = stock_audit_actor_id(user_id, product=self)
         notes = reason_notes or 'Order cancelled — stock restored'
 
         if variant:
@@ -925,7 +958,7 @@ class Product(db.Model):
                 reduction_amount=amount,
                 reason='restock',
                 reason_notes=notes,
-                reduced_by=user_id,
+                reduced_by=actor_id,
             )
         else:
             self.stock_quantity = int(self.stock_quantity or 0) + amount
@@ -936,7 +969,7 @@ class Product(db.Model):
                 reduction_amount=amount,
                 reason='restock',
                 reason_notes=notes,
-                reduced_by=user_id,
+                reduced_by=actor_id,
             )
 
         db.session.add(reduction)
@@ -1609,7 +1642,9 @@ class Order(db.Model):
                 elif item.product_id:
                     owner_product_id = item.product_id
 
-                if owner_product_id and user_id:
+                if owner_product_id:
+                    owner = Product.query.get(owner_product_id)
+                    actor_id = stock_audit_actor_id(user_id, product=owner)
                     db.session.add(StockReduction(
                         product_id=owner_product_id,
                         variant_id=None,
@@ -1617,7 +1652,7 @@ class Order(db.Model):
                         reduction_amount=addon_qty,
                         reason='restock',
                         reason_notes=f'Restored after cancellation of order #{self.id}',
-                        reduced_by=user_id,
+                        reduced_by=actor_id,
                     ))
     
     def to_dict(self):

@@ -1923,6 +1923,26 @@ def update_profile():
         traceback.print_exc()
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
+
+@templates_bp.route('/api/account/profile/phone/send-otp', methods=['POST'])
+def account_phone_send_otp():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+    from app.utils.phone_bind import send_phone_bind_otp
+    user = User.query.get(session['user_id'])
+    data = request.get_json(silent=True) or {}
+    return send_phone_bind_otp(user, data.get('phone'))
+
+
+@templates_bp.route('/api/account/profile/phone/verify', methods=['POST'])
+def account_phone_verify():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+    from app.utils.phone_bind import verify_phone_bind_otp
+    user = User.query.get(session['user_id'])
+    data = request.get_json(silent=True) or {}
+    return verify_phone_bind_otp(user, data.get('otp_code') or data.get('otp'))
+
 @templates_bp.route('/api/account/profile', methods=['GET'])
 def get_profile():
     """Get user profile data"""
@@ -7399,14 +7419,8 @@ def _customer_account_contact(customer):
 
 
 def _attach_seller_order_customer_contact(order_dict, customer):
-    contact = _customer_account_contact(customer)
-    order_dict['customer_phone'] = customer.phone if customer else None
-    order_dict['customer_email'] = (
-        None if (not customer or contact['is_phone']) else getattr(customer, 'email', None)
-    )
-    order_dict['customer_contact'] = contact['value']
-    order_dict['customer_contact_label'] = contact['label']
-    return order_dict
+    from app.utils.phone_bind import attach_order_customer_contact
+    return attach_order_customer_contact(order_dict, customer)
 
 
 def _order_amounts_including_addons(order):

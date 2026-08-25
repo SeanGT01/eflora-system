@@ -142,14 +142,11 @@ def create_product():
     return jsonify({'message': 'Product created', 'product': product.to_dict()}), 201
 
 def serialize_seller_order(order):
-    from app.utils.phone_utils import customer_account_contact
+    from app.utils.phone_bind import attach_order_customer_contact
     order_dict = order.to_dict()
     order_dict['items'] = [item.to_dict() for item in order.items]
     order_dict['items_count'] = sum(item.quantity for item in order.items)
-    contact = customer_account_contact(order.customer)
-    order_dict['customer_phone'] = order.customer.phone if order.customer else None
-    order_dict['customer_contact'] = contact['value']
-    order_dict['customer_contact_label'] = contact['label']
+    attach_order_customer_contact(order_dict, order.customer)
     order_dict['payment_proof'] = order.payment_proof
     order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
 

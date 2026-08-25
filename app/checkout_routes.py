@@ -485,7 +485,10 @@ def customer_only(f):
             role = session.get('role')
             if role == 'customer':
                 print(f"✅ User authenticated via session as customer (ID: {session['user_id']})")
-                request.user_id = session['user_id']
+                try:
+                    request.user_id = int(session['user_id'])
+                except (TypeError, ValueError):
+                    return jsonify({"error": "Invalid session"}), 401
                 return f(*args, **kwargs)
             else:
                 print(f"❌ Session user is {role}, customer required")
@@ -504,7 +507,10 @@ def customer_only(f):
             if role != "customer":
                 return jsonify({"error": "Customer access required"}), 403
 
-            request.user_id = user_id
+            try:
+                request.user_id = int(user_id)
+            except (TypeError, ValueError):
+                return jsonify({"error": "Invalid token"}), 401
             return f(*args, **kwargs)
         except Exception as e:
             print(f"JWT error: {e}")

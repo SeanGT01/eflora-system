@@ -185,8 +185,11 @@ def decrement_addon_option_stock(lines, user_id=None, reason='other', reason_not
             from datetime import datetime
             opt.updated_at = datetime.utcnow()
 
-        if not user_id or not opt.group:
+        if not opt.group:
             continue
+        from app.models import stock_audit_actor_id
+        owner = opt.group.product if getattr(opt.group, 'product', None) else None
+        actor_id = stock_audit_actor_id(user_id, product=owner)
         db.session.add(StockReduction(
             product_id=opt.group.product_id,
             variant_id=None,
@@ -194,7 +197,7 @@ def decrement_addon_option_stock(lines, user_id=None, reason='other', reason_not
             reduction_amount=qty,
             reason=reason,
             reason_notes=reason_notes,
-            reduced_by=user_id,
+            reduced_by=actor_id,
         ))
 
 

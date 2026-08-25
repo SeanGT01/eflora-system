@@ -39,6 +39,16 @@ def _iprog_config():
     return token, base
 
 
+def _iprog_phone_number(phone_raw):
+    """Return (09XXXXXXXXX, 63XXXXXXXXXX) for iProg."""
+    normalized = normalize_ph_mobile(phone_raw)
+    if not normalized:
+        return None, None
+    if normalized.startswith('0') and len(normalized) == 11:
+        return normalized, '63' + normalized[1:]
+    return normalized, normalized
+
+
 def _is_sender_name_error(data) -> bool:
     raw = data.get('message') if isinstance(data, dict) else data
     if isinstance(raw, list):
@@ -75,23 +85,19 @@ def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification')
         current_app.logger.error('SMS: IPROG_API_TOKEN is not configured')
         return False, None, SMS_SERVICE_UNAVAILABLE_CODE
 
-    normalized = normalize_ph_mobile(phone)
-    if not normalized:
+    local_09, msisdn_63 = _iprog_phone_number(phone)
+    if not local_09:
         current_app.logger.error('SMS: invalid phone number')
         return False, None, SMS_SERVICE_UNAVAILABLE_CODE
 
-    # :otp is replaced by iProg; this uses the IPROGOTP sender (all networks).
-    message = (
-        f'Your E-Flora {purpose} code is :otp. '
-        f'Valid for {expiry_minutes} minutes. Do not share.'
-    )
-
+    # Omit custom `message`. Custom copy can leave the IPROGOTP sender and
+    # Smart/TNT never delivers, while the dashboard still shows the OTP.
     url = f'{base}/otp/send_otp'
     payload = {
         'api_token': token,
-        'phone_number': normalized,
-        'message': message,
+        'phone_number': msisdn_63,
         'expires_in_minutes': int(expiry_minutes) if expiry_minutes else 5,
+        'sms_provider': 2,
     }
 
     try:
@@ -121,7 +127,7 @@ def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification')
                 delivered = str(delivered).strip()
             current_app.logger.info(
                 'SMS: OTP queued via /otp/send_otp for %s***',
-                normalized[:4],
+                local_09[:4],
             )
             return True, delivered, None
 
@@ -160,8 +166,8 @@ def send_sms_message(phone, message):
         current_app.logger.error('SMS: IPROG_API_TOKEN is not configured')
         return False, SMS_SERVICE_UNAVAILABLE_CODE
 
-    normalized = normalize_ph_mobile(phone)
-    if not normalized:
+    local_09, msisdn_63 = _iprog_phone_number(phone)
+    if not local_09:
         current_app.logger.error('SMS: invalid phone number')
         return False, SMS_SERVICE_UNAVAILABLE_CODE
 
@@ -172,8 +178,9 @@ def send_sms_message(phone, message):
     url = f'{base}/sms_messages'
     payload = {
         'api_token': token,
-        'phone_number': normalized,
+        'phone_number': msisdn_63,
         'message': text,
+        'sms_provider': 2,
     }
 
     try:

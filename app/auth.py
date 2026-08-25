@@ -37,14 +37,46 @@ def _normalize_email(value):
     return (value or '').strip().lower()
 
 
-def _find_user_by_phone(normalized_09):
+def _find_user_by_phone(normalized_09, exclude_user_id=None, roles=None):
     """Find User whose phone matches any common PH format of normalized_09."""
     from app.utils.phone_utils import phone_lookup_variants
 
     if not normalized_09:
         return None
     variants = phone_lookup_variants(normalized_09)
-    return User.query.filter(User.phone.in_(variants)).first()
+    q = User.query.filter(User.phone.in_(variants))
+    if exclude_user_id:
+        q = q.filter(User.id != int(exclude_user_id))
+    if roles:
+        q = q.filter(User.role.in_(tuple(roles)))
+    return q.first()
+
+
+def _phone_taken(normalized_09, exclude_email=None, exclude_user_id=None, roles=None):
+    if not normalized_09:
+        return False
+    user = _find_user_by_phone(
+        normalized_09,
+        exclude_user_id=exclude_user_id,
+        roles=roles,
+    )
+    if not user:
+        from app.utils.phone_utils import phone_to_account_email
+        # Phone-only accounts may only have the synthetic email set
+        synth = phone_to_account_email(normalized_09)
+        q = User.query.filter_by(email=synth)
+        if exclude_user_id:
+            q = q.filter(User.id != int(exclude_user_id))
+        if roles:
+            q = q.filter(User.role.in_(tuple(roles)))
+        user = q.first()
+        if not user:
+            return False
+    if exclude_user_id and int(user.id) == int(exclude_user_id):
+        return False
+    if exclude_email and (user.email or '').strip().lower() == (exclude_email or '').strip().lower():
+        return False
+    return True
 
 
 def _find_user_by_login_identifier(raw):
@@ -79,22 +111,6 @@ def _find_user_by_login_identifier(raw):
         return _find_user_by_phone(phone)
 
     return None
-
-
-def _phone_taken(normalized_09, exclude_email=None):
-    if not normalized_09:
-        return False
-    user = _find_user_by_phone(normalized_09)
-    if not user:
-        from app.utils.phone_utils import phone_to_account_email
-        # Phone-only accounts may only have the synthetic email set
-        synth = phone_to_account_email(normalized_09)
-        user = User.query.filter_by(email=synth).first()
-        if not user:
-            return False
-    if exclude_email and user.email == exclude_email:
-        return False
-    return True
 
 
 def _parse_forgot_identifier(data):
@@ -1298,6 +1314,28 @@ def change_password():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/profile/phone/send-otp', methods=['POST'])
+@jwt_required()
+def profile_phone_send_otp():
+    """Send SMS OTP to add or change the logged-in customer's delivery phone."""
+    from app.utils.phone_bind import send_phone_bind_otp
+
+    user = User.query.get(int(get_jwt_identity()))
+    data = request.get_json(silent=True) or {}
+    return send_phone_bind_otp(user, data.get('phone'))
+
+
+@auth_bp.route('/profile/phone/verify', methods=['POST'])
+@jwt_required()
+def profile_phone_verify():
+    """Verify SMS OTP and save the delivery phone on the logged-in customer."""
+    from app.utils.phone_bind import verify_phone_bind_otp
+
+    user = User.query.get(int(get_jwt_identity()))
+    data = request.get_json(silent=True) or {}
+    return verify_phone_bind_otp(user, data.get('otp_code') or data.get('otp'))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

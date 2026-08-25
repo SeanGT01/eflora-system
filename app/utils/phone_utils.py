@@ -52,22 +52,49 @@ def display_login_id(email: str = None, phone: str = None) -> str:
     return (email or phone or '').strip()
 
 
+def tel_href(phone_raw):
+    """Return a tel: URI for a PH mobile, or None."""
+    n = normalize_ph_mobile(phone_raw)
+    if not n or not n.startswith('0') or len(n) != 11:
+        return None
+    return 'tel:+63' + n[1:]
+
+
 def customer_account_contact(customer) -> dict:
     """
-    Contact to show for a customer based on how they registered.
-    Phone-only (synthetic email) accounts → phone; otherwise → email.
+    Preferred delivery contact: verified User.phone when present,
+    otherwise the signup email (never the synthetic SMS email).
     """
+    empty = {
+        'value': None,
+        'label': 'Contact',
+        'is_phone': False,
+        'phone': None,
+        'email': None,
+        'tel': None,
+    }
     if not customer:
-        return {'value': None, 'label': 'Contact', 'is_phone': False}
+        return empty
 
     email = getattr(customer, 'email', None)
-    phone = getattr(customer, 'phone', None)
-    is_phone = bool(is_synthetic_account_email(email or '') and phone)
-    value = display_login_id(email=email, phone=phone) or None
+    phone = normalize_ph_mobile(getattr(customer, 'phone', None))
+    show_email = None if is_synthetic_account_email(email or '') else (email or None)
+    if phone:
+        return {
+            'value': phone,
+            'label': 'Phone',
+            'is_phone': True,
+            'phone': phone,
+            'email': show_email,
+            'tel': tel_href(phone),
+        }
     return {
-        'value': value,
-        'label': 'Phone' if is_phone else 'Email',
-        'is_phone': is_phone,
+        'value': show_email,
+        'label': 'Email',
+        'is_phone': False,
+        'phone': None,
+        'email': show_email,
+        'tel': None,
     }
 
 

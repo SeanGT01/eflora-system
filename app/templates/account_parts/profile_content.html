@@ -1180,6 +1180,9 @@
         -webkit-backdrop-filter: blur(4px);
         -webkit-overflow-scrolling: touch;
     }
+    #addressModal.profile-onboarding-overlay {
+        overflow: hidden;
+    }
 
     .profile-onboarding-shell {
         display: grid;
@@ -1362,6 +1365,12 @@
     .onboarding-choice span { font-size: 13px; font-weight: 600; }
 
     #onboardingGenderOtherWrap { margin-top: 1rem; }
+    #onboardingStepGender,
+    #onboardingStepBirthday,
+    #onboardingStepPhone {
+        flex-direction: column;
+        flex: 1;
+    }
     #onboardingBirthday.form-control {
         max-width: 100%;
         min-height: 46px;
@@ -1403,6 +1412,12 @@
         min-height: 0;
         max-height: inherit;
         overflow: hidden;
+    }
+    #addressModal .address-modal-form {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1 1 auto;
     }
     #addressModal .profile-onboarding-sidebar {
         min-height: 100%;
@@ -1499,13 +1514,14 @@
         height: 14px;
     }
     #addressModal #addressForm .form-actions {
-        position: sticky;
-        bottom: 0;
-        margin-top: 0.55rem;
-        padding: 0.55rem 0 0.15rem;
+        position: static;
+        flex-shrink: 0;
+        margin-top: 0;
+        padding: 0.65rem 0.75rem 0.8rem;
         gap: 0.4rem;
         flex-wrap: wrap;
-        background: linear-gradient(180deg, rgba(255,255,255,0) 0%, var(--warm-white) 28%);
+        background: var(--warm-white);
+        border-top: 1px solid var(--border);
         z-index: 6;
     }
     #addressModal #addressForm .form-actions .btn {
@@ -1679,6 +1695,11 @@
             align-items: flex-start;
             padding: 0.55rem;
         }
+        #addressModal.profile-onboarding-overlay {
+            padding: 0;
+            overflow: hidden;
+            align-items: stretch;
+        }
         .profile-onboarding-shell,
         #onboardingProfileModal .profile-onboarding-shell,
         #addressModal .profile-onboarding-shell {
@@ -1687,6 +1708,14 @@
             min-height: 0;
             max-height: min(94vh, 900px);
             margin: 0.25rem auto;
+        }
+        #addressModal .profile-onboarding-shell {
+            width: 100%;
+            max-width: none;
+            height: 100dvh;
+            max-height: 100dvh;
+            margin: 0;
+            border-radius: 0;
         }
         .profile-onboarding-sidebar,
         #addressModal .profile-onboarding-sidebar {
@@ -2143,6 +2172,35 @@
     </div>
 </div>
 
+<!-- ─── Delivery phone (email/Gmail accounts, or change existing number) ─── -->
+<div class="profile-card" id="profilePhoneCard">
+    <div class="card-header">
+        <div class="card-header-left">
+            <div class="card-header-icon"><i class="ri-smartphone-line"></i></div>
+            <div class="card-title">Delivery phone number</div>
+        </div>
+    </div>
+    <div class="card-body">
+        <p class="form-hint" style="margin-bottom:0.85rem;">Riders and shops use this number to contact you about deliveries. Changing it requires a 6-digit SMS code on this same form.</p>
+        <div class="form-group">
+            <label class="form-label" for="profilePhoneInput">Mobile number</label>
+            <input type="tel" class="form-control" id="profilePhoneInput" inputmode="tel" maxlength="16"
+                   placeholder="09171234567" value="{{ user.phone or '' }}">
+        </div>
+        <div class="form-group" id="profilePhoneOtpWrap" style="display:none;">
+            <label class="form-label" for="profilePhoneOtp">6-digit code</label>
+            <input type="text" class="form-control" id="profilePhoneOtp" inputmode="numeric" maxlength="6"
+                   placeholder="••••••" style="letter-spacing:0.35em;font-weight:700;text-align:center;">
+            <p class="form-hint" id="profilePhoneOtpHint"></p>
+        </div>
+        <p id="profilePhoneError" style="display:none;color:var(--deep-rose);font-size:12.5px;margin:0.5rem 0 0;"></p>
+        <div class="form-actions" style="justify-content:flex-start;">
+            <button type="button" class="btn btn-outline" id="profilePhoneSendBtn" onclick="sendProfilePhoneOtp()">Send code</button>
+            <button type="button" class="btn btn-rose" id="profilePhoneVerifyBtn" onclick="verifyProfilePhoneOtp()" style="display:none;">Verify &amp; save</button>
+        </div>
+    </div>
+</div>
+
 <!-- ─── Delivery Addresses ─── -->
 <div class="profile-card">
     <div class="card-header">
@@ -2501,6 +2559,8 @@
                 <span class="profile-onboarding-step is-active" id="onboardingProgressGender">1</span>
                 <span class="profile-onboarding-step-line"></span>
                 <span class="profile-onboarding-step" id="onboardingProgressBirthday">2</span>
+                <span class="profile-onboarding-step-line" id="onboardingProgressPhoneLine" style="display:none;"></span>
+                <span class="profile-onboarding-step" id="onboardingProgressPhone" style="display:none;">3</span>
                 <span class="profile-onboarding-step-line"></span>
                 <span class="profile-onboarding-step" id="onboardingProgressAddress">3</span>
             </div>
@@ -2559,6 +2619,35 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Step 3: Phone (email/Gmail accounts) + OTP on this same modal -->
+            <div id="onboardingStepPhone" style="display:none;">
+                <label class="form-label" for="onboardingPhone">Mobile number <span style="color:var(--deep-rose)">*</span></label>
+                <input type="tel" id="onboardingPhone" class="form-control" inputmode="tel" autocomplete="tel"
+                       placeholder="09171234567" maxlength="16">
+                <p class="form-hint" style="margin-top:0.35rem;">Used by stores and riders for delivery. PH numbers only (09XXXXXXXXX or +63).</p>
+                <div class="profile-onboarding-actions" id="onboardingPhoneSendRow">
+                    <button type="button" class="btn btn-outline" onclick="goToPreviousOnboardingStep('phone')">
+                        <i class="ri-arrow-left-line"></i> Previous
+                    </button>
+                    <button type="button" class="btn btn-rose" id="onboardingPhoneSendBtn" onclick="sendOnboardingPhoneOtp()">
+                        Send code <i class="ri-send-plane-line"></i>
+                    </button>
+                </div>
+                <div id="onboardingPhoneOtpWrap" style="display:none;margin-top:1rem;">
+                    <label class="form-label" for="onboardingPhoneOtp">6-digit code</label>
+                    <input type="text" id="onboardingPhoneOtp" class="form-control" inputmode="numeric" autocomplete="one-time-code"
+                           maxlength="6" placeholder="••••••" style="letter-spacing:0.4em;font-weight:700;text-align:center;">
+                    <p class="form-hint" id="onboardingPhoneOtpHint" style="margin-top:0.35rem;"></p>
+                    <div class="profile-onboarding-actions">
+                        <button type="button" class="btn btn-outline" id="onboardingPhoneResendBtn" onclick="sendOnboardingPhoneOtp(true)">Resend</button>
+                        <button type="button" class="btn btn-rose" id="onboardingPhoneVerifyBtn" onclick="verifyOnboardingPhoneOtp()">
+                            Verify <i class="ri-check-line"></i>
+                        </button>
+                    </div>
+                </div>
+                <p id="onboardingPhoneError" style="display:none;color:var(--deep-rose);font-size:12.5px;margin:0.75rem 0 0;"></p>
+            </div>
         </div>
     </div>
 </div>
@@ -2567,12 +2656,14 @@
 <div id="addressModal" class="profile-onboarding-overlay" style="z-index:10040;" aria-modal="true" role="dialog" aria-labelledby="addressModalTitle">
     <div class="profile-onboarding-shell">
         <aside class="profile-onboarding-sidebar">
-            <div class="profile-onboarding-steps" aria-label="Profile setup progress">
+            <div class="profile-onboarding-steps" aria-label="Profile setup progress" id="addressOnboardingSteps">
                 <span class="profile-onboarding-step is-complete">1</span>
                 <span class="profile-onboarding-step-line"></span>
                 <span class="profile-onboarding-step is-complete">2</span>
+                <span class="profile-onboarding-step-line address-phone-step-line" style="display:none;"></span>
+                <span class="profile-onboarding-step is-complete address-phone-step" style="display:none;">3</span>
                 <span class="profile-onboarding-step-line"></span>
-                <span class="profile-onboarding-step is-active">3</span>
+                <span class="profile-onboarding-step is-active" id="addressProgressLast">3</span>
             </div>
             <div class="address-sidebar-hero">
                 <div class="profile-onboarding-art"><i class="ri-map-pin-2-line"></i></div>
@@ -2581,6 +2672,7 @@
             </div>
         </aside>
         <div class="profile-onboarding-panel">
+        <form id="addressForm" class="address-modal-form">
         <div class="card-header" style="position:sticky;top:0;background:var(--warm-white);z-index:10;border-bottom:1px solid var(--border);">
             <div class="card-header-left">
                 <div class="card-header-icon"><i class="ri-map-pin-add-line"></i></div>
@@ -2592,7 +2684,6 @@
         </div>
         
         <div class="card-body">
-            <form id="addressForm">
                 <input type="hidden" id="addressId" name="address_id">
                 <input type="hidden" id="exactLat" name="exact_lat">
                 <input type="hidden" id="exactLng" name="exact_lng">
@@ -2697,6 +2788,7 @@
                         </label>
                     </div>
                 </div>
+        </div>
 
                 <div class="form-actions">
                     <button type="button" class="btn btn-outline" id="addressModalPrevBtn" onclick="goToPreviousOnboardingStep('address')" style="display:none;">
@@ -2708,7 +2800,6 @@
                     </button>
                 </div>
             </form>
-        </div>
     </div>
     </div>
 </div>
@@ -3222,6 +3313,8 @@ let __onboardingHandlersBound = false;
 const __profileBoot = {
     gender: {{ (user.gender if user else '')|tojson }},
     birthday: {{ (user.birthday if user else '')|tojson }},
+    phone: {{ (user.phone if user else '')|tojson }},
+    needsPhone: {{ (not (user.phone if user else none))|tojson }},
 };
 
 try {
@@ -3258,13 +3351,48 @@ function _hasBirthday(value) {
     return !!(value && String(value).trim());
 }
 
+function _hasPhone(value) {
+    const raw = String(value || '').replace(/[\s\-()]/g, '');
+    return /^(?:\+63|0)9\d{9}$/.test(raw) || /^09\d{9}$/.test(raw);
+}
+
+function _needsOnboardingPhone() {
+    return !!__profileBoot.needsPhone && !_hasPhone(__profileBoot.phone);
+}
+
+function _csrfJsonHeaders() {
+    const t = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    return { 'Content-Type': 'application/json', 'X-CSRFToken': t };
+}
+
+function syncOnboardingPhoneSteps() {
+    const showPhone = _needsOnboardingPhone() || __onboardingStarted && !_hasPhone(__profileBoot.phone);
+    const phoneEls = [
+        document.getElementById('onboardingProgressPhone'),
+        document.getElementById('onboardingProgressPhoneLine'),
+    ];
+    phoneEls.forEach((el) => { if (el) el.style.display = showPhone ? '' : 'none'; });
+    document.querySelectorAll('.address-phone-step, .address-phone-step-line').forEach((el) => {
+        el.style.display = showPhone ? '' : 'none';
+    });
+    const last = document.getElementById('addressProgressLast');
+    const addrProg = document.getElementById('onboardingProgressAddress');
+    if (last) last.textContent = showPhone ? '4' : '3';
+    if (addrProg) addrProg.textContent = showPhone ? '4' : '3';
+    const phoneProg = document.getElementById('onboardingProgressPhone');
+    if (phoneProg) phoneProg.textContent = '3';
+}
+
 function setOnboardingProgress(activeStep) {
+    syncOnboardingPhoneSteps();
+    const includePhone = document.getElementById('onboardingProgressPhone')?.style.display !== 'none';
     const steps = {
         gender: document.getElementById('onboardingProgressGender'),
         birthday: document.getElementById('onboardingProgressBirthday'),
+        phone: document.getElementById('onboardingProgressPhone'),
         address: document.getElementById('onboardingProgressAddress'),
     };
-    const order = ['gender', 'birthday', 'address'];
+    const order = includePhone ? ['gender', 'birthday', 'phone', 'address'] : ['gender', 'birthday', 'address'];
     const activeIndex = order.indexOf(activeStep);
     order.forEach((name, index) => {
         const el = steps[name];
@@ -3301,6 +3429,7 @@ function showOnboardingProfileModal(step) {
     const modal = document.getElementById('onboardingProfileModal');
     const genderStep = document.getElementById('onboardingStepGender');
     const birthdayStep = document.getElementById('onboardingStepBirthday');
+    const phoneStep = document.getElementById('onboardingStepPhone');
     const title = document.getElementById('onboardingModalTitle');
     const hint = document.getElementById('onboardingModalHint');
     const icon = document.getElementById('onboardingModalIcon');
@@ -3311,17 +3440,28 @@ function showOnboardingProfileModal(step) {
 
     document.getElementById('onboardingGenderError').style.display = 'none';
     document.getElementById('onboardingBirthdayError').style.display = 'none';
+    const phoneErr = document.getElementById('onboardingPhoneError');
+    if (phoneErr) phoneErr.style.display = 'none';
+
+    genderStep.style.display = 'none';
+    birthdayStep.style.display = 'none';
+    if (phoneStep) phoneStep.style.display = 'none';
 
     if (step === 'gender') {
         genderStep.style.display = 'flex';
-        birthdayStep.style.display = 'none';
         title.textContent = 'Tell us about yourself';
         hint.textContent = 'Choose one option to continue.';
         if (sidebarTitle) sidebarTitle.textContent = 'Profile details';
         if (icon) icon.className = 'ri-user-heart-line';
         setOnboardingProgress('gender');
+    } else if (step === 'phone') {
+        if (phoneStep) phoneStep.style.display = 'block';
+        title.textContent = 'Add your mobile number';
+        hint.textContent = 'We’ll send a 6-digit SMS code to verify this number.';
+        if (sidebarTitle) sidebarTitle.textContent = 'Delivery phone';
+        if (icon) icon.className = 'ri-smartphone-line';
+        setOnboardingProgress('phone');
     } else {
-        genderStep.style.display = 'none';
         birthdayStep.style.display = 'flex';
         title.textContent = 'When is your birthday?';
         hint.textContent = 'Enter your date of birth to continue.';
@@ -3333,12 +3473,24 @@ function showOnboardingProfileModal(step) {
         if (bday && !bday.max) {
             const today = new Date();
             bday.max = today.toISOString().slice(0, 10);
-            // Must be at least 13 years old
             const min = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
             bday.min = min.toISOString().slice(0, 10);
         }
     }
     modal.style.display = 'flex';
+}
+
+function continueAfterOnboardingProfile() {
+    if (_needsOnboardingPhone()) {
+        showOnboardingProfileModal('phone');
+        return;
+    }
+    if (__onboardingAddressRequired) {
+        closeOnboardingProfileModal();
+        openRequiredAddressModal();
+        return;
+    }
+    closeOnboardingProfileModal();
 }
 
 async function saveOnboardingProfileFields(fields) {
@@ -3390,6 +3542,10 @@ function startPostRegistrationOnboarding(options = {}) {
         showOnboardingProfileModal('birthday');
         return;
     }
+    if (_needsOnboardingPhone()) {
+        showOnboardingProfileModal('phone');
+        return;
+    }
     if (requireAddress) openRequiredAddressModal();
 }
 
@@ -3425,11 +3581,8 @@ async function submitOnboardingGender() {
         __profileBoot.gender = gender;
         if (!_hasBirthday(__profileBoot.birthday)) {
             showOnboardingProfileModal('birthday');
-        } else if (__onboardingAddressRequired) {
-            closeOnboardingProfileModal();
-            openRequiredAddressModal();
         } else {
-            closeOnboardingProfileModal();
+            continueAfterOnboardingProfile();
         }
     } catch (e) {
         err.textContent = e.message || 'Could not save. Please try again.';
@@ -3480,8 +3633,7 @@ async function submitOnboardingBirthday() {
     try {
         await saveOnboardingProfileFields({ birthday: value });
         __profileBoot.birthday = value;
-        closeOnboardingProfileModal();
-        if (__onboardingAddressRequired) openRequiredAddressModal();
+        continueAfterOnboardingProfile();
     } catch (e) {
         err.textContent = e.message || 'Could not save. Please try again.';
         err.style.display = 'block';
@@ -3497,17 +3649,150 @@ function goToPreviousOnboardingStep(fromStep) {
         showOnboardingProfileModal('gender');
         return;
     }
-    if (fromStep === 'address') {
-        // Keep required-address state, but never leave both overlays open.
-        closeAddressModal({ force: true, keepRequired: true });
+    if (fromStep === 'phone') {
         hideExclusiveOnboardingSurfaces('onboardingProfileModal');
         showOnboardingProfileModal('birthday');
+        return;
+    }
+    if (fromStep === 'address') {
+        closeAddressModal({ force: true, keepRequired: true });
+        hideExclusiveOnboardingSurfaces('onboardingProfileModal');
+        if (_needsOnboardingPhone() || !_hasPhone(__profileBoot.phone)) {
+            showOnboardingProfileModal('phone');
+        } else {
+            showOnboardingProfileModal('birthday');
+        }
+    }
+}
+
+async function sendOnboardingPhoneOtp(isResend) {
+    const err = document.getElementById('onboardingPhoneError');
+    const phone = (document.getElementById('onboardingPhone')?.value || '').trim();
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+    const btn = document.getElementById(isResend ? 'onboardingPhoneResendBtn' : 'onboardingPhoneSendBtn');
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line"></i>'; }
+    try {
+        const r = await fetch('/api/account/profile/phone/send-otp', {
+            method: 'POST',
+            headers: _csrfJsonHeaders(),
+            body: JSON.stringify({ phone }),
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Could not send code');
+        const wrap = document.getElementById('onboardingPhoneOtpWrap');
+        if (wrap) wrap.style.display = 'block';
+        const hint = document.getElementById('onboardingPhoneOtpHint');
+        if (hint) hint.textContent = d.message || 'Enter the 6-digit code from SMS.';
+        showToast(d.message || 'Code sent', 'success');
+    } catch (e) {
+        if (err) { err.textContent = e.message || 'Could not send code'; err.style.display = 'block'; }
+        else showToast(e.message || 'Could not send code', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    }
+}
+
+async function verifyOnboardingPhoneOtp() {
+    const err = document.getElementById('onboardingPhoneError');
+    const otp = (document.getElementById('onboardingPhoneOtp')?.value || '').trim();
+    if (err) { err.style.display = 'none'; }
+    const btn = document.getElementById('onboardingPhoneVerifyBtn');
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line"></i> Verifying…'; }
+    try {
+        const r = await fetch('/api/account/profile/phone/verify', {
+            method: 'POST',
+            headers: _csrfJsonHeaders(),
+            body: JSON.stringify({ otp_code: otp }),
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Verification failed');
+        __profileBoot.phone = d.phone || otp;
+        __profileBoot.needsPhone = false;
+        const pf = document.getElementById('profilePhoneInput');
+        if (pf) pf.value = d.phone || '';
+        if (d.user && typeof syncProfileUI === 'function') syncProfileUI(d.user);
+        showToast(d.message || 'Phone number saved', 'success');
+        if (__onboardingAddressRequired) {
+            closeOnboardingProfileModal();
+            openRequiredAddressModal();
+        } else {
+            closeOnboardingProfileModal();
+        }
+    } catch (e) {
+        if (err) { err.textContent = e.message || 'Verification failed'; err.style.display = 'block'; }
+        else showToast(e.message || 'Verification failed', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    }
+}
+
+async function sendProfilePhoneOtp() {
+    const err = document.getElementById('profilePhoneError');
+    const phone = (document.getElementById('profilePhoneInput')?.value || '').trim();
+    if (err) { err.style.display = 'none'; }
+    const btn = document.getElementById('profilePhoneSendBtn');
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; }
+    try {
+        const r = await fetch('/api/account/profile/phone/send-otp', {
+            method: 'POST',
+            headers: _csrfJsonHeaders(),
+            body: JSON.stringify({ phone }),
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Could not send code');
+        const wrap = document.getElementById('profilePhoneOtpWrap');
+        const verifyBtn = document.getElementById('profilePhoneVerifyBtn');
+        if (wrap) wrap.style.display = 'block';
+        if (verifyBtn) verifyBtn.style.display = '';
+        const hint = document.getElementById('profilePhoneOtpHint');
+        if (hint) hint.textContent = d.message || 'Enter the 6-digit SMS code.';
+        showToast(d.message || 'Code sent', 'success');
+    } catch (e) {
+        if (err) { err.textContent = e.message || 'Could not send code'; err.style.display = 'block'; }
+        else showToast(e.message || 'Could not send code', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    }
+}
+
+async function verifyProfilePhoneOtp() {
+    const err = document.getElementById('profilePhoneError');
+    const otp = (document.getElementById('profilePhoneOtp')?.value || '').trim();
+    if (err) { err.style.display = 'none'; }
+    const btn = document.getElementById('profilePhoneVerifyBtn');
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Verifying…'; }
+    try {
+        const r = await fetch('/api/account/profile/phone/verify', {
+            method: 'POST',
+            headers: _csrfJsonHeaders(),
+            body: JSON.stringify({ otp_code: otp }),
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'Verification failed');
+        __profileBoot.phone = d.phone;
+        __profileBoot.needsPhone = false;
+        const pf = document.getElementById('profilePhoneInput');
+        if (pf) pf.value = d.phone || '';
+        document.getElementById('profilePhoneOtpWrap').style.display = 'none';
+        if (btn) btn.style.display = 'none';
+        showToast(d.message || 'Phone number saved', 'success');
+        if (d.user && typeof syncProfileUI === 'function') syncProfileUI(d.user);
+    } catch (e) {
+        if (err) { err.textContent = e.message || 'Verification failed'; err.style.display = 'block'; }
+        else showToast(e.message || 'Verification failed', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig || 'Verify & save'; }
     }
 }
 
 function openRequiredAddressModal() {
     closeOnboardingProfileModal();
     hideExclusiveOnboardingSurfaces('addressModal');
+    syncOnboardingPhoneSteps();
     showToast('Please verify and save your current/default delivery address.', 'info');
     showAddAddressModal(true);
     const closeBtn = document.getElementById('addressModalCloseBtn');
@@ -3565,8 +3850,9 @@ async function loadAddresses() {
         // Prompt incomplete profile fields for every account (including missing address).
         const needsGender = !_hasGender(__profileBoot.gender);
         const needsBirthday = !_hasBirthday(__profileBoot.birthday);
+        const needsPhone = _needsOnboardingPhone();
         const needsAddress = !hasAddresses || shouldAutoPromptAddress();
-        if (!__onboardingStarted && (needsGender || needsBirthday || needsAddress)) {
+        if (!__onboardingStarted && (needsGender || needsBirthday || needsPhone || needsAddress)) {
             setTimeout(() => {
                 startPostRegistrationOnboarding({ requireAddress: needsAddress });
             }, 250);
