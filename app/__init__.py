@@ -569,13 +569,27 @@ def create_app(config_class='default'):
             print(f"      {rule}")
     print("="*60 + "\n")
     
+    def _wants_api_json():
+        path = request.path or ''
+        return path.startswith('/api/') or path.startswith('/api/v1/')
+
     # Error handlers
     @app.errorhandler(404)
     def not_found(error):
+        if _wants_api_json():
+            return jsonify({'success': False, 'error': 'Not found'}), 404
         return render_template('404.html'), 404
-    
+
+    @app.errorhandler(405)
+    def method_not_allowed(error):
+        if _wants_api_json():
+            return jsonify({'success': False, 'error': 'Method not allowed'}), 405
+        return jsonify({'error': 'Method not allowed'}), 405
+
     @app.errorhandler(500)
     def internal_error(error):
+        if _wants_api_json():
+            return jsonify({'success': False, 'error': 'Server error'}), 500
         return render_template('500.html'), 500
     
     @app.errorhandler(429)

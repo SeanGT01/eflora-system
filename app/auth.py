@@ -1316,15 +1316,37 @@ def change_password():
         return jsonify({'error': str(e)}), 500
 
 
+def _jwt_user_or_error():
+    try:
+        user = User.query.get(int(get_jwt_identity()))
+    except (TypeError, ValueError):
+        return None, (jsonify({'success': False, 'error': 'Invalid token'}), 401)
+    if not user:
+        return None, (jsonify({'success': False, 'error': 'User not found'}), 404)
+    return user, None
+
+
 @auth_bp.route('/profile/phone/send-otp', methods=['POST'])
 @jwt_required()
 def profile_phone_send_otp():
     """Send SMS OTP to add or change the logged-in customer's delivery phone."""
     from app.utils.phone_bind import send_phone_bind_otp
 
-    user = User.query.get(int(get_jwt_identity()))
-    data = request.get_json(silent=True) or {}
-    return send_phone_bind_otp(user, data.get('phone'))
+    try:
+        user, err = _jwt_user_or_error()
+        if err:
+            return err
+        data = request.get_json(silent=True) or {}
+        return send_phone_bind_otp(user, data.get('phone'))
+    except Exception as e:
+        db.session.rollback()
+        print(f'❌ profile_phone_send_otp: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Could not send the verification code. Please try again.',
+        }), 500
 
 
 @auth_bp.route('/profile/phone/verify', methods=['POST'])
@@ -1333,9 +1355,21 @@ def profile_phone_verify():
     """Verify SMS OTP and save the delivery phone on the logged-in customer."""
     from app.utils.phone_bind import verify_phone_bind_otp
 
-    user = User.query.get(int(get_jwt_identity()))
-    data = request.get_json(silent=True) or {}
-    return verify_phone_bind_otp(user, data.get('otp_code') or data.get('otp'))
+    try:
+        user, err = _jwt_user_or_error()
+        if err:
+            return err
+        data = request.get_json(silent=True) or {}
+        return verify_phone_bind_otp(user, data.get('otp_code') or data.get('otp'))
+    except Exception as e:
+        db.session.rollback()
+        print(f'❌ profile_phone_verify: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Could not verify the code. Please try again.',
+        }), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

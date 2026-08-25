@@ -1307,8 +1307,13 @@
         gap: 0.15rem;
     }
 
+    .profile-onboarding-sheet-handle {
+        display: none;
+    }
+
     #onboardingStepGender,
-    #onboardingStepBirthday {
+    #onboardingStepBirthday,
+    #onboardingStepPhone {
         display: flex;
         flex-direction: column;
         flex: 1;
@@ -1689,33 +1694,51 @@
         }
     }
 
-    /* Phones / narrow screens */
+    @keyframes profileOnboardingSheetUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    /* Phones / narrow screens — bottom sheet (curved top, like other site modals) */
     @media (max-width: 700px) {
-        .profile-onboarding-overlay {
-            align-items: flex-start;
-            padding: 0.55rem;
-        }
+        .profile-onboarding-overlay,
         #addressModal.profile-onboarding-overlay {
+            align-items: flex-end;
+            justify-content: center;
             padding: 0;
             overflow: hidden;
-            align-items: stretch;
         }
         .profile-onboarding-shell,
         #onboardingProfileModal .profile-onboarding-shell,
         #addressModal .profile-onboarding-shell {
             grid-template-columns: 1fr;
-            width: min(100%, 520px);
-            min-height: 0;
-            max-height: min(94vh, 900px);
-            margin: 0.25rem auto;
-        }
-        #addressModal .profile-onboarding-shell {
+            grid-template-rows: auto auto minmax(0, 1fr);
             width: 100%;
             max-width: none;
-            height: 100dvh;
-            max-height: 100dvh;
+            min-height: 0;
+            height: auto;
+            max-height: min(92dvh, 900px);
             margin: 0;
-            border-radius: 0;
+            border-radius: 24px 24px 0 0;
+            border-bottom: 0;
+            box-shadow: 0 -12px 40px rgba(90, 40, 80, 0.16);
+            animation: profileOnboardingSheetUp 0.28s ease;
+        }
+        #onboardingProfileModal .profile-onboarding-shell {
+            min-height: min(62dvh, 520px);
+        }
+        #addressModal .profile-onboarding-shell {
+            height: min(92dvh, 900px);
+            max-height: min(92dvh, 900px);
+        }
+        .profile-onboarding-sheet-handle {
+            display: block;
+            grid-column: 1 / -1;
+            width: 40px;
+            height: 4px;
+            border-radius: 99px;
+            background: rgba(194, 78, 104, 0.28);
+            margin: 0.55rem auto 0.1rem;
         }
         .profile-onboarding-sidebar,
         #addressModal .profile-onboarding-sidebar {
@@ -1725,9 +1748,10 @@
             justify-content: center;
             align-items: center;
             gap: 0.45rem 0.75rem;
-            padding: 0.75rem 0.9rem;
+            padding: 0.35rem 0.9rem 0.7rem;
             border-right: 0;
             border-bottom: 1px solid rgba(181, 68, 90, 0.12);
+            border-radius: 0;
         }
         .profile-onboarding-steps {
             width: 100%;
@@ -1762,10 +1786,13 @@
             width: auto;
         }
         .profile-onboarding-panel {
-            padding: 1.1rem 1rem 1.2rem;
+            padding: 0.9rem 1rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
         #onboardingProfileModal .profile-onboarding-panel {
-            min-height: 320px;
+            min-height: 0;
         }
         .profile-onboarding-subheading {
             margin-bottom: 1rem;
@@ -1777,25 +1804,41 @@
         }
         .onboarding-choice i { font-size: 22px; }
         .profile-onboarding-actions {
-            padding-top: 1.15rem;
+            position: sticky;
+            bottom: 0;
+            z-index: 4;
             flex-wrap: wrap;
+            padding: 0.85rem 0 calc(0.7rem + env(safe-area-inset-bottom, 0px));
+            margin-top: auto;
+            background: linear-gradient(180deg, rgba(255,252,248,0) 0%, var(--warm-white) 28%);
         }
         .profile-onboarding-actions .btn {
             width: auto;
             flex: 1 1 auto;
             min-width: 0;
         }
-        #addressModal .card-body { padding: 0.7rem; }
+        #addressModal .card-body {
+            padding: 0.7rem;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
         #addressModal .address-location-row {
             grid-template-columns: 1fr;
             gap: 0.45rem;
+        }
+        #addressModal #addressForm .form-actions {
+            position: sticky;
+            bottom: 0;
+            padding: 0.7rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
         }
         #addressModal #addressForm .form-actions .btn {
             flex: 1 1 auto;
             min-width: 0;
         }
         #addressModal #addressMap {
-            height: clamp(140px, 32vh, 190px);
+            height: clamp(120px, 28vh, 170px);
         }
     }
 
@@ -2554,6 +2597,7 @@
 <!-- ─── Profile setup wizard: gender → birthday → address ─── -->
 <div id="onboardingProfileModal" class="profile-onboarding-overlay" aria-modal="true" role="dialog" aria-labelledby="onboardingModalTitle">
     <div class="profile-onboarding-shell">
+        <div class="profile-onboarding-sheet-handle" aria-hidden="true"></div>
         <aside class="profile-onboarding-sidebar">
             <div class="profile-onboarding-steps" aria-label="Profile setup progress">
                 <span class="profile-onboarding-step is-active" id="onboardingProgressGender">1</span>
@@ -2655,6 +2699,7 @@
 <!-- ─── Add/Edit Address Modal ─── -->
 <div id="addressModal" class="profile-onboarding-overlay" style="z-index:10040;" aria-modal="true" role="dialog" aria-labelledby="addressModalTitle">
     <div class="profile-onboarding-shell">
+        <div class="profile-onboarding-sheet-handle" aria-hidden="true"></div>
         <aside class="profile-onboarding-sidebar">
             <div class="profile-onboarding-steps" aria-label="Profile setup progress" id="addressOnboardingSteps">
                 <span class="profile-onboarding-step is-complete">1</span>
@@ -3455,7 +3500,7 @@ function showOnboardingProfileModal(step) {
         if (icon) icon.className = 'ri-user-heart-line';
         setOnboardingProgress('gender');
     } else if (step === 'phone') {
-        if (phoneStep) phoneStep.style.display = 'block';
+        if (phoneStep) phoneStep.style.display = 'flex';
         title.textContent = 'Add your mobile number';
         hint.textContent = 'We’ll send a 6-digit SMS code to verify this number.';
         if (sidebarTitle) sidebarTitle.textContent = 'Delivery phone';
