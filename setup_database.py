@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Database setup script for E-FLOWERS & PLANTS System
+Database setup script for E-FLORA & PLANTS System
 Run this script to create the database and tables
 """
 

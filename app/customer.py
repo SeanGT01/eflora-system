@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from collections import defaultdict
 
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating, CartItemAddon, ProductAddonOption, WishlistItem
+from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating, CartItemAddon, ProductAddonOption, WishlistItem, RiderLocation
 from app.extensions import db
 from sqlalchemy.orm import joinedload, selectinload
 from functools import wraps
@@ -1018,6 +1018,79 @@ def get_order(order_id):
         return jsonify(d)
     except Exception as e:
         current_app.logger.exception('get_order: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
+def _geom_lat_lng(geom):
+    """WKT POINT is stored as (lng lat); Shapely x=lng, y=lat."""
+    if geom is None:
+        return None, None
+    try:
+        from geoalchemy2.shape import to_shape
+        point = to_shape(geom)
+        return float(point.y), float(point.x)
+    except Exception:
+        return None, None
+
+
+@customer_bp.route('/orders/<int:order_id>/tracking', methods=['GET'])
+@customer_only
+def get_order_tracking(order_id):
+    """Latest rider GPS + pickup/drop-off for live customer map."""
+    try:
+        user_id = int(get_jwt_identity())
+        order = (
+            Order.query
+            .filter_by(id=order_id, customer_id=user_id)
+            .options(
+                joinedload(Order.store),
+                joinedload(Order.assigned_rider).joinedload(Rider.user),
+            )
+            .first()
+        )
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+
+        live = order.status == 'on_delivery' and order.rider_id is not None
+        rider_lat = rider_lng = None
+        updated_at = None
+        if live:
+            loc = (
+                RiderLocation.query
+                .filter_by(rider_id=order.rider_id, order_id=order.id)
+                .order_by(RiderLocation.timestamp.desc())
+                .first()
+            )
+            if loc is None:
+                loc = (
+                    RiderLocation.query
+                    .filter_by(rider_id=order.rider_id)
+                    .order_by(RiderLocation.timestamp.desc())
+                    .first()
+                )
+            if loc is not None:
+                rider_lat, rider_lng = _geom_lat_lng(loc.location)
+                updated_at = loc.timestamp.isoformat() if loc.timestamp else None
+
+        store = order.store
+        return jsonify({
+            'live': live,
+            'status': order.status,
+            'rider_name': (
+                order.assigned_rider.user.full_name
+                if order.assigned_rider and order.assigned_rider.user
+                else None
+            ),
+            'rider_latitude': rider_lat,
+            'rider_longitude': rider_lng,
+            'rider_updated_at': updated_at,
+            'customer_latitude': order.customer_latitude,
+            'customer_longitude': order.customer_longitude,
+            'store_latitude': float(store.latitude) if store and store.latitude is not None else None,
+            'store_longitude': float(store.longitude) if store and store.longitude is not None else None,
+        })
+    except Exception as e:
+        current_app.logger.exception('get_order_tracking: %s', e)
         return jsonify({'error': str(e)}), 500
 
 

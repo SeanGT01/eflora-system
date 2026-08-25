@@ -361,7 +361,7 @@ def approve_seller_application(app_id):
     notification = Notification(
         user_id=user.id,
         title='Seller Application Approved',
-        message=f'Congratulations! Your seller application for "{application.store_name}" has been approved. You can now start selling on E-FLOWERS.',
+        message=f'Congratulations! Your seller application for "{application.store_name}" has been approved. You can now start selling on E-FLORA.',
         type='seller_app_approved',
         reference_id=application.id,
     )

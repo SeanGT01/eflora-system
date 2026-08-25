@@ -1,10 +1,10 @@
 @echo off
-REM E-Flowers System - Railway Deployment Helper Script
+REM E-Flora System - Railway Deployment Helper Script
 REM This script helps with local preparation before deployment
 
 echo.
 echo ╔════════════════════════════════════════════════════════════════╗
-echo ║   E-FLOWERS SYSTEM - RAILWAY DEPLOYMENT HELPER                ║
+echo ║   E-FLORA SYSTEM - RAILWAY DEPLOYMENT HELPER                ║
 echo ╚════════════════════════════════════════════════════════════════╝
 echo.
 

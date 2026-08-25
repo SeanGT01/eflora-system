@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}POS Orders — E-FLOWERS{% endblock %}
+{% block title %}POS Orders — E-FLORA{% endblock %}
 {% block page_title %}Point of Sale Orders{% endblock %}
 
 {% block extra_css %}
@@ -16,9 +16,9 @@
     }
 
     .orders-container {
-        max-width: 1400px;
-        margin: var(--spacing-xl) auto;
-        padding: 0 var(--spacing-lg);
+        max-width: none;
+        margin: 0;
+        padding: 0;
         width: 100%;
         box-sizing: border-box;
     }
@@ -174,21 +174,104 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     @media print {
-        .no-print, .header-actions, .filters-card, .pagination, .action-btn, .modal-footer { display: none !important; }
-        body { background: white; padding: 0.5in; }
-        .modal-overlay { position: absolute; background: white; padding: 0; }
-        .modal { box-shadow: none; border: 1px solid #ddd; }
+        body::before,
+        .sidebar,
+        .topbar,
+        .dashboard-footer,
+        .toast-container,
+        .orders-container,
+        .header-actions,
+        .filters-card,
+        .pagination,
+        .action-btn,
+        .modal-footer,
+        .modal-header,
+        .modal-close,
+        .modal-close i,
+        .menu-toggle,
+        #chat-fab,
+        #chat-overlay,
+        #chat-lightbox,
+        .chat-lightbox,
+        .notif-wrap,
+        #notifPanel,
+        .notif-panel,
+        .notif-backdrop,
+        .store-status-pill,
+        .sidebar-logo,
+        .nav-section {
+            display: none !important;
+        }
+
+        html, body,
+        .app-shell,
+        .main-area,
+        .page-content {
+            background: #fff !important;
+            overflow: visible !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            position: static !important;
+            transform: none !important;
+            width: 100% !important;
+        }
+
+        .modal-overlay.active {
+            display: block !important;
+            position: static !important;
+            inset: auto !important;
+            background: #fff !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            padding: 0.4in !important;
+            z-index: auto !important;
+        }
+
+        .modal,
+        .order-details-modal-surface {
+            box-shadow: none !important;
+            border: none !important;
+            max-width: 100% !important;
+            max-height: none !important;
+            width: 100% !important;
+            overflow: visible !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            background: #fff !important;
+            animation: none !important;
+            border-radius: 0 !important;
+        }
+
+        .modal-header {
+            position: static !important;
+            background: none !important;
+            backdrop-filter: none !important;
+        }
+
+        .modal-body {
+            overflow: visible !important;
+            max-height: none !important;
+        }
+
+        #orderModal .modal-header,
+        #orderModal .modal-close {
+            display: none !important;
+            visibility: hidden !important;
+        }
+
         table, tr { page-break-inside: avoid; }
-        tr { page-break-after: auto; }
     }
 
     @media (max-width: 1024px) {
-        .orders-container { padding: 0 var(--spacing-md); }
+        .orders-container { padding: 0; }
         .stats-grid, .filters-card { gap: var(--spacing-md); }
         .filters-card { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
     }
     @media (max-width: 768px) {
-        .orders-container { padding: 0 var(--spacing-sm); }
+        .orders-container { padding: 0; }
         .page-header { flex-direction: column; align-items: stretch; gap: var(--spacing-md); }
         .page-header-text { min-width: auto; }
         .header-actions { justify-content: flex-start; }
@@ -345,7 +428,7 @@
         </div>
         <div class="modal-body" id="orderDetailContent"></div>
         <div class="modal-footer">
-            <button class="btn btn-outline" onclick="window.print()">
+            <button class="btn btn-outline" type="button" onclick="printPosOrder()">
                 <i class="ri-printer-line"></i> Print
             </button>
         </div>
@@ -775,6 +858,18 @@ function renderOrderModal(order) {
         </div>`;
 
     modal.classList.add('active');
+}
+
+function printPosOrder() {
+    const modal = document.getElementById('orderModal');
+    if (!modal || !modal.classList.contains('active')) {
+        showToast('Open an order first, then print.', 'error');
+        return;
+    }
+    document.body.classList.add('printing-pos-order');
+    const done = () => document.body.classList.remove('printing-pos-order');
+    window.addEventListener('afterprint', done, { once: true });
+    setTimeout(() => window.print(), 50);
 }
 
 function closeModal() {

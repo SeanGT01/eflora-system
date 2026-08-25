@@ -379,11 +379,13 @@ def get_location_history():
     
     location_data = []
     for loc in locations:
+        from geoalchemy2.shape import to_shape
+        point = to_shape(loc.location)
         location_data.append({
             'id': loc.id,
             'order_id': loc.order_id,
-            'lat': loc.location.x,
-            'lng': loc.location.y,
+            'lat': float(point.y),
+            'lng': float(point.x),
             'timestamp': loc.timestamp.isoformat()
         })
     

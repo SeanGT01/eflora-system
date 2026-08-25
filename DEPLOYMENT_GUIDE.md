@@ -1,4 +1,4 @@
-# 🚀 E-Flowers System - Railway Deployment Guide
+# 🚀 E-Flora System - Railway Deployment Guide
 
 ## ✅ Pre-Deployment Checklist
 

@@ -2862,92 +2862,92 @@
                                     <label class="form-label">Delivery Coverage</label>
                                     <div class="form-hint" style="margin-bottom: 0.75rem;">Choose how you cover deliveries. Coverage is shown on the map above.</div>
 
-                                    <div class="delivery-method-container">
-                                        <div class="delivery-method-box {% if store.delivery_method == 'radius' or store.delivery_method is none %}is-selected{% endif %}" data-method="radius">
-                                            <div class="delivery-method-icon"><i class="ri-focus-3-line"></i></div>
-                                            <input type="radio" name="delivery-method" id="method-radius" value="radius" style="display: none;"
-                                                   {% if store.delivery_method == 'radius' or store.delivery_method is none %}checked{% endif %}>
-                                            <div class="delivery-method-content">
-                                                <div class="delivery-method-label">Simple Radius</div>
-                                                <div class="delivery-method-desc">Deliver within a fixed distance</div>
-                                            </div>
-                                        </div>
-                                        <div class="delivery-method-box {% if store.delivery_method == 'zone' %}is-selected{% endif %}" data-method="zone">
-                                            <div class="delivery-method-icon"><i class="ri-map-2-line"></i></div>
-                                            <input type="radio" name="delivery-method" id="method-zone" value="zone" style="display: none;"
-                                                   {% if store.delivery_method == 'zone' %}checked{% endif %}>
-                                            <div class="delivery-method-content">
-                                                <div class="delivery-method-label">Custom Zone</div>
-                                                <div class="delivery-method-desc">Draw an exact coverage area</div>
-                                            </div>
-                                        </div>
-                                        <div class="delivery-method-box {% if store.delivery_method == 'municipality' %}is-selected{% endif %}" data-method="municipality">
-                                            <div class="delivery-method-icon"><i class="ri-community-line"></i></div>
-                                            <input type="radio" name="delivery-method" id="method-municipality" value="municipality" style="display: none;"
-                                                   {% if store.delivery_method == 'municipality' %}checked{% endif %}>
-                                            <div class="delivery-method-content">
-                                                <div class="delivery-method-label">Municipality</div>
-                                                <div class="delivery-method-desc">Deliver by selected cities/towns</div>
-                                            </div>
-                                        </div>
-                                    </div>
+                        <div class="delivery-method-container">
+                            <div class="delivery-method-box {% if store.delivery_method == 'radius' or store.delivery_method is none %}is-selected{% endif %}" data-method="radius">
+                                <div class="delivery-method-icon"><i class="ri-focus-3-line"></i></div>
+                                <input type="radio" name="delivery-method" id="method-radius" value="radius" style="display: none;"
+                                       {% if store.delivery_method == 'radius' or store.delivery_method is none %}checked{% endif %}>
+                                <div class="delivery-method-content">
+                                    <div class="delivery-method-label">Simple Radius</div>
+                                    <div class="delivery-method-desc">Deliver within a fixed distance</div>
                                 </div>
-
-                                <script>
-                                    document.querySelectorAll('.delivery-method-box').forEach(box => {
-                                        box.addEventListener('click', function() {
+                            </div>
+                            <div class="delivery-method-box {% if store.delivery_method == 'zone' %}is-selected{% endif %}" data-method="zone">
+                                <div class="delivery-method-icon"><i class="ri-map-2-line"></i></div>
+                                <input type="radio" name="delivery-method" id="method-zone" value="zone" style="display: none;"
+                                       {% if store.delivery_method == 'zone' %}checked{% endif %}>
+                                <div class="delivery-method-content">
+                                    <div class="delivery-method-label">Custom Zone</div>
+                                    <div class="delivery-method-desc">Draw an exact coverage area</div>
+                                </div>
+                            </div>
+                            <div class="delivery-method-box {% if store.delivery_method == 'municipality' %}is-selected{% endif %}" data-method="municipality">
+                                <div class="delivery-method-icon"><i class="ri-community-line"></i></div>
+                                <input type="radio" name="delivery-method" id="method-municipality" value="municipality" style="display: none;"
+                                       {% if store.delivery_method == 'municipality' %}checked{% endif %}>
+                                <div class="delivery-method-content">
+                                    <div class="delivery-method-label">Municipality</div>
+                                    <div class="delivery-method-desc">Deliver by selected cities/towns</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <script>
+                        document.querySelectorAll('.delivery-method-box').forEach(box => {
+                            box.addEventListener('click', function() {
                                             const basicSection = document.getElementById('basic-info-content');
                                             const isEditing = basicSection && basicSection.classList.contains('editing');
-                                            if (!isEditing) return;
-                                            const method = this.dataset.method;
-                                            document.getElementById('method-' + method).checked = true;
-                                            document.getElementById('method-' + method).dispatchEvent(new Event('change', { bubbles: true }));
-                                        });
-                                    });
-                                </script>
+                                if (!isEditing) return;
+                                const method = this.dataset.method;
+                                document.getElementById('method-' + method).checked = true;
+                                document.getElementById('method-' + method).dispatchEvent(new Event('change', { bubbles: true }));
+                            });
+                        });
+                    </script>
 
                                 <!-- RADIUS COVERAGE -->
                                 <div id="radius-settings" class="form-group form-group-full" {% if store.delivery_method == 'zone' or store.delivery_method == 'municipality' %}style="display: none;"{% endif %}>
                                     <div class="form-stack">
-                                        <div class="form-group">
-                                            <label class="form-label">Delivery Radius (km)</label>
-                                            <input type="number" class="form-control" id="delivery-radius"
-                                                   value="{{ store.delivery_radius_km or 15 }}" min="1" max="50" step="0.5">
+                            <div class="form-group">
+                                <label class="form-label">Delivery Radius (km)</label>
+                                <input type="number" class="form-control" id="delivery-radius" 
+                                       value="{{ store.delivery_radius_km or 15 }}" min="1" max="50" step="0.5">
                                             <div class="form-hint">Maximum distance you're willing to deliver</div>
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label">Maximum Delivery Distance (km)</label>
-                                            <input type="number" class="form-control" id="max-distance"
-                                                   value="{{ store.max_delivery_distance or 15 }}" min="1" max="100" step="1">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Maximum Delivery Distance (km)</label>
+                                <input type="number" class="form-control" id="max-distance" 
+                                       value="{{ store.max_delivery_distance or 15 }}" min="1" max="100" step="1">
                                             <div class="form-hint">Hard limit — orders beyond this cannot be placed</div>
-                                        </div>
-                                    </div>
-                                    <div class="utility-actions">
-                                        <button type="button" class="zone-btn" id="show-radius-btn">
-                                            <i class="ri-radar-line"></i> Show Radius on Map
-                                        </button>
-                                    </div>
+                            </div>
                                 </div>
+                        <div class="utility-actions">
+                            <button type="button" class="zone-btn" id="show-radius-btn">
+                                            <i class="ri-radar-line"></i> Show Radius on Map
+                            </button>
+                        </div>
+                    </div>
 
                                 <!-- ZONE COVERAGE -->
                                 <div id="zone-settings" class="form-group form-group-full" {% if store.delivery_method != 'zone' %}style="display: none;"{% endif %}>
-                                    <label class="form-label">Custom Delivery Zone</label>
-                                    <div class="delivery-zone-controls">
-                                        <button type="button" class="zone-btn" id="draw-polygon-btn">
-                                            <i class="ri-shape-line"></i> Draw Zone
-                                        </button>
-                                        <button type="button" class="zone-btn" id="clear-zone-btn">
-                                            <i class="ri-delete-bin-line"></i> Clear Zone
-                                        </button>
+                            <label class="form-label">Custom Delivery Zone</label>
+                            <div class="delivery-zone-controls">
+                                <button type="button" class="zone-btn" id="draw-polygon-btn">
+                                    <i class="ri-shape-line"></i> Draw Zone
+                                </button>
+                                <button type="button" class="zone-btn" id="clear-zone-btn">
+                                    <i class="ri-delete-bin-line"></i> Clear Zone
+                                </button>
                                         <button type="button" class="zone-btn" id="show-zone-btn">
                                             <i class="ri-map-pin-line"></i> Show Zone
                                         </button>
-                                    </div>
-                                    <div class="form-hint" style="margin-top: 0.5rem;">
+                            </div>
+                            <div class="form-hint" style="margin-top: 0.5rem;">
                                         Draw a polygon on the map above to define your exact delivery area
-                                    </div>
-                                </div>
-
+                            </div>
+                        </div>
+                        
                                 <!-- MUNICIPALITY COVERAGE -->
                                 <div id="municipality-settings" class="form-group form-group-full" {% if store.delivery_method != 'municipality' %}style="display: none;"{% endif %}>
                                     <div class="municipality-selector-header">
@@ -2958,66 +2958,66 @@
                                             </button>
                                             <button type="button" class="zone-btn municipality-bulk-btn" id="deselect-all-municipalities">
                                                 Deselect all
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="municipality-selector">
-                                        {% for municipality in municipalities %}
+                            </button>
+                        </div>
+                    </div>
+                            <div class="municipality-selector">
+                                {% for municipality in municipalities %}
                                         <div class="municipality-checkbox">
                                             <label title="{{ municipality }}">
-                                                <input type="checkbox" class="municipality-check" value="{{ municipality }}"
-                                                    {% if store.selected_municipalities and municipality in store.selected_municipalities %}checked{% endif %}>
-                                                <span>{{ municipality }}</span>
-                                            </label>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    <div id="municipality-validation-message" class="zone-info" style="border-left-color: var(--deep-rose); background: rgba(181, 68, 90, 0.08); display: none;">
-                                        Validation message will appear here
-                                    </div>
-                                    <div class="form-hint" style="margin-top: 0.5rem;">
+                                        <input type="checkbox" class="municipality-check" value="{{ municipality }}" 
+                                            {% if store.selected_municipalities and municipality in store.selected_municipalities %}checked{% endif %}>
+                                        <span>{{ municipality }}</span>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div id="municipality-validation-message" class="zone-info" style="border-left-color: var(--deep-rose); background: rgba(181, 68, 90, 0.08); display: none;">
+                                Validation message will appear here
+                            </div>
+                            <div class="form-hint" style="margin-top: 0.5rem;">
                                         Your store's municipality is automatically included as the starting point. Add only adjacent municipalities/cities.
-                                    </div>
+                            </div>
                                     <div id="municipality-preview" class="subtle-panel" style="margin-top: 0.75rem;">
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                            <strong>Selected: </strong>
-                                            <span id="selected-count" style="background: var(--deep-rose); color: white; padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-weight: 600;">0</span>
-                                        </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <strong>Selected: </strong>
+                                <span id="selected-count" style="background: var(--deep-rose); color: white; padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-weight: 600;">0</span>
+                            </div>
                                         <div class="form-hint" style="margin: 0;">
                                             Green = connected to the store municipality. Red = not adjacent to the delivery area. Delivery zone is built automatically when you save.
-                                        </div>
-                                    </div>
-                                </div>
-
+                            </div>
+                            </div>
+                        </div>
+                        
                                 <div class="delivery-info-box" style="margin-top: 0.75rem;">
-                                    <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
-                                        <i class="ri-information-line" style="color: var(--deep-rose); font-size: 18px; flex-shrink: 0;"></i>
-                                        <div>
+                        <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
+                            <i class="ri-information-line" style="color: var(--deep-rose); font-size: 18px; flex-shrink: 0;"></i>
+                            <div>
                                             <strong style="display: block; margin-bottom: 0.25rem;">Coverage on map</strong>
-                                            <span id="method-description" style="font-size: 12px; color: var(--muted);">
-                                                {% if store.delivery_method == 'zone' %}
+                                <span id="method-description" style="font-size: 12px; color: var(--muted);">
+                                    {% if store.delivery_method == 'zone' %}
                                                     Your custom zone is shown on the map. Use Draw Zone to update it.
-                                                {% elif store.delivery_method == 'municipality' %}
+                                    {% elif store.delivery_method == 'municipality' %}
                                                     Selected municipality borders are shown on the map.
-                                                {% else %}
+                                    {% else %}
                                                     Your delivery radius is shown as a circle around your store pin.
-                                                {% endif %}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
                             </div>
                         </form>
                         
-                        <div class="section-actions">
+                    <div class="section-actions">
                             <button type="button" class="btn-section-save" id="save-basic-info">
-                                <i class="ri-save-line"></i> Save Changes
-                            </button>
+                            <i class="ri-save-line"></i> Save Changes
+                        </button>
                             <button type="button" class="btn-section-cancel" id="cancel-basic-info">
-                                <i class="ri-close-line"></i> Cancel
-                            </button>
-                        </div>
+                            <i class="ri-close-line"></i> Cancel
+                        </button>
+                    </div>
                     </div>
                     
                     <!-- VIEW MODE -->
@@ -3025,12 +3025,12 @@
                         <div class="summary-field">
                             <div class="summary-label">Store Name</div>
                             <div class="summary-value" id="sum-store-name">{{ store.name }}</div>
-                        </div>
+                            </div>
                         <div class="summary-field">
                             <div class="summary-label">Contact Number</div>
                             <div class="summary-value {% if not store.contact_number %}empty{% endif %}" id="sum-contact">
                                 {{ store.contact_number or 'Not provided' }}
-                            </div>
+                        </div>
                         </div>
                         <div class="summary-field">
                             <div class="summary-label">Status</div>
@@ -3042,7 +3042,7 @@
                             <div class="summary-label">Description</div>
                             <div class="summary-value {% if not store.description %}empty{% endif %}" id="sum-description">
                                 {{ store.description or 'Not provided' }}
-                            </div>
+                        </div>
                         </div>
                         <div class="summary-field">
                             <div class="summary-label">Location</div>
@@ -3057,11 +3057,11 @@
                                     {% for entry in store.store_schedule.schedules %}
                                         <div style="margin-bottom: 0.25rem;">
                                             <strong>{{ entry.days | join(', ') | title }}</strong>: {{ entry.open }} - {{ entry.close }}
-                                        </div>
+                        </div>
                                     {% endfor %}
                                 {% else %}
                                     Not configured
-                                {% endif %}
+                        {% endif %}
                             </div>
                         </div>
                     </div>
@@ -3241,7 +3241,7 @@
                             </div>
                         </div>
                     </div>
-
+                    
                     <!-- Save/Cancel Buttons for Edit Mode -->
                     <div class="section-actions">
                         <button type="button" class="btn-section-save" id="save-qr-settings">
@@ -3556,7 +3556,7 @@
     }
     .primary-selector {
         top: auto !important;
-        right: 6px !important;
+            right: 6px !important;
         bottom: 6px !important;
         border-radius: 999px !important;
     }
@@ -4699,7 +4699,7 @@
             closeBannerCropModal();
         }
     });
-
+    
     // ─── LOGO UPLOAD HANDLERS ───
     document.getElementById('upload-logo-btn')?.addEventListener('click', () => {
         document.getElementById('store-logo-file').click();
@@ -5507,7 +5507,7 @@
     function toggleQRSettingsSection(expanded) {
         setSectionEditing('qr-settings-content', 'edit-qr-settings', expanded);
     }
-
+    
     function syncFreeDeliveryMinFields() {
         const editing = !!document.getElementById('qr-settings-content')?.classList.contains('editing');
         const enabled = !!document.getElementById('freeDeliveryToggle')?.checked;
@@ -5541,7 +5541,7 @@
         toggleQRSettingsSection(false);
         clearStoreSettingsDirty('qr');
     });
-
+    
     // ─── QR SETTINGS SECTION ───
     document.getElementById('save-qr-settings')?.addEventListener('click', async () => {
         const btn = document.getElementById('save-qr-settings');
@@ -6092,30 +6092,30 @@ async function handleQRFile(file, index) {
     async function loadBarangays(municipality, options = {}) {
         const moveMap = options.moveMap === true;
         const barangaySelect = document.getElementById('barangay');
-
+        
         if (!barangaySelect) return;
-
+        
         barangaySelect.innerHTML = '<option value="">Loading...</option>';
         barangaySelect.disabled = true;
-
+        
         if (!municipality) {
             barangaySelect.innerHTML = '<option value="">Select Municipality first</option>';
             return;
         }
-
+        
         try {
             const response = await fetch(`/api/laguna/barangays/${encodeURIComponent(municipality)}`);
             const data = await response.json();
 
-            if (data.success && data.barangays && data.barangays.length > 0) {
-                barangaySelect.innerHTML = '<option value="">Select Barangay</option>';
-                data.barangays.forEach(barangay => {
-                    const option = document.createElement('option');
-                    option.value = barangay;
-                    option.textContent = barangay;
-                    barangaySelect.appendChild(option);
-                });
-                barangaySelect.disabled = false;
+                if (data.success && data.barangays && data.barangays.length > 0) {
+                    barangaySelect.innerHTML = '<option value="">Select Barangay</option>';
+                    data.barangays.forEach(barangay => {
+                        const option = document.createElement('option');
+                        option.value = barangay;
+                        option.textContent = barangay;
+                        barangaySelect.appendChild(option);
+                    });
+                    barangaySelect.disabled = false;
 
                 // Optional: recenter map on municipality center when user picks from dropdown
                 if (moveMap && data.coordinates && marker && map && !__suppressStoreAddressGeocode) {
@@ -6132,13 +6132,13 @@ async function handleQRFile(file, index) {
                         });
                     }
                 }
-            } else {
-                barangaySelect.innerHTML = '<option value="">No barangays found</option>';
-            }
+                } else {
+                    barangaySelect.innerHTML = '<option value="">No barangays found</option>';
+                }
         } catch (error) {
-            console.error('Error loading barangays:', error);
-            barangaySelect.innerHTML = '<option value="">Error loading barangays</option>';
-            showToast('Failed to load barangays', 'error');
+                console.error('Error loading barangays:', error);
+                barangaySelect.innerHTML = '<option value="">Error loading barangays</option>';
+                showToast('Failed to load barangays', 'error');
         }
     }
 
@@ -6249,41 +6249,41 @@ async function handleQRFile(file, index) {
         const municipalitySelect = document.getElementById('municipality');
         const barangaySelect = document.getElementById('barangay');
         const streetInput = document.getElementById('street-address');
-
+        
         if (!municipalitySelect || !barangaySelect) {
             debug.warn('Municipality or barangay select element not found');
             return;
         }
-
+        
         const municipality = municipalitySelect.value;
         const barangay = barangaySelect.value;
         const street = (streetInput?.value || '').trim();
-
+        
         debug.log('Geocoding triggered:', { municipality, barangay, street, mapboxAvailable: !!mapboxToken });
-
+        
         if (!municipality || !barangay) {
             debug.log('Skipping geocode - municipality or barangay not selected');
             return;
         }
-
+        
         if (!mapboxToken) {
             debug.error('Mapbox token not available for geocoding');
             return;
         }
-
+        
         try {
             await loadLagunaProvinceBoundaryFromApi();
             const query = street
                 ? `${street}, ${barangay}, ${municipality}, Laguna, Philippines`
                 : `${barangay}, ${municipality}, Laguna, Philippines`;
             debug.log('Geocoding query:', query);
-
+            
             const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxToken}&country=ph&limit=1`;
             const response = await fetch(url);
             const data = await response.json();
-
+            
             debug.log('Geocoding response:', data);
-
+            
             if (data.features && data.features.length > 0) {
                 const coordinates = data.features[0].geometry.coordinates;
                 const place_name = data.features[0].place_name;
@@ -6294,19 +6294,19 @@ async function handleQRFile(file, index) {
                     showToast('Geocoded location is outside Laguna. Please pin your store on the map.', 'error');
                     return;
                 }
-
+                
                 debug.success('Location found:', { coordinates, place_name });
-
+                
                 if (marker && map) {
                     debug.log('Updating marker and map...');
                     marker.setLngLat(coordinates);
                     __storeLastValidPin = { lng: glng, lat: glat };
-                    map.flyTo({
-                        center: coordinates,
+                    map.flyTo({ 
+                        center: coordinates, 
                         zoom: street ? 16 : 15,
                         duration: 1500
                     });
-
+                    
                     updateLocationDisplay({
                         lat: glat,
                         lng: glng,
@@ -7226,7 +7226,7 @@ async function handleQRFile(file, index) {
         function refreshDeliveryCoverageOnMap({ toast = false } = {}) {
             if (!map) return;
             const method = document.querySelector('input[name="delivery-method"]:checked')?.value || 'radius';
-            updateDeliveryMethodBoxes();
+                    updateDeliveryMethodBoxes();
             syncFeePanelsForMethod(method);
 
             // Zone geometry/highlight is zone-mode only
@@ -7310,7 +7310,7 @@ async function handleQRFile(file, index) {
                     clearZoneHighlightLayers({ clearDraw: true });
                     clearDeliveryCoverageLayers({ keepDraw: false });
 
-                    initializeMunicipalityCheckboxes(storeData);
+                        initializeMunicipalityCheckboxes(storeData);
                     updateSelectedCount();
                     if (typeof window.__ensureMunicipalityBoundariesLoaded === 'function') {
                         await window.__ensureMunicipalityBoundariesLoaded({ silent: false });
@@ -7387,7 +7387,7 @@ async function handleQRFile(file, index) {
             const checkboxes = document.querySelectorAll('.municipality-check:checked');
             return Array.from(checkboxes).map(cb => cb.value);
         }
-
+        
         function clearMunicipalityHighlightLayers() {
             if (!map) return;
             ['selected-municipality-fill', 'selected-municipality-outline',
@@ -7412,31 +7412,31 @@ async function handleQRFile(file, index) {
         function renderBaseMunicipalityBoundaries() {
             if (!map || !municipalityBoundaries) return;
             clearMunicipalityHighlightLayers();
-            map.addSource('municipality-boundaries', {
-                type: 'geojson',
-                data: municipalityBoundaries
-            });
-            map.addLayer({
-                id: 'municipality-fill',
-                type: 'fill',
-                source: 'municipality-boundaries',
-                paint: {
+                        map.addSource('municipality-boundaries', {
+                            type: 'geojson',
+                            data: municipalityBoundaries
+                        });
+                        map.addLayer({
+                            id: 'municipality-fill',
+                            type: 'fill',
+                            source: 'municipality-boundaries',
+                            paint: {
                     'fill-color': '#94a3b8',
                     'fill-opacity': 0.08
-                }
-            });
-            map.addLayer({
-                id: 'municipality-outline',
-                type: 'line',
-                source: 'municipality-boundaries',
-                paint: {
+                            }
+                        });
+                        map.addLayer({
+                            id: 'municipality-outline',
+                            type: 'line',
+                            source: 'municipality-boundaries',
+                            paint: {
                     'line-color': '#64748b',
-                    'line-width': 1,
-                    'line-dasharray': [2, 1]
-                }
-            });
-        }
-
+                                'line-width': 1,
+                                'line-dasharray': [2, 1]
+                            }
+                        });
+                    }
+                    
         async function ensureMunicipalityBoundariesLoaded({ silent = false } = {}) {
             if (municipalityBoundaries) {
                 if (map && !map.getSource('municipality-boundaries')) {
@@ -7560,8 +7560,8 @@ async function handleQRFile(file, index) {
         function ensureSelectedMunicipalityLayers() {
             if (!map) return false;
             if (!map.getSource('selected-municipalities')) {
-                map.addSource('selected-municipalities', {
-                    type: 'geojson',
+                    map.addSource('selected-municipalities', {
+                        type: 'geojson',
                     data: { type: 'FeatureCollection', features: [] }
                 });
             }
@@ -7582,7 +7582,7 @@ async function handleQRFile(file, index) {
                 });
             }
             if (!map.getLayer('selected-municipality-outline')) {
-                map.addLayer({
+                    map.addLayer({
                     id: 'selected-municipality-outline',
                     type: 'line',
                     source: 'selected-municipalities',
@@ -7637,24 +7637,24 @@ async function handleQRFile(file, index) {
             source.setData({ type: 'FeatureCollection', features });
 
             if (!fit) return;
-            const bounds = new mapboxgl.LngLatBounds();
+                    const bounds = new mapboxgl.LngLatBounds();
             features.forEach(f => {
-                if (f.geometry.type === 'Polygon') {
+                        if (f.geometry.type === 'Polygon') {
                     f.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
-                } else if (f.geometry.type === 'MultiPolygon') {
-                    f.geometry.coordinates.forEach(poly => {
+                        } else if (f.geometry.type === 'MultiPolygon') {
+                            f.geometry.coordinates.forEach(poly => {
                         poly[0].forEach(coord => bounds.extend(coord));
+                            });
+                        }
                     });
-                }
-            });
-            if (!bounds.isEmpty()) {
+                    if (!bounds.isEmpty()) {
                 map.fitBounds(bounds, { padding: 50, duration: 450, maxZoom: 12 });
             }
         }
         
         async function validateMunicipalitySelection({ updateMap = true, fitMap = false } = {}) {
             const storeMunicipalityIsIncluded = enforceStoreMunicipalitySelection();
-            const selected = getSelectedMunicipalities();
+                const selected = getSelectedMunicipalities();
             const messageDiv = document.getElementById('municipality-validation-message');
             
             if (!messageDiv) return false;
@@ -7666,8 +7666,8 @@ async function handleQRFile(file, index) {
                 if (updateMap) paintSelectedMunicipalities([], selected, { fit: false });
                 return false;
             }
-            
-            if (selected.length === 0) {
+                
+                if (selected.length === 0) {
                 messageDiv.style.display = 'block';
                 messageDiv.innerHTML = 'Please select at least one municipality.';
                 messageDiv.style.borderLeftColor = 'var(--dusty-rose)';
@@ -7985,24 +7985,24 @@ async function handleQRFile(file, index) {
 
                 // Keep backend geocode as fallback for preview address / place_id
                 if (!feature) {
-                    const response = await fetch('/api/seller/store/geocode', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ latitude: lngLat.lat, longitude: lngLat.lng })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
+                const response = await fetch('/api/seller/store/geocode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ latitude: lngLat.lat, longitude: lngLat.lng })
+                });
+                const data = await response.json();
+                if (data.success) {
                         address = data.address || address;
                         placeId = data.place_id || placeId;
                     }
                 }
 
-                updateLocationDisplay({
-                    lat: lngLat.lat,
-                    lng: lngLat.lng,
+                    updateLocationDisplay({
+                        lat: lngLat.lat,
+                        lng: lngLat.lng,
                     address: address || 'Pinned location',
                     place_id: placeId
-                });
+                    });
             } catch (error) {
                 debug.error('Reverse geocoding error:', error);
                 updateLocationDisplay({
@@ -8031,7 +8031,7 @@ async function handleQRFile(file, index) {
             const municipalitySelect = document.getElementById('municipality');
             const barangaySelect = document.getElementById('barangay');
             const streetInput = document.getElementById('street-address');
-
+            
             if (municipalitySelect) {
                 debug.success('Municipality select found, attaching geocode listener');
                 municipalitySelect.addEventListener('change', function() {
@@ -8040,14 +8040,14 @@ async function handleQRFile(file, index) {
                     // After barangays load (other listener), geocode if barangay already chosen
                     setTimeout(() => {
                         if (!__suppressStoreAddressGeocode) {
-                            geocodeLocationByMunicipalityBarangay();
+                        geocodeLocationByMunicipalityBarangay();
                         }
                     }, 350);
                 });
             } else {
                 debug.error('Municipality select NOT found');
             }
-
+            
             if (barangaySelect) {
                 debug.success('Barangay select found, attaching listener');
                 barangaySelect.addEventListener('change', function() {

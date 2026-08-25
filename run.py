@@ -5,7 +5,7 @@ from app import create_app
 from app.chat_socket import socketio
 
 # Log startup
-print("🚀 E-Flowers system starting...", file=sys.stderr)
+print("🚀 E-Flora system starting...", file=sys.stderr)
 
 try:
     app = create_app()

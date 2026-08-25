@@ -1699,6 +1699,8 @@ class Order(db.Model):
             'customer_avatar': self.customer.avatar_url if self.customer else None,  # Cloudinary only
             'store_name': self.store.name if self.store else None,
             'store_logo': self.store.logo_url if self.store else None,  # Cloudinary only
+            'store_latitude': float(self.store.latitude) if self.store and self.store.latitude is not None else None,
+            'store_longitude': float(self.store.longitude) if self.store and self.store.longitude is not None else None,
             'rider_name': self.assigned_rider.user.full_name if self.assigned_rider and self.assigned_rider.user else None
         }
 

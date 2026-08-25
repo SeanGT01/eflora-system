@@ -1,10 +1,10 @@
 #!/bin/bash
-# E-Flowers System - Railway Deployment Helper Script (Linux/macOS)
+# E-Flora System - Railway Deployment Helper Script (Linux/macOS)
 # This script helps with local preparation before deployment
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║   E-FLOWERS SYSTEM - RAILWAY DEPLOYMENT HELPER                ║"
+echo "║   E-FLORA SYSTEM - RAILWAY DEPLOYMENT HELPER                ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
