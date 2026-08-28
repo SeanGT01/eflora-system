@@ -92,10 +92,11 @@ class User(db.Model):
     
     def to_dict(self):
         # Split on last space: everything before = first name, last word = last name
-        from app.utils.phone_utils import display_login_id, is_valid_ph_mobile
+        from app.utils.phone_utils import display_login_id, is_valid_ph_mobile, is_synthetic_account_email
 
         _name_parts = self.full_name.rsplit(' ', 1) if ' ' in self.full_name else [self.full_name]
         login_id = display_login_id(email=self.email, phone=self.phone)
+        phone_login = is_synthetic_account_email(self.email or '')
         return {
             'id': self.id,
             'full_name': self.full_name,
@@ -104,6 +105,7 @@ class User(db.Model):
             # Public "email" is the login identity (real email OR phone for SMS accounts).
             'email': login_id,
             'login_id': login_id,
+            'is_phone_login': phone_login,
             'role': self.role,
             'status': self.status,
             'phone': self.phone,

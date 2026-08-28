@@ -38,6 +38,12 @@ def send_phone_bind_otp(user, phone_raw):
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
 
+    if is_synthetic_account_email(user.email or ''):
+        return jsonify({
+            'success': False,
+            'error': 'Your login number cannot be changed here. It is tied to your account sign-in.',
+        }), 403
+
     if not is_valid_ph_mobile(phone_raw):
         return jsonify({
             'success': False,

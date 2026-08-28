@@ -894,15 +894,27 @@
             
             // Explicitly get and disable the button
             const submitBtn = nf.querySelector('button[type="submit"]');
+            const discardBtn = document.getElementById('profileDiscardBtn');
+            const wireProfileDirty = window.updateProfileFormActions || function() {};
+
             if (submitBtn) {
-                submitBtn.disabled = true; // Start disabled
-                
-                // Add listeners to all inputs to enable button when changed
+                submitBtn.disabled = true;
+                if (discardBtn) discardBtn.disabled = true;
+
                 const inputs = nf.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="radio"], select, textarea');
                 inputs.forEach(input => {
-                    input.addEventListener('input', () => { submitBtn.disabled = false; });
-                    input.addEventListener('change', () => { submitBtn.disabled = false; });
+                    input.addEventListener('input', wireProfileDirty);
+                    input.addEventListener('change', wireProfileDirty);
                 });
+            }
+
+            if (typeof window.refreshProfileFormBaseline === 'function') {
+                window.refreshProfileFormBaseline();
+            }
+            if (typeof window.setupProfilePhoneForm === 'function') {
+                window.setupProfilePhoneForm();
+            } else if (typeof window.updateProfilePhoneActions === 'function') {
+                window.updateProfilePhoneActions();
             }
             
             nf.addEventListener('submit', async function(e) {
@@ -931,18 +943,30 @@
                         }
 
                         syncProfileUI(d.user);
-                        btn.disabled = true; // Keep disabled after successful save
+                        if (typeof window.refreshProfileFormBaseline === 'function') {
+                            window.refreshProfileFormBaseline();
+                        } else {
+                            btn.disabled = true;
+                        }
                     } else {
                         showToast('Error: ' + (d.error || 'Unknown error'));
-                        btn.disabled = false; // Enable on error so user can retry
+                        if (typeof window.updateProfileFormActions === 'function') {
+                            window.updateProfileFormActions();
+                        } else {
+                            btn.disabled = false;
+                        }
                     }
                 } catch {
                     showToast('Network error. Please try again.');
-                    btn.disabled = false; // Enable on error so user can retry
+                    if (typeof window.updateProfileFormActions === 'function') {
+                        window.updateProfileFormActions();
+                    } else {
+                        btn.disabled = false;
+                    }
                 } finally {
                     btn.innerHTML = orig;
-                    if (!saveSuccess) {
-                        btn.disabled = false; // Already handled in catch/error blocks
+                    if (!saveSuccess && typeof window.updateProfileFormActions === 'function') {
+                        window.updateProfileFormActions();
                     }
                 }
             });
