@@ -2639,6 +2639,42 @@
         bootChat();
     }
 })();
+
+// Active-session Online presence for seller/admin dashboard tabs.
+(function setupPresenceHeartbeat() {
+    var INTERVAL_MS = 45000;
+    var timer = null;
+
+    function beat() {
+        if (document.hidden) return;
+        fetch('/api/v1/chat/presence/heartbeat', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        }).catch(function () {});
+    }
+
+    function start() {
+        if (timer) return;
+        beat();
+        timer = setInterval(beat, INTERVAL_MS);
+    }
+
+    function stop() {
+        if (timer) {
+            clearInterval(timer);
+            timer = null;
+        }
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) stop();
+        else start();
+    });
+    window.addEventListener('pageshow', start);
+    if (!document.hidden) start();
+})();
 </script>
 {% endif %}
 

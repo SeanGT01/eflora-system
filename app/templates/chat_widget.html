@@ -453,106 +453,6 @@
 }
 .search-result-item .msg-btn:hover { opacity: .92; }
 
-/* ══════════ RECOMMENDED SHOPS ══════════ */
-.chat-recommended-wrap {
-    padding: 8px 10px 9px;
-    border-bottom: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.35);
-}
-.chat-recommended-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-}
-.chat-recommended-title {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-}
-.chat-recommended-list {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-}
-.chat-rec-item {
-    min-width: 98px;
-    max-width: 98px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.55);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    padding: 6px;
-    cursor: pointer;
-    transition: var(--transition);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-.chat-rec-item:hover {
-    border-color: rgba(194, 78, 104, 0.45);
-    transform: translateY(-1px);
-    background: rgba(255, 255, 255, 0.8);
-}
-.chat-rec-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #c24e68, #d878a0);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 700;
-    overflow: hidden;
-}
-.chat-rec-avatar-wrap {
-    position: relative;
-    width: 28px;
-    height: 28px;
-    margin-bottom: 5px;
-}
-.chat-rec-chat-badge {
-    position: absolute;
-    right: -4px;
-    bottom: -4px;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #2c2520;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 9px;
-    border: 1.5px solid #fff;
-    pointer-events: none;
-}
-.chat-rec-avatar img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-.chat-rec-name {
-    font-size: 11.5px;
-    font-weight: 600;
-    color: var(--charcoal);
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.chat-rec-meta {
-    font-size: 10px;
-    color: var(--muted);
-    margin-top: 1px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
 .avatar-badge {
     border-radius: 50%;
     display: flex;
@@ -922,12 +822,6 @@ window.__eflowersChatUnread = {{ chat_unread_count|default(0)|int }};
                 <input type="text" id="chat-store-search" placeholder="Search stores to message…" oninput="chatWidget.searchStores(this.value)">
             </div>
             <div class="chat-search-results" id="chat-search-results" style="display:none;"></div>
-            <div class="chat-recommended-wrap" id="chat-recommended-wrap">
-                <div class="chat-recommended-head">
-                    <div class="chat-recommended-title">Recommended shops</div>
-                </div>
-                <div class="chat-recommended-list" id="chat-recommended-list"></div>
-            </div>
             <div class="chat-inbox" id="chat-inbox-list">
                 <div class="inbox-empty" id="chat-inbox-empty">No conversations yet</div>
             </div>
@@ -983,6 +877,7 @@ const chatWidget = (() => {
     let _userRole = null;
     let _convos = [];
     let _activeConvoId = null;
+    let _activeOtherUid = null;
     let _messages = [];
     let _pollTimer = null;
     let _messagesPollBusy = false;
@@ -994,9 +889,11 @@ const chatWidget = (() => {
     let _unreadPollTimer = null;
     let _liveSyncTimer = null;
     let _readPollTimer = null;
+    let _onlinePollTimer = null;
     let _lastUnreadCount = 0;
     let _lastMessagesFingerprint = '';
     let _lastInboxFingerprint = '';
+    let _allStores = null;
     let _locallyReadIds = new Set(); // suppress poll race after opening a thread
     let _supportFaqs = null;
     let _quickAnswersMode = false;
@@ -1173,10 +1070,8 @@ const chatWidget = (() => {
         const show = _isCustomerRole();
         const searchBar = document.querySelector('#chat-inbox-view .chat-search-bar');
         const results = document.getElementById('chat-search-results');
-        const recommended = document.getElementById('chat-recommended-wrap');
         if (searchBar) searchBar.style.display = show ? '' : 'none';
         if (results && !show) results.style.display = 'none';
-        if (recommended && !show) recommended.style.display = 'none';
     }
 
     // ═══ TOGGLE / OPEN / CLOSE ═══
@@ -1226,6 +1121,7 @@ const chatWidget = (() => {
     // ═══ INBOX ═══
     function showInbox() {
         _activeConvoId = null;
+        _activeOtherUid = null;
         _preferredOrderId = null;
         _pendingOrderContext = null;
         _orderContextExpanded = false;
@@ -1276,7 +1172,6 @@ const chatWidget = (() => {
             _lastInboxFingerprint = fingerprint;
             _convos = next;
             _renderInbox();
-            if (!quiet) _loadRecommendedShops();
             const localTotal = (_convos || []).reduce(function (sum, c) {
                 return sum + (c.unread_count || 0);
             }, 0);
@@ -1365,67 +1260,14 @@ const chatWidget = (() => {
     async function _getAllStores() {
         if (_allStores) return _allStores;
         try {
-            const res = await fetch('/api/v1/customer/stores');
-            _allStores = await res.json();
+            const res = await _fetch('/api/v1/customer/stores', { headers: _headers() });
+            const data = await res.json();
+            _allStores = Array.isArray(data) ? data : [];
         } catch(e) {
             console.error('Chat: failed to load stores', e);
             _allStores = [];
         }
         return _allStores;
-    }
-
-    async function _loadRecommendedShops() {
-        const wrap = document.getElementById('chat-recommended-wrap');
-        const list = document.getElementById('chat-recommended-list');
-        if (!wrap || !list) return;
-        if (!_isCustomerRole()) {
-            wrap.style.display = 'none';
-            return;
-        }
-
-        const stores = await _getAllStores();
-        if (!Array.isArray(stores) || stores.length === 0) {
-            wrap.style.display = 'none';
-            return;
-        }
-
-        const convoStoreIds = new Set(
-            (_convos || [])
-                .map(c => c.store_id)
-                .filter(id => typeof id === 'number' || typeof id === 'string')
-        );
-
-        const recommendations = stores
-            .filter(s => !convoStoreIds.has(s.id))
-            .sort((a, b) => {
-                const ar = Number(a.average_rating || a.rating || 0);
-                const br = Number(b.average_rating || b.rating || 0);
-                if (br !== ar) return br - ar;
-                const ac = Number(a.review_count || a.ratings_count || 0);
-                const bc = Number(b.review_count || b.ratings_count || 0);
-                if (bc !== ac) return bc - ac;
-                return String(a.name || '').localeCompare(String(b.name || ''));
-            })
-            .slice(0, 8);
-
-        if (recommendations.length === 0) {
-            wrap.style.display = 'none';
-            return;
-        }
-
-        list.innerHTML = recommendations.map(s => {
-            const logo = s.logo_url
-                ? `<div class="chat-rec-avatar"><img src="${s.logo_url}" alt="" onerror="this.parentElement.textContent='${_esc((s.name || 'S')[0])}'"></div>`
-                : `<div class="chat-rec-avatar">${_esc((s.name || 'S')[0])}</div>`;
-            const rating = Number(s.average_rating || s.rating || 0);
-            const ratingText = rating > 0 ? `⭐ ${rating.toFixed(1)}` : (s.municipality || 'Shop');
-            return `<button type="button" class="chat-rec-item" onclick="chatWidget.openWithStore(${s.id})">
-                <div class="chat-rec-avatar-wrap">${logo}<span class="chat-rec-chat-badge" aria-hidden="true"><i class="ri-chat-3-fill"></i></span></div>
-                <div class="chat-rec-name">${_esc(s.name || 'Store')}</div>
-                <div class="chat-rec-meta">${_esc(ratingText)}</div>
-            </button>`;
-        }).join('');
-        wrap.style.display = '';
     }
 
     function _renderInbox() {
@@ -1556,24 +1398,20 @@ const chatWidget = (() => {
 
     // ═══ STORE SEARCH ═══
     let _searchTimer = null;
-    let _allStores = null;
 
     async function searchStores(query) {
         const resultsEl = document.getElementById('chat-search-results');
         const inboxEl = document.getElementById('chat-inbox-list');
-        const recEl = document.getElementById('chat-recommended-wrap');
 
         if (!query || query.trim().length === 0) {
             resultsEl.style.display = 'none';
             inboxEl.style.display = '';
-            if (recEl) recEl.style.display = '';
             return;
         }
-        if (recEl) recEl.style.display = 'none';
 
         const allStores = await _getAllStores();
         const q = query.toLowerCase().trim();
-        const matches = allStores.filter(s => (s.name || '').toLowerCase().includes(q)).slice(0, 10);
+        const matches = (allStores || []).filter(s => (s.name || '').toLowerCase().includes(q)).slice(0, 10);
 
         if (matches.length === 0) {
             resultsEl.innerHTML = '<div class="inbox-empty" style="padding:20px;">No stores found</div>';
@@ -1782,8 +1620,8 @@ const chatWidget = (() => {
             document.getElementById('chat-detail-avatar').innerHTML = _avatarHtml(displayAvatar, displayName, 38, !isSeller);
         }
         document.getElementById('chat-detail-name').textContent = displayName;
-        // Check online
-        _checkOnline(other.id || convo.seller_id);
+        _activeOtherUid = other.id || convo.seller_id || null;
+        _checkOnline(_activeOtherUid);
     }
 
     function _orderStatusLabel(status) {
@@ -2347,11 +2185,18 @@ const chatWidget = (() => {
         _readPollTimer = setInterval(function () {
             if (!document.hidden && _activeConvoId) _markRead();
         }, 6000);
+        _onlinePollTimer = setInterval(function () {
+            if (!document.hidden && _activeConvoId && _activeOtherUid) {
+                _checkOnline(_activeOtherUid);
+            }
+        }, 15000);
+        if (_activeOtherUid) _checkOnline(_activeOtherUid);
     }
     function _stopPoll() {
         if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
         if (_typingPollTimer) { clearInterval(_typingPollTimer); _typingPollTimer = null; }
         if (_readPollTimer) { clearInterval(_readPollTimer); _readPollTimer = null; }
+        if (_onlinePollTimer) { clearInterval(_onlinePollTimer); _onlinePollTimer = null; }
         clearTimeout(_typingTimer);
         clearInterval(_typingKeepAlive);
         _typingKeepAlive = null;

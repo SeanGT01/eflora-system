@@ -25,6 +25,13 @@ chat_bp = Blueprint('chat', __name__)
 # Philippines timezone
 PHT = pytz.timezone('Asia/Manila')
 
+# In-memory active-session presence: {user_id: last_seen_pht}
+# Kept fresh by /presence/heartbeat (app/web foreground) and any chat API call.
+# Online ≠ "has a valid JWT/session cookie" (those last days); Online = recently active.
+_presence = {}
+_PRESENCE_TTL_SECONDS = 120
+
+
 def pht_now():
     """Get current time in Philippines timezone (UTC+8)"""
     return datetime.now(PHT)
@@ -42,6 +49,27 @@ def _to_pht(dt):
     return dt.astimezone(PHT)
 
 
+def _touch_presence(user_id):
+    """Mark a user as currently active in their logged-in session."""
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        return
+    _presence[uid] = pht_now()
+
+
+def _is_present(user_id):
+    """True when the user had recent active-session activity within the TTL."""
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        return False
+    seen = _presence.get(uid)
+    if seen is None:
+        return False
+    return (pht_now() - seen).total_seconds() <= _PRESENCE_TTL_SECONDS
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════════════════════
@@ -56,6 +84,7 @@ def chat_auth_required(fn):
         # 1) Try Flask session first (website users)
         if session.get('user_id'):
             g.chat_user_id = session['user_id']
+            _touch_presence(g.chat_user_id)
             return fn(*args, **kwargs)
 
         # 2) Try JWT token (mobile app / chat widget with session-bridge token)
@@ -63,6 +92,7 @@ def chat_auth_required(fn):
             verify_jwt_in_request()
             identity = get_jwt_identity()
             g.chat_user_id = int(identity) if isinstance(identity, str) else identity
+            _touch_presence(g.chat_user_id)
             return fn(*args, **kwargs)
         except Exception:
             pass
@@ -904,19 +934,43 @@ def total_unread_count():
 def check_online_status(user_id):
     """
     GET /api/v1/chat/users/<id>/online
-    Returns whether a user was active within the last 5 minutes.
-    Uses the user's updated_at field as a proxy for activity.
+    Online = active socket OR recent active-session heartbeat/chat activity.
     """
     target = User.query.get_or_404(user_id)
-    from datetime import timedelta
-    threshold = pht_now() - timedelta(minutes=5)
-    last_active = _to_pht(target.updated_at)
-    is_online = last_active is not None and last_active >= threshold
+
+    is_online = False
+    try:
+        from app.chat_socket import is_user_online as socket_online
+        is_online = bool(socket_online(user_id))
+    except Exception:
+        is_online = False
+
+    if not is_online:
+        is_online = _is_present(user_id)
+
+    last_active = _presence.get(int(user_id))
+    if last_active is None:
+        last_active = _to_pht(target.updated_at)
 
     return jsonify({
         'user_id': target.id,
         'is_online': bool(is_online),
         'last_active': last_active.isoformat() if last_active else None,
+    }), 200
+
+
+@chat_bp.route('/presence/heartbeat', methods=['POST'])
+@chat_auth_required
+def presence_heartbeat():
+    """
+    POST /api/v1/chat/presence/heartbeat
+    Called by Flutter/web while the logged-in client is in the foreground.
+    chat_auth_required already touches presence; this endpoint exists so
+    clients can stay Online without opening chat.
+    """
+    return jsonify({
+        'success': True,
+        'ttl_seconds': _PRESENCE_TTL_SECONDS,
     }), 200
 
 

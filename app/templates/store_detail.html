@@ -1023,22 +1023,63 @@
         overflow-wrap: anywhere;
     }
 
-    .status-open {
+    .status-open,
+    .status-closed {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: 7px;
+        padding: 4px 10px 4px 8px;
+        border-radius: 999px;
         font-size: 12px;
-        font-weight: 600;
+        font-weight: 650;
+        font-family: var(--font-sans);
+        letter-spacing: 0.01em;
+        line-height: 1.2;
+    }
+
+    .status-open {
         color: #276749;
+        background: rgba(72, 187, 120, 0.14);
+        border: 1px solid rgba(72, 187, 120, 0.32);
     }
 
     .status-open::before {
         content: '';
-        width: 7px; height: 7px;
+        width: 7px;
+        height: 7px;
         border-radius: 50%;
         background: #48bb78;
         animation: pulse-dot 2s ease-in-out infinite;
         flex-shrink: 0;
+    }
+
+    .status-closed {
+        color: #9b2c2c;
+        background: rgba(192, 57, 43, 0.1);
+        border: 1px solid rgba(192, 57, 43, 0.28);
+    }
+
+    .status-closed::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #e05353;
+        flex-shrink: 0;
+    }
+
+    .status-checking {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 4px 10px 4px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        font-family: var(--font-sans);
+        color: var(--muted);
+        background: rgba(44, 37, 32, 0.05);
+        border: 1px solid rgba(44, 37, 32, 0.08);
     }
 
     @keyframes pulse-dot {
@@ -1510,7 +1551,7 @@
                     <i class="ri-time-line"></i>
                     <div>
                         <div class="info-row-label">Status</div>
-                        <span class="status-open" id="storeStatusSidebar">Checking…</span>
+                        <span class="status-checking" id="storeStatusSidebar">Checking…</span>
                     </div>
                 </div>
                 <div class="info-row" id="storeHoursRow" style="display:none;">
@@ -1532,13 +1573,6 @@
                     <div>
                         <div class="info-row-label">Same-day Order Cutoff</div>
                         <div class="info-row-value" id="storeOrderCutoffValue"></div>
-                    </div>
-                </div>
-                <div class="info-row" id="storeLeadTimeRow" style="display:none;">
-                    <i class="ri-hourglass-line"></i>
-                    <div>
-                        <div class="info-row-label">Prep Time</div>
-                        <div class="info-row-value" id="storeLeadTimeValue"></div>
                     </div>
                 </div>
                 <div class="info-row">
@@ -2107,11 +2141,11 @@ function viewProduct(productId) {
             if (isOpen) {
                 statusSidebar.className = 'status-open';
                 statusSidebar.removeAttribute('style');
-                statusSidebar.innerHTML = '<i class="ri-checkbox-circle-line" style="margin-right:5px;"></i>Open Now';
+                statusSidebar.textContent = 'Open Now';
             } else {
-                statusSidebar.className = '';
-                statusSidebar.setAttribute('style', 'display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:#c0392b;');
-                statusSidebar.innerHTML = '<i class="ri-close-circle-line"></i> Closed';
+                statusSidebar.className = 'status-closed';
+                statusSidebar.removeAttribute('style');
+                statusSidebar.textContent = 'Closed';
             }
         }
 
@@ -2150,8 +2184,6 @@ function viewProduct(productId) {
         const windowValue = document.getElementById('storeDeliveryWindowValue');
         const cutoffRow = document.getElementById('storeOrderCutoffRow');
         const cutoffValue = document.getElementById('storeOrderCutoffValue');
-        const leadRow = document.getElementById('storeLeadTimeRow');
-        const leadValue = document.getElementById('storeLeadTimeValue');
 
         const showRow = (row, valueEl, text) => {
             if (!row || !valueEl) return;
@@ -2167,7 +2199,6 @@ function viewProduct(productId) {
         if (!schedule) {
             showRow(windowRow, windowValue, '');
             showRow(cutoffRow, cutoffValue, '');
-            showRow(leadRow, leadValue, '');
             return;
         }
 
@@ -2185,18 +2216,6 @@ function viewProduct(productId) {
                 ? `Order by ${formatTime12Hour(schedule.order_cutoff)} for same-day`
                 : ''
         );
-
-        let leadText = '';
-        if (schedule.lead_time_hours != null && schedule.lead_time_hours !== '') {
-            const hours = parseInt(schedule.lead_time_hours, 10);
-            if (hours === 0) leadText = 'None';
-            else if (Number.isFinite(hours) && hours > 0) {
-                leadText = hours === 1 ? '1 hour before slot start' : `${hours} hours before slot start`;
-            }
-        } else if (schedule.schedules && schedule.schedules.length) {
-            leadText = '1 hour before slot start';
-        }
-        showRow(leadRow, leadValue, leadText);
     }
 </script>
 <script type="application/json" id="storeDeliveryMapData">{{ store_map_data|tojson }}</script>

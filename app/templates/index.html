@@ -259,9 +259,10 @@
         z-index: 1;
     }
 
-    /* Sections below the fold do not need layout or paint work until approached. */
+    /* Sections below the fold do not need layout or paint work until approached.
+       Skip testimonials: paint containment clips the glass cards’ soft side shadows. */
     @supports (content-visibility: auto) {
-        .landing-atmosphere > section:not(.hero-section) {
+        .landing-atmosphere > section:not(.hero-section):not(.testimonials-section) {
             content-visibility: auto;
             contain-intrinsic-size: auto 620px;
         }
@@ -1957,13 +1958,19 @@
     }
 
     /* ─── Testimonials ─── */
-    .testimonials-section { margin-bottom: 100px; }
+    .testimonials-section {
+        margin-bottom: 100px;
+        /* Keep shadow/blur inside the section so sides aren’t clipped by overflow-x:hidden on body */
+        padding: 0.75rem 0.65rem 1.25rem;
+        overflow: visible;
+    }
 
     .testimonials-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 1.5rem;
         transition: opacity 0.28s ease, transform 0.28s ease;
+        overflow: visible;
     }
 
     .testimonials-grid.testimonial-rotating {
@@ -1984,6 +1991,7 @@
         -webkit-backdrop-filter: blur(24px) saturate(1.55);
         transition: var(--transition);
         position: relative;
+        overflow: visible;
     }
 
     .testimonial-card::before {
