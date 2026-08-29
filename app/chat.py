@@ -974,6 +974,46 @@ def presence_heartbeat():
     }), 200
 
 
+@chat_bp.route('/presence/status', methods=['POST'])
+@chat_auth_required
+def presence_status_batch():
+    """
+    POST /api/v1/chat/presence/status
+    Body: { "user_ids": [1, 2, 3] }
+    Returns: { "online": { "1": true, "2": false } }
+    Used by the chat inbox to show Messenger-style green dots.
+    """
+    data = request.get_json(silent=True) or {}
+    raw_ids = data.get('user_ids') or []
+    online_map = {}
+
+    try:
+        from app.chat_socket import is_user_online as socket_online
+    except Exception:
+        socket_online = None
+
+    seen = set()
+    for raw in raw_ids:
+        try:
+            uid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if uid <= 0 or uid in seen:
+            continue
+        seen.add(uid)
+        is_online = False
+        if socket_online is not None:
+            try:
+                is_online = bool(socket_online(uid))
+            except Exception:
+                is_online = False
+        if not is_online:
+            is_online = _is_present(uid)
+        online_map[str(uid)] = bool(is_online)
+
+    return jsonify({'online': online_map}), 200
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # TYPING INDICATOR (Polling fallback)
 # ═══════════════════════════════════════════════════════════════════════

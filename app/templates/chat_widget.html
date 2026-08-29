@@ -163,6 +163,33 @@
 .chat-head .status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
 .chat-head .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #31a24c; display: inline-block; }
 .chat-head .offline-dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; display: inline-block; }
+.avatar-wrap {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    line-height: 0;
+}
+.avatar-wrap .presence-dot {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #31a24c;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(49, 162, 76, 0.25);
+    pointer-events: none;
+    z-index: 2;
+}
+.chat-head .avatar-wrap .presence-dot {
+    width: 11px;
+    height: 11px;
+}
+.inbox-item .avatar-wrap .presence-dot {
+    width: 13px;
+    height: 13px;
+}
 .chat-head .close-btn {
     cursor: pointer;
     width: 32px;
@@ -878,6 +905,8 @@ const chatWidget = (() => {
     let _convos = [];
     let _activeConvoId = null;
     let _activeOtherUid = null;
+    let _onlineByUserId = {};
+    let _inboxPresenceTimer = null;
     let _messages = [];
     let _pollTimer = null;
     let _messagesPollBusy = false;
@@ -947,6 +976,84 @@ const chatWidget = (() => {
         return `<div class="avatar-placeholder" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.37)}px;">${_initials(name)}</div>`;
     }
 
+    function _withPresenceDot(avatarHtml, isOnline) {
+        if (!isOnline) return avatarHtml;
+        return `<div class="avatar-wrap">${avatarHtml}<span class="presence-dot" title="Online" aria-label="Online"></span></div>`;
+    }
+
+    function _isUserOnlineCached(uid) {
+        if (uid == null || uid === '') return false;
+        return !!_onlineByUserId[String(uid)];
+    }
+
+    async function _refreshOnlineStatuses(userIds) {
+        const ids = Array.from(new Set(
+            (userIds || [])
+                .map(function (id) { return parseInt(id, 10); })
+                .filter(function (id) { return Number.isFinite(id) && id > 0; })
+        ));
+        if (!ids.length) return;
+        try {
+            const res = await _fetch(API + '/presence/status', {
+                method: 'POST',
+                headers: _headers(),
+                body: JSON.stringify({ user_ids: ids }),
+            });
+            const data = await res.json();
+            const online = (data && data.online) || {};
+            Object.keys(online).forEach(function (k) {
+                _onlineByUserId[k] = !!online[k];
+            });
+        } catch (e) {}
+    }
+
+    function _inboxPartnerIds() {
+        return (_convos || [])
+            .map(function (c) {
+                const other = c.other_user || {};
+                return other.id || null;
+            })
+            .filter(Boolean);
+    }
+
+    async function _refreshInboxPresence({ rerender = true } = {}) {
+        await _refreshOnlineStatuses(_inboxPartnerIds());
+        if (rerender && !_activeConvoId) {
+            _renderInbox({ skipPresenceRefresh: true });
+        }
+        _applyHeaderPresence();
+    }
+
+    function _startInboxPresencePoll() {
+        if (_inboxPresenceTimer) return;
+        _inboxPresenceTimer = setInterval(function () {
+            if (document.hidden) return;
+            const overlay = document.getElementById('chat-overlay');
+            if (!overlay || !overlay.classList.contains('open')) return;
+            if (_activeConvoId) {
+                // Single online check updates status text + avatar dot
+                if (_activeOtherUid) _checkOnline(_activeOtherUid);
+                return;
+            }
+            _refreshInboxPresence({ rerender: true });
+        }, 20000);
+    }
+
+    function _stopInboxPresencePoll() {
+        if (_inboxPresenceTimer) {
+            clearInterval(_inboxPresenceTimer);
+            _inboxPresenceTimer = null;
+        }
+    }
+
+    function _applyHeaderPresence() {
+        const el = document.getElementById('chat-detail-avatar');
+        if (!el || !_activeOtherUid) return;
+        const bare = el.getAttribute('data-bare-avatar');
+        if (!bare) return;
+        el.innerHTML = _withPresenceDot(bare, _isUserOnlineCached(_activeOtherUid));
+    }
+
     function _adminAvatar(size) {
         size = size || 38;
         const iconSize = Math.max(14, Math.round(size * 0.46));
@@ -988,9 +1095,11 @@ const chatWidget = (() => {
             if (!_unreadPollTimer) {
                 _unreadPollTimer = setInterval(function () {
                     const drawerOpen = !!document.getElementById('chat-overlay')?.classList.contains('open');
+                    // Thread open: message poll owns freshness — skip unread churn
+                    if (drawerOpen && _activeConvoId) return;
                     if (drawerOpen) _pollUnread();
                     else _syncBadgeFromInbox();
-                }, 15000);
+                }, 20000);
             }
             if (!_badgeVisibilityBound) {
                 _badgeVisibilityBound = true;
@@ -1107,13 +1216,16 @@ const chatWidget = (() => {
         document.getElementById('chat-overlay').classList.add('open');
         showInbox();
         _startLiveSync();
+        _startInboxPresencePoll();
     }
 
     function close() {
         document.getElementById('chat-overlay').classList.remove('open');
         _stopPoll();
         _stopLiveSync();
+        _stopInboxPresencePoll();
         _activeConvoId = null;
+        _activeOtherUid = null;
         _locallyReadIds.clear();
         _syncBadgeFromInbox();
     }
@@ -1135,6 +1247,7 @@ const chatWidget = (() => {
         // Paint optimistic local state immediately (Messenger-style), then reconcile
         _renderInbox();
         _loadConversations({ quiet: true });
+        _refreshInboxPresence({ rerender: true });
     }
 
     function _updateSupportEntryVisibility() {}
@@ -1230,12 +1343,11 @@ const chatWidget = (() => {
         _stopLiveSync();
         _liveSyncTimer = setInterval(async () => {
             if (document.hidden) return;
+            // Thread open: message poll owns freshness — skip badge/inbox churn
+            if (_activeConvoId) return;
             await _pollUnread();
-            // Inbox open: refresh every tick; thread open: skip (message poll handles it)
-            if (!_activeConvoId) {
-                await _loadConversations({ quiet: true });
-            }
-        }, 5000);
+            await _loadConversations({ quiet: true });
+        }, 12000);
     }
 
     // Background badge sync while drawer is closed (seller/admin dashboards)
@@ -1270,7 +1382,8 @@ const chatWidget = (() => {
         return _allStores;
     }
 
-    function _renderInbox() {
+    function _renderInbox(opts) {
+        opts = opts || {};
         const list = document.getElementById('chat-inbox-list');
         if (!list) return;
         const isAdmin = _userRole === 'admin';
@@ -1295,7 +1408,11 @@ const chatWidget = (() => {
                 ? (supportConvo.last_message_text || 'Chat with admin support')
                 : 'Chat with admin support';
             const supportTime = supportConvo ? _timeAgo(supportConvo.last_message_at) : '';
-            const supportAvatar = _adminAvatar(44);
+            const supportUid = supportConvo && supportConvo.other_user ? supportConvo.other_user.id : null;
+            const supportAvatar = _withPresenceDot(
+                _adminAvatar(44),
+                _isUserOnlineCached(supportUid)
+            );
             parts.push(`<div class="inbox-item" data-support-item="1" onclick="chatWidget._openSupportFromInbox()">
                 ${supportAvatar}
                 <div class="info">
@@ -1326,8 +1443,12 @@ const chatWidget = (() => {
             const isSeller = (other.role === 'seller');
             const displayName = isSeller ? (c.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown');
             const displayAvatar = isSeller ? (c.store_logo || other.avatar_url) : other.avatar_url;
+            const avatar = _withPresenceDot(
+                _avatarHtml(displayAvatar, displayName, 44, !isSeller),
+                _isUserOnlineCached(other.id)
+            );
             return `<div class="inbox-item" onclick="chatWidget.openConvo(${c.id})">
-                ${_avatarHtml(displayAvatar, displayName, 44, !isSeller)}
+                ${avatar}
                 <div class="info">
                     <div class="name">${displayName}</div>
                     <div class="preview">${c.last_message_text || 'No messages yet'}</div>
@@ -1339,6 +1460,9 @@ const chatWidget = (() => {
             </div>`;
         }));
         list.innerHTML = parts.join('');
+
+        // Presence is refreshed on open + a slow timer — not on every inbox paint
+        // (avoids spamming /presence/status during quiet sync).
     }
 
     // ═══ OPEN CONVERSATION (by ID) ═══
@@ -1614,14 +1738,25 @@ const chatWidget = (() => {
         const isSeller = (other.role === 'seller');
         const displayName = isSeller ? (convo.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown');
         const displayAvatar = isSeller ? (convo.store_logo || other.avatar_url) : other.avatar_url;
+        const avatarEl = document.getElementById('chat-detail-avatar');
+        let bare;
         if (other.role === 'admin') {
-            document.getElementById('chat-detail-avatar').innerHTML = _adminAvatar(38);
+            bare = _adminAvatar(38);
         } else {
-            document.getElementById('chat-detail-avatar').innerHTML = _avatarHtml(displayAvatar, displayName, 38, !isSeller);
+            bare = _avatarHtml(displayAvatar, displayName, 38, !isSeller);
+        }
+        _activeOtherUid = other.id || convo.seller_id || null;
+        if (avatarEl) {
+            avatarEl.setAttribute('data-bare-avatar', bare);
+            avatarEl.innerHTML = _withPresenceDot(bare, _isUserOnlineCached(_activeOtherUid));
         }
         document.getElementById('chat-detail-name').textContent = displayName;
-        _activeOtherUid = other.id || convo.seller_id || null;
         _checkOnline(_activeOtherUid);
+        if (_activeOtherUid) {
+            _refreshOnlineStatuses([_activeOtherUid]).then(function () {
+                _applyHeaderPresence();
+            });
+        }
     }
 
     function _orderStatusLabel(status) {
@@ -1743,11 +1878,14 @@ const chatWidget = (() => {
             const res = await _fetch(API + '/users/' + uid + '/online', { headers: _headers() });
             const data = await res.json();
             const el = document.getElementById('chat-detail-status');
+            const online = !!data.is_online;
+            _onlineByUserId[String(uid)] = online;
             if (data.is_online) {
                 el.innerHTML = '<span class="online-dot"></span> Online';
             } else {
                 el.innerHTML = '<span class="offline-dot"></span> Offline';
             }
+            _applyHeaderPresence();
         } catch(e) {}
     }
 
@@ -1781,6 +1919,7 @@ const chatWidget = (() => {
                     ? (last.text || '[Image]')
                     : (last.text || '');
                 _touchConversationPreview(_activeConvoId, preview, last.sender_id);
+                if (last.sender_id != _userId) _markRead();
             }
         } catch(e) { console.error('Chat: load msgs failed', e); }
         finally { _messagesPollBusy = false; }
@@ -2170,26 +2309,19 @@ const chatWidget = (() => {
         return document.querySelector('.msg-menu-popup.open') !== null;
     }
 
-    // ═══ POLLING (near real-time while chat is open) ═══
+    // ═══ POLLING (while a conversation is open) ═══
     function _startPoll() {
         _stopPoll();
         _pollTimer = setInterval(async () => {
             if (document.hidden) return;
             if (!_hasOpenMenu()) await _loadMessages();
-        }, 3000);
-        // Typing is polled faster than messages so the indicator feels live.
+        }, 7000);
         _typingPollTimer = setInterval(function () {
             if (!document.hidden && _activeConvoId) _pollTyping();
-        }, 1500);
+        }, 4000);
         _pollTyping();
-        _readPollTimer = setInterval(function () {
-            if (!document.hidden && _activeConvoId) _markRead();
-        }, 6000);
-        _onlinePollTimer = setInterval(function () {
-            if (!document.hidden && _activeConvoId && _activeOtherUid) {
-                _checkOnline(_activeOtherUid);
-            }
-        }, 15000);
+        // Mark read on open + when new messages arrive — not on a tight timer
+        _markRead();
         if (_activeOtherUid) _checkOnline(_activeOtherUid);
     }
     function _stopPoll() {
