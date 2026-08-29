@@ -899,6 +899,13 @@ def clear_cart():
         return jsonify({'error': str(e)}), 500
 
 
+@customer_bp.route('/config/mapbox', methods=['GET'])
+def mapbox_public_config():
+    """Public Mapbox pk token for mobile static maps (same as web MAPBOX_PUBLIC_TOKEN)."""
+    token = current_app.config.get('MAPBOX_PUBLIC_TOKEN') or os.getenv('MAPBOX_PUBLIC_TOKEN', '')
+    return jsonify({'success': True, 'public_token': token or ''})
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # ORDERS — JWT protected
 # ══════════════════════════════════════════════════════════════════════════

@@ -2897,11 +2897,6 @@
                                     aria-expanded="false"
                                     aria-labelledby="addon-group-label-{{ group.id }}">
                                 <span class="addon-dd-trigger-inner">
-                                    <img class="addon-dd-trigger-thumb is-hidden" alt="" draggable="false">
-                                    <span class="addon-dd-trigger-ph">
-                                        <img src="{{ url_for('static', filename='images/no_addon_placeholder.png') }}"
-                                             alt="" width="28" height="28" draggable="false">
-                                    </span>
                                     <span class="addon-dd-trigger-text">Do not add</span>
                                 </span>
                                 <i class="ri-arrow-down-s-line addon-dd-chevron" aria-hidden="true"></i>
@@ -4534,33 +4529,10 @@ function syncAddonDropdownTrigger(dd, selectEl) {
     if (!dd || !selectEl) return;
     const opt = selectEl.options[selectEl.selectedIndex];
     const textEl = dd.querySelector('.addon-dd-trigger-text');
-    const thumb = dd.querySelector('.addon-dd-trigger-thumb');
-    const ph = dd.querySelector('.addon-dd-trigger-ph');
     const label = (!opt || !opt.value)
         ? 'Do not add'
         : ((opt.textContent || '').trim() || (opt.dataset.name || 'Add-on'));
     if (textEl) textEl.textContent = label;
-
-    const imageUrl = opt && opt.value ? (opt.dataset.image || '') : '';
-    if (thumb && ph) {
-        if (imageUrl) {
-            thumb.src = imageUrl;
-            thumb.alt = opt.dataset.name || 'Add-on';
-            thumb.classList.remove('is-hidden');
-            thumb.classList.add('is-zoomable');
-            thumb.dataset.zoomSrc = imageUrl;
-            thumb.dataset.zoomName = opt.dataset.name || 'Add-on';
-            ph.classList.add('is-hidden');
-        } else {
-            thumb.removeAttribute('src');
-            thumb.alt = '';
-            thumb.classList.add('is-hidden');
-            thumb.classList.remove('is-zoomable');
-            delete thumb.dataset.zoomSrc;
-            delete thumb.dataset.zoomName;
-            ph.classList.remove('is-hidden');
-        }
-    }
 
     dd.querySelectorAll('.addon-dd-option').forEach(btn => {
         const selected = (btn.dataset.value || '') === (selectEl.value || '');
@@ -4588,14 +4560,7 @@ function initAddonDropdowns() {
 
         syncAddonDropdownTrigger(dd, selectEl);
 
-        trigger.addEventListener('click', (e) => {
-            const zoomThumb = e.target.closest('.addon-dd-trigger-thumb.is-zoomable');
-            if (zoomThumb && zoomThumb.dataset.zoomSrc) {
-                e.preventDefault();
-                e.stopPropagation();
-                openAddonImageZoom(zoomThumb.dataset.zoomSrc, zoomThumb.dataset.zoomName || '');
-                return;
-            }
+        trigger.addEventListener('click', () => {
             const willOpen = !dd.classList.contains('is-open');
             closeAllAddonDropdowns(willOpen ? dd : null);
             if (willOpen) {
