@@ -4,94 +4,716 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Application status — E-FLORA Seller</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
-        :root { --cream:#faf6f0; --rose:#b5445a; --charcoal:#2c2520; --muted:#9a8d85; }
-        body { font-family:'DM Sans',sans-serif; background:var(--cream); color:var(--charcoal); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1.5rem; }
-        .card { max-width:440px; background:#fffdf9; border:1px solid rgba(107,76,59,0.12); border-radius:20px; padding:2rem; text-align:center; }
-        h1 { font-family:'Cormorant Garamond',serif; font-size:1.6rem; margin-bottom:0.5rem; }
-        p { color:var(--muted); font-size:14px; line-height:1.6; margin-bottom:1.25rem; }
-        .badge { display:inline-block; padding:0.35rem 0.85rem; border-radius:100px; font-size:12px; font-weight:600; margin-bottom:1rem; }
-        .badge.pending { background:rgba(240,180,41,0.15); color:#8a5e00; }
-        .badge.resubmitted { background:rgba(39,103,73,0.14); color:#1f5f41; }
-        .badge.rejected { background:rgba(192,57,43,0.12); color:#8a1f1f; }
-        .badge.approved { background:rgba(39,103,73,0.12); color:#1f5f41; }
-        a.btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.65rem 1.25rem; background:var(--charcoal); color:#faf6f0; text-decoration:none; border-radius:100px; font-size:14px; font-weight:500; }
-        a.link { color:var(--rose); font-size:13px; display:block; margin-top:1rem; }
-        .issues { text-align:left; margin:1rem 0; padding:0.85rem; border:1px solid rgba(192,57,43,0.15); border-radius:12px; background:rgba(192,57,43,0.04); }
-        .issues h3 { font-size:13px; margin:0 0 0.5rem 0; color:#8a1f1f; }
-        .issues ul { margin:0; padding-left:1.1rem; color:#7a4a45; font-size:13px; }
-        .issues li { margin-bottom:0.35rem; }
+        :root {
+            --cream: #faf6f0;
+            --warm-white: #fffdf9;
+            --blush: #f2c4ce;
+            --deep-rose: #b5445a;
+            --dusty-rose: #d4788a;
+            --sage: #7a9e7e;
+            --deep-sage: #4a6b4e;
+            --charcoal: #2c2520;
+            --muted: #9a8d85;
+            --border: rgba(107, 76, 59, 0.12);
+            --font-display: 'Cormorant Garamond', serif;
+            --font-sans: 'DM Sans', sans-serif;
+            --shadow-md: 0 4px 20px rgba(42, 35, 30, 0.08);
+            --shadow-lg: 0 8px 40px rgba(42, 35, 30, 0.12);
+            --radius-md: 10px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            --radius-pill: 100px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--cream);
+            color: var(--charcoal);
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.4;
+        }
+
+        .panel-left {
+            background: var(--charcoal);
+            color: #fff;
+            padding: 2.25rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            min-height: 100vh;
+            min-width: 0;
+        }
+
+        .glow-1, .glow-2 {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .glow-1 {
+            top: -120px; left: -90px;
+            width: 420px; height: 420px;
+            background: radial-gradient(circle, rgba(122,158,126,0.18) 0%, transparent 70%);
+        }
+        .glow-2 {
+            bottom: -90px; right: -70px;
+            width: 320px; height: 320px;
+            background: radial-gradient(circle, rgba(212,120,138,0.14) 0%, transparent 70%);
+        }
+
+        .logo-link {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+            color: #fff;
+            margin-bottom: 2.5rem;
+        }
+        .logo-name {
+            font-family: var(--font-display);
+            font-size: 1.45rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+        }
+
+        .panel-eyebrow {
+            position: relative;
+            z-index: 1;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.55);
+            margin-bottom: 0.75rem;
+        }
+        .panel-headline {
+            position: relative;
+            z-index: 1;
+            font-family: var(--font-display);
+            font-size: clamp(1.55rem, 2.4vw, 2.35rem);
+            font-weight: 500;
+            line-height: 1.15;
+            margin-bottom: 0.85rem;
+            overflow-wrap: break-word;
+        }
+        .panel-headline em {
+            font-style: italic;
+            color: var(--blush);
+        }
+        .panel-desc {
+            position: relative;
+            z-index: 1;
+            font-size: 13px;
+            line-height: 1.55;
+            color: rgba(255,255,255,0.62);
+            margin-bottom: 2rem;
+            overflow-wrap: break-word;
+        }
+
+        .steps-list {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: auto;
+            min-width: 0;
+        }
+        .step-item {
+            display: flex;
+            gap: 0.7rem;
+            align-items: flex-start;
+            min-width: 0;
+        }
+        .step-num {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.55);
+            border: 1px solid rgba(255,255,255,0.12);
+        }
+        .step-item.done .step-num {
+            background: rgba(122,158,126,0.22);
+            border-color: rgba(122,158,126,0.45);
+            color: #c8e0ca;
+        }
+        .step-item.current .step-num {
+            background: var(--deep-rose);
+            border-color: var(--deep-rose);
+            color: #fff;
+        }
+        .step-text {
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(255,255,255,0.55);
+            min-width: 0;
+            overflow-wrap: break-word;
+        }
+        .step-text strong {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 0.15rem;
+        }
+        .step-item.current .step-text,
+        .step-item.done .step-text {
+            color: rgba(255,255,255,0.78);
+        }
+
+        .panel-footer {
+            position: relative;
+            z-index: 1;
+            margin-top: 2.5rem;
+            font-size: 10.5px;
+            line-height: 1.4;
+            color: rgba(255,255,255,0.35);
+            overflow-wrap: break-word;
+        }
+
+        .panel-right {
+            padding: 1.5rem clamp(1.25rem, 2.5vw, 2.5rem) 2rem;
+            overflow-x: hidden;
+            overflow-y: auto;
+            max-height: 100vh;
+            background: var(--cream);
+            min-width: 0;
+        }
+
+        .status-card {
+            width: 100%;
+            max-width: none;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            padding: clamp(0.75rem, 2vw, 1.25rem) clamp(0.5rem, 2vw, 1rem);
+            min-height: calc(100vh - 3.5rem);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .status-inner {
+            width: 100%;
+            max-width: 520px;
+            margin: 0 auto;
+            text-align: center;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .top-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            width: 100%;
+        }
+        .top-actions a {
+            color: var(--deep-rose);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .top-actions a:hover { text-decoration: underline; }
+
+        .status-icon {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 1.1rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 34px;
+        }
+        .status-icon.pending {
+            background: rgba(181, 68, 90, 0.1);
+            color: var(--deep-rose);
+        }
+        .status-icon.resubmitted {
+            background: rgba(122, 158, 126, 0.16);
+            color: var(--deep-sage);
+        }
+        .status-icon.rejected {
+            background: rgba(192, 57, 43, 0.1);
+            color: #9b1c1c;
+        }
+        .status-icon.approved {
+            background: rgba(122, 158, 126, 0.18);
+            color: var(--deep-sage);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 0.9rem;
+            border-radius: var(--radius-pill);
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 0.85rem;
+        }
+        .badge.pending { background: rgba(240,180,41,0.15); color: #8a5e00; }
+        .badge.resubmitted { background: rgba(39,103,73,0.14); color: #1f5f41; }
+        .badge.rejected { background: rgba(192,57,43,0.12); color: #8a1f1f; }
+        .badge.approved { background: rgba(39,103,73,0.12); color: #1f5f41; }
+
+        .form-eyebrow {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--deep-rose);
+            margin-bottom: 0.4rem;
+        }
+        .status-title {
+            font-family: var(--font-display);
+            font-size: clamp(1.7rem, 3vw, 2.15rem);
+            font-weight: 500;
+            line-height: 1.15;
+            margin-bottom: 0.65rem;
+        }
+        .status-copy {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .submitted-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.35rem;
+            margin: 0 auto 0.85rem;
+            max-width: 100%;
+        }
+        .submitted-meta .meta-row {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.45rem 0.85rem;
+            border-radius: var(--radius-pill);
+            background: rgba(107, 76, 59, 0.05);
+            border: 1px solid var(--border);
+            color: var(--charcoal);
+            font-size: 12.5px;
+            line-height: 1.35;
+        }
+        .submitted-meta .meta-row i {
+            color: var(--deep-rose);
+            font-size: 15px;
+        }
+        .submitted-meta .meta-row strong {
+            font-weight: 600;
+        }
+        .submitted-meta .meta-row .muted {
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        .store-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.95rem;
+            border-radius: var(--radius-pill);
+            background: rgba(122, 158, 126, 0.08);
+            border: 1px solid rgba(122, 158, 126, 0.22);
+            color: var(--charcoal);
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            max-width: 100%;
+        }
+        .store-chip i { color: var(--deep-sage); font-size: 16px; }
+        .store-chip span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .info-box {
+            display: flex;
+            gap: 0.7rem;
+            align-items: flex-start;
+            text-align: left;
+            padding: 0.9rem 1rem;
+            border-radius: var(--radius-lg);
+            background: rgba(181, 68, 90, 0.06);
+            border: 1px solid rgba(181, 68, 90, 0.14);
+            margin-bottom: 1.25rem;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--charcoal);
+        }
+        .info-box i {
+            color: var(--deep-rose);
+            font-size: 18px;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+        .info-box strong { display: block; margin-bottom: 0.15rem; }
+
+        .issues {
+            text-align: left;
+            margin: 0 0 1.25rem;
+            padding: 0.95rem 1rem;
+            border: 1px solid rgba(192, 57, 43, 0.18);
+            border-radius: var(--radius-lg);
+            background: rgba(192, 57, 43, 0.05);
+        }
+        .issues h3 {
+            font-size: 13px;
+            margin: 0 0 0.55rem;
+            color: #8a1f1f;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .issues ul {
+            margin: 0;
+            padding-left: 1.1rem;
+            color: #7a4a45;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .issues li { margin-bottom: 0.4rem; }
+        .issues li:last-child { margin-bottom: 0; }
+
         .success-note {
-            margin: 0.8rem 0 1rem;
-            padding: 0.75rem 0.9rem;
-            border-radius: 12px;
-            border: 1px solid rgba(39,103,73,0.22);
-            background: rgba(39,103,73,0.08);
+            display: flex;
+            gap: 0.55rem;
+            align-items: flex-start;
+            text-align: left;
+            margin: 0 0 1.25rem;
+            padding: 0.85rem 0.95rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(39, 103, 73, 0.22);
+            background: rgba(39, 103, 73, 0.08);
             color: #1f5f41;
             font-size: 13px;
+            line-height: 1.45;
+        }
+        .success-note i { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+
+        .timeline {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.65rem;
+            margin: 0 0 1.5rem;
             text-align: left;
+        }
+        .timeline-item {
+            padding: 0.75rem 0.8rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            background: rgba(250, 246, 240, 0.7);
+            min-width: 0;
+        }
+        .timeline-item .t-label {
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 0.25rem;
+        }
+        .timeline-item .t-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--charcoal);
+            overflow-wrap: break-word;
+        }
+        .timeline-item.active {
+            border-color: rgba(181, 68, 90, 0.28);
+            background: rgba(181, 68, 90, 0.06);
+        }
+        .timeline-item.done {
+            border-color: rgba(122, 158, 126, 0.28);
+            background: rgba(122, 158, 126, 0.08);
+        }
+
+        a.btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            padding: 0.85rem 1.4rem;
+            background: linear-gradient(135deg, #c24e68, #b5445a);
+            color: #fff;
+            text-decoration: none;
+            border-radius: var(--radius-pill);
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 8px 20px rgba(181, 68, 90, 0.22);
+            transition: var(--transition);
+            min-width: 220px;
+        }
+        a.btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(181, 68, 90, 0.28);
+        }
+        a.btn-dark {
+            background: var(--charcoal);
+            box-shadow: 0 8px 20px rgba(44, 37, 32, 0.18);
+        }
+        a.link {
+            color: var(--deep-rose);
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+            display: block;
+            margin-top: 0.85rem;
+        }
+        a.link:hover { text-decoration: underline; }
+
+        .actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+
+        @media (max-width: 900px) {
+            body { grid-template-columns: 1fr; }
+            .panel-left { min-height: auto; padding: 1.75rem 1.5rem 1.5rem; }
+            .panel-headline { font-size: 1.85rem; }
+            .steps-list { flex-direction: row; flex-wrap: wrap; gap: 0.75rem; }
+            .step-item { flex: 1 1 140px; }
+            .panel-footer { margin-top: 1.5rem; }
+            .panel-right {
+                max-height: none;
+                padding: 1.25rem 1rem 2rem;
+            }
+            .status-card { min-height: auto; }
+            .status-inner { justify-content: flex-start; }
+            .timeline { grid-template-columns: 1fr; }
+            a.btn { width: 100%; min-width: 0; }
         }
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
 </head>
 <body>
-<div class="card">
-    {% set st = application.status if application else 'pending' %}
-    {% if st == 'rejected' %}
-    <span class="badge rejected"><i class="ri-close-circle-line"></i> Revisions requested</span>
-    <h1>Your application needs updates</h1>
-    {% elif st == 'approved' %}
-    <span class="badge approved"><i class="ri-checkbox-circle-line"></i> Approved</span>
-    <h1>Your seller application is approved</h1>
-    {% elif st == 'resubmitted' %}
-    <span class="badge resubmitted"><i class="ri-refresh-line"></i> Resubmitted</span>
-    <h1>Your updates were resubmitted</h1>
+{% set st = application.status if application else 'pending' %}
+{% set is_rejected = st == 'rejected' %}
+{% set is_approved = st == 'approved' %}
+{% set is_resubmitted = st == 'resubmitted' %}
+
+<div class="panel-left">
+    <div class="glow-1"></div>
+    <div class="glow-2"></div>
+
+    <a href="{{ url_for('templates.index') }}" class="logo-link">
+        <svg width="36" height="36" viewBox="0 0 42 42" fill="none" aria-hidden="true">
+            <circle cx="21" cy="21" r="7" fill="#d4788a" opacity="0.9"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.8" transform="rotate(0 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.65" transform="rotate(60 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.65" transform="rotate(120 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.55" transform="rotate(180 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.55" transform="rotate(240 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.45" transform="rotate(300 21 21)"/>
+            <circle cx="21" cy="21" r="5" fill="#fffdf9"/>
+            <circle cx="21" cy="21" r="2.5" fill="#ffd700" opacity="0.7"/>
+        </svg>
+        <span class="logo-name">E-FLORA</span>
+    </a>
+
+    <div class="panel-eyebrow">Seller Center</div>
+    {% if is_approved %}
+    <h1 class="panel-headline">You’re ready<br>to <em>sell</em></h1>
+    <p class="panel-desc">Your store application was approved. Open your dashboard to start listing products.</p>
+    {% elif is_rejected %}
+    <h1 class="panel-headline">A few<br><em>updates</em> needed</h1>
+    <p class="panel-desc">Admin requested corrections. Update the flagged fields and resubmit your application.</p>
     {% else %}
-    <span class="badge pending"><i class="ri-time-line"></i> Under review</span>
-    <h1>We received your application</h1>
+    <h1 class="panel-headline">Almost<br><em>there</em></h1>
+    <p class="panel-desc">Your store application is with our admin team. We’ll notify you when there’s a decision.</p>
     {% endif %}
-    {% if application %}
-    <p>Store: <strong>{{ application.store_name }}</strong>.</p>
-    {% if st == 'rejected' %}
-    <p>Our admin requested specific corrections. Update only the flagged fields and resubmit.</p>
-        {% if application.admin_notes or application.rejection_details %}
-        <div class="issues">
-            <h3>Requested changes</h3>
-            <ul>
-                {% if application.admin_notes %}
-                <li>{{ application.admin_notes }}</li>
-                {% endif %}
-                {% if application.rejection_details %}
-                    {% for field, detail in application.rejection_details.items() %}
-                        {% if detail and detail.get('rejected') %}
-                        <li><strong>{{ field.replace('_', ' ').title() }}</strong>{% if detail.get('reason') %}: {{ detail.get('reason') }}{% endif %}</li>
-                        {% endif %}
-                    {% endfor %}
-                {% endif %}
-            </ul>
+
+    <div class="steps-list">
+        <div class="step-item done">
+            <div class="step-num"><i class="ri-check-line"></i></div>
+            <div class="step-text">
+                <strong>Account created</strong>
+                Login verified with your email or mobile.
+            </div>
         </div>
-        {% endif %}
-    {% elif st == 'approved' %}
-    <p>You can now continue to your seller dashboard.</p>
-    {% elif st == 'resubmitted' %}
-    <p>Your corrected fields were sent back to admin. We will review your updates soon.</p>
-    <div class="success-note"><i class="ri-checkbox-circle-line"></i> Your changes were added successfully. Please wait while admin reviews the updated application.</div>
-    {% else %}
-    <p>An administrator will approve or request changes soon. You will see a notification when the decision is made.</p>
-    {% endif %}
-    {% else %}
-    <p>Your application is being processed.</p>
-    {% endif %}
-    {% if st == 'rejected' %}
-    <a class="btn" href="{{ url_for('templates.seller_signup_complete') }}"><i class="ri-edit-line"></i> Update application</a>
-    {% elif st == 'approved' %}
-    <a class="btn" href="{{ url_for('templates.seller_products') }}"><i class="ri-store-2-line"></i> Open seller dashboard</a>
-    {% else %}
-    <a class="btn" href="{{ url_for('templates.index') }}"><i class="ri-home-line"></i> Back to E-Flora shop</a>
-    {% endif %}
-    <a class="link" href="{{ url_for('templates.logout') }}">Sign out</a>
+        <div class="step-item done">
+            <div class="step-num"><i class="ri-check-line"></i></div>
+            <div class="step-text">
+                <strong>Application submitted</strong>
+                Store details and documents received.
+            </div>
+        </div>
+        <div class="step-item {% if is_approved %}done{% else %}current{% endif %}">
+            <div class="step-num">{% if is_approved %}<i class="ri-check-line"></i>{% else %}3{% endif %}</div>
+            <div class="step-text">
+                <strong>{% if is_approved %}Approved{% elif is_rejected %}Needs updates{% else %}Admin review{% endif %}</strong>
+                {% if is_approved %}
+                Your shop can go live.
+                {% elif is_rejected %}
+                Fix flagged items, then resubmit.
+                {% else %}
+                Waiting for admin decision.
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-footer">© 2026 E-FLORA &amp; PLANTS — Blooming with Technology</div>
+</div>
+
+<div class="panel-right">
+    <div class="status-card">
+        <div class="top-actions">
+            <a href="{{ url_for('templates.index') }}"><i class="ri-arrow-left-line"></i> Back to shop</a>
+            <a href="{{ url_for('templates.logout') }}"><i class="ri-logout-box-r-line"></i> Sign out</a>
+        </div>
+
+        <div class="status-inner">
+            <div class="form-eyebrow">Application status</div>
+
+            {% if is_rejected %}
+            <div class="status-icon rejected"><i class="ri-error-warning-line"></i></div>
+            <span class="badge rejected"><i class="ri-close-circle-line"></i> Revisions requested</span>
+            <h1 class="status-title">Your application needs updates</h1>
+            <p class="status-copy">Our admin requested specific corrections. Update only the flagged fields and resubmit.</p>
+            {% elif is_approved %}
+            <div class="status-icon approved"><i class="ri-checkbox-circle-line"></i></div>
+            <span class="badge approved"><i class="ri-checkbox-circle-line"></i> Approved</span>
+            <h1 class="status-title">Your seller application is approved</h1>
+            <p class="status-copy">You can now continue to your seller dashboard and start managing your store.</p>
+            {% elif is_resubmitted %}
+            <div class="status-icon resubmitted"><i class="ri-refresh-line"></i></div>
+            <h1 class="status-title">Resubmitted</h1>
+            <p class="status-copy">Your corrected fields were sent back to admin. We will review your updates soon.</p>
+            {% else %}
+            <div class="status-icon pending"><i class="ri-time-line"></i></div>
+            <h1 class="status-title">Under review</h1>
+            <p class="status-copy">We received your application. An administrator will approve or request changes soon. You’ll see a notification when the decision is made.</p>
+            {% endif %}
+
+            {% if submitted_at_display or reviewed_at_display %}
+            <div class="submitted-meta">
+                {% if submitted_at_display %}
+                <div class="meta-row">
+                    <i class="ri-calendar-schedule-line"></i>
+                    <span class="muted">Submitted</span>
+                    <strong>{{ submitted_at_display }}</strong>
+                </div>
+                {% endif %}
+                {% if reviewed_at_display and (is_approved or is_rejected) %}
+                <div class="meta-row">
+                    <i class="ri-time-line"></i>
+                    <span class="muted">Reviewed</span>
+                    <strong>{{ reviewed_at_display }}</strong>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if application and application.store_name %}
+            <div class="store-chip" title="{{ application.store_name }}">
+                <i class="ri-store-2-line"></i>
+                <span>{{ application.store_name }}</span>
+            </div>
+            {% endif %}
+
+            <div class="timeline">
+                <div class="timeline-item done">
+                    <div class="t-label">Submitted</div>
+                    <div class="t-value">{% if submitted_at_display %}{{ submitted_at_display }}{% else %}Done{% endif %}</div>
+                </div>
+                <div class="timeline-item {% if is_approved %}done{% else %}active{% endif %}">
+                    <div class="t-label">Review</div>
+                    <div class="t-value">
+                        {% if is_approved %}Complete{% elif is_rejected %}Changes needed{% elif is_resubmitted %}Re-checking{% else %}In progress{% endif %}
+                    </div>
+                </div>
+                <div class="timeline-item {% if is_approved %}done{% endif %}">
+                    <div class="t-label">Go live</div>
+                    <div class="t-value">{% if is_approved %}Ready{% else %}Pending{% endif %}</div>
+                </div>
+            </div>
+
+            {% if is_rejected and application and (application.admin_notes or application.rejection_details) %}
+            <div class="issues">
+                <h3><i class="ri-list-check-2"></i> Requested changes</h3>
+                <ul>
+                    {% if application.admin_notes %}
+                    <li>{{ application.admin_notes }}</li>
+                    {% endif %}
+                    {% if application.rejection_details %}
+                        {% for field, detail in application.rejection_details.items() %}
+                            {% if detail and detail.get('rejected') %}
+                            <li><strong>{{ field.replace('_', ' ').title() }}</strong>{% if detail.get('reason') %}: {{ detail.get('reason') }}{% endif %}</li>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </ul>
+            </div>
+            {% elif is_resubmitted %}
+            <div class="success-note">
+                <i class="ri-checkbox-circle-line"></i>
+                <span>Your changes were added successfully. Please wait while admin reviews the updated application.</span>
+            </div>
+            {% elif not is_approved and not is_rejected %}
+            <div class="info-box">
+                <i class="ri-shield-check-line"></i>
+                <div>
+                    <strong>What happens next</strong>
+                    Our admin team reviews your store details and verification documents before your shop goes live.
+                </div>
+            </div>
+            {% endif %}
+
+            {% if is_rejected or is_approved %}
+            <div class="actions">
+                {% if is_rejected %}
+                <a class="btn" href="{{ url_for('templates.seller_signup_complete') }}"><i class="ri-edit-line"></i> Update application</a>
+                {% elif is_approved %}
+                <a class="btn" href="{{ url_for('templates.seller_products') }}"><i class="ri-store-2-line"></i> Open seller dashboard</a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
 </body>
 </html>

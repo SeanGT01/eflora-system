@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from collections import defaultdict
 
-from app.models import Product, Store, Order, OrderItem, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating, CartItemAddon, ProductAddonOption, WishlistItem, RiderLocation
+from app.models import Product, Store, Order, OrderItem, OrderItemAddon, Cart, CartItem, Rider, ProductVariant, SellerApplication, Notification, User, UserAddress, ProductRating, StoreRating, CartItemAddon, ProductAddonOption, WishlistItem, RiderLocation
 from app.extensions import db
 from sqlalchemy.orm import joinedload, selectinload
 from functools import wraps
@@ -918,7 +918,7 @@ def get_orders():
             .options(
                 selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
                 selectinload(Order.items).joinedload(OrderItem.variant),
-                selectinload(Order.items).selectinload(OrderItem.addons),
+                selectinload(Order.items).selectinload(OrderItem.addons).joinedload(OrderItemAddon.addon_option),
                 joinedload(Order.store),
                 joinedload(Order.customer),
                 joinedload(Order.assigned_rider).joinedload(Rider.user),
@@ -996,7 +996,7 @@ def get_order(order_id):
             .options(
                 selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
                 selectinload(Order.items).joinedload(OrderItem.variant),
-                selectinload(Order.items).selectinload(OrderItem.addons),
+                selectinload(Order.items).selectinload(OrderItem.addons).joinedload(OrderItemAddon.addon_option),
                 joinedload(Order.store),
                 joinedload(Order.customer),
                 joinedload(Order.assigned_rider).joinedload(Rider.user),
@@ -1510,6 +1510,14 @@ def submit_seller_application():
         status='pending',
     )
     db.session.add(application)
+    db.session.flush()
+    from app.utils.admin_notifications import notify_admins
+    notify_admins(
+        title='New seller application',
+        message=f'"{application.store_name}" submitted by {user.full_name or user.email} needs review.',
+        type='seller_app_pending',
+        reference_id=application.id,
+    )
     db.session.commit()
 
     return jsonify({'success': True, 'message': 'Application submitted successfully', 'application': application.to_dict()}), 201
@@ -1580,6 +1588,15 @@ def resubmit_seller_application():
     application.rejection_details = None
     application.reviewed_at = None
     application.reviewed_by = None
+    application.submitted_at = datetime.utcnow()
+
+    from app.utils.admin_notifications import notify_admins
+    notify_admins(
+        title='Seller application resubmitted',
+        message=f'"{application.store_name}" was resubmitted and needs review.',
+        type='seller_app_resubmitted',
+        reference_id=application.id,
+    )
 
     db.session.commit()
 

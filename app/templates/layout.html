@@ -48,6 +48,9 @@
 
             --sidebar-w: 256px;
             --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            /* Page content inset — single source of truth (matches admin dashboard) */
+            --page-pad-y: 2rem;
+            --page-pad-x: 2rem;
         }
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -335,7 +338,7 @@
         .topbar {
             background: var(--warm-white);
             border-bottom: 1px solid var(--border);
-            padding: 0 2rem;
+            padding: 0 var(--page-pad-x);
             height: 64px;
             display: flex;
             align-items: center;
@@ -647,7 +650,24 @@
         /* ─── Page Content ─── */
         .page-content {
             flex: 1;
-            padding: 2rem;
+            padding: var(--page-pad-y) var(--page-pad-x);
+        }
+
+        /* Admin shells must not add a second outer margin on top of .page-content */
+        body.role-admin .page-content > .dash,
+        body.role-admin .page-content > .ana,
+        body.role-admin .page-content > .rpt,
+        body.role-admin .page-content > .adm,
+        body.role-admin .page-content > .admin-users-page,
+        body.role-admin .page-content > .admin-support-page,
+        body.role-admin .page-content > .admin-testimonials-page {
+            width: 100%;
+            max-width: none;
+            margin-left: 0;
+            margin-right: 0;
+            padding-left: 0;
+            padding-right: 0;
+            box-sizing: border-box;
         }
 
         /* ─── Cards ─── */
@@ -1298,7 +1318,11 @@
         /* ─── COMPREHENSIVE RESPONSIVE DESIGN ─── */
         /* Mobile First: < 480px */
         @media (max-width: 479px) {
-            :root { --sidebar-w: 0; }
+            :root {
+                --sidebar-w: 0;
+                --page-pad-y: 1rem;
+                --page-pad-x: 0.75rem;
+            }
             
             .app-shell { flex-direction: column; }
             .sidebar { transform: translateX(-100%); width: 100%; }
@@ -1307,7 +1331,7 @@
             .menu-toggle { display: flex; }
             
             .topbar {
-                padding: 0 0.75rem;
+                padding: 0 var(--page-pad-x);
                 height: 56px;
                 gap: 0.75rem;
             }
@@ -1331,7 +1355,7 @@
             .user-chip-role { display: none; }
             
             .page-content {
-                padding: 1rem 0.75rem;
+                padding: var(--page-pad-y) var(--page-pad-x);
                 flex: 1;
             }
             
@@ -1505,7 +1529,11 @@
 
         /* Small Tablets: 480px - 767px */
         @media (min-width: 480px) and (max-width: 767px) {
-            :root { --sidebar-w: 0; }
+            :root {
+                --sidebar-w: 0;
+                --page-pad-y: 1.25rem;
+                --page-pad-x: 1.25rem;
+            }
             
             .sidebar { transform: translateX(-100%); width: 80%; }
             .sidebar.open { transform: translateX(0); }
@@ -1513,13 +1541,11 @@
             .menu-toggle { display: flex; }
             
             .topbar {
-                padding: 0 1rem;
+                padding: 0 var(--page-pad-x);
                 height: 58px;
             }
             
             .topbar-title { font-size: 18px; }
-            
-            .page-content { padding: 1.25rem; }
             
             .stat-number { font-size: 28px; }
             
@@ -1542,9 +1568,12 @@
 
         /* Tablets: 768px - 1023px */
         @media (min-width: 768px) and (max-width: 1023px) {
-            :root { --sidebar-w: 0; }
-            .topbar { padding: 0 1.5rem; }
-            .page-content { padding: 1.25rem 1.35rem; }
+            :root {
+                --sidebar-w: 0;
+                --page-pad-y: 1.25rem;
+                --page-pad-x: 1.35rem;
+            }
+            .topbar { padding: 0 var(--page-pad-x); }
             
             .grid-2, .grid-3 { grid-template-columns: repeat(2, 1fr); }
             .grid-4 { grid-template-columns: repeat(2, 1fr); }
@@ -1565,17 +1594,19 @@
 
         /* Small Desktops / laptops: 1024px - 1279px */
         @media (min-width: 1024px) and (max-width: 1279px) {
+            :root {
+                --sidebar-w: 220px;
+                --page-pad-y: 1.5rem;
+                --page-pad-x: 1.35rem;
+            }
             .sidebar { width: 220px; }
-            :root { --sidebar-w: 220px; }
             .main-area { margin-left: 220px; }
             .menu-toggle { display: none; }
-            
-            .page-content { padding: 1.5rem 1.35rem; }
             
             .grid-3 { grid-template-columns: repeat(2, 1fr); }
             .grid-4 { grid-template-columns: repeat(2, 1fr); }
             
-            .topbar { padding: 0 1.35rem; }
+            .topbar { padding: 0 var(--page-pad-x); }
             
             .stat-number { font-size: 32px; }
             
@@ -1585,16 +1616,18 @@
 
         /* Large Desktops: 1280px+ */
         @media (min-width: 1280px) {
+            :root {
+                --page-pad-y: 2rem;
+                --page-pad-x: 2rem;
+            }
             .sidebar { width: var(--sidebar-w); }
             .main-area { margin-left: var(--sidebar-w); }
             .menu-toggle { display: none; }
             
-            .page-content { padding: 2rem; }
-            
             .grid-3 { grid-template-columns: repeat(3, 1fr); }
             .grid-4 { grid-template-columns: repeat(4, 1fr); }
             
-            .topbar { padding: 0 2rem; }
+            .topbar { padding: 0 var(--page-pad-x); }
         }
         
         /* Improved mobile sidebar overlay */
@@ -1780,7 +1813,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
     <style>{% include 'partials/modal_close_styles.html' %}</style>
 </head>
-<body>
+<body class="{% if session.get('role') == 'admin' %}role-admin{% elif session.get('role') == 'seller' %}role-seller{% endif %}">
 
 <!-- Toast Stack -->
 <div class="toast-stack" id="toastStack"></div>
@@ -2042,7 +2075,10 @@
 
 <script>
     const CURRENT_ROLE = {{ (session.get('role') or '')|tojson }};
-    const SELLER_NOTIF_API_BASE = '/api/seller/notifications';
+    const NOTIF_ENABLED = CURRENT_ROLE === 'seller' || CURRENT_ROLE === 'admin';
+    const NOTIF_API_BASE = CURRENT_ROLE === 'admin'
+        ? '/api/admin/notifications'
+        : '/api/seller/notifications';
 
     // Sidebar
     function toggleSidebar() {
@@ -2069,6 +2105,9 @@
         low_stock: 'var(--terracotta)',
         seller_app_approved: 'var(--sage)',
         seller_app_rejected: 'var(--terracotta)',
+        seller_app_pending: 'var(--terracotta)',
+        seller_app_resubmitted: 'var(--terracotta)',
+        new_testimonial: 'var(--dusty-rose)',
     };
     const NOTIF_TYPE_ICON = {
         new_order: 'ri-shopping-bag-3-line',
@@ -2081,6 +2120,9 @@
         low_stock: 'ri-alert-line',
         seller_app_approved: 'ri-store-2-line',
         seller_app_rejected: 'ri-close-circle-line',
+        seller_app_pending: 'ri-user-add-line',
+        seller_app_resubmitted: 'ri-refresh-line',
+        new_testimonial: 'ri-chat-quote-line',
     };
 
     function timeAgo(isoStr) {
@@ -2098,7 +2140,25 @@
         const sellerProductsUrl = "{{ url_for('templates.seller_products') }}";
         const sellerStatusUrl = "{{ url_for('templates.seller_signup_status') }}";
         const sellerDashboardUrl = "{{ url_for('templates.seller_dashboard') }}";
+        const adminUsersUrl = "{{ url_for('templates.admin_users') }}";
+        const adminDashboardUrl = "{{ url_for('templates.dashboard') }}";
+        const adminTestimonialsUrl = "{{ url_for('templates.admin_testimonials') }}";
         if (!n) return '';
+
+        if (CURRENT_ROLE === 'admin') {
+            if (n.type === 'seller_app_pending' || n.type === 'seller_app_resubmitted') {
+                return adminUsersUrl;
+            }
+            if (n.type === 'new_chat') {
+                return n.reference_id
+                    ? `${adminDashboardUrl}?open_chat=${encodeURIComponent(n.reference_id)}`
+                    : adminDashboardUrl;
+            }
+            if (n.type === 'new_testimonial') {
+                return adminTestimonialsUrl;
+            }
+            return '';
+        }
 
         if (
             n.type === 'new_order'
@@ -2165,7 +2225,7 @@
     }
 
     async function loadNotifications() {
-        if (CURRENT_ROLE !== 'seller') return;
+        if (!NOTIF_ENABLED) return;
         const list = document.getElementById('notifList');
         const empty = document.getElementById('notifEmpty');
         const loading = document.getElementById('notifLoading');
@@ -2173,7 +2233,7 @@
         const markBtn = document.getElementById('markAllReadBtn');
         if (!list) return;
         try {
-            const res = await fetch(SELLER_NOTIF_API_BASE);
+            const res = await fetch(NOTIF_API_BASE);
             if (!res.ok) return;
             const data = await res.json();
             if (loading) loading.style.display = 'none';
@@ -2198,10 +2258,10 @@
     }
 
     async function markNotifRead(id, el) {
-        if (CURRENT_ROLE !== 'seller') return;
+        if (!NOTIF_ENABLED) return;
         if (el && el.classList.contains('unread')) {
             el.classList.remove('unread');
-            fetch(`${SELLER_NOTIF_API_BASE}/${id}/read`, { method: 'POST' });
+            fetch(`${NOTIF_API_BASE}/${id}/read`, { method: 'POST' });
             const remaining = document.querySelectorAll('.notif-item.unread').length;
             const dot = document.querySelector('.notif-dot');
             const markBtn = document.getElementById('markAllReadBtn');
@@ -2234,8 +2294,8 @@
     });
 
     async function markAllNotifsRead() {
-        if (CURRENT_ROLE !== 'seller') return;
-        await fetch(`${SELLER_NOTIF_API_BASE}/read-all`, { method: 'POST' });
+        if (!NOTIF_ENABLED) return;
+        await fetch(`${NOTIF_API_BASE}/read-all`, { method: 'POST' });
         document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
         const dot = document.querySelector('.notif-dot');
         if (dot) dot.style.display = 'none';
@@ -2338,16 +2398,16 @@
 
     // Poll unread count every 60s to keep dot accurate without reloading
     async function pollNotifDot() {
-        if (CURRENT_ROLE !== 'seller') return;
+        if (!NOTIF_ENABLED) return;
         try {
-            const res = await fetch(SELLER_NOTIF_API_BASE);
+            const res = await fetch(NOTIF_API_BASE);
             if (!res.ok) return;
             const data = await res.json();
             const dot = document.querySelector('.notif-dot');
             if (dot) dot.style.display = (data.unread_count > 0) ? 'block' : 'none';
         } catch (e) {}
     }
-    if (CURRENT_ROLE === 'seller') {
+    if (NOTIF_ENABLED) {
         pollNotifDot();
         setInterval(pollNotifDot, 60000);
     }

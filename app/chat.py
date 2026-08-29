@@ -237,7 +237,7 @@ def _maybe_notify_seller_new_chat(convo, user, preview_text):
 
         store = Store.query.get(convo.store_id)
         if not store or store.seller_id != convo.seller_id:
-            # Rider / support / admin threads — skip
+            # Rider / support / admin threads — skip seller notify
             return
 
         snippet = (preview_text or '').strip()
@@ -250,6 +250,35 @@ def _maybe_notify_seller_new_chat(convo, user, preview_text):
             seller_id=store.seller_id,
             title='New chat message',
             message=f'{customer_name}: {snippet}' if snippet else f'{customer_name} sent a message.',
+            type='new_chat',
+            reference_id=convo.id,
+        )
+    except Exception:
+        pass
+
+
+def _maybe_notify_admin_new_chat(convo, user, preview_text):
+    """Notify admins when a customer messages a support/admin thread."""
+    try:
+        if not convo or not user:
+            return
+        if user.id != convo.customer_id:
+            return
+        if not convo.seller_id:
+            return
+
+        seller = User.query.get(convo.seller_id)
+        if not seller or seller.role != 'admin':
+            return
+
+        snippet = (preview_text or '').strip()
+        if len(snippet) > 120:
+            snippet = snippet[:117] + '...'
+        customer_name = (user.full_name or 'Customer').strip() or 'Customer'
+        from app.utils.admin_notifications import notify_admins
+        notify_admins(
+            title='New support message',
+            message=f'{customer_name}: {snippet}' if snippet else f'{customer_name} sent a support message.',
             type='new_chat',
             reference_id=convo.id,
         )
@@ -715,6 +744,7 @@ def send_message(convo_id):
     _bump_other_unread(convo, user.id)
 
     _maybe_notify_seller_new_chat(convo, user, text or '[Image]')
+    _maybe_notify_admin_new_chat(convo, user, text or '[Image]')
 
     db.session.commit()
 
@@ -779,6 +809,7 @@ def send_image_message(convo_id):
     _bump_other_unread(convo, user.id)
 
     _maybe_notify_seller_new_chat(convo, user, caption if caption else '[Image]')
+    _maybe_notify_admin_new_chat(convo, user, caption if caption else '[Image]')
 
     db.session.commit()
 

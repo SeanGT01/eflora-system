@@ -1609,6 +1609,305 @@
         font-size: 11px;
     }
 }
+
+/* Live delivery map (customer order detail) */
+.sdm-live-map-wrap {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    background: var(--warm-white);
+}
+.sdm-live-map {
+    width: 100%;
+    height: 220px;
+    min-height: 200px;
+}
+.sdm-live-map-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+        180deg,
+        rgba(44, 37, 32, 0.28) 0%,
+        rgba(44, 37, 32, 0) 22%,
+        rgba(44, 37, 32, 0) 58%,
+        rgba(250, 246, 240, 0.92) 100%
+    );
+}
+.sdm-live-map-top {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 2;
+}
+.live-map-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--deep-sage);
+    box-shadow: 0 2px 8px rgba(42, 35, 30, 0.12);
+}
+.live-map-chip.is-waiting {
+    color: #9a6b2e;
+}
+.live-map-chip::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4caf50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.25);
+    animation: liveMapPulse 1.6s ease-in-out infinite;
+}
+.live-map-chip.is-waiting::before {
+    background: #e0a020;
+    box-shadow: 0 0 0 3px rgba(224, 160, 32, 0.25);
+    animation: none;
+}
+@keyframes liveMapPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.65; transform: scale(0.92); }
+}
+.live-map-expand-btn {
+    pointer-events: auto;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--charcoal);
+    box-shadow: 0 2px 8px rgba(42, 35, 30, 0.12);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+.live-map-expand-btn:hover {
+    background: #fff;
+    color: var(--deep-rose);
+}
+.sdm-live-map-bottom {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.live-map-eta {
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--deep-rose);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+}
+.live-map-sub {
+    font-size: 11px;
+    color: var(--charcoal);
+    font-weight: 500;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+}
+.live-map-unavailable {
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    background: rgba(250, 246, 240, 0.85);
+}
+.live-map-pin {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 16px;
+    box-shadow: 0 4px 14px rgba(42, 35, 30, 0.22);
+    border: 2px solid #fff;
+}
+.live-map-pin--rider { background: var(--deep-rose); }
+.live-map-pin--customer { background: var(--deep-sage); }
+.live-map-pin--store { background: var(--dusty-rose); }
+
+#liveMapExpandOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10060;
+    background: var(--charcoal);
+    display: none;
+}
+#liveMapExpandOverlay.open {
+    display: block;
+}
+.live-map-expand-map-wrap {
+    position: absolute;
+    inset: 0;
+}
+#liveMapExpandedCanvas {
+    width: 100%;
+    height: 100%;
+}
+.live-map-float-btn {
+    position: absolute;
+    top: 14px;
+    z-index: 3;
+    width: 42px;
+    height: 42px;
+    border: none;
+    border-radius: 50%;
+    background: #fff;
+    color: var(--deep-rose);
+    box-shadow: 0 4px 14px rgba(42, 35, 30, 0.18);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: var(--transition);
+}
+.live-map-float-btn:hover {
+    transform: scale(1.04);
+    color: var(--charcoal);
+}
+.live-map-float-close { left: 12px; }
+.live-map-float-recenter { right: 12px; }
+.live-map-chip--overlay {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    pointer-events: none;
+    background: rgba(181, 68, 90, 0.92);
+    color: #fff;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 10px;
+    box-shadow: 0 4px 12px rgba(42, 35, 30, 0.2);
+}
+.live-map-chip--overlay::before {
+    background: #ffd6de;
+}
+.live-map-chip--overlay.is-waiting::before {
+    background: var(--blush);
+}
+
+.live-map-expand-details {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    z-index: 4;
+    padding: 14px 16px;
+    background: #fff;
+    border-radius: 22px;
+    box-shadow: 0 6px 18px rgba(42, 35, 30, 0.16);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: auto;
+}
+.live-map-details-avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 22px;
+    background: linear-gradient(135deg, var(--deep-rose) 0%, var(--dusty-rose) 100%);
+    border: 2px solid #fff;
+    box-shadow: 0 4px 10px rgba(181, 68, 90, 0.35);
+}
+.live-map-details-text {
+    flex: 1;
+    min-width: 0;
+}
+.live-map-details-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--charcoal);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.live-map-details-sub {
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.live-map-details-eta {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, var(--deep-rose) 0%, var(--dusty-rose) 100%);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+}
+.live-map-details-chat {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(242, 196, 206, 0.45);
+    color: var(--deep-rose);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: var(--transition);
+}
+.live-map-details-chat:hover {
+    background: rgba(242, 196, 206, 0.75);
+}
+
+@media (max-width: 768px) {
+    .live-map-expand-details {
+        left: 10px;
+        right: 10px;
+        bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+        padding: 12px 14px;
+        border-radius: 18px;
+    }
+    .live-map-details-title {
+        font-size: 15px;
+    }
+}
 </style>
 
 <div class="orders-page">
@@ -2363,6 +2662,410 @@ function orderItemRatingStarsHtml(item) {
 }
 
 /* ═══════════════════════════════════════
+   LIVE DELIVERY MAP (web parity with Flutter)
+═══════════════════════════════════════ */
+const LiveOrderMap = (function() {
+    let pollTimer = null;
+    let map = null;
+    let expandedMap = null;
+    let orderId = null;
+    let markers = { rider: null, customer: null, store: null };
+    let expandedMarkers = { rider: null, customer: null, store: null };
+    let state = { rider: null, customer: null, store: null, route: [], etaMin: null, live: false, riderName: '' };
+    let fetchingRoute = false;
+    let didInitialFit = false;
+    let expandBound = false;
+
+    function haversineKm(a, b) {
+        const r = 6371;
+        const dLat = (b.lat - a.lat) * Math.PI / 180;
+        const dLng = (b.lng - a.lng) * Math.PI / 180;
+        const x = Math.sin(dLat / 2) ** 2 +
+            Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) *
+            Math.sin(dLng / 2) ** 2;
+        return r * 2 * Math.asin(Math.sqrt(x));
+    }
+
+    function ensureToken() {
+        return window.MAPBOX_TOKEN || document.getElementById('mapbox-token')?.value || '';
+    }
+
+    function formatTrackingTime(iso) {
+        if (!iso) return 'just now';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return 'just now';
+        const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+        if (sec < 60) return 'just now';
+        if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+        return formatDateTimePH(iso);
+    }
+
+    function makePin(cls, icon) {
+        const el = document.createElement('div');
+        el.className = 'live-map-pin ' + cls;
+        el.innerHTML = '<i class="' + icon + '"></i>';
+        return el;
+    }
+
+    function setMarker(targetMap, bucket, key, lngLat, cls, icon) {
+        if (!targetMap || !lngLat) return;
+        if (bucket[key]) {
+            bucket[key].setLngLat(lngLat);
+            return;
+        }
+        bucket[key] = new mapboxgl.Marker({ element: makePin(cls, icon), anchor: 'center' })
+            .setLngLat(lngLat)
+            .addTo(targetMap);
+    }
+
+    function removeMarker(bucket, key) {
+        if (bucket[key]) {
+            bucket[key].remove();
+            bucket[key] = null;
+        }
+    }
+
+    function updateRouteOnMap(targetMap, coords) {
+        if (!targetMap || !coords?.length) return;
+        const geo = { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } };
+        const srcId = targetMap === expandedMap ? 'live-route-expanded' : 'live-route';
+        const layerId = targetMap === expandedMap ? 'live-route-line-expanded' : 'live-route-line';
+        if (targetMap.getSource(srcId)) {
+            targetMap.getSource(srcId).setData(geo);
+        } else {
+            targetMap.addSource(srcId, { type: 'geojson', data: geo });
+            targetMap.addLayer({
+                id: layerId,
+                type: 'line',
+                source: srcId,
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#b5445a', 'line-width': 4, 'line-opacity': 0.85 },
+            });
+        }
+    }
+
+    async function fetchOsrmRoute(start, end) {
+        const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.routes?.length) return null;
+        const route = data.routes[0];
+        return {
+            coords: route.geometry.coordinates,
+            etaMin: Math.max(1, Math.round(route.duration / 60)),
+        };
+    }
+
+    function fitMap(targetMap, force) {
+        if (!targetMap) return;
+        const points = [];
+        if (state.rider) points.push([state.rider.lng, state.rider.lat]);
+        if (state.customer) points.push([state.customer.lng, state.customer.lat]);
+        if (state.store && !state.rider) points.push([state.store.lng, state.store.lat]);
+        if (!points.length) return;
+        const isExpanded = targetMap === expandedMap;
+        const padding = isExpanded
+            ? { top: 72, bottom: 120, left: 48, right: 48 }
+            : 56;
+        if (points.length === 1) {
+            targetMap.setCenter(points[0]);
+            targetMap.setZoom(15);
+        } else {
+            const bounds = points.reduce(
+                (b, p) => b.extend(p),
+                new mapboxgl.LngLatBounds(points[0], points[0])
+            );
+            targetMap.fitBounds(bounds, { padding, maxZoom: 16, duration: force ? 0 : 400 });
+        }
+    }
+
+    function updateExpandedDetails(d) {
+        const waiting = !state.rider;
+        const name = (d?.rider_name || state.riderName || '').trim();
+        const titleEl = document.getElementById('liveMapExpandDetailsTitle');
+        const subEl = document.getElementById('liveMapExpandDetailsSub');
+        const etaEl = document.getElementById('liveMapExpandDetailsEta');
+        const chipEl = document.getElementById('liveMapExpandChip');
+        if (!titleEl) return;
+
+        titleEl.textContent = waiting
+            ? 'Rider is heading out'
+            : (state.etaMin != null ? `Arriving in ${state.etaMin} min` : 'Rider is on the way');
+        subEl.textContent = waiting
+            ? 'Waiting for live location'
+            : (name || 'Your order is on the way');
+
+        if (etaEl) {
+            const showEta = state.etaMin != null && !waiting;
+            etaEl.style.display = showEta ? '' : 'none';
+            etaEl.textContent = showEta ? `${state.etaMin} min` : '';
+        }
+        if (chipEl) {
+            chipEl.textContent = waiting ? 'CONNECTING' : 'LIVE';
+            chipEl.classList.toggle('is-waiting', waiting);
+        }
+    }
+
+    function syncMarkersToMap(targetMap, bucket) {
+        if (!targetMap) return;
+        if (state.store) setMarker(targetMap, bucket, 'store', [state.store.lng, state.store.lat], 'live-map-pin--store', 'ri-store-2-line');
+        if (state.customer) setMarker(targetMap, bucket, 'customer', [state.customer.lng, state.customer.lat], 'live-map-pin--customer', 'ri-home-smile-line');
+        if (state.rider) setMarker(targetMap, bucket, 'rider', [state.rider.lng, state.rider.lat], 'live-map-pin--rider', 'ri-e-bike-line');
+        else removeMarker(bucket, 'rider');
+        if (state.route.length) updateRouteOnMap(targetMap, state.route);
+    }
+
+    function updateUi(d) {
+        const chip = document.getElementById('liveMapChip');
+        const eta = document.getElementById('liveMapEta');
+        const sub = document.getElementById('liveMapSub');
+        if (!chip) return;
+        const waiting = !state.rider;
+        chip.textContent = waiting ? 'Waiting for rider GPS…' : 'Live tracking';
+        chip.classList.toggle('is-waiting', waiting);
+        if (eta) {
+            const showEta = state.etaMin && !waiting;
+            eta.style.display = showEta ? '' : 'none';
+            eta.textContent = showEta ? `~${state.etaMin} min` : '';
+        }
+        if (sub) {
+            const name = d?.rider_name || state.riderName || 'Your rider';
+            sub.textContent = waiting
+                ? `${name} is on the way`
+                : `${name} · updated ${formatTrackingTime(d?.rider_updated_at)}`;
+        }
+        updateExpandedDetails(d);
+    }
+
+    function stopPollOnly() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+    }
+
+    function destroyMapInstance(target) {
+        if (!target) return;
+        try { target.remove(); } catch (_) {}
+    }
+
+    function clearMarkerBucket(bucket) {
+        Object.keys(bucket).forEach(k => removeMarker(bucket, k));
+    }
+
+    async function refresh() {
+        if (!orderId) return;
+        try {
+            const res = await fetch(`/api/account/orders/${orderId}/tracking`, { credentials: 'same-origin' });
+            if (!res.ok) return;
+            const d = await res.json();
+            state.live = d.live === true;
+            state.riderName = d.rider_name || state.riderName;
+
+            const rider = (d.rider_latitude != null && d.rider_longitude != null)
+                ? { lat: d.rider_latitude, lng: d.rider_longitude } : null;
+            const customer = (d.customer_latitude != null && d.customer_longitude != null)
+                ? { lat: d.customer_latitude, lng: d.customer_longitude } : null;
+            const store = (d.store_latitude != null && d.store_longitude != null)
+                ? { lat: d.store_latitude, lng: d.store_longitude } : null;
+
+            const moved = rider && state.rider && haversineKm(state.rider, rider) * 1000 >= 20;
+            state.rider = rider || state.rider;
+            state.customer = customer || state.customer;
+            state.store = store || state.store;
+
+            if (!state.live) {
+                stopPollOnly();
+                updateUi(d);
+                return;
+            }
+
+            if (map && map.isStyleLoaded()) {
+                syncMarkersToMap(map, markers);
+                if (expandedMap && expandedMap.isStyleLoaded()) syncMarkersToMap(expandedMap, expandedMarkers);
+
+                const needRoute = moved || (!state.route.length && (state.rider || state.store) && state.customer);
+                if (needRoute && !fetchingRoute) {
+                    fetchingRoute = true;
+                    const start = state.rider || state.store;
+                    const end = state.customer;
+                    if (start && end) {
+                        const info = await fetchOsrmRoute(start, end);
+                        if (info) {
+                            state.route = info.coords;
+                            state.etaMin = info.etaMin;
+                            updateRouteOnMap(map, state.route);
+                            if (expandedMap) updateRouteOnMap(expandedMap, state.route);
+                        }
+                    }
+                    fetchingRoute = false;
+                }
+
+                if (!didInitialFit) {
+                    fitMap(map);
+                    didInitialFit = true;
+                } else if (moved) {
+                    fitMap(map);
+                    if (expandedMap) fitMap(expandedMap, true);
+                }
+            }
+
+            updateUi(d);
+        } catch (err) {
+            console.warn('Live tracking refresh failed', err);
+        }
+    }
+
+    function initMap(container) {
+        const token = ensureToken();
+        if (!token || typeof mapboxgl === 'undefined') {
+            container.innerHTML = '<div class="live-map-unavailable">Map unavailable — Mapbox is not configured.</div>';
+            return null;
+        }
+        mapboxgl.accessToken = token;
+        const instance = new mapboxgl.Map({
+            container,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [121.4113, 14.2691],
+            zoom: 12,
+            interactive: false,
+            attributionControl: false,
+        });
+        instance.on('load', () => {
+            instance.resize();
+            refresh();
+        });
+        return instance;
+    }
+
+    function ensureExpandOverlay() {
+        let overlay = document.getElementById('liveMapExpandOverlay');
+        const needsBuild = !overlay || !overlay.querySelector('.live-map-expand-map-wrap .live-map-expand-details');
+        if (overlay && needsBuild) {
+            overlay.remove();
+            overlay = null;
+        }
+        if (overlay) return overlay;
+        overlay = document.createElement('div');
+        overlay.id = 'liveMapExpandOverlay';
+        overlay.innerHTML = `
+            <div class="live-map-expand-map-wrap">
+                <div id="liveMapExpandedCanvas"></div>
+                <button type="button" class="live-map-float-btn live-map-float-close" id="liveMapExpandClose" aria-label="Close map">
+                    <i class="ri-close-line"></i>
+                </button>
+                <button type="button" class="live-map-float-btn live-map-float-recenter" id="liveMapRecenterBtn" aria-label="Recenter map">
+                    <i class="ri-focus-3-line"></i>
+                </button>
+                <span class="live-map-chip live-map-chip--overlay is-waiting" id="liveMapExpandChip">CONNECTING</span>
+                <div class="live-map-expand-details" id="liveMapExpandDetails">
+                    <div class="live-map-details-avatar" aria-hidden="true"><i class="ri-e-bike-line"></i></div>
+                    <div class="live-map-details-text">
+                        <div class="live-map-details-title" id="liveMapExpandDetailsTitle">Rider is heading out</div>
+                        <div class="live-map-details-sub" id="liveMapExpandDetailsSub">Waiting for live location</div>
+                    </div>
+                    <span class="live-map-details-eta" id="liveMapExpandDetailsEta" style="display:none;"></span>
+                    <button type="button" class="live-map-details-chat" id="liveMapExpandChatBtn" title="Chat with rider" aria-label="Chat with rider">
+                        <i class="ri-chat-3-line"></i>
+                    </button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#liveMapExpandClose').addEventListener('click', closeExpanded);
+        overlay.querySelector('#liveMapRecenterBtn').addEventListener('click', () => {
+            if (expandedMap) fitMap(expandedMap, true);
+        });
+        overlay.querySelector('#liveMapExpandChatBtn').addEventListener('click', () => {
+            if (!orderId) return;
+            closeExpanded();
+            if (window.chatWidget && typeof chatWidget.openWithRiderOrder === 'function') {
+                chatWidget.openWithRiderOrder(orderId);
+            }
+        });
+        return overlay;
+    }
+
+    function openExpanded(e) {
+        e?.preventDefault();
+        e?.stopPropagation();
+        if (!map || typeof mapboxgl === 'undefined') return;
+
+        const overlay = ensureExpandOverlay();
+        overlay.classList.add('open');
+        document.body.style.overflow = 'hidden';
+
+        if (expandedMap) {
+            expandedMap.remove();
+            expandedMap = null;
+            clearMarkerBucket(expandedMarkers);
+        }
+
+        expandedMap = new mapboxgl.Map({
+            container: 'liveMapExpandedCanvas',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: map.getCenter(),
+            zoom: map.getZoom(),
+            interactive: true,
+        });
+        expandedMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        expandedMap.on('load', () => {
+            expandedMap.resize();
+            syncMarkersToMap(expandedMap, expandedMarkers);
+            if (state.route.length) updateRouteOnMap(expandedMap, state.route);
+            fitMap(expandedMap, true);
+            updateExpandedDetails({ rider_name: state.riderName });
+        });
+    }
+
+    function closeExpanded() {
+        const overlay = document.getElementById('liveMapExpandOverlay');
+        if (overlay) overlay.classList.remove('open');
+        document.body.style.overflow = '';
+        destroyMapInstance(expandedMap);
+        expandedMap = null;
+        clearMarkerBucket(expandedMarkers);
+    }
+
+    function bindExpand() {
+        if (expandBound) return;
+        const btn = document.getElementById('liveMapExpandBtn');
+        if (!btn) return;
+        btn.addEventListener('click', openExpanded);
+        expandBound = true;
+    }
+
+    function start(id) {
+        stop();
+        orderId = id;
+        expandBound = false;
+        const container = document.getElementById('liveDeliveryMap');
+        if (!container) return;
+
+        map = initMap(container);
+        if (!map) return;
+
+        bindExpand();
+        pollTimer = setInterval(refresh, 8000);
+    }
+
+    function stop() {
+        stopPollOnly();
+        closeExpanded();
+        destroyMapInstance(map);
+        map = null;
+        orderId = null;
+        clearMarkerBucket(markers);
+        clearMarkerBucket(expandedMarkers);
+        state = { rider: null, customer: null, store: null, route: [], etaMin: null, live: false, riderName: '' };
+        fetchingRoute = false;
+        didInitialFit = false;
+        expandBound = false;
+    }
+
+    return { start, stop, refresh };
+})();
+
+/* ═══════════════════════════════════════
    ORDER DETAIL MODAL
 ═══════════════════════════════════════ */
 async function viewOrderDetail(orderId) {
@@ -2373,6 +3076,7 @@ async function viewOrderDetail(orderId) {
     modal.classList.add('active');
     modal.style.display = 'flex';
     body.innerHTML = `<div style="text-align:center;padding:3rem;"><div class="loading-spinner" style="margin:0 auto;"></div></div>`;
+    LiveOrderMap.stop();
 
     try {
         const res   = await fetch(`/api/account/orders/${orderId}`);
@@ -2380,6 +3084,11 @@ async function viewOrderDetail(orderId) {
 
         title.textContent = `Order #${order.order_number || String(orderId).padStart(4,'0')}`;
         body.innerHTML    = buildOrderDetailHTML(order);
+        if (order.status === 'on_delivery' && (order.rider_id || order.rider_name)) {
+            requestAnimationFrame(() => {
+                setTimeout(() => LiveOrderMap.start(order.id), 100);
+            });
+        }
 
     } catch (err) {
         body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">Failed to load order details.</div>`;
@@ -2645,6 +3354,26 @@ function buildOrderDetailHTML(order) {
         </section>` : '';
 
     const riderAssigned = !!(order.rider_name || order.rider_id);
+    const showLiveMap = order.status === 'on_delivery' && riderAssigned;
+    const liveMapHtml = showLiveMap ? `
+        <section class="sdm-block sdm-block--full">
+            <h4>Live delivery</h4>
+            <div class="sdm-live-map-wrap" id="liveMapWrap">
+                <div class="sdm-live-map" id="liveDeliveryMap"></div>
+                <div class="sdm-live-map-overlay"></div>
+                <div class="sdm-live-map-top">
+                    <span class="live-map-chip is-waiting" id="liveMapChip">Connecting…</span>
+                    <button type="button" class="live-map-expand-btn" id="liveMapExpandBtn" title="Expand map" aria-label="Expand map">
+                        <i class="ri-fullscreen-line"></i>
+                    </button>
+                </div>
+                <div class="sdm-live-map-bottom">
+                    <span class="live-map-sub" id="liveMapSub">${esc(order.rider_name || 'Your rider')} is on the way</span>
+                    <span class="live-map-eta" id="liveMapEta" style="display:none;"></span>
+                </div>
+            </div>
+        </section>` : '';
+
     const riderSection = `
         <section class="sdm-block sdm-block--full">
             <h4>Rider</h4>
@@ -2673,6 +3402,7 @@ function buildOrderDetailHTML(order) {
                 <span class="sdm-when">${formatDateTimePH(order.created_at)}</span>
             </header>
             ${progressHtml}
+            ${liveMapHtml}
             <section class="sdm-block sdm-block--full">
                 <h4>Items</h4>
                 <div class="sdm-item-rows">${itemsHtml}</div>
@@ -2707,6 +3437,7 @@ function buildOrderDetailHTML(order) {
 }
 
 function closeOrderDetail() {
+    LiveOrderMap.stop();
     const modal = document.getElementById('orderDetailModal');
     modal.classList.remove('active');
     modal.style.display = 'none';

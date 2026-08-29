@@ -47,9 +47,15 @@ def is_synthetic_account_email(email: str) -> bool:
 
 def display_login_id(email: str = None, phone: str = None) -> str:
     """Value shown/prefilled for login (phone for phone-only accounts)."""
-    if is_synthetic_account_email(email or '') and phone:
-        return normalize_ph_mobile(phone) or phone
-    return (email or phone or '').strip()
+    email = (email or '').strip()
+    phone_norm = normalize_ph_mobile(phone) or ((phone or '').strip() or None)
+    if is_synthetic_account_email(email):
+        if phone_norm:
+            return phone_norm
+        local = email.split('@', 1)[0]
+        if is_valid_ph_mobile(local):
+            return normalize_ph_mobile(local) or local
+    return email or phone_norm or ''
 
 
 def tel_href(phone_raw):

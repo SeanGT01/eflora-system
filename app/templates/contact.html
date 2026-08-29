@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% from "partials/help_nav.html" import help_nav, help_shell_open, help_shell_close %}
+
+{% block title %}Contact Us — E-FLORA{% endblock %}
+
+{% block extra_css %}
+{% include "partials/help_page_styles.html" %}
+{% include "partials/white_florals_styles.html" %}
+{% endblock %}
+
+{% block content %}
+{{ help_shell_open() }}
+
+    <nav class="help-crumb" aria-label="Breadcrumb">
+        <a href="{{ url_for('templates.index') }}">Home</a>
+        <i class="ri-arrow-right-s-line"></i>
+        <span>Contact Us</span>
+    </nav>
+
+    <header class="help-hero-band">
+        <div class="help-hero-inner">
+            <div class="help-kicker"><i class="ri-flower-fill"></i> E-FLORA Help</div>
+            <h1>We’re here when you need us</h1>
+            <p>Questions about an order, a shop, or something blooming on E-FLORA? Reach out — we usually reply within one business day.</p>
+        </div>
+    </header>
+
+    <div class="help-highlight">
+        <div class="help-chip">
+            <i class="ri-time-line"></i>
+            <strong>Same-day replies</strong>
+            <span>On business hours, PH time</span>
+        </div>
+        <div class="help-chip">
+            <i class="ri-map-pin-line"></i>
+            <strong>Laguna shops</strong>
+            <span>Local florists, local delivery</span>
+        </div>
+        <div class="help-chip">
+            <i class="ri-shield-check-line"></i>
+            <strong>Order-safe help</strong>
+            <span>Include your order number</span>
+        </div>
+    </div>
+
+    <div class="help-grid">
+        <button type="button" class="help-card" id="contactLiveChatBtn" onclick="openEfloraSupport(event)">
+            <span class="card-icon"><i class="ri-chat-3-line"></i></span>
+            <h3>Live chat</h3>
+            <p>Message E-FLORA support from the chat bubble while you’re signed in. Fastest for order and account help.</p>
+            <span class="card-action">Open chat <i class="ri-arrow-right-line"></i></span>
+        </button>
+        <a class="help-card help-card--sage" href="mailto:efloralaguna@gmail.com">
+            <span class="card-icon"><i class="ri-mail-send-line"></i></span>
+            <h3>Email</h3>
+            <p>Prefer writing it out? Reach us at efloralaguna@gmail.com — include your order number when you can.</p>
+            <span class="card-action">efloralaguna@gmail.com</span>
+        </a>
+    </div>
+
+    <section class="help-panel">
+        <div class="help-panel-head">
+            <div class="help-panel-icon"><i class="ri-edit-2-line"></i></div>
+            <div>
+                <h2>Send a message</h2>
+                <p class="panel-lead">We’ll open your email app with everything filled in — ready to send to efloralaguna@gmail.com.</p>
+            </div>
+        </div>
+        <form class="contact-form" id="contactForm" onsubmit="return sendContactEmail(event)">
+            <div class="form-row">
+                <div>
+                    <label for="contactName">Name</label>
+                    <input id="contactName" name="name" type="text" required maxlength="80" autocomplete="name" placeholder="Your name">
+                </div>
+                <div>
+                    <label for="contactEmail">Email</label>
+                    <input id="contactEmail" name="email" type="email" required maxlength="120" autocomplete="email" placeholder="you@email.com">
+                </div>
+            </div>
+            <div>
+                <label for="contactTopic">Topic</label>
+                <select id="contactTopic" name="topic" required>
+                    <option value="Order help">Order help</option>
+                    <option value="Delivery">Delivery</option>
+                    <option value="Returns / refunds">Returns / refunds</option>
+                    <option value="Seller / shop">Seller / shop</option>
+                    <option value="Account">Account</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div>
+                <label for="contactMessage">Message</label>
+                <textarea id="contactMessage" name="message" required maxlength="2000" placeholder="How can we help?"></textarea>
+            </div>
+            <button type="submit" class="btn-send">
+                <i class="ri-send-plane-2-line"></i>
+                Continue in email
+            </button>
+        </form>
+    </section>
+
+    <section class="help-panel">
+        <div class="help-panel-head">
+            <div class="help-panel-icon"><i class="ri-information-line"></i></div>
+            <div>
+                <h2>Hours &amp; coverage</h2>
+                <p class="panel-lead">Support rhythms that match how local shops work.</p>
+            </div>
+        </div>
+        <p>E-FLORA connects you with local flower shops across Laguna. Support is available daily during business hours (Philippines time). Shops set their own open hours and delivery windows — you’ll see those on each store page.</p>
+        <p>Looking for policies instead? See our <a href="{{ url_for('templates.shipping') }}">Shipping</a> and <a href="{{ url_for('templates.returns') }}">Returns</a> pages, or browse the <a href="{{ url_for('templates.faq') }}">FAQ</a>.</p>
+    </section>
+
+    {{ help_nav('contact') }}
+
+{{ help_shell_close() }}
+
+<script>
+function openEfloraSupport(e) {
+    if (e) e.preventDefault();
+    e.stopPropagation();
+    var cw = window.chatWidget;
+    if (cw && typeof cw.openSupport === 'function') {
+        cw.openSupport();
+        return false;
+    }
+    if (cw && typeof cw.toggle === 'function') {
+        cw.toggle();
+        return false;
+    }
+    window.location.href = '{{ url_for("templates.login") }}?next=' + encodeURIComponent('{{ url_for("templates.contact") }}');
+    return false;
+}
+
+function sendContactEmail(e) {
+    e.preventDefault();
+    const name = document.getElementById('contactName').value.trim();
+    const email = document.getElementById('contactEmail').value.trim();
+    const topic = document.getElementById('contactTopic').value;
+    const message = document.getElementById('contactMessage').value.trim();
+    const subject = encodeURIComponent('[E-FLORA] ' + topic + ' — ' + name);
+    const body = encodeURIComponent(
+        'Name: ' + name + '\n' +
+        'Email: ' + email + '\n' +
+        'Topic: ' + topic + '\n\n' +
+        message
+    );
+    window.location.href = 'mailto:efloralaguna@gmail.com?subject=' + subject + '&body=' + body;
+    return false;
+}
+</script>
+{% endblock %}

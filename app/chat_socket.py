@@ -218,6 +218,13 @@ def handle_send_message(data):
         if convo.customer_deleted_at:
             convo.customer_deleted_at = None
 
+    try:
+        from app.chat import _maybe_notify_seller_new_chat, _maybe_notify_admin_new_chat
+        _maybe_notify_seller_new_chat(convo, user, text or '[Image]')
+        _maybe_notify_admin_new_chat(convo, user, text or '[Image]')
+    except Exception:
+        pass
+
     db.session.commit()
 
     emit('new_message', msg.to_dict(), room=_room_name(convo_id), include_self=True)

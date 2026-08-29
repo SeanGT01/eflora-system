@@ -1057,11 +1057,12 @@ const chatWidget = (() => {
         if (!_activeOtherUid) return;
         const online = _isUserOnlineCached(_activeOtherUid);
         _setDetailStatus(online);
+        // No avatar green dot in the open thread — Online/Offline text already shows it
         const el = document.getElementById('chat-detail-avatar');
         if (!el) return;
         const bare = el.getAttribute('data-bare-avatar');
         if (!bare) return;
-        el.innerHTML = _withPresenceDot(bare, online);
+        el.innerHTML = bare;
     }
 
     function _adminAvatar(size) {
@@ -1758,7 +1759,8 @@ const chatWidget = (() => {
         _activeOtherUid = other.id || convo.seller_id || null;
         if (avatarEl) {
             avatarEl.setAttribute('data-bare-avatar', bare);
-            avatarEl.innerHTML = _withPresenceDot(bare, _isUserOnlineCached(_activeOtherUid));
+            // Header uses Online/Offline text — skip avatar presence dot
+            avatarEl.innerHTML = bare;
         }
         document.getElementById('chat-detail-name').textContent = displayName;
         // Paint cached presence immediately, then confirm with the server
@@ -2461,4 +2463,5 @@ const chatWidget = (() => {
         _toggleMenu,
     };
 })();
+window.chatWidget = chatWidget;
 </script>

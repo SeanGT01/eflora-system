@@ -6,114 +6,1043 @@
     <title>Store application — E-FLORA Seller</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
         :root {
-            --cream: #faf6f0; --warm-white: #fffdf9; --blush: #f2c4ce; --deep-rose: #b5445a;
-            --charcoal: #2c2520; --muted: #9a8d85; --border: rgba(107,76,59,0.12);
-            --font-display: 'Cormorant Garamond', serif; --font-sans: 'DM Sans', sans-serif;
+            --cream: #faf6f0;
+            --warm-white: #fffdf9;
+            --blush: #f2c4ce;
+            --deep-rose: #b5445a;
+            --dusty-rose: #d4788a;
+            --sage: #7a9e7e;
+            --deep-sage: #4a6b4e;
+            --charcoal: #2c2520;
+            --muted: #9a8d85;
+            --border: rgba(107, 76, 59, 0.12);
+            --border-strong: rgba(107, 76, 59, 0.22);
+            --font-display: 'Cormorant Garamond', serif;
+            --font-sans: 'DM Sans', sans-serif;
+            --shadow-sm: 0 2px 8px rgba(42, 35, 30, 0.05);
+            --shadow-md: 0 4px 20px rgba(42, 35, 30, 0.08);
+            --shadow-lg: 0 8px 40px rgba(42, 35, 30, 0.12);
+            --radius-md: 10px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            --radius-pill: 100px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: var(--font-sans); background: var(--cream); color: var(--charcoal); min-height: 100vh; }
-        .wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-        .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-        .top a { color: var(--deep-rose); text-decoration: none; font-size: 14px; }
-        h1 { font-family: var(--font-display); font-size: 1.75rem; margin-bottom: 0.35rem; }
-        .sub { color: var(--muted); font-size: 14px; margin-bottom: 1.5rem; }
-        .card { background: var(--warm-white); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
-        .form-group { margin-bottom: 1.1rem; }
-        .form-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--cream);
+            color: var(--charcoal);
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.4;
+        }
+
+        /* ── Left panel ── */
+        .panel-left {
+            background: var(--charcoal);
+            color: #fff;
+            padding: 2.25rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            min-height: 100vh;
+            min-width: 0;
+        }
+
+        .glow-1, .glow-2 {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .glow-1 {
+            top: -120px; left: -90px;
+            width: 420px; height: 420px;
+            background: radial-gradient(circle, rgba(122,158,126,0.18) 0%, transparent 70%);
+        }
+        .glow-2 {
+            bottom: -90px; right: -70px;
+            width: 320px; height: 320px;
+            background: radial-gradient(circle, rgba(212,120,138,0.14) 0%, transparent 70%);
+        }
+
+        .logo-link {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+            color: #fff;
+            margin-bottom: 2.5rem;
+        }
+        .logo-name {
+            font-family: var(--font-display);
+            font-size: 1.45rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+        }
+
+        .panel-eyebrow {
+            position: relative;
+            z-index: 1;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.55);
+            margin-bottom: 0.75rem;
+        }
+        .panel-headline {
+            position: relative;
+            z-index: 1;
+            font-family: var(--font-display);
+            font-size: clamp(1.55rem, 2.4vw, 2.35rem);
+            font-weight: 500;
+            line-height: 1.15;
+            margin-bottom: 0.85rem;
+            overflow-wrap: break-word;
+        }
+        .panel-headline em {
+            font-style: italic;
+            color: var(--blush);
+        }
+        .panel-desc {
+            position: relative;
+            z-index: 1;
+            font-size: 13px;
+            line-height: 1.55;
+            color: rgba(255,255,255,0.62);
+            max-width: none;
+            margin-bottom: 2rem;
+            overflow-wrap: break-word;
+        }
+
+        .steps-list {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: auto;
+            min-width: 0;
+        }
+        .step-item {
+            display: flex;
+            gap: 0.7rem;
+            align-items: flex-start;
+            min-width: 0;
+        }
+        .step-num {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.55);
+            border: 1px solid rgba(255,255,255,0.12);
+        }
+        .step-item.done .step-num {
+            background: rgba(122,158,126,0.22);
+            border-color: rgba(122,158,126,0.45);
+            color: #c8e0ca;
+        }
+        .step-item.current .step-num {
+            background: var(--deep-rose);
+            border-color: var(--deep-rose);
+            color: #fff;
+        }
+        .step-text strong {
+            display: block;
+            font-size: 13.5px;
+            font-weight: 600;
+            margin-bottom: 0.15rem;
+        }
+        .step-text {
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(255,255,255,0.55);
+            min-width: 0;
+            overflow-wrap: break-word;
+        }
+        .step-item.current .step-text,
+        .step-item.done .step-text {
+            color: rgba(255,255,255,0.78);
+        }
+
+        .panel-footer {
+            position: relative;
+            z-index: 1;
+            margin-top: 2.5rem;
+            font-size: 10.5px;
+            line-height: 1.4;
+            color: rgba(255,255,255,0.35);
+            overflow-wrap: break-word;
+        }
+
+        /* ── Right panel ── */
+        .panel-right {
+            padding: 1.5rem clamp(1.25rem, 2.5vw, 2.5rem) 2rem;
+            overflow-x: hidden;
+            overflow-y: auto;
+            max-height: 100vh;
+            background: var(--cream);
+            min-width: 0;
+        }
+
+        .form-card {
+            width: 100%;
+            min-width: 0;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            padding: clamp(0.75rem, 2vw, 1.25rem) clamp(0.5rem, 2vw, 1rem);
+            margin: 0;
+        }
+
+        .form-footer {
+            margin-top: 0.5rem;
+            padding-top: 0.35rem;
+        }
+
+        .top-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            gap: 0.75rem;
+        }
+        .top-actions a {
+            color: var(--deep-rose);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .top-actions a:hover { text-decoration: underline; }
+
+        .form-eyebrow {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--deep-rose);
+            margin-bottom: 0.4rem;
+        }
+        .form-title {
+            font-family: var(--font-display);
+            font-size: 1.85rem;
+            font-weight: 500;
+            line-height: 1.15;
+            margin-bottom: 0.45rem;
+        }
+        .form-subtitle {
+            font-size: 14px;
+            color: var(--muted);
+            line-height: 1.55;
+            margin-bottom: 1.15rem;
+        }
+
+        .account-chip {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.7rem 0.9rem;
+            border-radius: var(--radius-lg);
+            background: rgba(122, 158, 126, 0.08);
+            border: 1px solid rgba(122, 158, 126, 0.22);
+            margin-bottom: 1.25rem;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .account-chip .icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(122, 158, 126, 0.16);
+            color: var(--deep-sage);
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .account-chip .meta {
+            min-width: 0;
+            flex: 1;
+        }
+        .account-chip .label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--deep-sage);
+            margin-bottom: 0.1rem;
+        }
+        .account-chip .value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--charcoal);
+            word-break: break-word;
+        }
+
+        .info-box {
+            display: flex;
+            gap: 0.7rem;
+            align-items: flex-start;
+            padding: 0.85rem 0.95rem;
+            border-radius: var(--radius-lg);
+            background: rgba(181, 68, 90, 0.06);
+            border: 1px solid rgba(181, 68, 90, 0.14);
+            margin-bottom: 1.35rem;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--charcoal);
+        }
+        .info-box i {
+            color: var(--deep-rose);
+            font-size: 18px;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+        .info-box strong { display: block; margin-bottom: 0.15rem; }
+
+        .section-head {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            margin: 0.35rem 0 1rem;
+            padding-bottom: 0.55rem;
+            border-bottom: 1px solid var(--border);
+            min-width: 0;
+        }
+        .section-head i {
+            color: var(--deep-rose);
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .section-head h3 {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            font-weight: 600;
+            min-width: 0;
+        }
+        .section-head span {
+            margin-left: auto;
+            font-size: 11px;
+            color: var(--muted);
+            font-weight: 500;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        .form-group { margin-bottom: 1.1rem; min-width: 0; }
+        .form-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 0.45rem;
+        }
         .form-control, textarea.form-control {
-            width: 100%; padding: 0.75rem 1rem; border: 1.5px solid var(--border); border-radius: 10px; font-family: var(--font-sans); font-size: 14px;
+            width: 100%;
+            max-width: 100%;
+            padding: 0.8rem 1rem;
+            border: 1.5px solid rgba(194, 78, 104, 0.16);
+            border-radius: var(--radius-md);
+            font-family: var(--font-sans);
+            font-size: 14px;
+            background: rgba(255,255,255,0.85);
+            color: var(--charcoal);
+            transition: var(--transition);
+            box-sizing: border-box;
         }
-        textarea.form-control { min-height: 100px; resize: vertical; }
-        .upload-zone {
-            border: 2px dashed var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; cursor: pointer; background: var(--cream);
+        .form-control:focus, textarea.form-control:focus {
+            outline: none;
+            border-color: rgba(194, 78, 104, 0.48);
+            box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.12);
+            background: #fff;
         }
-        .upload-zone i { font-size: 28px; color: var(--deep-rose); opacity: 0.7; }
-        .upload-preview { display: none; margin-top: 10px; }
-        .upload-preview img { max-width: 100%; max-height: 160px; border-radius: 8px; }
-        .progress { display: none; margin-top: 8px; height: 4px; background: #eee; border-radius: 2px; overflow: hidden; }
-        .progress-bar { height: 100%; width: 0; background: var(--deep-rose); transition: width 0.2s; }
-        .btn-submit {
-            width: 100%; margin-top: 0.5rem; padding: 0.85rem; border: none; border-radius: 100px;
-            background: var(--charcoal); color: var(--cream); font-weight: 600; cursor: pointer; font-size: 14px;
-        }
-        .btn-submit:disabled { opacity: 0.65; cursor: not-allowed; }
-        .terms-row { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 13px; margin-top: 0.5rem; }
-        .toast {
-            position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
-            padding: 0.75rem 1.25rem; border-radius: 100px; font-size: 14px; color: #fff; z-index: 1000;
+        textarea.form-control { min-height: 110px; resize: vertical; line-height: 1.5; }
+
+        .field-hint {
             display: none;
+            font-size: 12px;
+            margin-top: 0.4rem;
+            line-height: 1.4;
+        }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 1rem 1.25rem;
+            min-width: 0;
+            margin-bottom: 0.35rem;
+        }
+        .upload-grid > .form-group {
+            margin-bottom: 0;
+            min-width: 0;
+        }
+        .upload-zone {
+            border: 1.5px dashed rgba(194, 78, 104, 0.28);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            background: rgba(250, 246, 240, 0.65);
+            transition: var(--transition);
+            min-height: 140px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .upload-zone:hover {
+            border-color: rgba(194, 78, 104, 0.5);
+            background: rgba(242, 196, 206, 0.12);
+        }
+        .upload-zone.has-file {
+            border-style: solid;
+            border-color: rgba(122, 158, 126, 0.45);
+            background: rgba(122, 158, 126, 0.06);
+        }
+        .upload-zone i {
+            font-size: 28px;
+            color: var(--deep-rose);
+            opacity: 0.85;
+        }
+        .upload-zone .uz-title {
+            margin-top: 0.55rem;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--charcoal);
+        }
+        .upload-zone .uz-sub {
+            margin-top: 0.25rem;
+            font-size: 11.5px;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+        .upload-preview {
+            display: none;
+            margin-top: 0.65rem;
+            max-width: 100%;
+            overflow: hidden;
+        }
+        .upload-preview img {
+            max-width: 100%;
+            width: 100%;
+            max-height: 140px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            object-fit: cover;
+            display: block;
+        }
+        .progress {
+            display: none;
+            margin-top: 0.5rem;
+            height: 4px;
+            background: rgba(107,76,59,0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, var(--dusty-rose), var(--deep-rose));
+            transition: width 0.2s;
+        }
+
+        .reject-banner {
+            display: flex;
+            gap: 0.7rem;
+            align-items: flex-start;
+            margin-bottom: 1.15rem;
+            padding: 0.9rem 1rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(192, 57, 43, 0.18);
+            background: rgba(192, 57, 43, 0.05);
+        }
+        .reject-banner i { color: #9b1c1c; font-size: 20px; flex-shrink: 0; }
+        .reject-banner strong {
+            display: block;
+            color: #8a1f1f;
+            font-size: 13.5px;
+            margin-bottom: 0.25rem;
+        }
+        .reject-banner p {
+            font-size: 13px;
+            color: #7a4a45;
+            line-height: 1.45;
+            margin: 0;
+        }
+
+        .form-group.locked .form-label::after {
+            content: ' · Locked';
+            font-weight: 600;
+            color: var(--muted);
+            letter-spacing: 0.04em;
+            text-transform: none;
+        }
+        .form-group.locked .form-control,
+        .form-group.locked textarea.form-control {
+            background: rgba(250, 246, 240, 0.85);
+            color: var(--muted);
+            cursor: not-allowed;
+            border-color: var(--border);
+            box-shadow: none;
+        }
+        .upload-zone.locked {
+            cursor: not-allowed;
+            pointer-events: none;
+            opacity: 0.72;
+            border-style: solid;
+            border-color: var(--border);
+            background: rgba(250, 246, 240, 0.85);
+        }
+        .upload-zone.locked .uz-sub::after {
+            content: ' · No change needed';
+            color: var(--deep-sage);
+            font-weight: 600;
+        }
+
+        .section-head.locked span {
+            color: var(--muted);
+        }
+        .section-head.locked span::after {
+            content: ' · Locked';
+            font-weight: 600;
+        }
+
+        .terms-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.55rem;
+            font-size: 13px;
+            line-height: 1.45;
+            color: var(--charcoal);
+            margin: 1.1rem 0 0.85rem;
+        }
+        .terms-row input {
+            margin-top: 0.2rem;
+            accent-color: var(--deep-rose);
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .terms-row label { cursor: pointer; }
+        .terms-row a {
+            color: var(--deep-rose);
+            font-weight: 600;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .terms-row.accepted {
+            padding: 0.65rem 0.8rem;
+            border-radius: var(--radius-md);
+            background: rgba(122, 158, 126, 0.08);
+            border: 1px solid rgba(122, 158, 126, 0.22);
+        }
+        .terms-row.accepted .accepted-note {
+            display: inline;
+            color: var(--deep-sage);
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .accepted-note { display: none; }
+
+        .terms-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10050;
+            background: rgba(44, 37, 32, 0.5);
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            backdrop-filter: blur(4px);
+        }
+        .terms-overlay.open { display: flex; }
+        .terms-modal {
+            width: min(640px, 100%);
+            max-height: min(88vh, 760px);
+            background: var(--warm-white);
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .terms-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1.1rem 1.25rem;
+            background: linear-gradient(135deg, #c24e68, #b5445a);
+            color: #fff;
+        }
+        .terms-modal-header h3 {
+            font-family: var(--font-display);
+            font-size: 1.35rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .terms-modal-close {
+            border: none;
+            background: rgba(255,255,255,0.16);
+            color: #fff;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .terms-modal-body {
+            padding: 1.25rem 1.35rem;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+        .terms-content h4 {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--charcoal);
+            margin: 1rem 0 0.35rem;
+        }
+        .terms-content h4:first-child { margin-top: 0; }
+        .terms-content p {
+            font-size: 13px;
+            line-height: 1.55;
+            color: var(--muted);
+            margin-bottom: 0.35rem;
+        }
+        .terms-scroll-track {
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: rgba(107,76,59,0.1);
+            margin: 0.75rem -1.35rem -1.25rem;
+        }
+        .terms-scroll-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--dusty-rose), var(--deep-rose));
+            transition: width 0.1s ease;
+        }
+        .terms-modal-footer {
+            border-top: 1px solid var(--border);
+            padding: 1rem 1.25rem 1.15rem;
+            background: rgba(250, 246, 240, 0.7);
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+        .terms-modal-check {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.6rem;
+            font-size: 13px;
+            line-height: 1.45;
+            color: var(--charcoal);
+        }
+        .terms-modal-check input {
+            margin-top: 0.15rem;
+            accent-color: var(--deep-rose);
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+        .terms-modal-check label.disabled {
+            color: var(--muted);
+        }
+        .terms-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.65rem;
+        }
+        .terms-btn {
+            border: none;
+            border-radius: var(--radius-pill);
+            padding: 0.65rem 1.15rem;
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .terms-btn-ghost {
+            background: transparent;
+            color: var(--muted);
+            border: 1.5px solid var(--border);
+        }
+        .terms-btn-accept {
+            background: linear-gradient(135deg, #c24e68, #b5445a);
+            color: #fff;
+        }
+        .terms-btn-accept:disabled {
+            background: #d5cec8;
+            color: #8a817a;
+            cursor: not-allowed;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 0.9rem 1.25rem;
+            border: none;
+            border-radius: var(--radius-pill);
+            background: linear-gradient(135deg, #c24e68, #b5445a);
+            color: #fff;
+            font-family: var(--font-sans);
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            box-shadow: 0 8px 20px rgba(181, 68, 90, 0.22);
+            transition: var(--transition);
+        }
+        .btn-submit:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(181, 68, 90, 0.28);
+        }
+        .btn-submit:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.75rem 1.25rem;
+            border-radius: var(--radius-pill);
+            font-size: 14px;
+            color: #fff;
+            z-index: 10000;
+            display: none;
+            box-shadow: var(--shadow-lg);
+        }
+
+        @media (max-width: 900px) {
+            body { grid-template-columns: 1fr; }
+            .panel-left { min-height: auto; padding: 1.75rem 1.5rem 1.5rem; }
+            .panel-headline { font-size: 1.85rem; }
+            .panel-desc { max-width: none; margin-bottom: 1.25rem; }
+            .steps-list { flex-direction: row; flex-wrap: wrap; gap: 0.75rem; }
+            .step-item { flex: 1 1 140px; }
+            .panel-footer { margin-top: 1.5rem; }
+            .panel-right {
+                max-height: none;
+                padding: 1.25rem 1rem 2rem;
+            }
+            .upload-grid { grid-template-columns: 1fr; }
+            .upload-zone { min-height: 132px; }
         }
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
 </head>
 <body>
-<div class="wrap">
-    <div class="top">
-        <a href="{{ url_for('templates.index') }}"><i class="ri-arrow-left-line"></i> Back to shop</a>
-        <a href="{{ url_for('templates.logout') }}">Sign out</a>
-    </div>
-    <h1>Complete your store application</h1>
-    <p class="sub">Signed in as <strong>{{ user.email }}</strong>. After submission, our admin team will review your documents.</p>
-    {% set is_rejected = application and application.status == 'rejected' %}
-    {% if is_rejected %}
-    <div class="card" style="margin-bottom:1rem;border-color:rgba(39,103,73,0.28);background:rgba(39,103,73,0.04);">
-        <div style="display:flex;align-items:center;gap:0.5rem;color:#1f5f41;font-weight:600;margin-bottom:0.65rem;">
-            <i class="ri-error-warning-line"></i>
-            <span>Application changes requested</span>
-        </div>
-        <p style="font-size:13px;color:#276749;margin:0;">
-            {% if application.admin_notes %}{{ application.admin_notes }}{% else %}Please update the rejected fields below and resubmit.{% endif %}
-        </p>
-    </div>
-    {% endif %}
 
-    <div class="card">
+<div class="panel-left">
+    <div class="glow-1"></div>
+    <div class="glow-2"></div>
+
+    <a href="{{ url_for('templates.index') }}" class="logo-link">
+        <svg width="36" height="36" viewBox="0 0 42 42" fill="none" aria-hidden="true">
+            <circle cx="21" cy="21" r="7" fill="#d4788a" opacity="0.9"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.8" transform="rotate(0 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.65" transform="rotate(60 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.65" transform="rotate(120 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.55" transform="rotate(180 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#f2c4ce" opacity="0.55" transform="rotate(240 21 21)"/>
+            <ellipse cx="21" cy="10" rx="4.5" ry="8" fill="#d4788a" opacity="0.45" transform="rotate(300 21 21)"/>
+            <circle cx="21" cy="21" r="5" fill="#fffdf9"/>
+            <circle cx="21" cy="21" r="2.5" fill="#ffd700" opacity="0.7"/>
+        </svg>
+        <span class="logo-name">E-FLORA</span>
+    </a>
+
+    <div class="panel-eyebrow">Seller Center</div>
+    <h1 class="panel-headline">Tell us about<br><em>your shop</em></h1>
+    <p class="panel-desc">
+        Share your store details and verification documents so we can review your seller application.
+    </p>
+
+    <div class="steps-list">
+        <div class="step-item done">
+            <div class="step-num"><i class="ri-check-line"></i></div>
+            <div class="step-text">
+                <strong>Account created</strong>
+                Login verified with your email or mobile.
+            </div>
+        </div>
+        <div class="step-item done">
+            <div class="step-num"><i class="ri-check-line"></i></div>
+            <div class="step-text">
+                <strong>Contact verified</strong>
+                OTP confirmed — you’re signed in.
+            </div>
+        </div>
+        <div class="step-item current">
+            <div class="step-num">3</div>
+            <div class="step-text">
+                <strong>Store application</strong>
+                Add store info, logo, and government ID.
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-footer">© 2026 E-FLORA &amp; PLANTS — Blooming with Technology</div>
+</div>
+
+<div class="panel-right">
+    <div class="form-card">
+        <div class="top-actions">
+            <a href="{{ url_for('templates.index') }}"><i class="ri-arrow-left-line"></i> Back to shop</a>
+            <a href="{{ url_for('templates.logout') }}"><i class="ri-logout-box-r-line"></i> Sign out</a>
+        </div>
+
+        {% set is_rejected = application and application.status == 'rejected' %}
+        {% set ns = namespace(has_field_map=false) %}
+        {% if is_rejected and application.rejection_details %}
+            {% for _field, detail in application.rejection_details.items() %}
+                {% if detail is mapping and detail.get('rejected') %}
+                    {% set ns.has_field_map = true %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+
+        <div class="form-eyebrow">Step 3 of 3</div>
+        <h2 class="form-title">{% if is_rejected %}Update your application{% else %}Complete your store application{% endif %}</h2>
+        <p class="form-subtitle">
+            {% if is_rejected and ns.has_field_map %}
+            Update only the fields flagged by admin. Locked sections cannot be changed.
+            {% elif is_rejected %}
+            Review the admin feedback below, update your application, and resubmit.
+            {% else %}
+            Fill in your store profile and upload the required files. Required fields are marked with *.
+            {% endif %}
+        </p>
+
+        <div class="account-chip">
+            <div class="icon"><i class="ri-{% if '@' in (login_id or '') %}mail{% else %}smartphone{% endif %}-line"></i></div>
+            <div class="meta">
+                <div class="label">Signed in as</div>
+                <div class="value">{{ login_id or user.email }}</div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <i class="ri-shield-check-line"></i>
+            <div>
+                <strong>Admin review</strong>
+                After you submit, our admin team will review your store application before your shop goes live.
+            </div>
+        </div>
+
+        {% if is_rejected %}
+        <div class="reject-banner">
+            <i class="ri-error-warning-line"></i>
+            <div>
+                <strong>Changes requested</strong>
+                <p>{% if application.admin_notes %}{{ application.admin_notes }}{% else %}Please update the flagged fields below and resubmit.{% endif %}</p>
+            </div>
+        </div>
+        {% endif %}
+
         <form id="storeAppForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="form-group">
+
+            <div class="section-head" data-section="store_details">
+                <i class="ri-store-2-line"></i>
+                <h3>Store details</h3>
+                <span>Visible to buyers</span>
+            </div>
+
+            <div class="form-group" data-field="store_name">
                 <label class="form-label">Store name *</label>
-                <input class="form-control" type="text" name="store_name" required placeholder="e.g. Laguna Blooms">
-                <small id="reason-store_name" style="display:none;color:#276749;font-size:12px;margin-top:6px;"></small>
+                <input class="form-control" type="text" name="store_name" required placeholder="e.g. Laguna Blooms" autocomplete="organization">
+                <small class="field-hint" id="reason-store_name"></small>
             </div>
-            <div class="form-group">
+
+            <div class="form-group" data-field="store_description">
                 <label class="form-label">Store description *</label>
-                <textarea class="form-control" name="store_description" required placeholder="Describe your shop and what you sell…"></textarea>
-                <small id="reason-store_description" style="display:none;color:#276749;font-size:12px;margin-top:6px;"></small>
+                <textarea class="form-control" name="store_description" required placeholder="Describe your shop, specialties, and the occasions you serve…"></textarea>
+                <small class="field-hint" id="reason-store_description"></small>
             </div>
-            <div class="form-group">
-                <label class="form-label">Store logo *</label>
-                <div class="upload-zone" data-target="storeLogo">
-                    <input type="file" id="storeLogo" name="store_logo" accept="image/*" style="display:none">
-                    <i class="ri-image-add-line"></i>
-                    <p style="margin-top:8px;font-size:13px;">Click to upload logo</p>
+
+            <div class="section-head" data-section="verification">
+                <i class="ri-folder-shield-2-line"></i>
+                <h3>Verification documents</h3>
+                <span>For admin review only</span>
+            </div>
+
+            <div class="upload-grid">
+                <div class="form-group" data-field="store_logo">
+                    <label class="form-label">Store logo *</label>
+                    <div class="upload-zone" data-target="storeLogo" id="logoZone">
+                        <input type="file" id="storeLogo" name="store_logo" accept="image/*" style="display:none">
+                        <i class="ri-image-add-line"></i>
+                        <div class="uz-title">Upload logo</div>
+                        <div class="uz-sub">PNG or JPG, clear square crop works best</div>
+                    </div>
+                    <div class="upload-preview" id="logoPreview"><img alt="Logo preview"></div>
+                    <div class="progress" id="logoProgress"><div class="progress-bar" id="logoBar"></div></div>
+                    <small class="field-hint" id="reason-store_logo"></small>
                 </div>
-                <div class="upload-preview" id="logoPreview"><img alt="Logo preview"></div>
-                <div class="progress" id="logoProgress"><div class="progress-bar" id="logoBar"></div></div>
-                <small id="reason-store_logo" style="display:none;color:#276749;font-size:12px;margin-top:6px;"></small>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Government ID *</label>
-                <div class="upload-zone" data-target="govId">
-                    <input type="file" id="govId" name="government_id" accept="image/*" style="display:none">
-                    <i class="ri-id-card-line"></i>
-                    <p style="margin-top:8px;font-size:13px;">Passport, driver's license, or national ID</p>
+
+                <div class="form-group" data-field="government_id">
+                    <label class="form-label">Government ID *</label>
+                    <div class="upload-zone" data-target="govId" id="idZone">
+                        <input type="file" id="govId" name="government_id" accept="image/*" style="display:none">
+                        <i class="ri-id-card-line"></i>
+                        <div class="uz-title">Upload ID</div>
+                        <div class="uz-sub">Passport, driver’s license, or national ID</div>
+                    </div>
+                    <div class="upload-preview" id="idPreview"><img alt="ID preview"></div>
+                    <div class="progress" id="idProgress"><div class="progress-bar" id="idBar"></div></div>
+                    <small class="field-hint" id="reason-government_id"></small>
                 </div>
-                <div class="upload-preview" id="idPreview"><img alt="ID preview"></div>
-                <div class="progress" id="idProgress"><div class="progress-bar" id="idBar"></div></div>
-                <small id="reason-government_id" style="display:none;color:#276749;font-size:12px;margin-top:6px;"></small>
             </div>
-            <div class="terms-row">
-                <input type="checkbox" name="agree_terms" id="agreeTerms" required>
-                <label for="agreeTerms">I agree to the seller terms and confirm my information is accurate.</label>
+
+            <div class="form-footer">
+                <div class="terms-row" id="termsRow">
+                    <input type="checkbox" name="agree_terms" id="agreeTerms" required>
+                    <label for="agreeTerms">
+                        I agree to the
+                        <a href="#" id="openTermsLink">Seller Terms &amp; Conditions</a>
+                        and confirm my store information is accurate.
+                        <span class="accepted-note" id="termsAcceptedNote"> · Accepted</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn-submit" id="submitBtn">
+                    <i class="ri-send-plane-line"></i> Submit for review
+                </button>
             </div>
-            <button type="submit" class="btn-submit" id="submitBtn"><i class="ri-send-plane-line"></i> Submit for review</button>
         </form>
     </div>
 </div>
+
+<div class="terms-overlay" id="termsOverlay" role="dialog" aria-modal="true" aria-labelledby="termsModalTitle">
+    <div class="terms-modal">
+        <div class="terms-modal-header">
+            <h3 id="termsModalTitle"><i class="ri-file-text-line"></i> Seller Terms &amp; Conditions</h3>
+            <button type="button" class="terms-modal-close" id="closeTermsBtn" aria-label="Close">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="terms-modal-body" id="termsModalBody">
+            <div class="terms-content">
+                <h4>1. Seller Agreement</h4>
+                <p>By applying to become a seller on E-FLORA, you agree to comply with and be bound by the following terms and conditions. Please read them carefully.</p>
+
+                <h4>2. Account Registration</h4>
+                <p>You must provide accurate and complete information when registering as a seller. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.</p>
+
+                <h4>3. Product Listings</h4>
+                <p>All products listed for sale must comply with our platform guidelines and applicable laws. You are solely responsible for the accuracy, quality, and legality of your product listings, including descriptions, images, and pricing.</p>
+
+                <h4>4. Fees and Payments</h4>
+                <p>E-FLORA does not charge sellers any platform or listing fees. Customer payments for orders are processed through our secure payment system, and seller payouts follow our standard settlement process.</p>
+
+                <h4>5. Order Fulfillment</h4>
+                <p>You must fulfill orders promptly and provide tracking information when required. Failure to fulfill orders may result in account suspension or termination.</p>
+
+                <h4>6. Returns and Refunds</h4>
+                <p>You agree to comply with our returns and refunds policy. This includes processing returns within the specified timeframe and issuing refunds promptly when required.</p>
+
+                <h4>7. Prohibited Activities</h4>
+                <p>You may not engage in fraudulent activities, list prohibited items, manipulate reviews, or use the platform for any illegal purposes. Violation may result in immediate account termination.</p>
+
+                <h4>8. Intellectual Property</h4>
+                <p>You represent that you have all necessary rights to the products you list and that your listings do not infringe on any third-party intellectual property rights.</p>
+
+                <h4>9. Documents &amp; Verification</h4>
+                <p>You authorize E-FLORA to review your store details, logo, and government ID for seller verification. Submitted documents are used only for review and compliance purposes.</p>
+
+                <h4>10. Termination</h4>
+                <p>We reserve the right to suspend or terminate your seller account at any time for violations of these terms or for any other reason at our discretion.</p>
+
+                <h4>11. Limitation of Liability</h4>
+                <p>Our platform shall not be liable for any indirect, incidental, or consequential damages arising from your use of the seller services.</p>
+
+                <h4>12. Indemnification</h4>
+                <p>You agree to indemnify and hold harmless our platform, its affiliates, and their respective officers, directors, employees, and agents from any claims arising out of your breach of these terms.</p>
+
+                <h4>13. Modifications to Terms</h4>
+                <p>We may modify these terms at any time. Continued use of the seller services after changes constitutes acceptance of the modified terms.</p>
+
+                <h4>14. Contact Information</h4>
+                <p>For questions regarding these terms, please contact our support team at efloralaguna@gmail.com.</p>
+            </div>
+            <div class="terms-scroll-track" aria-hidden="true">
+                <div class="terms-scroll-bar" id="termsScrollBar"></div>
+            </div>
+        </div>
+        <div class="terms-modal-footer">
+            <div class="terms-modal-check">
+                <input type="checkbox" id="acceptTermsModal" disabled>
+                <label for="acceptTermsModal" id="termsModalLabel" class="disabled">
+                    I have read and agree to the Seller Terms &amp; Conditions (please scroll to the bottom)
+                </label>
+            </div>
+            <div class="terms-modal-actions">
+                <button type="button" class="terms-btn terms-btn-ghost" id="cancelTermsBtn">Cancel</button>
+                <button type="button" class="terms-btn terms-btn-accept" id="acceptTermsBtn" disabled>
+                    <i class="ri-check-line"></i> Accept Terms
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -123,6 +1052,17 @@ const EXISTING_APPLICATION = {{ (application.to_dict() if application else {})|t
 const IS_REJECTED_RESUBMIT = !!(EXISTING_APPLICATION && EXISTING_APPLICATION.status === 'rejected');
 const REJECTION_DETAILS = (IS_REJECTED_RESUBMIT && EXISTING_APPLICATION.rejection_details) || {};
 
+const agreeTerms = document.getElementById('agreeTerms');
+const termsRow = document.getElementById('termsRow');
+const termsOverlay = document.getElementById('termsOverlay');
+const termsModalBody = document.getElementById('termsModalBody');
+const acceptTermsModal = document.getElementById('acceptTermsModal');
+const acceptTermsBtn = document.getElementById('acceptTermsBtn');
+const termsModalLabel = document.getElementById('termsModalLabel');
+const termsScrollBar = document.getElementById('termsScrollBar');
+let termsAccepted = false;
+let pendingSubmitAfterAccept = false;
+
 function toast(msg, ok) {
     const t = document.getElementById('toast');
     t.textContent = msg;
@@ -131,9 +1071,144 @@ function toast(msg, ok) {
     setTimeout(() => { t.style.display = 'none'; }, 3200);
 }
 
+function openTermsModal(fromSubmit) {
+    pendingSubmitAfterAccept = !!fromSubmit;
+    termsOverlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    termsModalBody.scrollTop = 0;
+    acceptTermsModal.checked = false;
+    acceptTermsModal.disabled = true;
+    acceptTermsBtn.disabled = true;
+    termsModalLabel.classList.add('disabled');
+    termsModalLabel.textContent = 'I have read and agree to the Seller Terms & Conditions (please scroll to the bottom)';
+    termsScrollBar.style.width = '0%';
+    // Allow short content (no scroll) to unlock immediately
+    requestAnimationFrame(() => checkTermsScroll());
+}
+
+function closeTermsModal() {
+    termsOverlay.classList.remove('open');
+    document.body.style.overflow = '';
+    pendingSubmitAfterAccept = false;
+}
+
+function checkTermsScroll() {
+    const scrollTop = termsModalBody.scrollTop;
+    const maxScroll = termsModalBody.scrollHeight - termsModalBody.clientHeight;
+    const pct = maxScroll <= 8 ? 100 : Math.min(100, Math.round((scrollTop / maxScroll) * 100));
+    termsScrollBar.style.width = pct + '%';
+
+    if (pct >= 92 || maxScroll <= 8) {
+        acceptTermsModal.disabled = false;
+        termsModalLabel.classList.remove('disabled');
+        termsModalLabel.textContent = 'I have read and agree to the Seller Terms & Conditions';
+    }
+}
+
+function markTermsAccepted() {
+    termsAccepted = true;
+    agreeTerms.checked = true;
+    termsRow.classList.add('accepted');
+    document.getElementById('termsAcceptedNote').style.display = 'inline';
+}
+
+function acceptTermsAndClose() {
+    if (!acceptTermsModal.checked) {
+        toast('Please check the box to accept the terms.', false);
+        return;
+    }
+    markTermsAccepted();
+    const shouldSubmit = pendingSubmitAfterAccept;
+    closeTermsModal();
+    toast('Terms accepted. You can submit your application.', true);
+    if (shouldSubmit) {
+        document.getElementById('storeAppForm').requestSubmit();
+    }
+}
+
+agreeTerms.addEventListener('click', function(e) {
+    if (termsAccepted && agreeTerms.checked) return;
+    e.preventDefault();
+    openTermsModal(false);
+});
+
+agreeTerms.addEventListener('change', function() {
+    if (!agreeTerms.checked) {
+        termsAccepted = false;
+        termsRow.classList.remove('accepted');
+        document.getElementById('termsAcceptedNote').style.display = 'none';
+    }
+});
+
+document.getElementById('openTermsLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    openTermsModal(false);
+});
+
+termsModalBody.addEventListener('scroll', checkTermsScroll);
+acceptTermsModal.addEventListener('change', function() {
+    acceptTermsBtn.disabled = !this.checked;
+});
+acceptTermsBtn.addEventListener('click', acceptTermsAndClose);
+document.getElementById('closeTermsBtn').addEventListener('click', closeTermsModal);
+document.getElementById('cancelTermsBtn').addEventListener('click', closeTermsModal);
+termsOverlay.addEventListener('click', function(e) {
+    if (e.target === termsOverlay) closeTermsModal();
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && termsOverlay.classList.contains('open')) closeTermsModal();
+});
+
 function isRejectedField(field) {
     const f = REJECTION_DETAILS[field];
     return !!(f && f.rejected);
+}
+
+function hasRejectionFieldMap() {
+    return Object.values(REJECTION_DETAILS).some(v => v && v.rejected);
+}
+
+function isLockedField(field) {
+    return IS_REJECTED_RESUBMIT && hasRejectionFieldMap() && !isRejectedField(field);
+}
+
+const SECTION_FIELDS = {
+    store_details: ['store_name', 'store_description'],
+    verification: ['store_logo', 'government_id'],
+};
+
+function lockSectionIfAllLocked(sectionKey) {
+    const fields = SECTION_FIELDS[sectionKey];
+    if (!fields || !fields.every(isLockedField)) return;
+    const head = document.querySelector(`.section-head[data-section="${sectionKey}"]`);
+    if (head) head.classList.add('locked');
+}
+
+function lockFieldGroup(field) {
+    const group = document.querySelector(`[data-field="${field}"]`);
+    if (group) group.classList.add('locked');
+
+    if (field === 'store_name' || field === 'store_description') {
+        const form = document.getElementById('storeAppForm');
+        const input = form[field];
+        if (input) {
+            input.readOnly = true;
+            input.setAttribute('aria-readonly', 'true');
+            input.tabIndex = -1;
+        }
+        return;
+    }
+
+    const zoneId = field === 'store_logo' ? 'logoZone' : 'idZone';
+    const inputId = field === 'store_logo' ? 'storeLogo' : 'govId';
+    const zone = document.getElementById(zoneId);
+    const fileInput = document.getElementById(inputId);
+    if (zone) zone.classList.add('locked');
+    if (fileInput) {
+        fileInput.disabled = true;
+        fileInput.removeAttribute('required');
+    }
 }
 
 function showFieldReason(field, fallbackLabel) {
@@ -175,11 +1250,13 @@ function hydrateFormForResubmission() {
         const prev = document.getElementById('logoPreview');
         prev.style.display = 'block';
         prev.querySelector('img').src = EXISTING_APPLICATION.store_logo_url;
+        document.getElementById('logoZone').classList.add('has-file');
     }
     if (EXISTING_APPLICATION.government_id_url) {
         const prev = document.getElementById('idPreview');
         prev.style.display = 'block';
         prev.querySelector('img').src = EXISTING_APPLICATION.government_id_url;
+        document.getElementById('idZone').classList.add('has-file');
     }
 
     markField(form.store_name, isRejectedField('store_name'));
@@ -192,10 +1269,18 @@ function hydrateFormForResubmission() {
     showFieldReason('store_logo', 'Store logo');
     showFieldReason('government_id', 'Government ID');
 
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.innerHTML = '<i class="ri-refresh-line"></i> Resubmit rejected fields';
+    if (hasRejectionFieldMap()) {
+        ['store_name', 'store_description', 'store_logo', 'government_id'].forEach(field => {
+            if (isLockedField(field)) lockFieldGroup(field);
+        });
+        Object.keys(SECTION_FIELDS).forEach(lockSectionIfAllLocked);
+    }
 
-    // Real-time feedback: rejected note turns green when that field is changed.
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.innerHTML = hasRejectionFieldMap()
+        ? '<i class="ri-refresh-line"></i> Resubmit rejected fields'
+        : '<i class="ri-refresh-line"></i> Resubmit application';
+
     const originalStoreName = (EXISTING_APPLICATION.store_name || '').trim();
     const originalStoreDescription = (EXISTING_APPLICATION.store_description || '').trim();
 
@@ -230,6 +1315,7 @@ async function uploadToCloudinary(file, folder) {
 
 document.querySelectorAll('.upload-zone').forEach(z => {
     z.addEventListener('click', () => {
+        if (z.classList.contains('locked')) return;
         const id = z.getAttribute('data-target');
         document.getElementById(id === 'storeLogo' ? 'storeLogo' : 'govId').click();
     });
@@ -241,6 +1327,7 @@ document.getElementById('storeLogo').addEventListener('change', function() {
     const prev = document.getElementById('logoPreview');
     prev.style.display = 'block';
     prev.querySelector('img').src = URL.createObjectURL(f);
+    document.getElementById('logoZone').classList.add('has-file');
     if (IS_REJECTED_RESUBMIT && isRejectedField('store_logo')) {
         setReasonResolved('store_logo', true);
     }
@@ -252,6 +1339,7 @@ document.getElementById('govId').addEventListener('change', function() {
     const prev = document.getElementById('idPreview');
     prev.style.display = 'block';
     prev.querySelector('img').src = URL.createObjectURL(f);
+    document.getElementById('idZone').classList.add('has-file');
     if (IS_REJECTED_RESUBMIT && isRejectedField('government_id')) {
         setReasonResolved('government_id', true);
     }
@@ -259,8 +1347,12 @@ document.getElementById('govId').addEventListener('change', function() {
 
 document.getElementById('storeAppForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const agree = document.getElementById('agreeTerms').checked;
-    if (!agree) { toast('Please accept the terms.', false); return; }
+
+    if (!termsAccepted || !agreeTerms.checked) {
+        openTermsModal(true);
+        toast('Please read and accept the Seller Terms first.', false);
+        return;
+    }
 
     const storeName = this.store_name.value.trim();
     const storeDesc = this.store_description.value.trim();
@@ -325,7 +1417,11 @@ document.getElementById('storeAppForm').addEventListener('submit', async functio
     } catch (err) {
         toast(err.message || 'Error', false);
         btn.disabled = false;
-        btn.innerHTML = '<i class="ri-send-plane-line"></i> Submit for review';
+        btn.innerHTML = IS_REJECTED_RESUBMIT
+            ? (hasRejectionFieldMap()
+                ? '<i class="ri-refresh-line"></i> Resubmit rejected fields'
+                : '<i class="ri-refresh-line"></i> Resubmit application')
+            : '<i class="ri-send-plane-line"></i> Submit for review';
     }
 });
 

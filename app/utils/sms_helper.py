@@ -21,7 +21,7 @@ SMS_SERVICE_UNAVAILABLE_MESSAGE = (
     "We couldn't send your verification SMS right now. "
     "This is a temporary system issue on our side — not a problem with your details. "
     "Please try again shortly, switch to email verification if available, "
-    "or contact support. Support: support@eflora.ph"
+    "or contact support. Support: efloralaguna@gmail.com"
 )
 
 SMS_SENDER_NAME_REQUIRED_CODE = 'sms_sender_name_required'

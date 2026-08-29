@@ -803,6 +803,18 @@
     let currentReviewOriginal = null;
 
     const DEFAULT_CUSTOMER_AVATAR_URL = '/static/images/default-customer-avatar.svg';
+
+    /** Hide synthetic phone-account emails (…@sms.eflora.internal) in admin UI. */
+    function displayLoginId(email, phone) {
+        const raw = (email || '').trim();
+        const ph = (phone || '').trim();
+        if (raw.toLowerCase().endsWith('@sms.eflora.internal')) {
+            const local = raw.split('@')[0];
+            return ph || local || raw;
+        }
+        return raw || ph || 'N/A';
+    }
+
     function _userAvatarHtml(avatarUrl) {
         if (avatarUrl) return `<img src="${avatarUrl}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">`;
         return `<img src="${DEFAULT_CUSTOMER_AVATAR_URL}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">`;
@@ -1014,7 +1026,7 @@
                         ${_userAvatarHtml(app.avatar_url)}
                         <div>
                             <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
-                            <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--muted);">${displayLoginId(app.login_id || app.email, app.phone)}</div>
                         </div>
                     </div>
                 </td>
@@ -1057,7 +1069,7 @@
                         ${_userAvatarHtml(app.avatar_url)}
                         <div>
                             <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
-                            <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--muted);">${displayLoginId(app.login_id || app.email, app.phone)}</div>
                         </div>
                     </div>
                 </td>
@@ -1100,7 +1112,7 @@
                         ${_userAvatarHtml(app.avatar_url)}
                         <div>
                             <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
-                            <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--muted);">${displayLoginId(app.login_id || app.email, app.phone)}</div>
                         </div>
                     </div>
                 </td>
@@ -1146,7 +1158,7 @@
                         ${_userAvatarHtml(app.avatar_url)}
                         <div>
                             <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
-                            <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--muted);">${displayLoginId(app.login_id || app.email, app.phone)}</div>
                         </div>
                     </div>
                 </td>
@@ -1200,7 +1212,7 @@
                             ${_userAvatarHtml(app.avatar_url)}
                             <div>
                                 <div style="font-weight: 600; color: var(--charcoal);">${app.full_name || 'N/A'}</div>
-                                <div style="font-size: 12px; color: var(--muted);">${app.email || 'N/A'}</div>
+                                <div style="font-size: 12px; color: var(--muted);">${displayLoginId(app.login_id || app.email, app.phone)}</div>
                             </div>
                         </div>
                     </td>
@@ -1281,7 +1293,7 @@
         const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase();
         const filteredUsers = currentUsers.filter(user => {
             if (!searchTerm) return true;
-            const text = `${user.full_name || ''} ${user.email || ''} ${user.role || ''} ${user.status || ''}`.toLowerCase();
+            const text = `${user.full_name || ''} ${user.login_id || ''} ${user.email || ''} ${user.phone || ''} ${user.role || ''} ${user.status || ''}`.toLowerCase();
             return text.includes(searchTerm);
         });
 
@@ -1314,7 +1326,7 @@
                             ${_userAvatarHtml(user.avatar_url)}
                             <div>
                                 <div style="font-weight: 600; color: var(--charcoal);">${safeName}</div>
-                                <div style="font-size: 12px; color: var(--muted);">${user.email || 'N/A'}</div>
+                                <div style="font-size: 12px; color: var(--muted);">${displayLoginId(user.login_id || user.email, user.phone)}</div>
                             </div>
                         </div>
                     </td>
@@ -1376,7 +1388,7 @@
             <tr>
                 <td>
                     <div style="font-weight: 600; color: var(--charcoal);">${ban.user_name || 'Unknown'}</div>
-                    <div style="font-size: 12px; color: var(--muted);">${ban.user_email || ''}</div>
+                    <div style="font-size: 12px; color: var(--muted);">${displayLoginId(ban.user_email)}</div>
                 </td>
                 <td style="max-width: 260px;"><span style="font-size: 13px; color: var(--muted);">${ban.reason || 'No reason provided'}</span></td>
                 <td>${ban.banned_until ? new Date(ban.banned_until).toLocaleString() : '<span class="status-badge status-rejected">Permanent</span>'}</td>
@@ -1441,7 +1453,7 @@
                         <div class="user-details-panel">
                             <h6 class="user-details-title">Account</h6>
                             <p class="user-details-row"><strong>Name:</strong> ${user.full_name || 'N/A'}</p>
-                            <p class="user-details-row"><strong>Email:</strong> ${user.email || 'N/A'}</p>
+                            <p class="user-details-row"><strong>Email / Mobile:</strong> ${displayLoginId(user.login_id || user.email, user.phone)}</p>
                             <p class="user-details-row"><strong>Phone:</strong> ${user.phone || 'N/A'}</p>
                         </div>
                         <div class="user-details-panel">
@@ -1640,7 +1652,7 @@
                 <div>
                     <h6 style="font-weight: 600; color: var(--charcoal); margin-bottom: 0.75rem;">Applicant Information</h6>
                     <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Name:</strong> ${app.full_name || 'N/A'}</p>
-                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Email:</strong> ${app.email || 'N/A'}</p>
+                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Email / Mobile:</strong> ${displayLoginId(app.login_id || app.email, app.phone)}</p>
                     <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Phone:</strong> ${app.phone || 'N/A'}</p>
                 </div>
                 <div>

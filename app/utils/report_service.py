@@ -60,6 +60,25 @@ def _to_pht(dt: Optional[datetime]) -> Optional[datetime]:
     return dt.astimezone(PHT)
 
 
+def _pht_date(dt: Optional[datetime]) -> Optional[date]:
+    """Calendar date in Asia/Manila for a UTC-naive or aware timestamp."""
+    local = _to_pht(dt)
+    return local.date() if local else None
+
+
+def _iter_pht_days(start: datetime, end: datetime):
+    """Yield each Philippine calendar day in the half-open UTC range [start, end)."""
+    start_d = _pht_date(start)
+    # end is exclusive — last included local day is the day before end's PHT date
+    end_exclusive_d = _pht_date(end)
+    if not start_d or not end_exclusive_d:
+        return
+    cur = start_d
+    while cur < end_exclusive_d:
+        yield cur
+        cur += timedelta(days=1)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Period helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -259,9 +278,9 @@ def _new_customer_count(store_id, start, end) -> int:
 
 def _top_products(store_id, start, end, limit=5):
     """Return list of dicts with ``name``, ``category``, ``quantity``, ``revenue``.
-    Groups by product + variant so each variant is a separate line item."""
+    Groups by product + variant; merges completed online + POS sales."""
     from app.models import ProductVariant
-    rows = db.session.query(
+    online_rows = db.session.query(
         Product.id,
         Product.name,
         ProductVariant.id.label('variant_id'),
@@ -278,17 +297,40 @@ def _top_products(store_id, start, end, limit=5):
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
-     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name) \
-      .order_by(func.sum(OrderItem.quantity * OrderItem.price).desc()) \
-      .limit(limit).all()
+     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
 
-    return [{
-        'id': r.id,
-        'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
-        'category': r.category_name or 'Uncategorized',
-        'quantity': int(r.qty or 0),
-        'revenue': _to_float(r.revenue),
-    } for r in rows]
+    pos_rows = db.session.query(
+        Product.id,
+        Product.name,
+        ProductVariant.id.label('variant_id'),
+        ProductVariant.name.label('variant_name'),
+        Category.name.label('category_name'),
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('qty'),
+        func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('revenue'),
+    ).join(POSOrderItem, POSOrderItem.product_id == Product.id) \
+     .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .outerjoin(ProductVariant, ProductVariant.id == POSOrderItem.variant_id) \
+     .outerjoin(Category, Category.id == Product.main_category_id) \
+     .filter(
+        POSOrder.store_id == store_id,
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
+
+    merged = {}
+    for r in list(online_rows) + list(pos_rows):
+        key = (int(r.id), int(r.variant_id) if r.variant_id else None)
+        entry = merged.setdefault(key, {
+            'id': r.id,
+            'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
+            'category': r.category_name or 'Uncategorized',
+            'quantity': 0,
+            'revenue': 0.0,
+        })
+        entry['quantity'] += int(r.qty or 0)
+        entry['revenue'] += _to_float(r.revenue)
+
+    return sorted(merged.values(), key=lambda x: x['revenue'], reverse=True)[:limit]
 
 
 def _order_status_breakdown(store_id, start, end):
@@ -308,8 +350,16 @@ def _order_status_breakdown(store_id, start, end):
         ('pending', 0),
         ('cancelled', 0),
     ])
+    fold = {
+        'completed': 'delivered',
+        'accepted': 'preparing',
+        'done_preparing': 'preparing',
+    }
     for status, count in rows:
         key = (status or 'pending').lower()
+        key = fold.get(key, key)
+        if key not in out:
+            key = 'pending'
         out[key] = (out.get(key) or 0) + int(count or 0)
     return out
 
@@ -380,19 +430,28 @@ def _sales_by_category(store_id, start, end):
 
 
 def _peak_hours(store_id, start, end):
-    """Return 7 buckets across the day showing order counts."""
-    rows = db.session.query(
-        func.extract('hour', Order.created_at).label('h'),
-        func.count(Order.id),
-    ).filter(
+    """Order volume by Philippine local time-of-day buckets (online + POS)."""
+    by_hour = defaultdict(int)
+
+    online_ts = db.session.query(Order.created_at).filter(
         Order.store_id == store_id,
         Order.created_at >= start,
         Order.created_at < end,
-    ).group_by('h').all()
+    ).all()
+    for (ts,) in online_ts:
+        local = _to_pht(ts)
+        if local:
+            by_hour[local.hour] += 1
 
-    by_hour = defaultdict(int)
-    for hour, count in rows:
-        by_hour[int(hour or 0)] += int(count or 0)
+    pos_ts = db.session.query(POSOrder.created_at).filter(
+        POSOrder.store_id == store_id,
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).all()
+    for (ts,) in pos_ts:
+        local = _to_pht(ts)
+        if local:
+            by_hour[local.hour] += 1
 
     buckets = [
         ('8AM',  range(7, 10)),
@@ -400,65 +459,57 @@ def _peak_hours(store_id, start, end):
         ('12PM', range(12, 14)),
         ('2PM',  range(14, 16)),
         ('4PM',  range(16, 18)),
-        ('6PM',  range(18, 20)),
-        ('8PM',  range(20, 23)),
+        ('6PM',  range(18, 21)),
+        ('8PM+', list(range(21, 24)) + list(range(0, 7))),
     ]
     return [{'label': lbl, 'count': sum(by_hour[h] for h in span)} for lbl, span in buckets]
 
 
 def _revenue_series(store_id, start, end):
-    """Daily revenue + order count series across ``[start, end)``."""
-    online_rows = db.session.query(
-        func.date(Order.created_at).label('d'),
-        func.coalesce(func.sum(Order.total_amount), 0).label('rev'),
-        func.count(Order.id).label('orders'),
-    ).filter(
+    """Daily completed online + POS revenue, bucketed by Philippine calendar day."""
+    days = (end - start).days or 1
+    if days > 31:
+        return _bucketed_revenue(store_id, start, end, buckets=12)
+
+    online_rows = db.session.query(Order.created_at, Order.total_amount).filter(
         Order.store_id == store_id,
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
-    ).group_by('d').order_by('d').all()
-
-    pos_rows = db.session.query(
-        func.date(POSOrder.created_at).label('d'),
-        func.coalesce(func.sum(POSOrder.total_amount), 0).label('rev'),
-        func.count(POSOrder.id).label('orders'),
-    ).filter(
+    ).all()
+    pos_rows = db.session.query(POSOrder.created_at, POSOrder.total_amount).filter(
         POSOrder.store_id == store_id,
         POSOrder.created_at >= start,
         POSOrder.created_at < end,
-    ).group_by('d').order_by('d').all()
+    ).all()
 
-    # Normalize key because func.date type differs across engines.
-    def _k(day_value):
-        return day_value.isoformat() if hasattr(day_value, 'isoformat') else str(day_value)
+    online_by_day = defaultdict(lambda: [0.0, 0])
+    for ts, amt in online_rows:
+        d = _pht_date(ts)
+        if d:
+            online_by_day[d][0] += _to_float(amt)
+            online_by_day[d][1] += 1
 
-    online_by_day = {_k(r.d): (_to_float(r.rev), int(r.orders or 0)) for r in online_rows}
-    pos_by_day = {_k(r.d): (_to_float(r.rev), int(r.orders or 0)) for r in pos_rows}
-
-    days = (end - start).days or 1
-    # For long ranges, downsample to ~12 buckets
-    if days > 31:
-        return _bucketed_revenue(store_id, start, end, buckets=12)
+    pos_by_day = defaultdict(lambda: [0.0, 0])
+    for ts, amt in pos_rows:
+        d = _pht_date(ts)
+        if d:
+            pos_by_day[d][0] += _to_float(amt)
+            pos_by_day[d][1] += 1
 
     labels, revenues, order_counts = [], [], []
     online_revenues, pos_revenues = [], []
     online_orders, pos_orders = [], []
-    cur = start.date()
-    end_d = end.date()
-    while cur < end_d:
-        k = _k(cur)
-        o_rev, o_cnt = online_by_day.get(k, (0.0, 0))
-        p_rev, p_cnt = pos_by_day.get(k, (0.0, 0))
-        rev, oc = (o_rev + p_rev), (o_cnt + p_cnt)
+    for cur in _iter_pht_days(start, end):
+        o_rev, o_cnt = online_by_day.get(cur, [0.0, 0])
+        p_rev, p_cnt = pos_by_day.get(cur, [0.0, 0])
         labels.append(cur.strftime('%b %d'))
-        revenues.append(rev)
-        order_counts.append(oc)
+        revenues.append(o_rev + p_rev)
+        order_counts.append(o_cnt + p_cnt)
         online_revenues.append(o_rev)
         pos_revenues.append(p_rev)
         online_orders.append(o_cnt)
         pos_orders.append(p_cnt)
-        cur += timedelta(days=1)
     return {
         'labels': labels,
         'revenue': revenues,
@@ -539,9 +590,9 @@ def _bucketed_revenue(store_id, start, end, buckets=12):
 
 def _delivery_performance(store_id, start, end):
     """On-time rate, avg delivery time (minutes), cancellation %."""
-    delivered = db.session.query(Order).filter(
+    fulfilled = db.session.query(Order).filter(
         Order.store_id == store_id,
-        Order.status == 'delivered',
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
     ).all()
@@ -561,40 +612,35 @@ def _delivery_performance(store_id, start, end):
 
     delivery_minutes = []
     on_time = 0
-    for o in delivered:
-        if o.delivered_at and o.confirmed_at:
-            mins = (o.delivered_at - o.confirmed_at).total_seconds() / 60.0
-            if mins >= 0:
-                delivery_minutes.append(mins)
-                if mins <= 60:
-                    on_time += 1
-        elif o.delivered_at and o.created_at:
-            mins = (o.delivered_at - o.created_at).total_seconds() / 60.0
-            if mins >= 0 and mins < 60 * 24 * 3:
-                delivery_minutes.append(mins)
-                if mins <= 90:
-                    on_time += 1
+    for o in fulfilled:
+        mins, thresh = _measure_order_delivery(o)
+        if mins is None:
+            continue
+        delivery_minutes.append(mins)
+        if mins <= thresh:
+            on_time += 1
 
     avg_minutes = round(sum(delivery_minutes) / len(delivery_minutes), 1) if delivery_minutes else 0.0
-    on_time_rate = round((on_time / len(delivered)) * 100, 1) if delivered else 0.0
+    on_time_rate = round((on_time / len(delivery_minutes)) * 100, 1) if delivery_minutes else 0.0
     cancel_rate = round((cancelled / total) * 100, 1) if total else 0.0
 
-    # Per-day on-time rate (last 7 days within the range)
     series_days = []
     series_rates = []
-    end_d = end.date()
+    end_d = _pht_date(end) or end.date()
     for i in range(7):
         d = end_d - timedelta(days=7 - i)
-        days_orders = [o for o in delivered if o.delivered_at and o.delivered_at.date() == d]
-        if days_orders:
-            ok = sum(
-                1 for o in days_orders
-                if (o.confirmed_at and (o.delivered_at - o.confirmed_at).total_seconds() / 60 <= 60)
-                or (not o.confirmed_at and (o.delivered_at - o.created_at).total_seconds() / 60 <= 90)
-            )
-            series_rates.append(round((ok / len(days_orders)) * 100, 1))
-        else:
-            series_rates.append(0)
+        days_orders = []
+        ok = 0
+        for o in fulfilled:
+            if not o.delivered_at or _pht_date(o.delivered_at) != d:
+                continue
+            mins, thresh = _measure_order_delivery(o)
+            if mins is None:
+                continue
+            days_orders.append(mins)
+            if mins <= thresh:
+                ok += 1
+        series_rates.append(round((ok / len(days_orders)) * 100, 1) if days_orders else 0)
         series_days.append(d.strftime('%a'))
 
     return {
@@ -682,13 +728,16 @@ def compute_analytics(
     pos_orders = _pos_order_count(store.id, start, end)
     total_orders = online_orders + pos_orders
 
-    avg_order = (total_rev / total_orders) if total_orders else 0.0
+    # AOV = completed ticket average (revenue is completed online + all POS)
+    sold_orders = completed_online + pos_orders
+    avg_order = (total_rev / sold_orders) if sold_orders else 0.0
     new_customers = _new_customer_count(store.id, start, end)
 
     # Previous-period comparisons for the % badges
     prev_rev = _online_revenue(store.id, prev_start, prev_end) + _pos_revenue(store.id, prev_start, prev_end)
+    prev_completed = _completed_online_order_count(store.id, prev_start, prev_end) + _pos_order_count(store.id, prev_start, prev_end)
     prev_orders = _online_order_count(store.id, prev_start, prev_end) + _pos_order_count(store.id, prev_start, prev_end)
-    prev_avg = (prev_rev / prev_orders) if prev_orders else 0.0
+    prev_avg = (prev_rev / prev_completed) if prev_completed else 0.0
     prev_new_customers = _new_customer_count(store.id, prev_start, prev_end)
 
     def pct_change(now, before):
@@ -722,7 +771,7 @@ def compute_analytics(
 
             'all_customers': total_customers,
             'all_products': total_products,
-            'completed_orders': completed_online,
+            'completed_orders': completed_online + pos_orders,
         },
         'deltas': {
             'revenue_pct': pct_change(total_rev, prev_rev),
@@ -1568,8 +1617,9 @@ def _platform_new_customer_count(start, end) -> int:
 
 
 def _platform_top_products(start, end, limit=5):
+    """Top products by completed online + POS revenue in [start, end)."""
     from app.models import ProductVariant
-    rows = db.session.query(
+    online_rows = db.session.query(
         Product.id,
         Product.name,
         ProductVariant.id.label('variant_id'),
@@ -1585,22 +1635,45 @@ def _platform_top_products(start, end, limit=5):
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
-     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name) \
-      .order_by(func.sum(OrderItem.quantity * OrderItem.price).desc()) \
-      .limit(limit).all()
+     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
 
-    return [{
-        'id': r.id,
-        'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
-        'category': r.category_name or 'Uncategorized',
-        'quantity': int(r.qty or 0),
-        'revenue': _to_float(r.revenue),
-    } for r in rows]
+    pos_rows = db.session.query(
+        Product.id,
+        Product.name,
+        ProductVariant.id.label('variant_id'),
+        ProductVariant.name.label('variant_name'),
+        Category.name.label('category_name'),
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('qty'),
+        func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('revenue'),
+    ).join(POSOrderItem, POSOrderItem.product_id == Product.id) \
+     .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .outerjoin(ProductVariant, ProductVariant.id == POSOrderItem.variant_id) \
+     .outerjoin(Category, Category.id == Product.main_category_id) \
+     .filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
+
+    merged = {}
+    for r in list(online_rows) + list(pos_rows):
+        key = (int(r.id), int(r.variant_id) if r.variant_id else None)
+        entry = merged.setdefault(key, {
+            'id': r.id,
+            'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
+            'category': r.category_name or 'Uncategorized',
+            'quantity': 0,
+            'revenue': 0.0,
+        })
+        entry['quantity'] += int(r.qty or 0)
+        entry['revenue'] += _to_float(r.revenue)
+
+    out = sorted(merged.values(), key=lambda x: x['revenue'], reverse=True)
+    return out[:limit]
 
 
 def _platform_top_stores(start, end, limit=5):
-    """Top stores by delivered revenue in [start, end)."""
-    rows = db.session.query(
+    """Top stores by completed online + POS revenue in [start, end)."""
+    online_rows = db.session.query(
         Store.id,
         Store.name,
         func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
@@ -1610,24 +1683,53 @@ def _platform_top_stores(start, end, limit=5):
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
-     ).group_by(Store.id, Store.name) \
-      .order_by(func.sum(Order.total_amount).desc()) \
-      .limit(limit).all()
+     ).group_by(Store.id, Store.name).all()
+
+    pos_rows = db.session.query(
+        Store.id,
+        Store.name,
+        func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue'),
+        func.count(POSOrder.id).label('orders'),
+    ).join(POSOrder, POSOrder.store_id == Store.id) \
+     .filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+     ).group_by(Store.id, Store.name).all()
+
+    merged = {}
+    for r in online_rows:
+        merged[int(r.id)] = {
+            'id': r.id,
+            'name': r.name,
+            'revenue': _to_float(r.revenue),
+            'orders': int(r.orders or 0),
+        }
+    for r in pos_rows:
+        entry = merged.setdefault(int(r.id), {
+            'id': r.id,
+            'name': r.name,
+            'revenue': 0.0,
+            'orders': 0,
+        })
+        entry['revenue'] += _to_float(r.revenue)
+        entry['orders'] += int(r.orders or 0)
+
+    rows = sorted(merged.values(), key=lambda x: x['revenue'], reverse=True)[:limit]
 
     # Store.logo_url is a Python @property (not a SQL column), so resolve it
     # after the aggregate query using ORM instances.
-    store_ids = [int(r.id) for r in rows]
+    store_ids = [int(r['id']) for r in rows]
     store_map = {}
     if store_ids:
         for s in Store.query.filter(Store.id.in_(store_ids)).all():
             store_map[s.id] = s
 
     return [{
-        'id': r.id,
-        'name': r.name,
-        'logo_url': (store_map.get(r.id).logo_url if store_map.get(r.id) else None),
-        'revenue': _to_float(r.revenue),
-        'orders': int(r.orders or 0),
+        'id': r['id'],
+        'name': r['name'],
+        'logo_url': (store_map.get(r['id']).logo_url if store_map.get(r['id']) else None),
+        'revenue': r['revenue'],
+        'orders': r['orders'],
     } for r in rows]
 
 
@@ -1647,8 +1749,17 @@ def _platform_order_status_breakdown(start, end):
         ('pending', 0),
         ('cancelled', 0),
     ])
+    # Fold less-common statuses into the five chart buckets analytics.html expects.
+    fold = {
+        'completed': 'delivered',
+        'accepted': 'preparing',
+        'done_preparing': 'preparing',
+    }
     for status, count in rows:
         key = (status or 'pending').lower()
+        key = fold.get(key, key)
+        if key not in out:
+            key = 'pending'
         out[key] = (out.get(key) or 0) + int(count or 0)
     return out
 
@@ -1717,17 +1828,26 @@ def _platform_sales_by_category(start, end):
 
 
 def _platform_peak_hours(start, end):
-    rows = db.session.query(
-        func.extract('hour', Order.created_at).label('h'),
-        func.count(Order.id),
-    ).filter(
+    """Order volume by Philippine local time-of-day buckets (online + POS)."""
+    by_hour = defaultdict(int)
+
+    online_ts = db.session.query(Order.created_at).filter(
         Order.created_at >= start,
         Order.created_at < end,
-    ).group_by('h').all()
+    ).all()
+    for (ts,) in online_ts:
+        local = _to_pht(ts)
+        if local:
+            by_hour[local.hour] += 1
 
-    by_hour = defaultdict(int)
-    for hour, count in rows:
-        by_hour[int(hour or 0)] += int(count or 0)
+    pos_ts = db.session.query(POSOrder.created_at).filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).all()
+    for (ts,) in pos_ts:
+        local = _to_pht(ts)
+        if local:
+            by_hour[local.hour] += 1
 
     buckets = [
         ('8AM',  range(7, 10)),
@@ -1735,60 +1855,55 @@ def _platform_peak_hours(start, end):
         ('12PM', range(12, 14)),
         ('2PM',  range(14, 16)),
         ('4PM',  range(16, 18)),
-        ('6PM',  range(18, 20)),
-        ('8PM',  range(20, 23)),
+        ('6PM',  range(18, 21)),
+        ('8PM+', list(range(21, 24)) + list(range(0, 7))),
     ]
     return [{'label': lbl, 'count': sum(by_hour[h] for h in span)} for lbl, span in buckets]
 
 
 def _platform_revenue_series(start, end):
-    online_rows = db.session.query(
-        func.date(Order.created_at).label('d'),
-        func.coalesce(func.sum(Order.total_amount), 0).label('rev'),
-        func.count(Order.id).label('orders'),
-    ).filter(
-        Order.status.in_(COMPLETED_ORDER_STATUSES),
-        Order.created_at >= start,
-        Order.created_at < end,
-    ).group_by('d').order_by('d').all()
-
-    pos_rows = db.session.query(
-        func.date(POSOrder.created_at).label('d'),
-        func.coalesce(func.sum(POSOrder.total_amount), 0).label('rev'),
-        func.count(POSOrder.id).label('orders'),
-    ).filter(
-        POSOrder.created_at >= start,
-        POSOrder.created_at < end,
-    ).group_by('d').order_by('d').all()
-
-    def _k(day_value):
-        return day_value.isoformat() if hasattr(day_value, 'isoformat') else str(day_value)
-
-    online_by_day = {_k(r.d): (_to_float(r.rev), int(r.orders or 0)) for r in online_rows}
-    pos_by_day = {_k(r.d): (_to_float(r.rev), int(r.orders or 0)) for r in pos_rows}
-
+    """Daily completed online + POS revenue, bucketed by Philippine calendar day."""
     days = (end - start).days or 1
     if days > 31:
         return _platform_bucketed_revenue(start, end, buckets=12)
 
+    online_rows = db.session.query(Order.created_at, Order.total_amount).filter(
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
+        Order.created_at >= start,
+        Order.created_at < end,
+    ).all()
+    pos_rows = db.session.query(POSOrder.created_at, POSOrder.total_amount).filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).all()
+
+    online_by_day = defaultdict(lambda: [0.0, 0])
+    for ts, amt in online_rows:
+        d = _pht_date(ts)
+        if d:
+            online_by_day[d][0] += _to_float(amt)
+            online_by_day[d][1] += 1
+
+    pos_by_day = defaultdict(lambda: [0.0, 0])
+    for ts, amt in pos_rows:
+        d = _pht_date(ts)
+        if d:
+            pos_by_day[d][0] += _to_float(amt)
+            pos_by_day[d][1] += 1
+
     labels, revenues, order_counts = [], [], []
     online_revenues, pos_revenues = [], []
     online_orders, pos_orders = [], []
-    cur = start.date()
-    end_d = end.date()
-    while cur < end_d:
-        k = _k(cur)
-        o_rev, o_cnt = online_by_day.get(k, (0.0, 0))
-        p_rev, p_cnt = pos_by_day.get(k, (0.0, 0))
-        rev, oc = (o_rev + p_rev), (o_cnt + p_cnt)
+    for cur in _iter_pht_days(start, end):
+        o_rev, o_cnt = online_by_day.get(cur, [0.0, 0])
+        p_rev, p_cnt = pos_by_day.get(cur, [0.0, 0])
         labels.append(cur.strftime('%b %d'))
-        revenues.append(rev)
-        order_counts.append(oc)
+        revenues.append(o_rev + p_rev)
+        order_counts.append(o_cnt + p_cnt)
         online_revenues.append(o_rev)
         pos_revenues.append(p_rev)
         online_orders.append(o_cnt)
         pos_orders.append(p_cnt)
-        cur += timedelta(days=1)
     return {
         'labels': labels,
         'revenue': revenues,
@@ -1865,9 +1980,24 @@ def _platform_bucketed_revenue(start, end, buckets=12):
     }
 
 
+def _measure_order_delivery(o):
+    """Return (minutes, on_time_threshold_minutes) or (None, None) if unmeasurable."""
+    if not getattr(o, 'delivered_at', None):
+        return None, None
+    if o.confirmed_at:
+        mins = (o.delivered_at - o.confirmed_at).total_seconds() / 60.0
+        if mins >= 0:
+            return mins, 60.0
+    elif o.created_at:
+        mins = (o.delivered_at - o.created_at).total_seconds() / 60.0
+        if mins >= 0 and mins < 60 * 24 * 3:
+            return mins, 90.0
+    return None, None
+
+
 def _platform_delivery_performance(start, end):
-    delivered = db.session.query(Order).filter(
-        Order.status == 'delivered',
+    fulfilled = db.session.query(Order).filter(
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
     ).all()
@@ -1885,39 +2015,38 @@ def _platform_delivery_performance(start, end):
 
     delivery_minutes = []
     on_time = 0
-    for o in delivered:
-        if o.delivered_at and o.confirmed_at:
-            mins = (o.delivered_at - o.confirmed_at).total_seconds() / 60.0
-            if mins >= 0:
-                delivery_minutes.append(mins)
-                if mins <= 60:
-                    on_time += 1
-        elif o.delivered_at and o.created_at:
-            mins = (o.delivered_at - o.created_at).total_seconds() / 60.0
-            if mins >= 0 and mins < 60 * 24 * 3:
-                delivery_minutes.append(mins)
-                if mins <= 90:
-                    on_time += 1
+    for o in fulfilled:
+        mins, thresh = _measure_order_delivery(o)
+        if mins is None:
+            continue
+        delivery_minutes.append(mins)
+        if mins <= thresh:
+            on_time += 1
 
     avg_minutes = round(sum(delivery_minutes) / len(delivery_minutes), 1) if delivery_minutes else 0.0
-    on_time_rate = round((on_time / len(delivered)) * 100, 1) if delivered else 0.0
+    # Denominator = orders with a measurable delivery window (not all fulfilled).
+    on_time_rate = round((on_time / len(delivery_minutes)) * 100, 1) if delivery_minutes else 0.0
     cancel_rate = round((cancelled / total) * 100, 1) if total else 0.0
 
     series_days = []
     series_rates = []
-    end_d = end.date()
+    end_d = _pht_date(end) or end.date()
     for i in range(7):
         d = end_d - timedelta(days=7 - i)
-        days_orders = [o for o in delivered if o.delivered_at and o.delivered_at.date() == d]
-        if days_orders:
-            ok = sum(
-                1 for o in days_orders
-                if (o.confirmed_at and (o.delivered_at - o.confirmed_at).total_seconds() / 60 <= 60)
-                or (not o.confirmed_at and (o.delivered_at - o.created_at).total_seconds() / 60 <= 90)
-            )
-            series_rates.append(round((ok / len(days_orders)) * 100, 1))
-        else:
-            series_rates.append(0)
+        days_orders = []
+        ok = 0
+        for o in fulfilled:
+            if not o.delivered_at:
+                continue
+            if _pht_date(o.delivered_at) != d:
+                continue
+            mins, thresh = _measure_order_delivery(o)
+            if mins is None:
+                continue
+            days_orders.append(mins)
+            if mins <= thresh:
+                ok += 1
+        series_rates.append(round((ok / len(days_orders)) * 100, 1) if days_orders else 0)
         series_days.append(d.strftime('%a'))
 
     return {
@@ -2003,12 +2132,15 @@ def compute_admin_analytics(
     pos_orders = _platform_pos_order_count(start, end)
     total_orders = online_orders + pos_orders
 
-    avg_order = (total_rev / total_orders) if total_orders else 0.0
+    # AOV = completed ticket average (revenue is completed online + all POS)
+    sold_orders = completed_online + pos_orders
+    avg_order = (total_rev / sold_orders) if sold_orders else 0.0
     new_customers = _platform_new_customer_count(start, end)
 
     prev_rev = _platform_online_revenue(prev_start, prev_end) + _platform_pos_revenue(prev_start, prev_end)
+    prev_completed = _platform_completed_online_order_count(prev_start, prev_end) + _platform_pos_order_count(prev_start, prev_end)
     prev_orders = _platform_online_order_count(prev_start, prev_end) + _platform_pos_order_count(prev_start, prev_end)
-    prev_avg = (prev_rev / prev_orders) if prev_orders else 0.0
+    prev_avg = (prev_rev / prev_completed) if prev_completed else 0.0
     prev_new_customers = _platform_new_customer_count(prev_start, prev_end)
 
     def pct_change(now, before):
@@ -2043,7 +2175,7 @@ def compute_admin_analytics(
             'new_customers': new_customers,
             'all_customers': total_customers,
             'all_products': total_products,
-            'completed_orders': completed_online,
+            'completed_orders': completed_online + pos_orders,
             'active_stores': total_active_stores,
         },
         'deltas': {

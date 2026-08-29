@@ -18,7 +18,7 @@ EMAIL_SERVICE_UNAVAILABLE_MESSAGE = (
     "This is a temporary system issue on our side — not a problem with your details. "
     "Please contact the developer or support team so they can restore email delivery, "
     "then try signing up again. "
-    "Support: support@eflora.ph"
+    "Support: efloralaguna@gmail.com"
 )
 
 

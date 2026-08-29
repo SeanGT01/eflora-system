@@ -393,6 +393,18 @@ def get_authenticated_user_id():
     return None
 
 
+def _point_geom_lat_lng(geom):
+    """WKT POINT is stored as (lng lat); Shapely x=lng, y=lat."""
+    if geom is None:
+        return None, None
+    try:
+        from geoalchemy2.shape import to_shape
+        point = to_shape(geom)
+        return float(point.y), float(point.x)
+    except Exception:
+        return None, None
+
+
 def _serialize_customer_order(
     order,
     rated_item_ids=None,
@@ -1737,6 +1749,13 @@ def seller_apply():
             latest_rejected.reviewed_at = None
             latest_rejected.reviewed_by = None
             latest_rejected.submitted_at = datetime.utcnow()
+            from app.utils.admin_notifications import notify_admins
+            notify_admins(
+                title='Seller application resubmitted',
+                message=f'"{latest_rejected.store_name}" was resubmitted and needs review.',
+                type='seller_app_resubmitted',
+                reference_id=latest_rejected.id,
+            )
             db.session.commit()
 
             return jsonify({
@@ -1770,6 +1789,14 @@ def seller_apply():
         )
         
         db.session.add(application)
+        db.session.flush()
+        from app.utils.admin_notifications import notify_admins
+        notify_admins(
+            title='New seller application',
+            message=f'"{application.store_name}" submitted by {user.full_name or user.email} needs review.',
+            type='seller_app_pending',
+            reference_id=application.id,
+        )
         db.session.commit()
         
         return jsonify({
@@ -3089,10 +3116,16 @@ def _seller_portal_latest_application(user_id):
 
 def _finalize_seller_signup_from_otp(record, email):
     """Create seller user after OTP verification; log in and clear OTP row."""
+    def _clear_pending_seller_session():
+        session.pop('pending_seller_reg_email', None)
+        session.pop('pending_seller_reg_channel', None)
+        session.pop('pending_seller_reg_dest', None)
+        session.pop('pending_seller_reg_login_id', None)
+
     if User.query.filter_by(email=email).first():
         db.session.delete(record)
         db.session.commit()
-        session.pop('pending_seller_reg_email', None)
+        _clear_pending_seller_session()
         return redirect(url_for('templates.login'))
 
     pending = record.signup_data or {}
@@ -3109,7 +3142,7 @@ def _finalize_seller_signup_from_otp(record, email):
     db.session.delete(record)
     db.session.commit()
 
-    session.pop('pending_seller_reg_email', None)
+    _clear_pending_seller_session()
     session.permanent = True
     session['user_id'] = user.id
     session['user_name'] = user.full_name
@@ -3153,15 +3186,11 @@ def seller_signup_landing():
 
 @templates_bp.route('/seller/signup/start', methods=['POST'])
 def seller_signup_start():
-    """Validate account fields, send Gmail OTP, redirect to verify step."""
+    """Validate account fields (email OR phone), send OTP, redirect to verify."""
     if session.get('user_id'):
-        current_user = User.query.get(session.get('user_id'))
-        role_label = (getattr(current_user, 'role', None) or session.get('role') or 'existing').strip()
         return render_template(
             'seller_signup_landing.html',
-            error=(
-                f"Email already exists"
-            ),
+            error='You are already signed in. Sign out first to create a new seller account.',
             form_data=request.form,
         )
 
@@ -3175,16 +3204,22 @@ def seller_signup_start():
         )
         from app.utils.email_helper import send_seller_signup_otp_email
         from app.utils.otp_delivery import deliver_otp, sync_hashed_otp_record
-        from app.utils.phone_utils import is_valid_ph_mobile, mask_email, mask_phone
+        from app.utils.phone_utils import (
+            display_login_id,
+            is_synthetic_account_email,
+            is_valid_ph_mobile,
+            mask_email,
+            mask_phone,
+            normalize_ph_mobile,
+            phone_to_account_email,
+        )
 
         full_name = (request.form.get('full_name') or '').strip()
-        email = (request.form.get('email') or '').strip().lower()
-        phone_raw = (request.form.get('phone') or '').strip()
-        phone = _normalize_ph_mobile(phone_raw) if phone_raw else None
+        identifier = (request.form.get('identifier') or request.form.get('email') or '').strip()
         password = request.form.get('password') or ''
         confirm_password = request.form.get('confirm_password') or ''
 
-        if not all([full_name, email, password, confirm_password]):
+        if not all([full_name, identifier, password, confirm_password]):
             return render_template(
                 'seller_signup_landing.html',
                 error='All fields are required.',
@@ -3206,15 +3241,29 @@ def seller_signup_start():
                 form_data=request.form,
             )
 
-        if phone_raw and (not phone or not is_valid_ph_mobile(phone_raw)):
+        # Same identifier rules as customer registration: email OR PH mobile.
+        email = None
+        phone = None
+        channel = 'email'
+        if '@' in identifier:
+            email = identifier.lower()
+            if is_synthetic_account_email(email) or '@' not in email or '.' not in email.split('@')[-1]:
+                return render_template(
+                    'seller_signup_landing.html',
+                    error='Enter a valid email address or Philippine mobile number.',
+                    form_data=request.form,
+                )
+            channel = 'email'
+        elif is_valid_ph_mobile(identifier):
+            phone = normalize_ph_mobile(identifier)
+            email = phone_to_account_email(phone)
+            channel = 'sms'
+        else:
             return render_template(
                 'seller_signup_landing.html',
-                error='Please enter a valid Philippine mobile number (e.g., 09171234567).',
+                error='Enter a valid email address or Philippine mobile number (e.g. 09171234567).',
                 form_data=request.form,
             )
-
-        # Smart channel: phone present → SMS, else email
-        channel = 'sms' if phone else 'email'
 
         if phone and _phone_taken_web(phone, exclude_email=email):
             return render_template(
@@ -3225,15 +3274,16 @@ def seller_signup_start():
 
         existing = User.query.filter_by(email=email).first()
         if existing:
+            kind = 'phone number' if channel == 'sms' else 'email'
             if existing.role == 'customer':
                 existing_msg = (
-                    'This email is already registered as a customer account. '
-                    'Please sign in to continue your seller application, or use a different email.'
+                    f'This {kind} is already registered as a customer account. '
+                    'Please sign in to continue your seller application, or use a different email/phone.'
                 )
             else:
                 existing_msg = (
-                    f"This email is already registered as a {existing.role} account. "
-                    'Please sign in, or use a different email.'
+                    f'This {kind} is already registered as a {existing.role} account. '
+                    'Please sign in, or use a different email/phone.'
                 )
             return render_template(
                 'seller_signup_landing.html',
@@ -3255,7 +3305,10 @@ def seller_signup_start():
             if not allowed:
                 session['pending_seller_reg_email'] = email
                 session['pending_seller_reg_channel'] = channel
-                session['pending_seller_reg_dest'] = mask_phone(phone) if channel == 'sms' else mask_email(email)
+                session['pending_seller_reg_dest'] = (
+                    mask_phone(phone) if channel == 'sms' else mask_email(email)
+                )
+                session['pending_seller_reg_login_id'] = display_login_id(email=email, phone=phone)
                 return redirect(
                     url_for('templates.seller_signup_verify', cooldown=retry_after)
                 )
@@ -3289,7 +3342,6 @@ def seller_signup_start():
             sms_purpose='verification',
         )
         if not ok:
-            db.session.rollback()
             return render_template(
                 'seller_signup_landing.html',
                 error=(fail or {}).get('error') or 'Failed to send verification code.',
@@ -3301,6 +3353,7 @@ def seller_signup_start():
         session['pending_seller_reg_email'] = email
         session['pending_seller_reg_channel'] = channel
         session['pending_seller_reg_dest'] = meta.get('destination_masked')
+        session['pending_seller_reg_login_id'] = display_login_id(email=email, phone=phone)
         return redirect(url_for('templates.seller_signup_verify'))
 
     except Exception as e:
@@ -3479,7 +3532,15 @@ def seller_signup_complete():
     latest = _seller_portal_latest_application(user.id)
     if latest and latest.status in ('pending', 'resubmitted'):
         return redirect(url_for('templates.seller_signup_status'))
-    return render_template('seller_signup_complete.html', user=user, application=latest)
+
+    from app.utils.phone_utils import display_login_id
+
+    return render_template(
+        'seller_signup_complete.html',
+        user=user,
+        application=latest,
+        login_id=display_login_id(email=user.email, phone=user.phone),
+    )
 
 
 @templates_bp.route('/seller/suspended', methods=['GET'])
@@ -3520,10 +3581,19 @@ def seller_signup_status():
         return redirect(url_for('templates.seller_store_suspended'))
 
     latest = _seller_portal_latest_application(user.id)
+    submitted_at_display = ''
+    reviewed_at_display = ''
+    if latest and latest.submitted_at:
+        submitted_at_display = _fmt_pht(latest.submitted_at, '%b %d, %Y at %I:%M %p')
+    if latest and latest.reviewed_at:
+        reviewed_at_display = _fmt_pht(latest.reviewed_at, '%b %d, %Y at %I:%M %p')
+
     return render_template(
         'seller_signup_status.html',
         user=user,
         application=latest,
+        submitted_at_display=submitted_at_display,
+        reviewed_at_display=reviewed_at_display,
     )
 
 
@@ -3541,7 +3611,8 @@ def orders_data():
         .options(
             joinedload(Order.store),
             joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
-            joinedload(Order.items).joinedload(OrderItem.variant)
+            joinedload(Order.items).joinedload(OrderItem.variant),
+            joinedload(Order.items).joinedload(OrderItem.addons).joinedload(OrderItemAddon.addon_option),
         )
         .filter_by(customer_id=user_id)
         .order_by(Order.created_at.desc())
@@ -3606,8 +3677,10 @@ def order_details(order_id):
         Order.query
         .options(
             joinedload(Order.store),
+            joinedload(Order.assigned_rider).joinedload(Rider.user),
             joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
-            joinedload(Order.items).joinedload(OrderItem.variant)
+            joinedload(Order.items).joinedload(OrderItem.variant),
+            joinedload(Order.items).joinedload(OrderItem.addons).joinedload(OrderItemAddon.addon_option),
         )
         .filter_by(id=order_id, customer_id=user_id)
         .first()
@@ -3619,6 +3692,70 @@ def order_details(order_id):
     order_dict = _serialize_customer_order(order)
     order_dict['date'] = order_dict['created_at']
     return jsonify(order_dict)
+
+
+@templates_bp.route('/api/account/orders/<int:order_id>/tracking', methods=['GET'])
+def account_order_tracking(order_id):
+    """Latest rider GPS + pickup/drop-off for live customer map (session auth)."""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        user_id = int(session['user_id'])
+        order = (
+            Order.query
+            .filter_by(id=order_id, customer_id=user_id)
+            .options(
+                joinedload(Order.store),
+                joinedload(Order.assigned_rider).joinedload(Rider.user),
+            )
+            .first()
+        )
+        if not order:
+            return jsonify({'error': 'Order not found'}), 404
+
+        live = order.status == 'on_delivery' and order.rider_id is not None
+        rider_lat = rider_lng = None
+        updated_at = None
+        if live:
+            loc = (
+                RiderLocation.query
+                .filter_by(rider_id=order.rider_id, order_id=order.id)
+                .order_by(RiderLocation.timestamp.desc())
+                .first()
+            )
+            if loc is None:
+                loc = (
+                    RiderLocation.query
+                    .filter_by(rider_id=order.rider_id)
+                    .order_by(RiderLocation.timestamp.desc())
+                    .first()
+                )
+            if loc is not None:
+                rider_lat, rider_lng = _point_geom_lat_lng(loc.location)
+                updated_at = loc.timestamp.isoformat() if loc.timestamp else None
+
+        store = order.store
+        return jsonify({
+            'live': live,
+            'status': order.status,
+            'rider_name': (
+                order.assigned_rider.user.full_name
+                if order.assigned_rider and order.assigned_rider.user
+                else None
+            ),
+            'rider_latitude': rider_lat,
+            'rider_longitude': rider_lng,
+            'rider_updated_at': updated_at,
+            'customer_latitude': order.customer_latitude,
+            'customer_longitude': order.customer_longitude,
+            'store_latitude': float(store.latitude) if store and store.latitude is not None else None,
+            'store_longitude': float(store.longitude) if store and store.longitude is not None else None,
+        })
+    except Exception as e:
+        current_app.logger.exception('account_order_tracking: %s', e)
+        return jsonify({'error': str(e)}), 500
+
 
 @templates_bp.route('/api/account/orders/<int:order_id>/cancel', methods=['POST'])
 def cancel_order(order_id):
@@ -4002,15 +4139,71 @@ def contact():
     """Contact page"""
     return render_template('contact.html')
 
+
+_DEFAULT_PUBLIC_FAQS = (
+    {
+        'question': 'What is E-FLORA?',
+        'answer': 'E-FLORA is a marketplace that connects you with local flower and plant shops — so you can browse arrangements, order online, and get fresh blooms delivered from nearby partners.',
+    },
+    {
+        'question': 'Where do you deliver?',
+        'answer': 'Delivery depends on each partner shop’s coverage area, typically across cities and barangays in Laguna. Set your address in your account to see which shops can deliver to you.',
+    },
+    {
+        'question': 'How do I track my order?',
+        'answer': 'Open My Orders after checkout. You’ll see status updates as the shop prepares and delivers your order. You can also message the shop from chat when needed.',
+    },
+    {
+        'question': 'Can I cancel an order?',
+        'answer': 'Yes, while the shop hasn’t started preparing. Once an order is accepted and in preparation, cancel options may close — contact the shop or support right away if plans change.',
+    },
+    {
+        'question': 'What if my flowers arrive damaged?',
+        'answer': 'Message the shop or E-FLORA support within 24 hours with your order number and photos. Eligible issues may be resolved with a replacement or refund. See our Returns page for details.',
+    },
+    {
+        'question': 'How do I become a seller?',
+        'answer': 'Use Become a Seller from the footer or account menu, complete the signup steps, and wait for admin approval. Once approved, you can list products and fulfill orders from your seller dashboard.',
+    },
+    {
+        'question': 'Do I need an account to order?',
+        'answer': 'Yes — a free customer account lets you save addresses, track orders, chat with shops, and keep your wishlist.',
+    },
+)
+
+
 @templates_bp.route('/faq')
 def faq():
-    """FAQ page"""
-    return render_template('faq.html')
+    """FAQ page — prefers admin-managed SupportFAQ rows, with sensible fallbacks."""
+    faqs = []
+    try:
+        _ensure_support_faqs_table()
+        rows = (
+            SupportFAQ.query
+            .filter_by(is_active=True)
+            .order_by(SupportFAQ.updated_at.desc(), SupportFAQ.id.desc())
+            .limit(50)
+            .all()
+        )
+        faqs = [{'question': r.question, 'answer': r.answer} for r in rows]
+    except Exception as ex:
+        current_app.logger.warning('faq page: could not load SupportFAQ (%s)', ex)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+    if not faqs:
+        faqs = list(_DEFAULT_PUBLIC_FAQS)
+
+    return render_template('faq.html', faqs=faqs)
+
 
 @templates_bp.route('/shipping')
 def shipping():
     """Shipping policy page"""
     return render_template('shipping.html')
+
 
 @templates_bp.route('/returns')
 def returns():
@@ -4249,8 +4442,13 @@ def dashboard():
 def _render_admin_dashboard():
     """Render the admin dashboard with platform-wide aggregates."""
     from sqlalchemy import func
-    from datetime import date, timedelta
-    from app.utils.report_service import period_range
+    from app.utils.report_service import (
+        period_range,
+        _platform_new_customer_count,
+        _pht_date,
+        _iter_pht_days,
+        COMPLETED_ORDER_STATUSES,
+    )
 
     period = (request.args.get('period') or 'month').lower().strip()
     custom_from = request.args.get('from')
@@ -4259,13 +4457,11 @@ def _render_admin_dashboard():
     prev_start = range_start - (range_end - range_start)
     prev_end = range_start
 
-    today = date.today()
-
     # Revenue KPI: online = delivered/completed, POS = all
     online_revenue = db.session.query(
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).scalar() or 0
@@ -4280,7 +4476,7 @@ def _render_admin_dashboard():
     prev_online_revenue = db.session.query(
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= prev_start,
         Order.created_at < prev_end,
     ).scalar() or 0
@@ -4320,36 +4516,28 @@ def _render_admin_dashboard():
     if orders_prev_month > 0:
         orders_change = round(((orders_this_month - orders_prev_month) / orders_prev_month) * 100, 1)
 
-    # Customers KPI: new customer accounts registered in period
-    customers_this_month = db.session.query(func.count(User.id)).filter(
-        User.role == 'customer',
-        User.created_at >= range_start,
-        User.created_at < range_end,
-    ).scalar() or 0
-    customers_prev_month = db.session.query(func.count(User.id)).filter(
-        User.role == 'customer',
-        User.created_at >= prev_start,
-        User.created_at < prev_end,
-    ).scalar() or 0
+    # Customers KPI: first-time buyers (matches analytics New Customers)
+    customers_this_month = _platform_new_customer_count(range_start, range_end)
+    customers_prev_month = _platform_new_customer_count(prev_start, prev_end)
     customers_change = 0
     if customers_prev_month > 0:
         customers_change = round(((customers_this_month - customers_prev_month) / customers_prev_month) * 100, 1)
 
-    # Delivery rate: (delivered+completed) / (delivered+completed+cancelled)
+    # Fulfillment success among resolved online orders (not punctuality)
     total_resolved = Order.query.filter(
         Order.status.in_(['delivered', 'completed', 'cancelled']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
     delivered_this_month = Order.query.filter(
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
     delivery_rate = round((delivered_this_month / total_resolved * 100), 1) if total_resolved > 0 else 100.0
 
-    # Top products: online delivered/completed + POS all
-    top_products_query = db.session.query(
+    # Top products: completed online + POS, merged by product/variant
+    online_top = db.session.query(
         Product.id,
         Product.name,
         ProductVariant.id.label('variant_id'),
@@ -4363,26 +4551,48 @@ def _render_admin_dashboard():
      .outerjoin(Store, Store.id == Product.store_id) \
      .outerjoin(Category, Category.id == Product.main_category_id) \
      .filter(
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
      ) \
-     .group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Store.name, Category.name) \
-     .order_by(func.sum(OrderItem.quantity).desc()) \
-     .limit(5).all()
+     .group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Store.name, Category.name).all()
 
-    top_products = [{
-        'id': r.id,
-        'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
-        'store_name': r.store_name or '—',
-        'category': r.category_name or 'General',
-        'total_sold': int(r.total_sold or 0),
-    } for r in top_products_query]
+    pos_top = db.session.query(
+        Product.id,
+        Product.name,
+        ProductVariant.id.label('variant_id'),
+        ProductVariant.name.label('variant_name'),
+        Store.name.label('store_name'),
+        Category.name.label('category_name'),
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('total_sold'),
+    ).join(POSOrderItem, POSOrderItem.product_id == Product.id) \
+     .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .outerjoin(ProductVariant, ProductVariant.id == POSOrderItem.variant_id) \
+     .outerjoin(Store, Store.id == Product.store_id) \
+     .outerjoin(Category, Category.id == Product.main_category_id) \
+     .filter(
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
+     ) \
+     .group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Store.name, Category.name).all()
 
-    # Recent orders: online (delivered/completed) + POS, merged and sorted
+    merged_top = {}
+    for r in list(online_top) + list(pos_top):
+        key = (int(r.id), int(r.variant_id) if r.variant_id else None)
+        entry = merged_top.setdefault(key, {
+            'id': r.id,
+            'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
+            'store_name': r.store_name or '—',
+            'category': r.category_name or 'General',
+            'total_sold': 0,
+        })
+        entry['total_sold'] += int(r.total_sold or 0)
+    top_products = sorted(merged_top.values(), key=lambda x: x['total_sold'], reverse=True)[:5]
+
+    # Recent orders: completed online + POS, sorted by real timestamp
     online_recent_q = (Order.query
                        .filter(
-                           Order.status.in_(['delivered', 'completed']),
+                           Order.status.in_(COMPLETED_ORDER_STATUSES),
                            Order.created_at >= range_start,
                            Order.created_at < range_end,
                        )
@@ -4406,6 +4616,7 @@ def _render_admin_dashboard():
             'customer_initial': (cust_name[:1] or 'U').upper(),
             'store_name': o.store.name if getattr(o, 'store', None) else '—',
             'date': _fmt_pht(o.created_at) if o.created_at else '',
+            '_sort_at': o.created_at or datetime.min,
             'total': float(o.total_amount or 0),
             'status': o.status or 'pending',
             'type': 'online',
@@ -4418,42 +4629,45 @@ def _render_admin_dashboard():
             'customer_initial': ((p.customer_name or 'W')[0]).upper(),
             'store_name': p.store.name if getattr(p, 'store', None) else '—',
             'date': _fmt_pht(p.created_at) if p.created_at else '',
+            '_sort_at': p.created_at or datetime.min,
             'total': float(p.total_amount or 0),
             'status': 'completed',
             'type': 'pos',
         })
-    recent_orders_list.sort(key=lambda x: x['date'], reverse=True)
+    recent_orders_list.sort(key=lambda x: x['_sort_at'], reverse=True)
     recent_orders_list = recent_orders_list[:8]
+    for row in recent_orders_list:
+        row.pop('_sort_at', None)
 
-    # Chart data: matches selected period range
+    # Chart data: Philippine calendar days within selected period
     def _admin_build_chart(ds_start, ds_end):
-        d_online = db.session.query(
-            func.date(Order.created_at).label('day'),
-            func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
-            func.count(Order.id).label('order_count'),
-        ).filter(
-            Order.status.in_(['delivered', 'completed']),
+        online_rows = db.session.query(Order.created_at, Order.total_amount).filter(
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
             Order.created_at >= ds_start,
             Order.created_at < ds_end,
-        ).group_by(func.date(Order.created_at)).all()
-
-        d_pos = db.session.query(
-            func.date(POSOrder.created_at).label('day'),
-            func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue'),
-            func.count(POSOrder.id).label('order_count'),
-        ).filter(
+        ).all()
+        pos_rows = db.session.query(POSOrder.created_at, POSOrder.total_amount).filter(
             POSOrder.created_at >= ds_start,
             POSOrder.created_at < ds_end,
-        ).group_by(func.date(POSOrder.created_at)).all()
+        ).all()
 
-        o_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in d_online}
-        p_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in d_pos}
-        days = max(1, (ds_end.date() - ds_start.date()).days)
+        o_map = defaultdict(lambda: [0.0, 0])
+        p_map = defaultdict(lambda: [0.0, 0])
+        for ts, amt in online_rows:
+            d = _pht_date(ts)
+            if d:
+                o_map[d][0] += float(amt or 0)
+                o_map[d][1] += 1
+        for ts, amt in pos_rows:
+            d = _pht_date(ts)
+            if d:
+                p_map[d][0] += float(amt or 0)
+                p_map[d][1] += 1
+
         labels, revenues, order_counts = [], [], []
-        for i in range(days):
-            day_val = ds_start.date() + timedelta(days=i)
-            o_rev, o_cnt = o_map.get(day_val, (0.0, 0))
-            p_rev, p_cnt = p_map.get(day_val, (0.0, 0))
+        for day_val in _iter_pht_days(ds_start, ds_end):
+            o_rev, o_cnt = o_map.get(day_val, [0.0, 0])
+            p_rev, p_cnt = p_map.get(day_val, [0.0, 0])
             labels.append(day_val.strftime('%b %d'))
             revenues.append(o_rev + p_rev)
             order_counts.append(o_cnt + p_cnt)
@@ -4469,7 +4683,7 @@ def _render_admin_dashboard():
     total_riders = db.session.query(func.count(Rider.id)).scalar() or 0
     active_riders = db.session.query(func.count(Rider.id)).filter(Rider.is_active.is_(True)).scalar() or 0
     pending_orders = Order.query.filter(
-        Order.status.in_(['pending', 'preparing', 'accepted']),
+        Order.status.in_(['pending', 'preparing', 'accepted', 'done_preparing']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
@@ -4517,9 +4731,16 @@ def seller_dashboard():
     if session.get('role') != 'seller':
         return redirect(url_for('templates.dashboard'))
 
-    from sqlalchemy import func, case, extract
-    from datetime import date, timedelta
-    from app.utils.report_service import period_range
+    from sqlalchemy import func, extract
+    from datetime import timedelta
+    from app.utils.report_service import (
+        period_range,
+        COMPLETED_ORDER_STATUSES,
+        _pht_date,
+        _iter_pht_days,
+        _new_customer_count,
+        _to_pht,
+    )
 
     user_id = session['user_id']
     store = _seller_portal_manageable_store(user_id)
@@ -4541,7 +4762,6 @@ def seller_dashboard():
     range_start, range_end, period_label = period_range(period, custom_from, custom_to)
     prev_start = range_start - (range_end - range_start)
     prev_end = range_start
-    today = date.today()
 
 
 
@@ -4550,7 +4770,7 @@ def seller_dashboard():
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).scalar() or 0
@@ -4567,7 +4787,7 @@ def seller_dashboard():
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= prev_start,
         Order.created_at < prev_end,
     ).scalar() or 0
@@ -4611,12 +4831,12 @@ def seller_dashboard():
     if orders_prev_month > 0:
         orders_change = round(((orders_this_month - orders_prev_month) / orders_prev_month) * 100, 1)
 
-    # ── KPI: Unique customers (delivered/completed orders only) ──
+    # ── KPI: Unique customers with completed online orders in period ──
     customers_this_month = db.session.query(
         func.count(func.distinct(Order.customer_id))
     ).filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).scalar() or 0
@@ -4625,7 +4845,7 @@ def seller_dashboard():
         func.count(func.distinct(Order.customer_id))
     ).filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= prev_start,
         Order.created_at < prev_end,
     ).scalar() or 0
@@ -4634,7 +4854,7 @@ def seller_dashboard():
     if customers_prev_month > 0:
         customers_change = round(((customers_this_month - customers_prev_month) / customers_prev_month) * 100, 1)
 
-    # ── KPI: Delivery rate (delivered+completed / delivered+completed+cancelled) ──
+    # ── KPI: Fulfillment success among resolved online orders ──
     total_resolved = Order.query.filter(
         Order.store_id == store.id,
         Order.status.in_(['delivered', 'completed', 'cancelled']),
@@ -4644,7 +4864,7 @@ def seller_dashboard():
 
     delivered_this_month = Order.query.filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
@@ -4665,7 +4885,7 @@ def seller_dashboard():
      .outerjoin(Category, Category.id == Product.main_category_id) \
      .filter(
         Product.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
@@ -4687,7 +4907,6 @@ def seller_dashboard():
         POSOrder.created_at < range_end,
     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
 
-    from collections import defaultdict
     tp_map = defaultdict(lambda: {'total_sold': 0, 'category': 'General', 'variant_name': None})
     for r in online_top:
         key = (r.id, r.variant_id)
@@ -4728,6 +4947,7 @@ def seller_dashboard():
             'customer_name': o.customer.full_name if o.customer else 'Unknown',
             'customer_initial': (o.customer.full_name[0] if o.customer and o.customer.full_name else 'U'),
             'date': _fmt_pht(o.created_at) if o.created_at else '',
+            '_sort_at': o.created_at or datetime.min,
             'total': float(o.total_amount or 0),
             'status': o.status,
             'type': 'online',
@@ -4738,46 +4958,48 @@ def seller_dashboard():
             'customer_name': p.customer_name or 'Walk-in',
             'customer_initial': ((p.customer_name or 'W')[0]).upper(),
             'date': _fmt_pht(p.created_at) if p.created_at else '',
+            '_sort_at': p.created_at or datetime.min,
             'total': float(p.total_amount or 0),
             'status': 'completed',
             'type': 'pos',
         })
-    recent_orders_list.sort(key=lambda x: x['date'], reverse=True)
+    recent_orders_list.sort(key=lambda x: x['_sort_at'], reverse=True)
     recent_orders_list = recent_orders_list[:10]
+    for row in recent_orders_list:
+        row.pop('_sort_at', None)
 
-    # ── Revenue chart data (matches selected period range) ──
+    # ── Revenue chart data (Philippine calendar days) ──
     def _build_chart_dataset(store_id, ds_start, ds_end):
-        online_daily = db.session.query(
-            func.date(Order.created_at).label('day'),
-            func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
-            func.count(Order.id).label('order_count')
-        ).filter(
+        online_rows = db.session.query(Order.created_at, Order.total_amount).filter(
             Order.store_id == store_id,
-            Order.status.in_(['delivered', 'completed']),
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
             Order.created_at >= ds_start,
             Order.created_at < ds_end,
-        ).group_by(func.date(Order.created_at)).all()
-
-        pos_daily = db.session.query(
-            func.date(POSOrder.created_at).label('day'),
-            func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue'),
-            func.count(POSOrder.id).label('order_count')
-        ).filter(
+        ).all()
+        pos_rows = db.session.query(POSOrder.created_at, POSOrder.total_amount).filter(
             POSOrder.store_id == store_id,
             POSOrder.created_at >= ds_start,
             POSOrder.created_at < ds_end,
-        ).group_by(func.date(POSOrder.created_at)).all()
+        ).all()
 
-        o_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in online_daily}
-        p_map = {row.day: (float(row.revenue or 0), int(row.order_count or 0)) for row in pos_daily}
+        o_map = defaultdict(lambda: [0.0, 0])
+        p_map = defaultdict(lambda: [0.0, 0])
+        for ts, amt in online_rows:
+            d = _pht_date(ts)
+            if d:
+                o_map[d][0] += float(amt or 0)
+                o_map[d][1] += 1
+        for ts, amt in pos_rows:
+            d = _pht_date(ts)
+            if d:
+                p_map[d][0] += float(amt or 0)
+                p_map[d][1] += 1
 
-        days = max(1, (ds_end.date() - ds_start.date()).days)
         labels, rev, o_rev, p_rev, cnt, o_cnt, p_cnt = [], [], [], [], [], [], []
-        for i in range(days):
-            d = ds_start.date() + timedelta(days=i)
+        for d in _iter_pht_days(ds_start, ds_end):
             labels.append(d.strftime('%b %d'))
-            or_v, oc = o_map.get(d, (0.0, 0))
-            pr_v, pc = p_map.get(d, (0.0, 0))
+            or_v, oc = o_map.get(d, [0.0, 0])
+            pr_v, pc = p_map.get(d, [0.0, 0])
             o_rev.append(or_v); p_rev.append(pr_v); rev.append(or_v + pr_v)
             o_cnt.append(oc); p_cnt.append(pc); cnt.append(oc + pc)
         return {
@@ -4827,22 +5049,25 @@ def seller_dashboard():
     # Pending orders count
     pending_orders = Order.query.filter(
         Order.store_id == store.id,
-        Order.status.in_(['pending', 'preparing', 'accepted']),
+        Order.status.in_(['pending', 'preparing', 'accepted', 'done_preparing']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
 
-    # POS revenue today
+    # POS revenue today (Philippine calendar day)
+    today_start, today_end, _ = period_range('today')
     pos_revenue_today = db.session.query(
         func.coalesce(func.sum(POSOrder.total_amount), 0)
     ).filter(
         POSOrder.store_id == store.id,
-        func.date(POSOrder.created_at) == today
-    ).scalar()
+        POSOrder.created_at >= today_start,
+        POSOrder.created_at < today_end,
+    ).scalar() or 0
 
     pos_orders_today = POSOrder.query.filter(
         POSOrder.store_id == store.id,
-        func.date(POSOrder.created_at) == today
+        POSOrder.created_at >= today_start,
+        POSOrder.created_at < today_end,
     ).count()
 
     # ── Analytics: Order status distribution (selected range) ──
@@ -4855,17 +5080,31 @@ def seller_dashboard():
     ).group_by(Order.status).all()
     order_status_dist = {row[0]: row[1] for row in status_dist_query}
 
-    # ── Analytics: Revenue by payment method (delivered/completed) ──
+    # ── Analytics: Revenue by payment method (online completed + POS) ──
     payment_method_query = db.session.query(
         Order.payment_method,
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).group_by(Order.payment_method).all()
     revenue_by_payment = {row[0] or 'unknown': float(row[1]) for row in payment_method_query}
+
+    pos_payment_query = db.session.query(
+        POSOrder.payment_method,
+        func.coalesce(func.sum(POSOrder.total_amount), 0)
+    ).filter(
+        POSOrder.store_id == store.id,
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
+    ).group_by(POSOrder.payment_method).all()
+    for method, amount in pos_payment_query:
+        key = method or 'cash'
+        # Tag POS methods so they don't silently collide with online labels.
+        label = f"pos_{key}"
+        revenue_by_payment[label] = revenue_by_payment.get(label, 0.0) + float(amount or 0)
 
     # ── Analytics: Sales by category (selected range, ONLINE + POS) ──
     online_category_sales_query = db.session.query(
@@ -4877,7 +5116,7 @@ def seller_dashboard():
      .join(Order, Order.id == OrderItem.order_id) \
      .filter(
         Product.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).group_by(Category.name).all()
@@ -4932,28 +5171,12 @@ def seller_dashboard():
     sales_by_category.sort(key=lambda x: (x['qty'], x['revenue']), reverse=True)
     sales_by_category = sales_by_category[:8]
 
-    # ── Analytics: POS vs Online revenue (selected range) ──
-    range_days = max(1, (range_end.date() - range_start.date()).days)
-    pos_vs_online = {'labels': [], 'online': [], 'pos': []}
-    for i in range(range_days):
-        d = range_start.date() + timedelta(days=i)
-        lbl = d.strftime('%b %d')
-        online_rev = db.session.query(
-            func.coalesce(func.sum(Order.total_amount), 0)
-        ).filter(
-            Order.store_id == store.id,
-            Order.status.in_(['delivered', 'completed']),
-            func.date(Order.created_at) == d
-        ).scalar()
-        pos_rev = db.session.query(
-            func.coalesce(func.sum(POSOrder.total_amount), 0)
-        ).filter(
-            POSOrder.store_id == store.id,
-            func.date(POSOrder.created_at) == d
-        ).scalar()
-        pos_vs_online['labels'].append(lbl)
-        pos_vs_online['online'].append(float(online_rev))
-        pos_vs_online['pos'].append(float(pos_rev))
+    # ── Analytics: POS vs Online revenue (reuse PHT chart series) ──
+    pos_vs_online = {
+        'labels': chart_data.get('labels', []),
+        'online': chart_data.get('online_revenue', []),
+        'pos': chart_data.get('pos_revenue', []),
+    }
 
     # ── Analytics: Rating distribution (1-5 stars, selected range) ──
     rating_dist_query = db.session.query(
@@ -4976,60 +5199,72 @@ def seller_dashboard():
     ).group_by(StoreRating.rating).all()
     store_rating_distribution = {int(r[0]): r[1] for r in store_rating_dist_query}
 
-    # ── Analytics: Hourly order distribution (selected range) ──
-    hourly_query = db.session.query(
-        extract('hour', Order.created_at).label('hr'),
-        func.count(Order.id)
-    ).filter(
+    # ── Analytics: Hourly order distribution in PHT (online + POS, all statuses) ──
+    hourly_distribution = defaultdict(int)
+    for (ts,) in db.session.query(Order.created_at).filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
         Order.created_at >= range_start,
         Order.created_at < range_end,
-    ).group_by(extract('hour', Order.created_at)).all()
-    hourly_distribution = {int(r[0]): r[1] for r in hourly_query}
+    ).all():
+        local = _to_pht(ts)
+        if local:
+            hourly_distribution[local.hour] += 1
+    for (ts,) in db.session.query(POSOrder.created_at).filter(
+        POSOrder.store_id == store.id,
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
+    ).all():
+        local = _to_pht(ts)
+        if local:
+            hourly_distribution[local.hour] += 1
+    hourly_distribution = {int(k): int(v) for k, v in hourly_distribution.items()}
 
-    # ── Analytics: Average order value trend (selected range) ──
-    aov_query = db.session.query(
-        func.date(Order.created_at).label('day'),
-        func.avg(Order.total_amount).label('aov'),
-        func.count(Order.id).label('cnt')
-    ).filter(
+    # ── Analytics: AOV trend by PHT day (completed online + POS) ──
+    aov_by_day = defaultdict(lambda: [0.0, 0])  # rev, count
+    for ts, amt in db.session.query(Order.created_at, Order.total_amount).filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
-    ).group_by(func.date(Order.created_at)) \
-     .order_by(func.date(Order.created_at)).all()
-    aov_trend = {
-        'labels': [],
-        'values': [],
-        'counts': []
-    }
-    for row in aov_query:
-        day_val = row.day
-        aov_trend['labels'].append(day_val.strftime('%b %d') if not isinstance(day_val, str) else day_val)
-        aov_trend['values'].append(round(float(row.aov), 2))
-        aov_trend['counts'].append(int(row.cnt))
+    ).all():
+        d = _pht_date(ts)
+        if d:
+            aov_by_day[d][0] += float(amt or 0)
+            aov_by_day[d][1] += 1
+    for ts, amt in db.session.query(POSOrder.created_at, POSOrder.total_amount).filter(
+        POSOrder.store_id == store.id,
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
+    ).all():
+        d = _pht_date(ts)
+        if d:
+            aov_by_day[d][0] += float(amt or 0)
+            aov_by_day[d][1] += 1
 
-    # ── Analytics: Customer retention (repeat vs new, selected range) ──
+    aov_trend = {'labels': [], 'values': [], 'counts': []}
+    for d in _iter_pht_days(range_start, range_end):
+        rev, cnt = aov_by_day.get(d, [0.0, 0])
+        if cnt <= 0:
+            continue
+        aov_trend['labels'].append(d.strftime('%b %d'))
+        aov_trend['values'].append(round(rev / cnt, 2))
+        aov_trend['counts'].append(cnt)
+
+    # ── Analytics: Customer retention (repeat vs one-time vs first-time) ──
     all_customers = db.session.query(
         Order.customer_id,
         func.count(Order.id).label('order_count')
     ).filter(
         Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed']),
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).group_by(Order.customer_id).all()
 
-    new_customers = 0
-    repeat_customers = 0
-    for cust in all_customers:
-        if cust.order_count > 1:
-            repeat_customers += 1
-        else:
-            new_customers += 1
+    repeat_customers = sum(1 for cust in all_customers if cust.order_count > 1)
     total_unique_customers = len(all_customers)
+    # True first-time buyers at this store (lifetime first order falls in period)
+    new_customers = _new_customer_count(store.id, range_start, range_end)
 
     return render_template('seller_dashboard.html',
         store=store,
@@ -5225,10 +5460,14 @@ def api_admin_user_bans():
 
     bans = AccountBan.query.filter_by(is_active=True).order_by(AccountBan.created_at.desc()).all()
     payload = []
+    from app.utils.phone_utils import display_login_id
     for ban in bans:
         item = ban.to_dict()
         item['user_name'] = ban.user.full_name if ban.user else 'Unknown user'
-        item['user_email'] = ban.user.email if ban.user else None
+        item['user_email'] = (
+            display_login_id(email=ban.user.email, phone=ban.user.phone)
+            if ban.user else None
+        )
         item['banned_by_name'] = ban.banned_by_user.full_name if ban.banned_by_user else 'Admin'
         payload.append(item)
 
@@ -5314,11 +5553,13 @@ def get_seller_applications():
     result = []
     for app in applications:
         app_dict = app.to_dict()
-        # Add user details
+        # Add user details (login_id hides synthetic @sms.eflora.internal emails)
         user = User.query.get(app.user_id)
         if user:
-            app_dict['full_name'] = user.full_name
-            app_dict['email'] = user.email
+            user_data = user.to_dict()
+            app_dict['full_name'] = user_data.get('full_name') or user.full_name
+            app_dict['email'] = user_data.get('login_id') or user_data.get('email')
+            app_dict['login_id'] = app_dict['email']
             app_dict['phone'] = user.phone
         result.append(app_dict)
     
@@ -7470,10 +7711,14 @@ def _serialize_seller_order_for_template(order):
 
 
 @templates_bp.route('/api/seller/notifications', methods=['GET'])
-def seller_notifications_api():
-    if session.get('role') != 'seller':
+@templates_bp.route('/api/admin/notifications', methods=['GET'])
+@templates_bp.route('/api/notifications', methods=['GET'])
+def session_notifications_api():
+    if session.get('role') not in ('seller', 'admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
     notifications = Notification.query.filter_by(user_id=user_id)\
         .order_by(Notification.created_at.desc()).limit(20).all()
     unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
@@ -7484,20 +7729,28 @@ def seller_notifications_api():
 
 
 @templates_bp.route('/api/seller/notifications/read-all', methods=['POST'])
-def seller_notifications_read_all_api():
-    if session.get('role') != 'seller':
+@templates_bp.route('/api/admin/notifications/read-all', methods=['POST'])
+@templates_bp.route('/api/notifications/read-all', methods=['POST'])
+def session_notifications_read_all_api():
+    if session.get('role') not in ('seller', 'admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
     Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
     db.session.commit()
     return jsonify({'success': True}), 200
 
 
 @templates_bp.route('/api/seller/notifications/<int:notif_id>/read', methods=['POST'])
-def seller_notification_read_api(notif_id):
-    if session.get('role') != 'seller':
+@templates_bp.route('/api/admin/notifications/<int:notif_id>/read', methods=['POST'])
+@templates_bp.route('/api/notifications/<int:notif_id>/read', methods=['POST'])
+def session_notification_read_api(notif_id):
+    if session.get('role') not in ('seller', 'admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
     notif = Notification.query.filter_by(id=notif_id, user_id=user_id).first()
     if notif:
         notif.is_read = True

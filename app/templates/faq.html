@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "partials/help_nav.html" import help_nav, help_shell_open, help_shell_close %}
+
+{% block title %}FAQ — E-FLORA{% endblock %}
+
+{% block extra_css %}
+{% include "partials/help_page_styles.html" %}
+{% include "partials/white_florals_styles.html" %}
+{% endblock %}
+
+{% block content %}
+{{ help_shell_open() }}
+
+    <nav class="help-crumb" aria-label="Breadcrumb">
+        <a href="{{ url_for('templates.index') }}">Home</a>
+        <i class="ri-arrow-right-s-line"></i>
+        <span>FAQ</span>
+    </nav>
+
+    <header class="help-hero-band">
+        <div class="help-hero-inner">
+            <div class="help-kicker"><i class="ri-flower-fill"></i> E-FLORA Help</div>
+            <h1>Questions, answered <em>simply</em></h1>
+            <p>Quick answers about ordering, delivery, shops, and your account. Still stuck? <a href="{{ url_for('templates.contact') }}">Contact us</a>.</p>
+        </div>
+    </header>
+
+    <div class="faq-list">
+        {% for item in faqs %}
+        <details class="faq-item"{% if loop.first %} open{% endif %}>
+            <summary>
+                <span>{{ item.question }}</span>
+                <span class="faq-plus" aria-hidden="true"><i class="ri-add-line"></i></span>
+            </summary>
+            <div class="faq-answer">{{ item.answer }}</div>
+        </details>
+        {% else %}
+        <section class="help-panel">
+            <p>FAQs will appear here soon. In the meantime, message us via <a href="{{ url_for('templates.contact') }}">Contact Us</a> or open live chat.</p>
+        </section>
+        {% endfor %}
+    </div>
+
+    <section class="help-panel" style="margin-top:1.25rem;">
+        <div class="help-panel-head">
+            <div class="help-panel-icon"><i class="ri-compass-3-line"></i></div>
+            <div>
+                <h2>Need something else?</h2>
+                <p class="panel-lead">Policies for delivery and damaged blooms, one click away.</p>
+            </div>
+        </div>
+        <p>Delivery details live on our <a href="{{ url_for('templates.shipping') }}">Shipping</a> page. For damaged blooms or refunds, see <a href="{{ url_for('templates.returns') }}">Returns</a>.</p>
+    </section>
+
+    {{ help_nav('faq') }}
+
+{{ help_shell_close() }}
+{% endblock %}

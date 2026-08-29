@@ -577,15 +577,19 @@ class SellerApplication(db.Model):
         return self.government_id_url
     
     def to_dict(self):
+        from app.utils.phone_utils import display_login_id
+
         u = self.applicant
         full_name = self.applicant_full_name or (u.full_name if u else None)
-        email = self.applicant_email or (u.email if u else None)
+        raw_email = self.applicant_email or (u.email if u else None)
         phone = self.applicant_phone or (u.phone if u else None)
+        email = display_login_id(email=raw_email, phone=phone)
         return {
             'id': self.id,
             'user_id': self.user_id,
             'full_name': full_name,
             'email': email,
+            'login_id': email,
             'phone': phone,
             'application_source': self.application_source or 'customer_account',
             'store_name': self.store_name,
@@ -1364,6 +1368,17 @@ class OrderItemAddon(db.Model):
     order_item = db.relationship('OrderItem', back_populates='addons')
     addon_option = db.relationship('ProductAddonOption', back_populates='order_item_addons')
 
+    @property
+    def resolved_image_url(self):
+        """Prefer order snapshot; fall back to live add-on option image."""
+        url = (self.image_url or '').strip()
+        if url:
+            return url
+        opt = self.addon_option
+        if opt and (opt.image_url or '').strip():
+            return opt.image_url.strip()
+        return None
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -1372,7 +1387,7 @@ class OrderItemAddon(db.Model):
             'name': self.name,
             'price': float(self.price) if self.price is not None else 0,
             'quantity': self.quantity,
-            'image_url': self.image_url,
+            'image_url': self.resolved_image_url,
             'total': float(self.quantity * self.price) if self.price is not None else 0,
         }
 
