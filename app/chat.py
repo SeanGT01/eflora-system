@@ -1021,7 +1021,8 @@ def presence_status_batch():
 # In-memory typing state (per-conversation, per-user)
 # {convo_id: {user_id: {'at': datetime, 'name': str}}}
 _typing_state = {}
-_TYPING_TTL_SECONDS = 6
+# Must stay above client typing-poll interval (≈2s) with network slack.
+_TYPING_TTL_SECONDS = 10
 
 
 @chat_bp.route('/conversations/<int:convo_id>/typing', methods=['POST'])
