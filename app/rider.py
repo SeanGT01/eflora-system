@@ -109,7 +109,7 @@ def get_assigned_orders():
     
     status = request.args.get('status', 'on_delivery')
     
-    orders = (
+    base_query = (
         Order.query
         .options(
             selectinload(Order.items).selectinload(OrderItem.addons),
@@ -117,13 +117,24 @@ def get_assigned_orders():
             joinedload(Order.customer),
             joinedload(Order.store),
         )
-        .filter_by(
-            rider_id=rider.id,
-            status=status
-        )
-        .order_by(Order.created_at.desc())
-        .all()
+        .filter(Order.rider_id == rider.id)
     )
+
+    if status == 'delivered':
+        # Completed tab: rider-delivered and customer-confirmed orders.
+        orders = (
+            base_query
+            .filter(Order.status.in_(_DELIVERED_STATUSES))
+            .order_by(Order.created_at.desc())
+            .all()
+        )
+    else:
+        orders = (
+            base_query
+            .filter_by(status=status)
+            .order_by(Order.created_at.desc())
+            .all()
+        )
     
     order_data = []
     for order in orders:

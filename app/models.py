@@ -665,6 +665,7 @@ class Rider(db.Model):
             'phone': u.phone if u else None,
             'avatar_url': u.avatar_url if u else None,  # Cloudinary only
             'store_name': self.store.name if self.store else None,
+            'store_logo_url': self.store.logo_url if self.store else None,
             'vehicle_type': self.vehicle_type,
             'license_plate': self.license_plate,
             'is_active': self.is_active,
