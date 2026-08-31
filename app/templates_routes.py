@@ -2013,6 +2013,9 @@ def change_password():
         
         if new_password != confirm_password:
             return jsonify({'error': 'New passwords do not match'}), 400
+
+        if current_password == new_password:
+            return jsonify({'error': 'New password must be different from current password'}), 400
         
         pw_error = _password_strength_error(new_password)
         if pw_error:

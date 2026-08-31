@@ -1297,6 +1297,8 @@ def change_password():
             return jsonify({'error': 'All fields are required'}), 400
         if new_password != confirm_password:
             return jsonify({'error': 'New passwords do not match'}), 400
+        if current_password == new_password:
+            return jsonify({'error': 'New password must be different from current password'}), 400
         pw_error = _validate_password_strength(new_password)
         if pw_error:
             return jsonify({'error': pw_error}), 400
