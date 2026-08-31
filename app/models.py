@@ -4,6 +4,7 @@ from sqlalchemy import event
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+import re
 from decimal import Decimal
 from sqlalchemy.dialects.postgresql import JSON
 import cloudinary
@@ -205,6 +206,12 @@ class StorePaymentSetting(db.Model):
 
 class Store(db.Model):
     __tablename__ = 'stores'
+
+    PENDING_ADDRESS_PLACEHOLDER = 'Address pending - please update'
+    _ADDRESS_PLACEHOLDERS = frozenset({
+        'address pending - please update',
+        'to be updated',
+    })
     
     id = db.Column(db.Integer, primary_key=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -296,6 +303,29 @@ class Store(db.Model):
         if self.seller_application:
             return self.seller_application.store_logo_url
         return None
+
+    @property
+    def usable_address(self):
+        """Street address excluding legacy placeholder text."""
+        addr = (self.address or '').strip()
+        if not addr:
+            return ''
+        if addr.casefold() in self._ADDRESS_PLACEHOLDERS:
+            return ''
+        return addr
+
+    @property
+    def public_location_label(self):
+        """Short location for cards; empty when the store has no real location."""
+        barangay = (self.barangay or '').strip()
+        municipality = (self.municipality or '').strip()
+        if barangay and municipality:
+            return f'{barangay}, {municipality}'
+        if municipality:
+            return municipality
+        if barangay:
+            return barangay
+        return self.usable_address
     
     def calculate_delivery_fee(self, distance_km, subtotal):
         """Calculate delivery fee based on distance and order subtotal"""
@@ -1396,6 +1426,23 @@ class OrderItemAddon(db.Model):
 # ═════════════════════════════════════════════════════════════════════════════
 # STOCK REDUCTION AUDIT MODEL
 # ═════════════════════════════════════════════════════════════════════════════
+def resolve_customer_refs_in_stock_notes(notes, reduced_by=None, reducer_user=None):
+    """Replace legacy `customer #123` tokens with the customer's real name."""
+    if not notes:
+        return notes
+
+    def repl(match):
+        uid = int(match.group(1))
+        if reduced_by == uid and reducer_user and reducer_user.full_name:
+            return reducer_user.full_name.strip()
+        user = User.query.get(uid)
+        if user and user.full_name:
+            return user.full_name.strip()
+        return match.group(0)
+
+    return re.sub(r'customer\s+#(\d+)', repl, notes, flags=re.IGNORECASE)
+
+
 class StockReduction(db.Model):
     """Audit log for all stock reductions with reason tracking"""
     __tablename__ = 'stock_reductions'
@@ -1433,6 +1480,13 @@ class StockReduction(db.Model):
     
     # Valid reasons
     REASONS = ['spoilage', 'damage', 'defect', 'other', 'pos_sale', 'found_stock', 'receiving_error', 'restock']
+
+    def display_reason_notes(self):
+        return resolve_customer_refs_in_stock_notes(
+            self.reason_notes,
+            reduced_by=self.reduced_by,
+            reducer_user=self.reducer_user,
+        )
     
     def to_dict(self):
         # Get product image (prefer primary, then first image)
@@ -1479,7 +1533,7 @@ class StockReduction(db.Model):
             'addon_image_url': addon_image_url,
             'reduction_amount': self.reduction_amount,
             'reason': self.reason,
-            'reason_notes': self.reason_notes,
+            'reason_notes': self.display_reason_notes(),
             'reduced_by': self.reduced_by,
             'reduced_by_user': self.reducer_user.full_name if self.reducer_user else None,
             'reducer_name': self.reducer_user.full_name if self.reducer_user else None,

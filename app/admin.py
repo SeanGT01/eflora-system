@@ -348,7 +348,7 @@ def approve_seller_application(app_id):
     store = Store(
         seller_id=user.id,
         name=application.store_name,
-        address='To be updated',
+        address='',
         description=application.store_description,
         seller_application_id=application.id,
         status='active',

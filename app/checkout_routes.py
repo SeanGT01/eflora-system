@@ -369,6 +369,15 @@ def _collect_stock_issues(stock_lookup):
     return issues
 
 
+def _customer_display_name(user_id, user=None):
+    """Real name for stock audit messages (falls back if user missing)."""
+    if user is None:
+        user = User.query.get(user_id)
+    if user and user.full_name:
+        return user.full_name.strip()
+    return f'Customer #{user_id}'
+
+
 def _reduce_stock_lookup(stock_lookup, user_id, reason_notes, store_id=None):
     """Reduce stock with audit trail after an order has been created.
 
@@ -1082,6 +1091,8 @@ def create_orders():
     try:
         user_id = request.user_id
         data = request.get_json() or {}
+        customer = User.query.get(user_id)
+        customer_name = _customer_display_name(user_id, customer)
         
         print(f"📦 Received create-orders data: {data}")
 
@@ -1284,13 +1295,13 @@ def create_orders():
         _reduce_stock_lookup(
             stock_lookup,
             user_id,
-            f"Reduced automatically after online checkout by customer #{user_id}",
+            f"Reduced automatically after online checkout by {customer_name}",
         )
         decrement_addon_option_stock(
             cart_addon_lines,
             user_id=user_id,
             reason='other',
-            reason_notes=f"Reduced automatically after online checkout by customer #{user_id}",
+            reason_notes=f"Reduced automatically after online checkout by {customer_name}",
         )
 
         print(f"🗑️ Removing {len(selected_items)} selected items from cart")
@@ -1507,6 +1518,7 @@ def process_checkout():
         customer = User.query.get(user_id)
         if not customer:
             return jsonify({"error": "User not found"}), 404
+        customer_name = _customer_display_name(user_id, customer)
 
         address_id = data.get("delivery_address_id")
         delivery_notes = data.get("delivery_notes", "")
@@ -1725,7 +1737,7 @@ def process_checkout():
         _reduce_stock_lookup(
             stock_lookup,
             user_id,
-            f"Reduced automatically after online checkout by customer #{user_id}",
+            f"Reduced automatically after online checkout by {customer_name}",
         )
 
         CartItem.query.filter(
@@ -2039,6 +2051,8 @@ def buy_now_create_order():
     try:
         user_id = request.user_id
         data = request.get_json() or {}
+        customer = User.query.get(user_id)
+        customer_name = _customer_display_name(user_id, customer)
 
         product_id = data.get("product_id")
         variant_id = data.get("variant_id")
@@ -2205,14 +2219,14 @@ def buy_now_create_order():
             quantity,
             "other",
             user_id,
-            reason_notes=f"Buy Now order #{order.id} by customer #{user_id}",
+            reason_notes=f"Buy Now order #{order.id} by {customer_name}",
             variant=variant,
         )
         decrement_addon_option_stock(
             struct_lines,
             user_id=user_id,
             reason='other',
-            reason_notes=f"Buy Now order #{order.id} by customer #{user_id}",
+            reason_notes=f"Buy Now order #{order.id} by {customer_name}",
         )
 
         if variant is not None:
@@ -2236,7 +2250,7 @@ def buy_now_create_order():
                 line["quantity"],
                 "other",
                 user_id,
-                reason_notes=f"Buy Now add-on on order #{order.id} by customer #{user_id}",
+                reason_notes=f"Buy Now add-on on order #{order.id} by {customer_name}",
                 variant=None,
             )
             notify_low_stock_if_crossed(
@@ -2246,15 +2260,13 @@ def buy_now_create_order():
                 stock_after=int(addon_product.stock_quantity or 0),
             )
 
-        _customer = User.query.get(user_id)
-        _customer_name = _customer.full_name if _customer else f'Customer #{user_id}'
         db.session.add(Notification(
             user_id=store.seller_id,
             title='New Order Received',
             message=(
-                f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {_customer_name} was placed via Cash on Delivery.'
+                f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {customer_name} was placed via Cash on Delivery.'
                 if payment_method == "cod"
-                else f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {_customer_name} is awaiting payment verification.'
+                else f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {customer_name} is awaiting payment verification.'
             ),
             type='new_order',
             reference_id=order.id,
