@@ -932,6 +932,128 @@ def _product_list_for_storefront(orm_products):
     return product_list
 
 
+FEATURED_HOME_CATEGORY_ROWS = (
+    ('bouquets', 'Bouquets'),
+    ('potted-plants', 'Potted Plants'),
+    ('fresh-flowers', 'Fresh Flowers'),
+    ('succulents', 'Succulents'),
+)
+FEATURED_PRODUCTS_PER_CATEGORY = 48
+
+
+def _apply_storefront_delivery_flags(product_list, orm_products, is_customer, customer_address):
+    """Attach can_deliver_to_customer on serialized storefront product dicts."""
+    delivery_map = {}
+    if is_customer and customer_address:
+        for product in orm_products:
+            delivery_map[product.id] = _store_delivery_match(product.store, customer_address)
+
+    for pd in product_list:
+        if is_customer and customer_address:
+            delivery = delivery_map.get(
+                pd.get('id'),
+                {'can_deliver': True, 'reason': None},
+            )
+            pd['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
+            pd['delivery_block_reason'] = delivery.get('reason')
+        else:
+            pd['can_deliver_to_customer'] = True
+            pd['delivery_block_reason'] = None
+    return product_list
+
+
+def _build_featured_product_rows(is_customer, customer_address, location_filter_on):
+    """Landing-page featured rows grouped by main category."""
+    from app.models import Category
+
+    slugs = [slug for slug, _ in FEATURED_HOME_CATEGORY_ROWS]
+    categories = Category.query.filter(
+        Category.slug.in_(slugs),
+        Category.is_active.is_(True),
+    ).all()
+    category_by_slug = {cat.slug: cat for cat in categories}
+
+    rows = []
+    for slug, display_name in FEATURED_HOME_CATEGORY_ROWS:
+        category = category_by_slug.get(slug)
+        orm_products = []
+        if category:
+            orm_products = (
+                _public_storefront_product_base_query(require_sellable=True)
+                .filter(Product.main_category_id == category.id)
+                .order_by(Product.created_at.desc())
+                .limit(FEATURED_PRODUCTS_PER_CATEGORY)
+                .all()
+            )
+            if location_filter_on and customer_address:
+                orm_products = [
+                    product for product in orm_products
+                    if _store_delivery_match(product.store, customer_address).get('can_deliver')
+                ]
+
+        product_list = _product_list_for_storefront(orm_products)
+        _apply_storefront_delivery_flags(
+            product_list,
+            orm_products,
+            is_customer,
+            customer_address,
+        )
+        rows.append({
+            'name': display_name,
+            'slug': slug,
+            'products': product_list,
+        })
+    return rows
+
+
+def _flatten_featured_product_rows(featured_product_rows):
+    """Single list for quick-add JSON (deduped by product id, preserve row order)."""
+    seen = set()
+    flat = []
+    for row in featured_product_rows or []:
+        for product in row.get('products') or []:
+            product_id = product.get('id')
+            if product_id is None or product_id in seen:
+                continue
+            seen.add(product_id)
+            flat.append(product)
+    return flat
+
+
+def _subcategory_filter_key(name, slug=None):
+    raw = (slug or name or '').strip().lower()
+    key = re.sub(r'[^a-z0-9]+', '-', raw).strip('-')
+    return key
+
+
+def _subcategory_filters_for_products(product_list):
+    """Unique store-subcategory chips for a main-category listing (grouped by name)."""
+    grouped = {}
+    order = []
+    for product in product_list or []:
+        store_category = product.get('store_category') or {}
+        name = (
+            (store_category.get('name') if isinstance(store_category, dict) else None)
+            or product.get('store_category_name')
+            or ''
+        ).strip()
+        slug = (
+            (store_category.get('slug') if isinstance(store_category, dict) else None)
+            or product.get('store_category_slug')
+            or ''
+        ).strip()
+        key = _subcategory_filter_key(name, slug)
+        if not key:
+            continue
+        if key not in grouped:
+            grouped[key] = {'key': key, 'name': name or slug, 'count': 0}
+            order.append(key)
+        grouped[key]['count'] += 1
+        product['subcategory_filter_key'] = key
+    order.sort(key=lambda k: grouped[k]['name'].lower())
+    return [grouped[k] for k in order]
+
+
 def _normalize_place_name(value):
     """Case/accent-insensitive place comparison for municipality matching."""
     import unicodedata
@@ -1172,42 +1294,12 @@ def index():
         browse_all_mode = bool(session.get('storefront_browse_all', False))
         location_filter_on = bool(is_customer and customer_address and not browse_all_mode)
 
-        # Over-fetch when filtering so the featured strip still fills with in-range items.
-        product_fetch_limit = 200 if location_filter_on else 40
-        products = (
-            _public_storefront_product_base_query(require_sellable=True)
-            .order_by(Product.created_at.desc())
-            .limit(product_fetch_limit)
-            .all()
+        featured_product_rows = _build_featured_product_rows(
+            is_customer,
+            customer_address,
+            location_filter_on,
         )
-        product_delivery_map = {}
-        if is_customer and customer_address:
-            for product in products:
-                delivery = _store_delivery_match(product.store, customer_address)
-                product_delivery_map[product.id] = delivery
-
-        if location_filter_on:
-            products = [
-                p for p in products
-                if product_delivery_map.get(p.id, {}).get('can_deliver')
-            ]
-
-        # Only the featured grid is rendered on this route.  Serializing the
-        # full over-fetch here loaded every image and variant before discarding
-        # most of them.
-        products = products[:12]
-        product_list = _product_list_for_storefront(products)
-        for pd in product_list:
-            delivery = product_delivery_map.get(
-                pd.get('id'),
-                {'can_deliver': True, 'reason': None},
-            )
-            if is_customer and customer_address:
-                pd['can_deliver_to_customer'] = bool(delivery.get('can_deliver'))
-                pd['delivery_block_reason'] = delivery.get('reason')
-            else:
-                pd['can_deliver_to_customer'] = True
-                pd['delivery_block_reason'] = None
+        products = _flatten_featured_product_rows(featured_product_rows)
 
         # Get active stores - logo_url property now handles seller_application lookup by seller_id
         store_fetch_limit = 80 if location_filter_on else 40
@@ -1298,7 +1390,8 @@ def index():
 
         return render_template(
             'index.html',
-            products=product_list,
+            featured_product_rows=featured_product_rows,
+            products=products,
             stores=store_list,
             categories=featured_categories,  # For featured categories section
             main_categories=main_categories,   # For navigation menu
@@ -1330,7 +1423,8 @@ def index():
         except Exception:
             pass
         return render_template('index.html', 
-                             products=[], 
+                             featured_product_rows=[],
+                             products=[],
                              stores=[], 
                              categories=[],
                              main_categories=[],
@@ -4114,17 +4208,25 @@ def category(category_identifier):
             return redirect(url_for('templates.index'))
         
         # Get all products in this main category
-        products = Product.query.filter_by(
-            main_category_id=category.id,
-            is_available=True,
-            is_archived=False
-        ).join(Store).filter(Store.status == 'active').all()
-        
+        products = (
+            _public_storefront_product_base_query(require_sellable=True)
+            .filter(Product.main_category_id == category.id)
+            .order_by(Product.created_at.desc())
+            .all()
+        )
+
         product_list = _product_list_for_storefront(products)
-        
+        subcategories = _subcategory_filters_for_products(product_list)
+        requested_sub = _subcategory_filter_key(request.args.get('sub') or '')
+        initial_subcategory = requested_sub if any(
+            item['key'] == requested_sub for item in subcategories
+        ) else 'all'
+
         return render_template('category.html',
                              category=category,
                              products=product_list,
+                             subcategories=subcategories,
+                             initial_subcategory=initial_subcategory,
                              category_identifier=category_identifier,
                              category_id=category.name,
                              categories=main_categories)
@@ -5784,6 +5886,19 @@ def admin_support():
 # ADMIN STORES API
 # ═════════════════════════════════════════════════════════════════════════════
 
+STORE_DESCRIPTION_MAX_LENGTH = 500
+
+
+def _validated_store_description(raw):
+    """Normalize and validate seller store description length."""
+    description = (raw or '').strip()
+    if len(description) > STORE_DESCRIPTION_MAX_LENGTH:
+        return None, (
+            f'Store description must be {STORE_DESCRIPTION_MAX_LENGTH} characters or less.'
+        )
+    return description or None, None
+
+
 def _store_summary_dict(store: 'Store') -> dict:
     """Serialize a Store row plus computed counters for the admin UI."""
     from sqlalchemy import func as sa_func
@@ -5871,7 +5986,10 @@ def api_admin_store_update(store_id):
             return jsonify({'error': 'Name cannot be empty'}), 400
         store.name = name
     if 'description' in data:
-        store.description = (data.get('description') or '').strip() or None
+        description, desc_error = _validated_store_description(data.get('description'))
+        if desc_error:
+            return jsonify({'error': desc_error}), 400
+        store.description = description
     if 'address' in data:
         store.address = (data.get('address') or '').strip() or store.address
     if 'contact_number' in data:
@@ -11086,7 +11204,10 @@ def update_store_settings():
         if 'contact_number' in data:
             store.contact_number = data['contact_number']
         if 'description' in data:
-            store.description = data['description']
+            description, desc_error = _validated_store_description(data.get('description'))
+            if desc_error:
+                return jsonify({'error': desc_error}), 400
+            store.description = description
         if 'status' in data:
             requested_status = (data.get('status') or '').strip().lower()
             current_status = (store.status or '').strip().lower()
@@ -11662,6 +11783,12 @@ def get_barangay_coordinates(municipality, barangay):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+MAX_CUSTOMER_ADDRESSES = 3
+CUSTOMER_ADDRESS_LIMIT_MESSAGE = (
+    'You can save up to {limit} addresses. Remove one to add another.'
+)
+
+
 @templates_bp.route('/api/account/addresses', methods=['GET'])
 def get_user_addresses():
     """Get all addresses for the logged-in user (supports JWT and sessions)"""
@@ -11679,7 +11806,10 @@ def get_user_addresses():
         
         return jsonify({
             'success': True,
-            'addresses': [addr.to_dict() for addr in addresses]
+            'addresses': [addr.to_dict() for addr in addresses],
+            'address_count': len(addresses),
+            'max_addresses': MAX_CUSTOMER_ADDRESSES,
+            'can_add': len(addresses) < MAX_CUSTOMER_ADDRESSES,
         })
     except Exception as e:
         print(f"❌ Error fetching addresses: {str(e)}")
@@ -11701,6 +11831,16 @@ def add_user_address():
         for field in required:
             if field not in data or data[field] is None:
                 return jsonify({'error': f'{field} is required'}), 400
+
+        address_count = UserAddress.query.filter_by(user_id=user_id).count()
+        if address_count >= MAX_CUSTOMER_ADDRESSES:
+            return jsonify({
+                'success': False,
+                'error': CUSTOMER_ADDRESS_LIMIT_MESSAGE.format(limit=MAX_CUSTOMER_ADDRESSES),
+                'code': 'address_limit',
+                'address_count': address_count,
+                'max_addresses': MAX_CUSTOMER_ADDRESSES,
+            }), 400
         
         # Format the complete address
         address_line = format_address(

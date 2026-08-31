@@ -116,7 +116,29 @@
         width: 100%; height: 100%; object-fit: cover;
     }
 
-    .store-hero-info { flex: 1 1 220px; min-width: 0; }
+    .store-hero-info {
+        flex: 1 1 220px;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .store-hero-details-scroll {
+        min-height: 0;
+        max-height: min(180px, 26vh);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .store-hero-details-scroll::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+    }
 
     .store-hero-name {
         font-family: var(--font-display);
@@ -134,19 +156,27 @@
         color: rgba(255, 255, 255, 0.92);
         line-height: 1.45;
         max-width: 520px;
-        margin-bottom: 1.25rem;
+        margin-bottom: 0;
         text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-        line-clamp: 2;
-        overflow: hidden;
+        overflow-wrap: anywhere;
     }
 
     .store-hero-tags {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
+    }
+
+    .store-hero-tags--meta {
+        flex-shrink: 0;
+    }
+
+    .store-hero-details-scroll .store-hero-tags {
+        margin-top: 0.75rem;
+    }
+
+    .store-hero-details-scroll .store-hero-desc:last-child {
+        margin-bottom: 0;
     }
 
     .store-tag {
@@ -941,6 +971,7 @@
         gap: 1.25rem;
         position: sticky;
         top: 100px;
+        align-self: start;
     }
 
     .sidebar-card {
@@ -1170,6 +1201,7 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 1rem;
         }
+
         .store-sidebar > .btn { grid-column: 1 / -1; }
 
         .store-stats-bar { grid-template-columns: repeat(2, 1fr); margin-bottom: 1.75rem; }
@@ -1194,7 +1226,15 @@
             align-items: flex-end;
         }
 
-        .store-hero-info { flex: 1 1 auto; width: auto; min-width: 0; }
+        .store-hero-info {
+            flex: 1 1 auto;
+            width: auto;
+            min-width: 0;
+        }
+
+        .store-hero-details-scroll {
+            max-height: min(220px, 36vh);
+        }
 
         .store-hero-actions {
             flex-direction: row;
@@ -1268,7 +1308,9 @@
         .store-hero-content { padding: 1.25rem 1.1rem 1.35rem; gap: 1rem; }
         .store-logo-large { width: 68px; height: 68px; font-size: 26px; border-radius: 14px; }
         .store-hero-name { font-size: clamp(22px, 6.5vw, 30px); margin-bottom: 0.5rem; }
-        .store-hero-desc { font-size: 13px; -webkit-line-clamp: 3; line-clamp: 3; }
+        .store-hero-desc { font-size: 13px; }
+
+        .store-hero-details-scroll { max-height: min(180px, 32vh); }
 
         .store-hero-actions { gap: 0.55rem; }
         .store-map-preview { flex: 1 1 100%; width: 100%; height: 100px; }
@@ -1347,16 +1389,22 @@
             <!-- Info -->
             <div class="store-hero-info">
                 <h1 class="store-hero-name">{{ store.name }}</h1>
-                {% if store.description %}
-                <p class="store-hero-desc">{{ store.description }}</p>
-                {% endif %}
-                <div class="store-hero-tags">
-                    {% if store.public_location_label %}
-                    <span class="store-tag store-tag-address">
-                        <i class="ri-map-pin-line"></i>
-                        {{ store.public_location_label }}
-                    </span>
+                {% if store.description or store.public_location_label %}
+                <div class="store-hero-details-scroll">
+                    {% if store.description %}
+                    <p class="store-hero-desc">{{ store.description }}</p>
                     {% endif %}
+                    {% if store.public_location_label %}
+                    <div class="store-hero-tags">
+                        <span class="store-tag store-tag-address">
+                            <i class="ri-map-pin-line"></i>
+                            {{ store.public_location_label }}
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                <div class="store-hero-tags store-hero-tags--meta">
                     <span class="store-tag">
                         <i class="ri-truck-line"></i> {{ store.delivery_radius_km or 5 }}km delivery
                     </span>

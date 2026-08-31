@@ -207,8 +207,6 @@
         .landing-white-florals__flower { opacity: 0.28; }
     }
 
-    body:has(.landing-atmosphere) .main-header,
-    body:has(.landing-atmosphere) .main-nav,
     body:has(.landing-atmosphere) .main-content,
     body:has(.landing-atmosphere) .main-footer,
     body:has(.landing-atmosphere) footer {
@@ -229,7 +227,9 @@
             inset 0 1px 0 rgba(255, 255, 255, 0.65);
         position: sticky;
         top: 0;
-        z-index: 1000;
+        /* Above page content, below cart / modals */
+        z-index: 1100;
+        pointer-events: auto;
         padding-top: env(safe-area-inset-top, 0px);
     }
 
@@ -244,7 +244,9 @@
         box-shadow:
             0 4px 16px rgba(181, 68, 90, 0.06),
             inset 0 1px 0 rgba(255, 255, 255, 0.65);
-        z-index: 999;
+        position: relative;
+        z-index: 1;
+        pointer-events: auto;
     }
 
     .landing-atmosphere {
@@ -262,7 +264,7 @@
     /* Sections below the fold do not need layout or paint work until approached.
        Skip testimonials: paint containment clips the glass cards’ soft side shadows. */
     @supports (content-visibility: auto) {
-        .landing-atmosphere > section:not(.hero-section):not(.testimonials-section) {
+        .landing-atmosphere > section:not(.hero-section):not(.testimonials-section):not(.featured-section) {
             content-visibility: auto;
             contain-intrinsic-size: auto 620px;
         }
@@ -1312,24 +1314,82 @@
     
 
     /* ─── Featured Products ─── */
-    .featured-section { margin-bottom: 3rem; }
+    .featured-section { margin-bottom: 3rem; width: 100%; }
+
+    .featured-category-rows {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 2.75rem;
+    }
+
+    .featured-category-row {
+        width: 100%;
+    }
+
+    .featured-category-row-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.1rem;
+    }
+
+    .featured-category-row-title {
+        font-family: var(--font-display);
+        font-size: clamp(20px, 2.4vw, 26px);
+        font-weight: 500;
+        color: var(--charcoal);
+        margin: 0;
+    }
+
+    .featured-category-row-link {
+        flex-shrink: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--deep-rose);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .featured-category-row-link:hover {
+        text-decoration: underline;
+    }
+
+    .featured-category-empty {
+        margin: 0;
+        padding: 1.25rem 1rem;
+        border-radius: var(--radius-lg);
+        border: 1px dashed rgba(196, 74, 122, 0.25);
+        background: rgba(255, 255, 255, 0.45);
+        color: var(--muted);
+        font-size: 13px;
+        font-family: var(--font-sans);
+    }
 
     .product-grid {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        width: 100%;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 1.3rem;
     }
 
     @media (max-width: 1399px) {
-        .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.2rem; }
+        .product-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.2rem; }
     }
 
     @media (max-width: 1199px) {
-        .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.1rem; }
+        .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.1rem; }
     }
 
     @media (max-width: 899px) {
-        .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.95rem; }
+        .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.95rem; }
+    }
+
+    @media (max-width: 599px) {
+        .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; }
     }
 
     .product-card {
@@ -3097,55 +3157,31 @@
             {% endif %}
     </div>
 
-    {% if products and products|length > 0 %}
-    <div class="product-grid">
-        {% for product in products %}
-        <div class="product-card" onclick="viewProduct({{ product.id }})" data-product-id="{{ product.id }}">
-            {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
-            {% set has_sellable_stock = product.is_available and (product.stock_quantity > 0 or has_variant_stock) %}
-            {% set can_deliver = product.can_deliver_to_customer if product.can_deliver_to_customer is defined else True %}
-            {% if product.stock_quantity < 10 and product.stock_quantity > 0 and not has_variant_stock %}
-            <div class="product-badge badge-low">Low Stock</div>
-            {% endif %}
-            {% if session.get('role') == 'customer' and browse_all_mode and not can_deliver %}
-            <div class="product-badge badge-delivery-block">Outside Delivery Area</div>
-            {% endif %}
+    {% set ns = namespace(has_products=false) %}
+    {% for row in featured_product_rows %}
+        {% if row.products and row.products|length > 0 %}
+            {% set ns.has_products = true %}
+        {% endif %}
+    {% endfor %}
 
-            <div class="product-image">
-                {% if product.image_url %}
-                <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy" decoding="async"
-                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;opacity:0.2\'><i class=\'ri-image-line\'></i></div>';">
-                {% else %}
-                <div style="font-size:48px;opacity:0.2"><i class="ri-image-line"></i></div>
-                {% endif %}
-                <div class="product-overlay">
-                    <button class="overlay-btn" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="View Details">
-                        <i class="ri-eye-line"></i>
-                    </button>
-                    {% if session.get('role') not in ['seller', 'admin'] and can_deliver %}
-                    <button class="overlay-btn" onclick="event.stopPropagation(); openQuickAddPicker(event.currentTarget, {{ product.id }})" title="Quick Add">
-                        <i class="ri-shopping-bag-line"></i>
-                    </button>
-                    {% endif %}
-                </div>
+    {% if ns.has_products %}
+    <div class="featured-category-rows">
+        {% for row in featured_product_rows %}
+        {% if row.products and row.products|length > 0 %}
+        <div class="featured-category-row">
+            <div class="featured-category-row-header">
+                <h3 class="featured-category-row-title">{{ row.name }}</h3>
+                <a href="{{ url_for('templates.category', category_identifier=row.slug) }}" class="featured-category-row-link">
+                    View all <i class="ri-arrow-right-line"></i>
+                </a>
             </div>
-
-            <div class="product-content">
-                <h3 class="product-title">{{ product.name }}</h3>
-                <div class="product-meta">
-                    <div class="product-price">{{ price_tag(product, 'sm', false) }}</div>
-                    {% set rating = product.avg_rating if product.avg_rating is defined else 0 %}
-                    {% set reviews = product.review_count if product.review_count is defined else 0 %}
-                    {% if reviews and reviews > 0 %}
-                    <div class="product-rating" title="{{ rating }} from {{ reviews }} review{{ 's' if reviews != 1 else '' }}">
-                        <i class="ri-star-fill"></i>
-                        <span>{{ '%.1f'|format(rating) }}</span>
-                        <span class="product-rating__count">({{ reviews }})</span>
-                    </div>
-                    {% endif %}
-                </div>
+            <div class="product-grid">
+                {% for product in row.products %}
+                {% include 'partials/storefront_product_card.html' %}
+                {% endfor %}
             </div>
         </div>
+        {% endif %}
         {% endfor %}
     </div>
     {% else %}

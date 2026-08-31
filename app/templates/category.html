@@ -168,7 +168,12 @@
     }
 
     .main-header,
-    .main-nav,
+    .main-nav {
+        position: relative;
+        z-index: 1100;
+        pointer-events: auto;
+    }
+
     .main-content,
     .main-footer,
     footer {
@@ -221,6 +226,83 @@
         margin: 1.5rem auto 0;
         font-size: 16px;
     }
+
+    .filter-bar {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.65rem;
+        margin: 0 auto 1.5rem;
+        max-width: 100%;
+    }
+
+    .filter-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-family: var(--font-sans);
+        white-space: nowrap;
+    }
+
+    .filter-select-wrap {
+        position: relative;
+        min-width: min(280px, 100%);
+    }
+
+    .filter-select-wrap::after {
+        content: '';
+        position: absolute;
+        right: 0.95rem;
+        top: 50%;
+        width: 0.45rem;
+        height: 0.45rem;
+        border-right: 1.5px solid var(--deep-rose);
+        border-bottom: 1.5px solid var(--deep-rose);
+        transform: translateY(-70%) rotate(45deg);
+        pointer-events: none;
+    }
+
+    .filter-select {
+        width: 100%;
+        appearance: none;
+        -webkit-appearance: none;
+        padding: 0.6rem 2.2rem 0.6rem 1rem;
+        border-radius: var(--radius-pill);
+        border: 1.5px solid rgba(194, 78, 104, 0.22);
+        background: rgba(255, 255, 255, 0.72);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--charcoal);
+        cursor: pointer;
+        transition: var(--transition);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        box-shadow: 0 4px 14px rgba(80, 40, 70, 0.05);
+    }
+
+    .filter-select:hover {
+        border-color: rgba(194, 78, 104, 0.4);
+        background: rgba(255, 255, 255, 0.88);
+    }
+
+    .filter-select:focus {
+        outline: none;
+        border-color: rgba(194, 78, 104, 0.5);
+        box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.12);
+    }
+
+    .filter-empty {
+        display: none;
+        text-align: center;
+        padding: 2.5rem 1.5rem;
+        color: var(--muted);
+        font-size: 15px;
+    }
+
+    .filter-empty.is-visible { display: block; }
     
     /* Breadcrumb */
     .breadcrumb {
@@ -535,6 +617,16 @@
         .category-header h1 {
             font-size: 2rem;
         }
+
+        .filter-bar {
+            justify-content: stretch;
+            margin-bottom: 1.25rem;
+        }
+
+        .filter-select-wrap {
+            flex: 1;
+            min-width: 0;
+        }
     }
     
     @media (max-width: 480px) {
@@ -645,12 +737,30 @@
         <h1>{{ category_id|title }}</h1>
         <p>Browse our beautiful collection of {{ category_id }}</p>
     </div>
+
+    {% if products and products|length > 0 and subcategories %}
+    <div class="filter-bar" id="categoryFilterBar">
+        <label class="filter-label" for="categorySubFilter">Subcategory</label>
+        <div class="filter-select-wrap">
+            <select id="categorySubFilter" class="filter-select" aria-label="Filter by subcategory">
+                <option value="all"{% if initial_subcategory == 'all' %} selected{% endif %}>
+                    All ({{ products|length }})
+                </option>
+                {% for sub in subcategories %}
+                <option value="{{ sub.key }}"{% if initial_subcategory == sub.key %} selected{% endif %}>
+                    {{ sub.name }} ({{ sub.count }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    {% endif %}
     
     <!-- Products Grid -->
     {% if products and products|length > 0 %}
-    <div class="product-grid">
+    <div class="product-grid" id="categoryProductGrid">
         {% for product in products %}
-        <div class="product-card" onclick="viewProduct({{ product.id }})" data-product-id="{{ product.id }}">
+        <div class="product-card" onclick="viewProduct({{ product.id }})" data-product-id="{{ product.id }}" data-sub="{{ product.subcategory_filter_key or '' }}">
             {% set has_sellable_stock = product.is_available and product.stock_quantity > 0 %}
             {% if product.stock_quantity < 5 and product.stock_quantity > 0 %}
             <div class="product-badge">Low Stock</div>
@@ -702,6 +812,9 @@
         </div>
         {% endfor %}
     </div>
+    <div class="filter-empty" id="categoryFilterEmpty">
+        <p>No products in this subcategory yet.</p>
+    </div>
     {% else %}
     <div class="empty-state">
         <i class="ri-leaf-line"></i>
@@ -726,6 +839,37 @@
       function viewProduct(productId) {
         window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
     }
+
+    (function categorySubcategoryFilter() {
+        const select = document.getElementById('categorySubFilter');
+        const cards = document.querySelectorAll('#categoryProductGrid .product-card');
+        const emptyEl = document.getElementById('categoryFilterEmpty');
+        if (!select || !cards.length) return;
+
+        function applyFilter(key) {
+            let visible = 0;
+            cards.forEach(function (card) {
+                const show = key === 'all' || card.getAttribute('data-sub') === key;
+                card.style.display = show ? '' : 'none';
+                if (show) visible += 1;
+            });
+            if (emptyEl) emptyEl.classList.toggle('is-visible', visible === 0);
+            select.value = key || 'all';
+            try {
+                const url = new URL(window.location.href);
+                if (key && key !== 'all') url.searchParams.set('sub', key);
+                else url.searchParams.delete('sub');
+                window.history.replaceState({}, '', url.pathname + url.search);
+            } catch (_) {}
+        }
+
+        select.addEventListener('change', function () {
+            applyFilter(select.value || 'all');
+        });
+
+        const initial = {{ (initial_subcategory or 'all')|tojson }};
+        if (initial && initial !== 'all') applyFilter(initial);
+    })();
 
     // Your existing addToCart and other functions...
     function addToCart(product) {

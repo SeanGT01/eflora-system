@@ -2704,8 +2704,9 @@
                                 
                                 <div class="form-group form-group-full">
                                     <label class="form-label">Store Description</label>
-                                    <textarea class="form-control" id="store-description" rows="3" 
+                                    <textarea class="form-control" id="store-description" rows="3" maxlength="500"
                                               placeholder="Tell customers about your store...">{{ store.description or '' }}</textarea>
+                                    <div class="form-hint" id="store-description-count">0 / 500 characters</div>
                                 </div>
 
                                 <!-- STORE SCHEDULE / OPERATING HOURS -->
@@ -5247,6 +5248,23 @@
         clearStoreSettingsDirty('basic');
     });
     
+    // Store description character limit
+    const STORE_DESCRIPTION_MAX = 500;
+    const storeDescriptionInput = document.getElementById('store-description');
+    const storeDescriptionCount = document.getElementById('store-description-count');
+
+    function updateStoreDescriptionCount() {
+        if (!storeDescriptionInput || !storeDescriptionCount) return;
+        const length = storeDescriptionInput.value.length;
+        storeDescriptionCount.textContent = `${length} / ${STORE_DESCRIPTION_MAX} characters`;
+        storeDescriptionCount.style.color = length >= STORE_DESCRIPTION_MAX ? '#c0392b' : '';
+    }
+
+    if (storeDescriptionInput) {
+        updateStoreDescriptionCount();
+        storeDescriptionInput.addEventListener('input', updateStoreDescriptionCount);
+    }
+
     // Real-time validation for contact number
     const contactNumberInput = document.getElementById('contact-number');
     if (contactNumberInput) {
@@ -5288,6 +5306,15 @@
             const contactNumber = document.getElementById('contact-number').value.trim();
             const status = document.getElementById('store-status').value;
             const description = document.getElementById('store-description').value.trim();
+
+            if (description.length > STORE_DESCRIPTION_MAX) {
+                showToast(`Store description must be ${STORE_DESCRIPTION_MAX} characters or less`, 'error');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                document.dispatchEvent(new CustomEvent('store-section-saved', { detail: { section: 'basic', success: false } }));
+                return;
+            }
+            
             const municipality = document.getElementById('municipality').value;
             const barangay = document.getElementById('barangay').value;
             const street = document.getElementById('street-address').value.trim();

@@ -33,6 +33,51 @@ from app.addon_helpers import (
 checkout_bp = Blueprint("checkout", __name__)
 print(f"✅ checkout_bp created: {checkout_bp}")
 
+MAX_ACTIVE_CUSTOMER_ORDERS = 5
+ACTIVE_ORDER_LIMIT_MESSAGE = (
+    "You already have {count} active orders (maximum {limit}). "
+    "Please wait until an order is marked Completed before placing a new one."
+)
+
+
+def _customer_active_order_count(customer_id):
+    """Orders that still count toward the active-order checkout cap."""
+    return (
+        Order.query.filter(
+            Order.customer_id == customer_id,
+            Order.status != 'completed',
+        ).count()
+    )
+
+
+def _active_order_limit_payload(customer_id):
+    count = _customer_active_order_count(customer_id)
+    blocked = count >= MAX_ACTIVE_CUSTOMER_ORDERS
+    return {
+        'blocked': blocked,
+        'active_order_count': count,
+        'limit': MAX_ACTIVE_CUSTOMER_ORDERS,
+        'message': (
+            ACTIVE_ORDER_LIMIT_MESSAGE.format(
+                count=count,
+                limit=MAX_ACTIVE_CUSTOMER_ORDERS,
+            )
+            if blocked else None
+        ),
+    }
+
+
+def _active_order_limit_error_response(customer_id):
+    payload = _active_order_limit_payload(customer_id)
+    if not payload['blocked']:
+        return None
+    return jsonify({
+        'success': False,
+        'error': payload['message'],
+        'code': 'active_order_limit',
+        **payload,
+    }), 403
+
 # Test route
 @checkout_bp.route("/test", methods=["GET"])
 def test_checkout():
@@ -711,12 +756,23 @@ def _check_store_delivery(store, address, subtotal):
 
 
 # ===== NEW ENDPOINT: Validate delivery and calculate totals (no order creation) =====
+@checkout_bp.route("/active-order-limit", methods=["GET"])
+@customer_only
+def checkout_active_order_limit():
+    """Return whether the customer is blocked by the active-order cap."""
+    return jsonify(_active_order_limit_payload(request.user_id)), 200
+
+
 @checkout_bp.route("/validate-stock", methods=["POST"])
 @customer_only
 def validate_checkout_stock():
     """Pre-checkout stock check for selected cart items or a buy-now item."""
     try:
         user_id = request.user_id
+        limit_error = _active_order_limit_error_response(user_id)
+        if limit_error:
+            return limit_error
+
         data = request.get_json() or {}
         mode = (data.get("mode") or "cart").strip().lower()
 
@@ -844,6 +900,10 @@ def validate_checkout():
     print("🔵🔵🔵 VALIDATE CHECKOUT ROUTE WAS CALLED! 🔵🔵🔵")
     try:
         user_id = request.user_id
+        limit_error = _active_order_limit_error_response(user_id)
+        if limit_error:
+            return limit_error
+
         data = request.get_json() or {}
 
         customer = User.query.get(user_id)
@@ -1090,6 +1150,10 @@ def create_orders():
     print("🔵🔵🔵 CREATE ORDERS ROUTE WAS CALLED! 🔵🔵🔵")
     try:
         user_id = request.user_id
+        limit_error = _active_order_limit_error_response(user_id)
+        if limit_error:
+            return limit_error
+
         data = request.get_json() or {}
         customer = User.query.get(user_id)
         customer_name = _customer_display_name(user_id, customer)
@@ -1513,6 +1577,10 @@ def process_checkout():
     print("🔵🔵🔵 PROCESS CHECKOUT ROUTE WAS CALLED! 🔵🔵🔵")
     try:
         user_id = request.user_id
+        limit_error = _active_order_limit_error_response(user_id)
+        if limit_error:
+            return limit_error
+
         data = request.get_json() or {}
 
         customer = User.query.get(user_id)
@@ -1890,6 +1958,10 @@ def buy_now_validate():
     print("🔵🔵🔵 BUY NOW VALIDATE ROUTE WAS CALLED! 🔵🔵🔵")
     try:
         user_id = request.user_id
+        limit_error = _active_order_limit_error_response(user_id)
+        if limit_error:
+            return limit_error
+
         data = request.get_json() or {}
         
         print(f"📨 Request data received: {data}")
@@ -2050,6 +2122,10 @@ def buy_now_create_order():
     print("🔵🔵🔵 BUY NOW CREATE ORDER ROUTE WAS CALLED! 🔵🔵🔵")
     try:
         user_id = request.user_id
+        limit_error = _active_order_limit_error_response(user_id)
+        if limit_error:
+            return limit_error
+
         data = request.get_json() or {}
         customer = User.query.get(user_id)
         customer_name = _customer_display_name(user_id, customer)

@@ -2459,7 +2459,7 @@
             <div class="card-header-icon"><i class="ri-map-pin-line"></i></div>
             <div class="card-title">Delivery Addresses</div>
         </div>
-        <button type="button" class="btn btn-profile-action btn-sm" onclick="showAddAddressModal()">
+        <button type="button" class="btn btn-profile-action btn-sm" id="addAddressBtn" onclick="showAddAddressModal()">
             <i class="ri-add-line"></i> Add Address
         </button>
     </div>
@@ -3479,6 +3479,8 @@ let __addressPromptConsumed = false;
 let __addressesCache = [];
 let __addressPage = 1;
 const ADDRESS_PAGE_SIZE = 4;
+const MAX_CUSTOMER_ADDRESSES = 3;
+const ADDRESS_LIMIT_MESSAGE = 'You can save up to 3 addresses. Remove one to add another.';
 
 // Laguna province boundary (merged municipalities) for pin containment
 let lagunaProvinceFeature = null;
@@ -4258,6 +4260,19 @@ function _isProfileOnboardingComplete() {
         && !_needsOnboardingPhone();
 }
 
+function canAddCustomerAddress() {
+    return (__addressesCache || []).length < MAX_CUSTOMER_ADDRESSES;
+}
+
+function updateAddAddressButton() {
+    const btn = document.getElementById('addAddressBtn');
+    if (!btn) return;
+    const atLimit = !canAddCustomerAddress();
+    btn.disabled = atLimit;
+    btn.title = atLimit ? ADDRESS_LIMIT_MESSAGE : 'Add Address';
+    btn.setAttribute('aria-disabled', atLimit ? 'true' : 'false');
+}
+
 async function loadAddresses(options = {}) {
     try {
         const r = await fetch('/api/account/addresses');
@@ -4314,6 +4329,7 @@ function renderAddressesPage() {
             pagination.classList.remove('is-visible');
             pagination.innerHTML = '';
         }
+        updateAddAddressButton();
         return;
     }
 
@@ -4355,6 +4371,7 @@ function renderAddressesPage() {
     `).join('');
 
     renderAddressPagination(totalPages);
+    updateAddAddressButton();
 }
 
 function renderAddressPagination(totalPages) {
@@ -4909,6 +4926,10 @@ async function autoDetectAndPrefillAddress() {
 }
 
 function showAddAddressModal(autoDetect = true) {
+    if (!canAddCustomerAddress()) {
+        showToast(ADDRESS_LIMIT_MESSAGE, 'error');
+        return;
+    }
     hideExclusiveOnboardingSurfaces('addressModal');
     if (!__onboardingAddressRequired) {
         clearRequiredAddressOnboarding();

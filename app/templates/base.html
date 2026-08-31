@@ -467,7 +467,7 @@
             box-shadow: var(--shadow-leaf);
             min-width: 190px;
             overflow: hidden;
-            z-index: 1001;
+            z-index: 1200;
         }
 
         .user-menu.show { display: block; animation: menuFade 0.2s ease; }
@@ -817,7 +817,7 @@
             background: rgba(42, 35, 30, 0.18);
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
-            z-index: 1000;
+            z-index: 4500;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s ease;
@@ -843,7 +843,7 @@
                 inset 1px 0 0 rgba(255, 255, 255, 0.4);
             transform: translateX(100%);
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            z-index: 1001;
+            z-index: 4501;
             display: flex;
             flex-direction: column;
             isolation: isolate;
@@ -1360,7 +1360,7 @@
             display: none;
             justify-content: center;
             align-items: center;
-            z-index: 1002;
+            z-index: 4600;
             padding: 1.5rem;
         }
 
@@ -1483,6 +1483,26 @@
             background: #fff5f5;
             color: #8b3a3a;
             border-radius: var(--radius-md);
+        }
+
+        #checkoutActiveOrderLimit {
+            margin-bottom: 16px;
+        }
+
+        #checkoutActiveOrderLimit > div {
+            padding: 14px 16px;
+            border: 1px solid #d4a574;
+            background: #fff8ef;
+            color: #7a4a12;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        #checkoutActiveOrderLimit strong {
+            display: block;
+            margin-bottom: 0.35rem;
+            font-size: 14px;
         }
 
         /* ===== GCASH PAYMENT CONTAINER ===== */
@@ -2149,7 +2169,7 @@
             font-size: 14px;
             font-family: var(--font-sans);
             box-shadow: var(--shadow-deep);
-            z-index: 2000;
+            z-index: 4700;
             opacity: 0;
             transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
             white-space: nowrap;
@@ -2169,7 +2189,7 @@
             display: none;
             justify-content: center;
             align-items: center;
-            z-index: 1003;
+            z-index: 4601;
             padding: 1.5rem;
             opacity: 0;
             transition: opacity 0.3s ease;
@@ -3046,6 +3066,7 @@
                         <div style="font-weight: 600; margin-bottom: 4px;">No saved address yet</div>
                         <div style="font-size: 13px; color: var(--muted);">Please add a customer address first before checking out.</div>
                     </div>
+                    <div id="checkoutActiveOrderLimit" style="display:none; margin-bottom: 16px;"></div>
                     <div id="checkoutDeliveryIssues" style="display:none; margin-bottom: 16px;"></div>
 
                     <div class="checkout-delivery-card" style="margin-bottom: 0;">
@@ -3237,10 +3258,10 @@
 {% if request.endpoint != 'templates.my_account' %}
 <nav class="main-nav">
     <div class="nav-container">
-        <a href="{{ url_for('templates.index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">All</a>
+        <a href="{{ url_for('templates.index') }}" class="nav-link {% if request.endpoint == 'templates.index' %}active{% endif %}">All</a>
         {% if categories %}
             {% for category in categories %}
-       <a href="{{ url_for('templates.category', category_identifier=category.id) }}" class="nav-link">{{ category.name }}</a>
+       <a href="{{ url_for('templates.category', category_identifier=category.slug or category.id) }}" class="nav-link">{{ category.name }}</a>
             {% endfor %}
         {% endif %}
     </div>
@@ -5003,24 +5024,46 @@ function clearCartLocal() {
     showToast('Basket cleared');
 }
 
+function closeCart() {
+    const sidebar = document.getElementById('cartSidebar');
+    const overlay = document.getElementById('cartOverlay');
+    if (sidebar) sidebar.classList.remove('active');
+    if (overlay) overlay.classList.remove('active');
+    if (typeof updateChatFabVisibility === 'function') updateChatFabVisibility();
+}
+
+function showCheckoutModal() {
+    closeCart();
+    document.getElementById('checkoutModal')?.classList.add('active');
+}
+
 function toggleCart() {
     if (SHOPPING_DISABLED) {
         showToast('Cart is disabled for seller/admin accounts', 'error');
         return;
     }
+    // If quick-add left the header disabled, restore clicks first.
+    if (document.body.classList.contains('qa-picker-open') && typeof closeQuickAddPicker === 'function') {
+        closeQuickAddPicker();
+    }
     const sidebar = document.getElementById('cartSidebar');
     const overlay = document.getElementById('cartOverlay');
+    if (!sidebar || !overlay) return;
     sidebar.classList.toggle('active');
     overlay.classList.toggle('active');
     updateChatFabVisibility();
     if (sidebar.classList.contains('active')) updateCartDisplay();
 }
 
-document.getElementById('closeCart').addEventListener('click', toggleCart);
+document.getElementById('closeCart')?.addEventListener('click', toggleCart);
 
 function toggleUserMenu(event) {
-    event.stopPropagation();
+    if (event) event.stopPropagation();
+    if (document.body.classList.contains('qa-picker-open') && typeof closeQuickAddPicker === 'function') {
+        closeQuickAddPicker();
+    }
     const userMenu = document.getElementById('userMenu');
+    if (!userMenu) return;
     userMenu.classList.toggle('show');
 }
 
@@ -5092,6 +5135,52 @@ async function fetchCheckoutAddresses() {
     }
 
     return Array.isArray(result.addresses) ? result.addresses : [];
+}
+
+async function fetchCheckoutActiveOrderLimit() {
+    const response = await fetch('/api/v1/checkout/active-order-limit');
+    const result = await response.json();
+    if (!response.ok) {
+        throw new Error(result.error || 'Could not verify active order limit');
+    }
+    return result;
+}
+
+function renderCheckoutActiveOrderLimit(data) {
+    const el = document.getElementById('checkoutActiveOrderLimit');
+    const nextBtn = document.getElementById('checkoutNextBtn');
+    if (!el) return !!data?.blocked;
+
+    if (data && data.blocked) {
+        el.style.display = 'block';
+        el.innerHTML = `
+            <div>
+                <strong><i class="ri-error-warning-line"></i> Checkout unavailable</strong>
+                ${data.message || 'You have too many active orders. Complete an order before placing a new one.'}
+            </div>
+        `;
+        if (nextBtn) nextBtn.disabled = true;
+        return true;
+    }
+
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return false;
+}
+
+function clearCheckoutActiveOrderLimit() {
+    renderCheckoutActiveOrderLimit({ blocked: false });
+}
+
+async function ensureCheckoutActiveOrderAllowed() {
+    try {
+        const data = await fetchCheckoutActiveOrderLimit();
+        return !renderCheckoutActiveOrderLimit(data);
+    } catch (error) {
+        console.error('Active order limit check failed:', error);
+        clearCheckoutActiveOrderLimit();
+        return true;
+    }
 }
 
 function closeStockIssueModal() {
@@ -5215,6 +5304,27 @@ async function buyNowDirect(item) {
         return;
     }
 
+    const activeOrdersOk = await ensureCheckoutActiveOrderAllowed();
+    if (!activeOrdersOk) {
+        startCheckoutSession();
+        checkoutStep = 1;
+        checkoutOrders = [];
+        uploadedProofs = {};
+        uploadedProofData = {};
+        currentOrderIndex = 0;
+        isCreatingOrders = false;
+        storeDeliveryPreferences = {};
+        updateProgressIndicator(1);
+
+        document.getElementById('checkoutStep1').style.display = 'block';
+        document.getElementById('checkoutStep2').style.display = 'none';
+        document.getElementById('checkoutStep3').style.display = 'none';
+        document.getElementById('checkoutBackBtn').style.display = 'none';
+        document.getElementById('checkoutNextBtn').textContent = '→ Continue';
+        showCheckoutModal();
+        return;
+    }
+
     startCheckoutSession();
     checkoutStep = 1;
     checkoutOrders = [];
@@ -5231,7 +5341,7 @@ async function buyNowDirect(item) {
     document.getElementById('checkoutBackBtn').style.display = 'none';
     document.getElementById('checkoutNextBtn').textContent = '→ Continue';
     document.getElementById('checkoutNextBtn').disabled = false;
-    document.getElementById('checkoutModal').classList.add('active');
+    showCheckoutModal();
 
     if (checkoutModalCloseHandler) {
         document.getElementById('checkoutModal').removeEventListener('click', checkoutModalCloseHandler);
@@ -5293,6 +5403,26 @@ async function checkout() {
     });
     if (!stockOk) return;
 
+    const activeOrdersOk = await ensureCheckoutActiveOrderAllowed();
+    if (!activeOrdersOk) {
+        startCheckoutSession();
+        checkoutStep = 1;
+        checkoutOrders = [];
+        uploadedProofs = {};
+        uploadedProofData = {};
+        currentOrderIndex = 0;
+        isCreatingOrders = false;
+        updateProgressIndicator(1);
+
+        document.getElementById('checkoutStep1').style.display = 'block';
+        document.getElementById('checkoutStep2').style.display = 'none';
+        document.getElementById('checkoutStep3').style.display = 'none';
+        document.getElementById('checkoutBackBtn').style.display = 'none';
+        document.getElementById('checkoutNextBtn').textContent = '→ Continue';
+        showCheckoutModal();
+        return;
+    }
+
     startCheckoutSession();
     
     checkoutStep = 1;
@@ -5322,7 +5452,7 @@ async function checkout() {
     // Phase 1: Initialize per-store delivery preferences
     storeDeliveryPreferences = {};
     
-    document.getElementById('checkoutModal').classList.add('active');
+    showCheckoutModal();
     
     if (checkoutModalCloseHandler) {
         document.getElementById('checkoutModal').removeEventListener('click', checkoutModalCloseHandler);
@@ -5381,6 +5511,7 @@ async function closeCheckout() {
     cancelCheckout();
     buyNowMode = false;
     buyNowItem = null;
+    clearCheckoutActiveOrderLimit();
 }
 
 function goBackCheckout() {
@@ -5485,6 +5616,11 @@ async function probeCheckoutAddressDelivery(addressId) {
             return { canDeliver: true, issues: [] };
         }
 
+        if (result.code === 'active_order_limit') {
+            renderCheckoutActiveOrderLimit(result);
+            return { canDeliver: false, issues: [], activeOrderLimit: true };
+        }
+
         const issues = result.undeliverable_stores || [];
         if (issues.length) {
             return { canDeliver: false, issues };
@@ -5528,6 +5664,13 @@ async function loadCheckoutAddresses() {
     checkoutAddressDeliveryMap = {};
 
     try {
+        const limitData = await fetchCheckoutActiveOrderLimit();
+        if (renderCheckoutActiveOrderLimit(limitData)) {
+            listEl.innerHTML = '';
+            emptyEl.style.display = 'none';
+            return;
+        }
+
         checkoutAddresses = await fetchCheckoutAddresses();
         if (!checkoutAddresses.length) {
             selectedCheckoutAddressId = null;
@@ -5741,9 +5884,12 @@ async function proceedCheckout() {
                     renderCheckoutAddresses();
                 }
                 renderCheckoutDeliveryIssues(result.undeliverable_stores || []);
-                
+
                 // Show more helpful error message
-                if (result.undeliverable_stores && result.undeliverable_stores.length > 0) {
+                if (result.code === 'active_order_limit') {
+                    renderCheckoutActiveOrderLimit(result);
+                    showToast(result.error || 'Checkout unavailable', 'error');
+                } else if (result.undeliverable_stores && result.undeliverable_stores.length > 0) {
                     const issue = result.undeliverable_stores[0];
                     showDeliveryUnavailableModal({
                         title: 'Cannot deliver here',

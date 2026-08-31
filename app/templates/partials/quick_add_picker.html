@@ -516,7 +516,7 @@
     </div>
 </div>
 
-<script type="application/json" id="quickAddProductsData">{{ quick_add_products|default(products)|tojson }}</script>
+<script type="application/json" id="quickAddProductsData">{{ (quick_add_products|default(products)|default([]))|tojson }}</script>
 <script>
 // Quick-add: multi-select Standard/variants + add-ons with per-card qty
 (function () {
@@ -1259,6 +1259,20 @@
         openQuickAddPicker(null, productId);
     };
 
-    document.addEventListener('DOMContentLoaded', loadHomeProductsMap);
+    document.addEventListener('DOMContentLoaded', function () {
+        // Never leave the sticky header unclickable after a bad quick-add state.
+        document.body.classList.remove('qa-picker-open');
+        const overlay = document.getElementById('qaOverlay');
+        const picker = document.getElementById('qaPicker');
+        if (overlay) {
+            overlay.classList.remove('open');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+        if (picker) {
+            picker.classList.remove('open');
+            picker.hidden = true;
+        }
+        loadHomeProductsMap();
+    });
 })();
 </script>
