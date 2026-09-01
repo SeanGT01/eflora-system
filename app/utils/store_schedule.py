@@ -58,6 +58,45 @@ def format_hhmm_value(value):
     return format_hhmm_label(*parsed)
 
 
+def format_store_hours_parts(schedule):
+    """Labeled 12-hour PH store-open vs delivery window for dashboard Store Info."""
+    schedule = schedule or {}
+    blocks = []
+    seen = set()
+    for entry in schedule.get('schedules') or []:
+        open_l = format_hhmm_value(entry.get('open'))
+        close_l = format_hhmm_value(entry.get('close'))
+        if not open_l or not close_l:
+            continue
+        key = (open_l, close_l)
+        if key in seen:
+            continue
+        seen.add(key)
+        blocks.append(f'{open_l} – {close_l}')
+    open_hours = None
+    if len(blocks) == 1:
+        open_hours = f'{blocks[0]} PHT'
+    elif len(blocks) > 1:
+        open_hours = f"{'; '.join(blocks)} PHT"
+    start = format_hhmm_value(schedule.get('delivery_start'))
+    end = format_hhmm_value(schedule.get('delivery_cutoff'))
+    delivery_hours = f'{start} – {end} PHT' if start and end else None
+    return {
+        'open': open_hours,
+        'delivery': delivery_hours,
+    }
+
+
+def format_store_hours_display(schedule):
+    parts = format_store_hours_parts(schedule)
+    bits = []
+    if parts.get('open'):
+        bits.append(f"Store open {parts['open']}")
+    if parts.get('delivery'):
+        bits.append(f"Delivery {parts['delivery']}")
+    return ' · '.join(bits) if bits else 'Not set'
+
+
 def _combine_pht(day, hour, minute):
     return PHT.localize(datetime(day.year, day.month, day.day, hour, minute, 0))
 

@@ -5,6 +5,7 @@ from app.extensions import db
 from app.models import User, Store, Product, Order, Rider, POSOrder, OrderAnalytics, Testimonial, OrderItem, RiderOTP
 from sqlalchemy import func
 from datetime import datetime, timedelta
+from app.utils.report_service import period_range
 import os
 from werkzeug.utils import secure_filename
 
@@ -47,17 +48,19 @@ def seller_dashboard():
     if not store:
         return jsonify({'error': 'No active store found'}), 404
     
-    # Today's stats
-    today = datetime.utcnow().date()
+    # Today's stats (Philippine calendar day)
+    today_start, today_end, _ = period_range('today')
     
     today_orders = Order.query.filter(
         Order.store_id == store.id,
-        func.date(Order.created_at) == today
+        Order.created_at >= today_start,
+        Order.created_at < today_end,
     ).count()
     
     today_revenue_result = db.session.query(func.sum(Order.total_amount)).filter(
         Order.store_id == store.id,
-        func.date(Order.created_at) == today,
+        Order.created_at >= today_start,
+        Order.created_at < today_end,
         Order.status == 'delivered'
     ).first()
     today_revenue = float(today_revenue_result[0] or 0)

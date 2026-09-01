@@ -377,9 +377,22 @@
 /* ─── Two-column body ───────────────────────────────────── */
 .dash-body {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 1fr;
   gap: 0.95rem;
   margin-bottom: 0.95rem;
+  align-items: stretch;
+}
+
+.dash-body > .panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dash-body .chart-wrap {
+  flex: 1;
+  min-height: 220px;
+  height: auto;
 }
 
 /* ─── Panel base ────────────────────────────────────────── */
@@ -473,11 +486,28 @@
 .rank-num.bronze { background: rgba(196,113,75,.15); color: var(--terracotta); }
 .rank-num.plain  { background: rgba(250,246,240,.9); color: var(--muted); border: 1px solid var(--border); }
 
-.rank-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
+.rank-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
   flex-shrink: 0;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
 }
+
+.rank-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.rank-thumb i { font-size: 16px; }
 
 .rank-info { flex: 1; min-width: 0; }
 
@@ -642,6 +672,29 @@ table.dash-table {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.95rem;
+  align-items: stretch;
+}
+
+.dash-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+  min-height: 0;
+}
+
+.dash-col > .panel:last-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.alert-list,
+.info-list,
+.activity-feed {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ─── Quick Actions ─────────────────────────────────────── */
@@ -705,6 +758,131 @@ table.dash-table {
   line-height: 1.35;
 }
 
+/* ─── Inventory Alerts ──────────────────────────────────── */
+.alert-item {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .55rem 1rem;
+  border-bottom: 1px solid rgba(194, 78, 104, 0.08);
+  transition: var(--transition);
+}
+
+.alert-item:last-child { border-bottom: none; }
+.alert-item:hover { background: rgba(255, 245, 248, 0.65); }
+
+.alert-icon {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.alert-icon.danger  { background: rgba(192,57,43,.1); color: #9b1c1c; }
+
+.alert-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.alert-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.alert-thumb i { font-size: 16px; }
+.alert-thumb.low { box-shadow: 0 0 0 1.5px rgba(240,180,41,.45); }
+.alert-thumb.out { box-shadow: 0 0 0 1.5px rgba(192,57,43,.35); }
+
+.alert-info { flex: 1; min-width: 0; }
+.alert-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alert-detail { font-size: 10.5px; color: var(--muted); }
+
+.alert-stock {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.alert-stock.low { color: #8a5e00; }
+.alert-stock.out { color: #9b1c1c; }
+
+.info-store-head {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .65rem 1rem .55rem;
+  border-bottom: 1px solid rgba(194, 78, 104, 0.08);
+}
+
+.info-status {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 100px;
+  background: rgba(122,158,126,.16);
+  color: var(--sage);
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .55rem 1rem;
+  border-bottom: 1px solid rgba(194, 78, 104, 0.08);
+  min-height: 52px;
+}
+
+.info-row:last-child { border-bottom: none; }
+
+.info-label {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.info-label i { font-size: 14px; color: var(--dusty-rose); }
+
+.info-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--charcoal);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ─── Performance ───────────────────────────────────────── */
 .perf-body { padding: 0.85rem 1rem; }
 
@@ -763,9 +941,13 @@ table.dash-table {
 .activity-feed { padding: .5rem 0; }
 
 .activity-item {
+  --act-pad-x: 1.75rem;
+  --act-pad-y: .85rem;
+  --act-dot: 30px;
+  --act-dot-mt: 1px;
   display: flex;
   gap: 1rem;
-  padding: .85rem 1.75rem;
+  padding: var(--act-pad-y) var(--act-pad-x);
   position: relative;
   transition: var(--transition);
 }
@@ -775,24 +957,28 @@ table.dash-table {
 .activity-item::before {
   content: '';
   position: absolute;
-  left: calc(1.75rem + 15px);
-  top: calc(.85rem + 32px);
-  width: 1px;
-  height: calc(100% - .85rem);
+  left: calc(var(--act-pad-x) + (var(--act-dot) / 2));
+  top: calc(var(--act-pad-y) + var(--act-dot-mt) + (var(--act-dot) / 2));
+  width: 2px;
+  margin-left: -1px;
+  height: 100%;
   background: var(--border);
 }
 
 .activity-item:last-child::before { display: none; }
 
 .act-dot {
-  width: 30px; height: 30px;
+  width: var(--act-dot);
+  height: var(--act-dot);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   flex-shrink: 0;
-  margin-top: 1px;
+  margin-top: var(--act-dot-mt);
+  position: relative;
+  z-index: 1;
 }
 
 .act-dot.order    { background: rgba(181,68,90,.1);   color: var(--deep-rose); }
@@ -836,8 +1022,9 @@ table.dash-table {
   .dash-table thead th { padding: .65rem 1rem; }
   .dash-table td { padding: .8rem 1rem; }
   .perf-body { padding: 1rem 1.25rem; }
-  .activity-item { padding: .75rem 1.25rem; }
-  .activity-item::before { left: calc(1.25rem + 15px); }
+  .activity-item { padding: .75rem 1.25rem; --act-pad-x: 1.25rem; --act-pad-y: .75rem; }
+  .info-row { padding: .65rem 1.25rem; }
+  .info-store-head { padding: .55rem 1.25rem; }
   .quick-actions-grid { padding: 1.1rem 1.25rem; }
 }
 
@@ -898,7 +1085,7 @@ table.dash-table {
   /* Top products */
   .product-rank { padding: .5rem .875rem; gap: .5rem; }
   .rank-num { width: 20px; height: 20px; font-size: 10px; }
-  .rank-dot { width: 7px; height: 7px; }
+  .rank-thumb { width: 36px; height: 36px; border-radius: 8px; }
   .rank-name { font-size: 12px; }
   .rank-store { font-size: 10px; }
   .rank-sold { font-size: 14px; }
@@ -936,12 +1123,15 @@ table.dash-table {
   .perf-note { font-size: 10px; }
 
   /* Activity feed */
-  .activity-item { padding: .55rem .875rem; gap: .55rem; }
-  .activity-item::before {
-    left: calc(.875rem + 13px);
-    top: calc(.55rem + 27px);
+  .activity-item {
+    padding: .55rem .875rem;
+    gap: .55rem;
+    --act-pad-x: .875rem;
+    --act-pad-y: .55rem;
+    --act-dot: 26px;
+    --act-dot-mt: 0px;
   }
-  .act-dot { width: 26px; height: 26px; font-size: 11px; }
+  .act-dot { font-size: 11px; }
   .act-main { font-size: 12px; }
   .act-time { font-size: 10px; }
 
@@ -984,6 +1174,7 @@ table.dash-table {
   /* Products */
   .product-rank { padding: .4rem .625rem; gap: .4rem; }
   .rank-num { width: 18px; height: 18px; font-size: 9px; }
+  .rank-thumb { width: 32px; height: 32px; border-radius: 8px; }
   .rank-name { font-size: 11px; }
   .rank-store { font-size: 9px; }
   .rank-sold { font-size: 13px; }
@@ -1011,9 +1202,15 @@ table.dash-table {
   .perf-note { font-size: 9.5px; }
 
   /* Activity */
-  .activity-item { padding: .45rem .625rem; gap: .45rem; }
-  .activity-item::before { left: calc(.625rem + 11px); top: calc(.45rem + 24px); }
-  .act-dot { width: 22px; height: 22px; font-size: 10px; }
+  .activity-item {
+    padding: .45rem .625rem;
+    gap: .45rem;
+    --act-pad-x: .625rem;
+    --act-pad-y: .45rem;
+    --act-dot: 22px;
+    --act-dot-mt: 0px;
+  }
+  .act-dot { font-size: 10px; }
   .act-main { font-size: 11px; }
   .act-time { font-size: 9.5px; }
 }
@@ -1174,13 +1371,18 @@ table.dash-table {
         {% endif %}
       </div>
 
-      {% set rank_palette = ['var(--deep-rose)', 'var(--sage)', 'var(--dusty-rose)', 'var(--terracotta)', 'var(--bark)'] %}
       {% if top_products and top_products|length > 0 %}
         {% for p in top_products %}
           {% set rank_class = 'gold' if loop.index == 1 else ('silver' if loop.index == 2 else ('bronze' if loop.index == 3 else 'plain')) %}
           <div class="product-rank">
             <div class="rank-num {{ rank_class }}">{{ loop.index }}</div>
-            <div class="rank-dot" style="background:{{ rank_palette[loop.index0 % rank_palette|length] }}"></div>
+            <div class="rank-thumb">
+              {% if p.image_url %}
+              <img src="{{ p.image_url }}" alt="{{ p.name }}" loading="lazy">
+              {% else %}
+              <i class="ri-image-line"></i>
+              {% endif %}
+            </div>
             <div class="rank-info">
               <div class="rank-name">{{ p.name }}</div>
               <div class="rank-store">{% if is_admin and p.store_name %}{{ p.store_name }}{% else %}{{ p.category or 'General' }}{% endif %}</div>
@@ -1281,6 +1483,7 @@ table.dash-table {
   <!-- ─── Bottom Row ──────────────────────────────────────── -->
   <div class="dash-bottom">
 
+    <div class="dash-col">
     <!-- Quick Actions -->
     <div class="panel">
       <div class="panel-head">
@@ -1333,8 +1536,70 @@ table.dash-table {
       </div>
     </div>
 
-    <!-- Performance + Activity split -->
-    <div style="display:flex;flex-direction:column;gap:0.95rem;">
+    {% if is_admin %}
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Inventory Alerts</span>
+        <a href="{{ url_for('templates.admin_stores') }}" class="panel-action">
+          Stores <i class="ri-arrow-right-line"></i>
+        </a>
+      </div>
+      {% if low_stock_products or out_of_stock > 0 %}
+        <div class="alert-list">
+        {% for product in out_of_stock_products %}
+        <div class="alert-item">
+          <div class="alert-thumb out">
+            {% if product.thumbnail_url or product.image_url %}
+            <img src="{{ product.thumbnail_url or product.image_url }}" alt="{{ product.name }}" loading="lazy">
+            {% else %}
+            <i class="ri-image-line"></i>
+            {% endif %}
+          </div>
+          <div class="alert-info">
+            <div class="alert-name">{{ product.name }}</div>
+            <div class="alert-detail">{{ product.store_name or 'Unknown store' }} · Out of stock</div>
+          </div>
+          <div class="alert-stock out">0 left</div>
+        </div>
+        {% endfor %}
+        {% if out_of_stock > out_of_stock_products|length %}
+        <div class="alert-item">
+          <div class="alert-icon danger"><i class="ri-error-warning-line"></i></div>
+          <div class="alert-info">
+            <div class="alert-name">More out of stock</div>
+            <div class="alert-detail">{{ out_of_stock - out_of_stock_products|length }} more across the platform</div>
+          </div>
+          <div class="alert-stock out">{{ out_of_stock }}</div>
+        </div>
+        {% endif %}
+        {% for product in low_stock_products[:5] %}
+        <div class="alert-item">
+          <div class="alert-thumb low">
+            {% if product.thumbnail_url or product.image_url %}
+            <img src="{{ product.thumbnail_url or product.image_url }}" alt="{{ product.name }}" loading="lazy">
+            {% else %}
+            <i class="ri-image-line"></i>
+            {% endif %}
+          </div>
+          <div class="alert-info">
+            <div class="alert-name">{{ product.name }}</div>
+            <div class="alert-detail">{{ product.store_name or 'Unknown store' }} · Low stock</div>
+          </div>
+          <div class="alert-stock low">{{ product.stock_quantity }} left</div>
+        </div>
+        {% endfor %}
+        </div>
+      {% else %}
+        <div style="padding:1.4rem;text-align:center;color:var(--muted);font-size:13px;">
+          <i class="ri-checkbox-circle-line" style="font-size:22px;display:block;margin-bottom:.35rem;color:var(--sage);"></i>
+          All catalog products are well-stocked
+        </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    </div>
+
+    <div class="dash-col">
 
       <!-- Store Performance -->
       <div class="panel">
@@ -1403,14 +1668,14 @@ table.dash-table {
               <div class="act-dot order"><i class="ri-group-line"></i></div>
               <div class="act-text">
                 <div class="act-main"><strong>{{ '{:,}'.format(total_users|default(0)) }}</strong> registered users</div>
-                <div class="act-time">All roles combined</div>
+                <div class="act-time">{{ '{:,}'.format(customer_users|default(0)) }} customers · {{ '{:,}'.format(seller_users|default(0)) }} sellers</div>
               </div>
             </div>
             <div class="activity-item">
               <div class="act-dot delivery"><i class="ri-store-2-line"></i></div>
               <div class="act-text">
                 <div class="act-main"><strong>{{ active_stores|default(0) }}</strong> active stores · {{ pending_stores|default(0) }} pending</div>
-                <div class="act-time">{{ total_stores|default(0) }} total</div>
+                <div class="act-time">{{ total_stores|default(0) }} total · {{ pending_applications|default(0) }} applications awaiting review</div>
               </div>
             </div>
             <div class="activity-item">
@@ -1421,10 +1686,31 @@ table.dash-table {
               </div>
             </div>
             <div class="activity-item">
-              <div class="act-dot product"><i class="ri-shopping-bag-3-line"></i></div>
+              <div class="act-dot product"><i class="ri-leaf-line"></i></div>
               <div class="act-text">
-                <div class="act-main"><strong>{{ pending_orders|default(0) }}</strong> orders awaiting fulfillment</div>
-                <div class="act-time">Across all stores</div>
+                <div class="act-main"><strong>{{ '{:,}'.format(total_catalog_products|default(0)) }}</strong> catalog products</div>
+                <div class="act-time">{{ out_of_stock|default(0) }} out of stock · {{ low_stock_count|default(0) }} low stock</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="act-dot order"><i class="ri-shopping-bag-3-line"></i></div>
+              <div class="act-text">
+                <div class="act-main"><strong>{{ '{:,}'.format(orders_this_month|default(0)) }}</strong> orders · {{ pending_orders|default(0) }} awaiting fulfillment</div>
+                <div class="act-time">{{ period_label or 'Selected period' }} · across all stores</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="act-dot delivery"><i class="ri-money-dollar-circle-line"></i></div>
+              <div class="act-text">
+                <div class="act-main"><strong>₱{{ '{:,.0f}'.format(revenue_this_month|default(0)) }}</strong> platform revenue</div>
+                <div class="act-time">{{ '{:,}'.format(customers_this_month|default(0)) }} new customers this period</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="act-dot review"><i class="ri-star-line"></i></div>
+              <div class="act-text">
+                <div class="act-main"><strong>{{ '%.1f'|format(avg_rating|default(0)) }}/5</strong> customer rating</div>
+                <div class="act-time">{{ '{:,}'.format(total_reviews|default(0)) }} reviews · {{ '%.1f'|format(delivery_rate|default(0)) }}% fulfillment</div>
               </div>
             </div>
           {% else %}

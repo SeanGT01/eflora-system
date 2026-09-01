@@ -4,6 +4,7 @@
 {% block page_title %}Riders{% endblock %}
 
 {% block extra_css %}
+{% include 'partials/seller_dash_theme.html' %}
 <style>
     /* ─── Riders Page ─── */
     .riders-page { display: flex; flex-direction: column; gap: 1.75rem; }
@@ -717,98 +718,84 @@
             font-size: 12px;
         }
     }
+
+    .dash.riders-page .riders-panel {
+        border-radius: 14px;
+        box-shadow: 0 6px 18px rgba(80, 40, 70, 0.05), inset 0 1px 0 rgba(255,255,255,.9);
+        border: 1px solid rgba(194, 78, 104, 0.14);
+        background: #fff;
+    }
+    .dash.riders-page .panel-title {
+        font-size: 16px;
+        font-weight: 500;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="riders-page">
+<div class="dash riders-page">
 
-    <!-- Toolbar -->
-    <div class="page-toolbar">
-        <div class="toolbar-left">
-            <div class="search-box">
-                <i class="ri-search-line"></i>
-                <input type="text" id="searchInput" placeholder="Search riders…">
-            </div>
-            <select class="filter-select" id="statusFilter">
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-            </select>
-        </div>
-        <div class="toolbar-right">
-            <button class="btn btn-outline" onclick="loadRiders()">
-                <i class="ri-refresh-line"></i>
-            </button>
-            <button class="btn btn-outline" data-archive-toggle onclick="toggleArchivedSection()">
-                <i class="ri-archive-line"></i> Archived
-            </button>
-            <button class="btn btn-rose" onclick="openInviteModal()">
-                <i class="ri-user-add-line"></i> Invite Rider
-            </button>
-        </div>
+  <div class="dash-header">
+    <div>
+      <div class="dash-greeting-label">Delivery team</div>
+      <h1 class="dash-title">Riders, <em>in bloom</em></h1>
     </div>
+    <div class="dash-header-actions">
+      <div class="dash-date"><i class="ri-calendar-line"></i><span class="dash-date-str">…</span></div>
+      <button type="button" class="dash-ghost-btn" onclick="loadRiders()"><i class="ri-refresh-line"></i> Refresh</button>
+      <button type="button" class="dash-ghost-btn" data-archive-toggle onclick="toggleArchivedSection()"><i class="ri-archive-line"></i> Archived</button>
+      <button type="button" class="apply-btn" onclick="openInviteModal()"><i class="ri-user-add-line"></i> Invite Rider</button>
+    </div>
+  </div>
 
-    <!-- Stat Row -->
-    <div class="stat-row">
-        <div class="stat-card">
-            <div class="stat-card-stripe stripe-rose"></div>
-            <div class="stat-card-header">
-                <div class="stat-label">Total Riders</div>
-                <div class="stat-card-icon icon-rose"><i class="ri-motorbike-line"></i></div>
-            </div>
-            <div class="stat-number" id="statTotal">0</div>
-            <div class="stat-sub">Registered riders</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-stripe stripe-sage"></div>
-            <div class="stat-card-header">
-                <div class="stat-label">Active</div>
-                <div class="stat-card-icon icon-sage"><i class="ri-checkbox-circle-line"></i></div>
-            </div>
-            <div class="stat-number" id="statActive">0</div>
-            <div class="stat-sub">Ready to deliver</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-stripe stripe-bark"></div>
-            <div class="stat-card-header">
-                <div class="stat-label">Inactive</div>
-                <div class="stat-card-icon icon-bark"><i class="ri-user-unfollow-line"></i></div>
-            </div>
-            <div class="stat-number" id="statInactive">0</div>
-            <div class="stat-sub">Currently offline</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-stripe stripe-terra"></div>
-            <div class="stat-card-header">
-                <div class="stat-label">Pending Invites</div>
-                <div class="stat-card-icon icon-terra"><i class="ri-mail-send-line"></i></div>
-            </div>
-            <div class="stat-number" id="statPending">0</div>
-            <div class="stat-sub">Awaiting verification</div>
-        </div>
+  <div class="dash-toolbar">
+    <div class="dash-search">
+      <i class="ri-search-line"></i>
+      <input type="text" id="searchInput" placeholder="Search riders…">
     </div>
+    <select class="filter-select" id="statusFilter">
+      <option value="">All Status</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+    </select>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-label">Total Riders</div><div class="kpi-icon"><i class="ri-motorbike-line"></i></div></div>
+      <div class="kpi-value" id="statTotal">0</div>
+      <div class="kpi-sub">Registered riders</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-top"><div class="kpi-label">Active</div><div class="kpi-icon"><i class="ri-checkbox-circle-line"></i></div></div>
+      <div class="kpi-value" id="statActive">0</div>
+      <div class="kpi-sub">Ready to deliver</div>
+    </div>
+    <div class="kpi-card bark">
+      <div class="kpi-top"><div class="kpi-label">Inactive</div><div class="kpi-icon"><i class="ri-user-unfollow-line"></i></div></div>
+      <div class="kpi-value" id="statInactive">0</div>
+      <div class="kpi-sub">Currently offline</div>
+    </div>
+    <div class="kpi-card terra">
+      <div class="kpi-top"><div class="kpi-label">Pending Invites</div><div class="kpi-icon"><i class="ri-mail-send-line"></i></div></div>
+      <div class="kpi-value" id="statPending">0</div>
+      <div class="kpi-sub">Awaiting verification</div>
+    </div>
+  </div>
 
     <!-- Pending Invitations Panel -->
-    <div class="riders-panel" id="pendingSection" style="display: none;">
-        <div class="panel-header">
-            <div class="panel-title">
-                <i class="ri-time-line"></i>
-                Pending Invitations
-                <span class="panel-badge" id="pendingCount">0</span>
-            </div>
+    <div class="panel riders-panel" id="pendingSection" style="display: none;">
+        <div class="panel-head">
+            <div class="panel-title">Pending Invitations <span class="panel-badge" id="pendingCount">0</span></div>
         </div>
         <div id="pendingList"></div>
     </div>
 
     <!-- Riders Panel -->
-    <div class="riders-panel">
-        <div class="panel-header">
-            <div class="panel-title">
-                <i class="ri-team-line"></i>
-                Verified Riders
-            </div>
-            <button class="btn btn-outline btn-sm" data-archive-toggle onclick="toggleArchivedSection()">
+    <div class="panel riders-panel">
+        <div class="panel-head">
+            <div class="panel-title">Verified Riders</div>
+            <button class="panel-action" data-archive-toggle onclick="toggleArchivedSection()">
                 <i class="ri-archive-line"></i> Archived
             </button>
         </div>
@@ -819,18 +806,18 @@
         </div>
 
         <!-- Empty State -->
-        <div id="noRiders" class="riders-empty" style="display: none;">
-            <i class="ri-motorbike-line riders-empty-icon"></i>
-            <div class="riders-empty-title">No riders yet</div>
-            <div class="riders-empty-sub">Invite riders with their email or mobile number — we'll send a verification OTP.</div>
-            <button class="btn btn-rose" onclick="openInviteModal()">
+        <div id="noRiders" class="empty-panel" style="display: none;">
+            <i class="ri-motorbike-line"></i>
+            No riders yet. Invite with email or mobile — we'll send a verification OTP.
+            <div style="margin-top:.85rem;">
+            <button class="apply-btn" onclick="openInviteModal()">
                 <i class="ri-user-add-line"></i> Invite Your First Rider
             </button>
+            </div>
         </div>
 
-        <!-- Table -->
-        <div id="ridersTableContainer" style="display: none;">
-            <table class="table">
+        <div id="ridersTableContainer" class="table-scroll" style="display: none;">
+            <table class="dash-table">
                 <thead>
                     <tr>
                         <th>#</th>
@@ -848,16 +835,12 @@
     </div>
 
     <!-- Archived Riders Panel -->
-    <div class="riders-panel" id="archivedRidersSection" style="display: none;">
-        <div class="panel-header">
-            <div class="panel-title">
-                <i class="ri-archive-line"></i>
-                Archived Riders
-                <span class="panel-badge" id="archivedRidersCount">0</span>
-            </div>
+    <div class="panel riders-panel" id="archivedRidersSection" style="display: none;">
+        <div class="panel-head">
+            <div class="panel-title">Archived Riders <span class="panel-badge" id="archivedRidersCount">0</span></div>
         </div>
-        <div id="archivedRidersTableContainer">
-            <table class="table">
+        <div id="archivedRidersTableContainer" class="table-scroll">
+            <table class="dash-table">
                 <thead>
                     <tr>
                         <th>#</th>

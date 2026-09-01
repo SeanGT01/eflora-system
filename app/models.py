@@ -845,6 +845,8 @@ class Product(db.Model):
     special_price = db.Column(db.Numeric(10, 2), nullable=True)  # Sale / discounted price
     stock_quantity = db.Column(db.Integer, default=0)
     is_available = db.Column(db.Boolean, default=True)
+    # When the flower is unavailable, keep its YMAL add-ons listed for other products
+    keep_ymal_addons_when_unavailable = db.Column(db.Boolean, default=False, nullable=False)
     
     # Archive fields
     is_archived = db.Column(db.Boolean, default=False, nullable=False)
@@ -907,6 +909,7 @@ class Product(db.Model):
         """Move product to archive"""
         self.is_archived = True
         self.is_available = False
+        self.keep_ymal_addons_when_unavailable = False
         self.archived_at = datetime.utcnow()
         self.archived_by = user_id
     
@@ -1063,6 +1066,14 @@ class Product(db.Model):
             'thumbnail_url': primary_image.get_transformed_url(width=200, height=200) if primary_image else None,
             'images': [img.to_dict() for img in sorted_images],
             'is_available': self.is_available,
+            'keep_ymal_addons_when_unavailable': bool(
+                getattr(self, 'keep_ymal_addons_when_unavailable', False)
+            ),
+            'has_ymal_addons': any(
+                bool(getattr(o, 'show_in_you_may_also_like', False))
+                for g in (self.addon_groups or [])
+                for o in (g.options or [])
+            ),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'is_archived': self.is_archived,

@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 from flask import jsonify
+from sqlalchemy import or_
 
 from app.extensions import db
 from app.models import ProductAddonOption, CartItemAddon, OrderItemAddon
@@ -87,6 +88,11 @@ def resolve_structured_addon_selections(product, option_ids, quantity_per_option
             store_id is not None
             and source_product.store_id == store_id
             and bool(opt.show_in_you_may_also_like)
+            and not bool(getattr(source_product, 'is_archived', False))
+            and (
+                bool(source_product.is_available)
+                or bool(getattr(source_product, 'keep_ymal_addons_when_unavailable', False))
+            )
         )
         if not same_product and not same_store_ymal:
             return None, (jsonify({
@@ -221,10 +227,14 @@ def ymal_addon_option_dicts(product):
         .options(joinedload(ProductAddonOption.group).joinedload(ProductAddonGroup.product))
         .filter(
             Product.store_id == product.store_id,
+            Product.is_archived.is_(False),
             ProductAddonOption.show_in_you_may_also_like.is_(True),
             ProductAddonOption.is_available.is_(True),
             ProductAddonGroup.is_active.is_(True),
-            Product.is_available.is_(True),
+            or_(
+                Product.is_available.is_(True),
+                Product.keep_ymal_addons_when_unavailable.is_(True),
+            ),
         )
         .order_by(
             ProductAddonGroup.sort_order.asc(),

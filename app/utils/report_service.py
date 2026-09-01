@@ -32,7 +32,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 import pytz
 from urllib.request import urlopen
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.extensions import db
 from app.models import (
@@ -64,6 +64,11 @@ def _pht_date(dt: Optional[datetime]) -> Optional[date]:
     """Calendar date in Asia/Manila for a UTC-naive or aware timestamp."""
     local = _to_pht(dt)
     return local.date() if local else None
+
+
+def pht_sql_date(column):
+    """PostgreSQL: naive UTC timestamp → Philippine calendar date (UTC+8)."""
+    return func.date(column + text("INTERVAL '8 hours'"))
 
 
 def _iter_pht_days(start: datetime, end: datetime):
@@ -962,8 +967,9 @@ def _products_section(store_id, start, end):
 
 
 def _revenue_section(store_id, start, end):
+    day = pht_sql_date(Order.created_at)
     daily = db.session.query(
-        func.date(Order.created_at).label('d'),
+        day.label('d'),
         func.count(Order.id).label('orders'),
         func.coalesce(func.sum(Order.total_amount), 0).label('rev'),
     ).filter(
@@ -971,7 +977,7 @@ def _revenue_section(store_id, start, end):
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
-    ).group_by('d').order_by('d').all()
+    ).group_by(day).order_by(day).all()
 
     rows = []
     total_rev = 0.0
@@ -2385,15 +2391,16 @@ def _admin_products_section(start, end):
 
 
 def _admin_revenue_section(start, end):
+    day = pht_sql_date(Order.created_at)
     daily = db.session.query(
-        func.date(Order.created_at).label('d'),
+        day.label('d'),
         func.count(Order.id).label('orders'),
         func.coalesce(func.sum(Order.total_amount), 0).label('rev'),
     ).filter(
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= start,
         Order.created_at < end,
-    ).group_by('d').order_by('d').all()
+    ).group_by(day).order_by(day).all()
 
     rows = []
     total_rev = 0.0

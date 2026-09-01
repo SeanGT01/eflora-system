@@ -173,6 +173,17 @@
                                 <span class="available-toggle-hint">Customers can purchase this product right away</span>
                             </div>
                         </div>
+                        <div class="available-toggle-row" id="keepYmalRow" style="display: none; margin-top: 0.5rem;">
+                            <label class="toggle-switch" style="margin: 0; width: auto; flex-shrink: 0;">
+                                <input type="checkbox" id="keepYmalAddons"
+                                       {% if product and product.keep_ymal_addons_when_unavailable %}checked{% endif %}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="available-toggle-text">
+                                <span class="available-toggle-label">Keep add-ons in You May Also Like</span>
+                                <span class="available-toggle-hint">Other products can still offer this item’s YMAL add-ons while it is hidden</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1930,31 +1941,63 @@
     .form-footer {
         position: fixed;
         bottom: 0;
-        left: 0;
+        left: var(--sidebar-w);
         right: 0;
         background: var(--warm-white);
         border-top: 1px solid var(--border);
-        padding: 0.65rem 1.25rem;
+        padding: 0.65rem var(--page-pad-x, 2rem);
         z-index: 100;
         box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+        box-sizing: border-box;
     }
 
     .footer-content {
-        max-width: 1400px;
-        margin: 0 auto;
+        width: 100%;
+        max-width: none;
+        margin: 0;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 0.75rem;
+    }
+
+    .footer-left {
+        flex-shrink: 0;
     }
 
     .footer-right {
         display: flex;
         gap: 0.5rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
     .form-footer .btn {
         padding: 0.4rem 0.9rem;
         font-size: 13px;
+    }
+
+    @media (max-width: 768px) {
+        .form-footer {
+            left: 0;
+            padding: 0.55rem 1rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+        }
+        .footer-content {
+            flex-wrap: wrap;
+        }
+        .footer-left,
+        .footer-right {
+            width: 100%;
+        }
+        .footer-right {
+            justify-content: stretch;
+        }
+        .footer-right .btn,
+        .footer-left .btn {
+            flex: 1;
+            text-align: center;
+            justify-content: center;
+        }
     }
 
     /* Loading Overlay */
@@ -2083,7 +2126,32 @@
         } else {
             console.log(`🆕 Add mode - no product data to load`);
         }
+
+        const availEl = document.getElementById('isAvailable');
+        if (availEl) {
+            availEl.addEventListener('change', syncKeepYmalRow);
+            syncKeepYmalRow();
+        }
+        document.addEventListener('change', function(ev) {
+            if (ev.target && ev.target.name === 'addon_opt_ymal') syncKeepYmalRow();
+        });
     });
+
+    function productHasYmalAddonsChecked() {
+        return Array.from(document.querySelectorAll('[name="addon_opt_ymal"]')).some(el => el.checked);
+    }
+
+    function syncKeepYmalRow() {
+        const row = document.getElementById('keepYmalRow');
+        const avail = document.getElementById('isAvailable');
+        if (!row || !avail) return;
+        const show = !avail.checked && productHasYmalAddonsChecked();
+        row.style.display = show ? 'flex' : 'none';
+        if (!show && avail.checked) {
+            const keep = document.getElementById('keepYmalAddons');
+            if (keep) keep.checked = false;
+        }
+    }
 
     // ===== NEW: LOAD STORE SUBCATEGORIES =====
     function loadStoreSubcategories() {
@@ -3228,6 +3296,10 @@
         }
         
         formData.append('is_available', document.getElementById('isAvailable').checked);
+        formData.append(
+            'keep_ymal_addons_when_unavailable',
+            !!(document.getElementById('keepYmalAddons')?.checked && !document.getElementById('isAvailable').checked)
+        );
         formData.append('has_variants', hasVariants);
         const hasAddons = document.getElementById('hasAddons')?.checked || false;
         formData.append('has_addons', hasAddons);
@@ -4407,6 +4479,7 @@ function updateVariantStockInData(variantId, newStock) {
         if (container) container.innerHTML = '';
         (groups || []).forEach(g => addAddonGroup(g));
         updateAddonGroupCount();
+        if (typeof syncKeepYmalRow === 'function') syncKeepYmalRow();
     }
 
     function addAddonGroup(existing) {

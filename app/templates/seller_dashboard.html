@@ -383,9 +383,22 @@
 /* ─── Two-column body ───────────────────────────────────── */
 .dash-body {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 1fr;
   gap: 0.95rem;
   margin-bottom: 0.95rem;
+  align-items: stretch;
+}
+
+.dash-body > .panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dash-body .chart-wrap {
+  flex: 1;
+  min-height: 200px;
+  height: auto;
 }
 
 /* ─── Panel base ────────────────────────────────────────── */
@@ -438,6 +451,7 @@
 .chart-wrap {
   padding: 0.85rem 1rem 1rem;
   position: relative;
+  min-height: 200px;
   height: 200px;
 }
 
@@ -470,11 +484,28 @@
 .rank-num.bronze { background: rgba(196,113,75,.15); color: var(--terracotta); }
 .rank-num.plain  { background: var(--cream); color: var(--muted); border: 1px solid var(--border); }
 
-.rank-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
+.rank-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
   flex-shrink: 0;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
 }
+
+.rank-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.rank-thumb i { font-size: 16px; }
 
 .rank-info { flex: 1; min-width: 0; }
 
@@ -643,6 +674,41 @@ table.dash-table {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.95rem;
+  align-items: stretch;
+}
+
+.dash-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+  min-height: 0;
+}
+
+.dash-col > .panel:last-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 34rem;
+  overflow: hidden;
+}
+
+.alert-list,
+.info-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.alert-list {
+  overflow-y: auto;
+}
+
+.dash-col > .panel:last-child .empty-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* ─── Quick Actions ─────────────────────────────────────── */
@@ -787,8 +853,40 @@ table.dash-table {
 .alert-icon.warning { background: rgba(240,180,41,.15); color: #8a5e00; }
 .alert-icon.danger  { background: rgba(192,57,43,.1); color: #9b1c1c; }
 
+.alert-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.alert-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.alert-thumb i { font-size: 16px; }
+.alert-thumb.low { box-shadow: 0 0 0 1.5px rgba(240,180,41,.45); }
+.alert-thumb.out { box-shadow: 0 0 0 1.5px rgba(192,57,43,.35); }
+
 .alert-info { flex: 1; min-width: 0; }
-.alert-name { font-size: 12px; font-weight: 600; color: var(--charcoal); }
+.alert-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .alert-detail { font-size: 10.5px; color: var(--muted); }
 
 .alert-stock {
@@ -800,6 +898,74 @@ table.dash-table {
 
 .alert-stock.low { color: #8a5e00; }
 .alert-stock.out { color: #9b1c1c; }
+
+/* ─── Store Info ────────────────────────────────────────── */
+.info-store-head {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .65rem 1rem .55rem;
+  border-bottom: 1px solid rgba(194, 78, 104, 0.08);
+}
+
+.info-status {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 100px;
+}
+
+.info-status.active { background: rgba(122,158,126,.16); color: var(--sage); }
+.info-status.pending { background: rgba(240,180,41,.18); color: #8a5e00; }
+.info-status.inactive,
+.info-status.suspended { background: rgba(192,57,43,.1); color: #9b1c1c; }
+
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .55rem 1rem;
+  border-bottom: 1px solid rgba(194, 78, 104, 0.08);
+  min-height: 52px;
+}
+
+.info-row:last-child { border-bottom: none; }
+
+.info-label {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.info-label i { font-size: 14px; color: var(--dusty-rose); }
+
+.info-value.info-hours {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  line-height: 1.35;
+}
+.info-hours-line {
+  display: block;
+}
+.info-hours-kind {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
 
 /* ─── Empty State ───────────────────────────────────────── */
 .empty-panel {
@@ -1052,6 +1218,7 @@ table.dash-table {
   .dash { padding: 0; }
   .kpi-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
   .dash-bottom { grid-template-columns: 1fr; }
+  .dash-col > .panel:last-child { min-height: 0; }
   .quick-actions-grid { grid-template-columns: 1fr 1fr; }
   .panel-head { padding: 1rem 1.25rem .875rem; }
   .chart-wrap { padding: 1.1rem 1.25rem; }
@@ -1060,6 +1227,7 @@ table.dash-table {
   .dash-table td { padding: .8rem 1rem; }
   .perf-body { padding: 1rem 1.25rem; }
   .alert-item { padding: .65rem 1.25rem; }
+  .info-row { padding: .65rem 1.25rem; }
   .quick-actions-grid { padding: 1.1rem 1.25rem; }
   .analytics-grid { grid-template-columns: 1fr; }
   .analytics-grid-3 { grid-template-columns: 1fr; }
@@ -1120,7 +1288,7 @@ table.dash-table {
   }
   .product-rank { padding: .5rem .875rem; gap: .5rem; }
   .rank-num { width: 20px; height: 20px; font-size: 10px; }
-  .rank-dot { width: 7px; height: 7px; }
+  .rank-thumb { width: 36px; height: 36px; border-radius: 8px; }
   .rank-name { font-size: 12px; }
   .rank-store { font-size: 10px; }
   .rank-sold { font-size: 14px; }
@@ -1155,7 +1323,10 @@ table.dash-table {
   .perf-note { font-size: 10px; }
 
   .alert-item { padding: .55rem .875rem; gap: .5rem; }
+  .info-row { padding: .5rem .875rem; min-height: 48px; }
+  .info-store-head { padding: .55rem .875rem; }
   .alert-icon { width: 26px; height: 26px; font-size: 12px; border-radius: 6px; }
+  .alert-thumb { width: 36px; height: 36px; border-radius: 8px; }
   .alert-name { font-size: 12px; }
   .alert-detail { font-size: 10px; }
   .alert-stock { font-size: 13px; }
@@ -1214,6 +1385,7 @@ table.dash-table {
 
   .product-rank { padding: .4rem .625rem; gap: .4rem; }
   .rank-num { width: 18px; height: 18px; font-size: 9px; }
+  .rank-thumb { width: 32px; height: 32px; border-radius: 8px; }
   .rank-name { font-size: 11px; }
   .rank-store { font-size: 9px; }
   .rank-sold { font-size: 13px; }
@@ -1421,12 +1593,17 @@ table.dash-table {
       </div>
 
       {% if top_products %}
-        {% set rank_colors = ['var(--deep-rose)', 'var(--sage)', 'var(--dusty-rose)', 'var(--terracotta)', 'var(--bark)'] %}
         {% set rank_classes = ['gold', 'silver', 'bronze', 'plain', 'plain'] %}
         {% for product in top_products %}
         <div class="product-rank">
           <div class="rank-num {{ rank_classes[loop.index0] if loop.index0 < 5 else 'plain' }}">{{ loop.index }}</div>
-          <div class="rank-dot" style="background:{{ rank_colors[loop.index0] if loop.index0 < 5 else 'var(--muted)' }}"></div>
+          <div class="rank-thumb">
+            {% if product.image_url %}
+            <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy">
+            {% else %}
+            <i class="ri-image-line"></i>
+            {% endif %}
+          </div>
           <div class="rank-info">
             <div class="rank-name">{{ product.name }}</div>
             <div class="rank-store">{{ product.category }}</div>
@@ -1513,8 +1690,7 @@ table.dash-table {
   <!-- ─── Bottom Row ──────────────────────────────────────── -->
   <div class="dash-bottom">
 
-    <!-- Quick Actions + Inventory Alerts -->
-    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+    <div class="dash-col">
 
       <!-- Quick Actions -->
       <div class="panel">
@@ -1554,19 +1730,32 @@ table.dash-table {
           </a>
         </div>
         {% if low_stock_products or out_of_stock > 0 %}
-          {% if out_of_stock > 0 %}
+        <div class="alert-list">
+          {% for product in out_of_stock_products %}
           <div class="alert-item">
-            <div class="alert-icon danger"><i class="ri-error-warning-line"></i></div>
-            <div class="alert-info">
-              <div class="alert-name">Out of Stock</div>
-              <div class="alert-detail">{{ out_of_stock }} product{{ 's' if out_of_stock != 1 else '' }} need restocking</div>
+            <div class="alert-thumb out">
+              {% if product.thumbnail_url or product.image_url %}
+              <img src="{{ product.thumbnail_url or product.image_url }}" alt="{{ product.name }}" loading="lazy">
+              {% else %}
+              <i class="ri-image-line"></i>
+              {% endif %}
             </div>
-            <div class="alert-stock out">{{ out_of_stock }}</div>
+            <div class="alert-info">
+              <div class="alert-name">{{ product.name }}</div>
+              <div class="alert-detail">Out of stock — restock needed</div>
+            </div>
+            <div class="alert-stock out">0 left</div>
           </div>
-          {% endif %}
-          {% for product in low_stock_products[:5] %}
+          {% endfor %}
+          {% for product in low_stock_products %}
           <div class="alert-item">
-            <div class="alert-icon warning"><i class="ri-plant-line"></i></div>
+            <div class="alert-thumb low">
+              {% if product.thumbnail_url or product.image_url %}
+              <img src="{{ product.thumbnail_url or product.image_url }}" alt="{{ product.name }}" loading="lazy">
+              {% else %}
+              <i class="ri-image-line"></i>
+              {% endif %}
+            </div>
             <div class="alert-info">
               <div class="alert-name">{{ product.name }}</div>
               <div class="alert-detail">Low stock — restock soon</div>
@@ -1574,6 +1763,7 @@ table.dash-table {
             <div class="alert-stock low">{{ product.stock_quantity }} left</div>
           </div>
           {% endfor %}
+        </div>
         {% else %}
           <div class="empty-panel">
             <i class="ri-checkbox-circle-line"></i>
@@ -1583,8 +1773,7 @@ table.dash-table {
       </div>
     </div>
 
-    <!-- Performance + Store Info -->
-    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+    <div class="dash-col">
 
       <!-- Store Performance -->
       <div class="panel">
@@ -1646,24 +1835,80 @@ table.dash-table {
             Settings <i class="ri-settings-4-line"></i>
           </a>
         </div>
-        <div class="perf-body">
-          <div style="display:flex;flex-direction:column;gap:.75rem;">
-            <div style="display:flex;justify-content:space-between;font-size:13px;">
-              <span style="color:var(--muted);">Store</span>
-              <span style="font-weight:600;">{{ store.name }}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:13px;">
-              <span style="color:var(--muted);">Status</span>
-              <span style="color:var(--sage);font-weight:600;">{{ store.status|title }}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:13px;">
-              <span style="color:var(--muted);">Delivery Method</span>
-              <span style="font-weight:600;">{{ store.delivery_method|title if store.delivery_method else 'Not set' }}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:13px;">
-              <span style="color:var(--muted);">POS Today</span>
-              <span style="font-weight:600;">₱{{ '{:,.0f}'.format(pos_revenue_today) }} ({{ pos_orders_today }} orders)</span>
-            </div>
+        {% set loc = store.public_location_label or store.formatted_address or store.usable_address %}
+        {% set method = store.delivery_method or 'radius' %}
+        {% if method == 'radius' %}
+          {% set coverage = (store.delivery_radius_km or 5)|round(1)|string ~ ' km radius' %}
+        {% elif method == 'municipality' %}
+          {% set muni = store.selected_municipalities or [] %}
+          {% set coverage = (muni|length) ~ ' municipalities' %}
+        {% else %}
+          {% set coverage = 'Custom zone' %}
+        {% endif %}
+        {% set hours = store_hours_parts or {} %}
+        {% set qr_n = store.gcash_qr_images|length %}
+        <div class="info-store-head">
+          <div class="rank-thumb">
+            {% if store.logo_url %}
+            <img src="{{ store.logo_url }}" alt="{{ store.name }}" loading="lazy">
+            {% else %}
+            <i class="ri-store-2-line"></i>
+            {% endif %}
+          </div>
+          <div class="rank-info">
+            <div class="rank-name">{{ store.name }}</div>
+            <div class="rank-store">{{ loc if loc else 'Add your store location' }}</div>
+          </div>
+          <span class="info-status {{ store.status or 'pending' }}">{{ (store.status or 'pending')|replace('_',' ')|title }}</span>
+        </div>
+        <div class="info-list">
+          <div class="info-row">
+            <span class="info-label"><i class="ri-phone-line"></i> Contact</span>
+            <span class="info-value">{{ store.contact_number or 'Not set' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label"><i class="ri-map-pin-line"></i> Coverage</span>
+            <span class="info-value">{{ method|replace('_',' ')|title }} · {{ coverage }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label"><i class="ri-truck-line"></i> Delivery fee</span>
+            <span class="info-value">₱{{ '{:,.0f}'.format(store.base_delivery_fee or 0) }} + ₱{{ '{:,.0f}'.format(store.delivery_rate_per_km or 0) }}/km</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label"><i class="ri-gift-line"></i> Free delivery</span>
+            <span class="info-value">
+              {% if store.free_delivery_enabled %}
+                Over ₱{{ '{:,.0f}'.format(store.free_delivery_minimum or 0) }}
+              {% else %}
+                Off
+              {% endif %}
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label"><i class="ri-time-line"></i> Hours</span>
+            <span class="info-value info-hours">
+              {% if hours.open %}
+              <span class="info-hours-line"><span class="info-hours-kind">Store open</span> {{ hours.open }}</span>
+              {% endif %}
+              {% if hours.delivery %}
+              <span class="info-hours-line"><span class="info-hours-kind">Delivery</span> {{ hours.delivery }}</span>
+              {% endif %}
+              {% if not hours.open and not hours.delivery %}
+              Not set
+              {% endif %}
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label"><i class="ri-qr-code-line"></i> GCash QR</span>
+            <span class="info-value">{% if qr_n %}{{ qr_n }} uploaded{% else %}Not uploaded{% endif %}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label"><i class="ri-motorbike-line"></i> Riders</span>
+            <span class="info-value">{{ active_riders }}/{{ total_riders }} active</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label"><i class="ri-store-3-line"></i> POS today</span>
+            <span class="info-value">₱{{ '{:,.0f}'.format(pos_revenue_today) }} · {{ pos_orders_today }} sale{{ 's' if pos_orders_today != 1 else '' }}</span>
           </div>
         </div>
       </div>

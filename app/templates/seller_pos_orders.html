@@ -4,431 +4,238 @@
 {% block page_title %}Point of Sale Orders{% endblock %}
 
 {% block extra_css %}
+{% include 'partials/seller_dash_theme.html' %}
 <style>
-{% include 'partials/order_detail_sdm_styles.html' %}
-    :root {
-        --spacing-xs: 0.25rem;
-        --spacing-sm: 0.5rem;
-        --spacing-md: 1rem;
-        --spacing-lg: 1.5rem;
-        --spacing-xl: 2rem;
-        --spacing-xxl: 2.5rem;
-    }
-
-    .orders-container {
-        max-width: none;
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        box-sizing: border-box;
-    }
-
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: var(--spacing-xl);
-        flex-wrap: wrap;
-        gap: var(--spacing-lg);
-    }
-
-    .page-header-text { flex: 1; min-width: 280px; }
-    .page-header-text h1 { margin: 0 0 var(--spacing-xs) 0; font-size: clamp(24px, 4vw, 32px); line-height: 1.2; }
-    .page-header-text p  { margin: 0; font-size: clamp(13px, 3vw, 14px); color: var(--muted); }
-
-    .header-actions { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
-    .header-actions .btn { white-space: nowrap; padding: 0.7rem 1.25rem; }
-
-    .filters-card {
-        background: var(--warm-white);
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--border);
-        padding: var(--spacing-lg);
-        margin-bottom: var(--spacing-xl);
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: var(--spacing-lg);
-    }
-
-    .filter-group { min-width: 0; }
-    .filter-group label {
-        display: block; font-size: 11px; font-weight: 600;
-        text-transform: uppercase; letter-spacing: 0.05em;
-        color: var(--muted); margin-bottom: var(--spacing-xs);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .filter-group select,
-    .filter-group input {
-        width: 100%; padding: 0.7rem 1rem;
-        background: var(--cream); border: 1.5px solid var(--border-strong);
-        border-radius: var(--radius-md); font-family: var(--font-sans);
-        font-size: 13px; color: var(--charcoal);
-        transition: var(--transition); box-sizing: border-box;
-    }
-    .filter-group select:focus,
-    .filter-group input:focus {
-        outline: none; border-color: var(--deep-rose);
-        background: var(--warm-white);
-        box-shadow: 0 0 0 3px rgba(181, 68, 90, 0.08);
-    }
-
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: var(--spacing-lg);
-        margin-bottom: var(--spacing-xl);
-    }
-
-    .stat-card {
-        background: var(--warm-white); border-radius: var(--radius-lg);
-        border: 1px solid var(--border); padding: var(--spacing-lg);
-        transition: var(--transition); display: flex; flex-direction: column;
-    }
-    .stat-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); transform: translateY(-2px); }
-    .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: var(--spacing-xs); }
-    .stat-value { font-family: var(--font-display); font-size: clamp(24px, 5vw, 32px); font-weight: 400; color: var(--charcoal); line-height: 1.2; word-break: break-word; margin-bottom: var(--spacing-xs); }
-    .stat-trend { font-size: clamp(11px, 2.5vw, 12px); color: var(--muted); margin-top: auto; display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; }
-    .stat-trend.positive { color: var(--deep-sage); }
-    .stat-trend i { font-size: 14px; }
-
-    .table-wrapper {
-        background: var(--warm-white);
-        border-radius: var(--radius-xl);
-        border: 1px solid var(--border);
-        overflow: visible;
-        margin-bottom: var(--spacing-xl);
-    }
-
-    table { width: 100%; border-collapse: collapse; min-width: 0; }
-
-    th {
-        text-align: left;
-        padding: 0.875rem 1.25rem;
-        background: var(--cream);
-        font-size: 10.5px;
-        font-weight: 700;
-        text-transform: uppercase; letter-spacing: 0.05em;
-        color: var(--muted);
-        border-bottom: 1px solid var(--border);
-        white-space: nowrap;
-    }
-    td {
-        padding: 1rem 1.25rem;
-        font-size: 13.5px;
-        color: var(--charcoal);
-        border-bottom: 1px solid var(--border);
-        vertical-align: middle;
-    }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(181, 68, 90, 0.02); }
-
-    .status-badge { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; white-space: nowrap; text-transform: capitalize; }
+{% include 'partials/pos_receipt_styles.html' %}
+    .status-badge { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 100px; font-size: 11px; font-weight: 600; white-space: nowrap; text-transform: capitalize; }
     .status-cash  { background: rgba(72, 187, 120, 0.12); color: #276749; }
     .status-gcash { background: rgba(66, 153, 225, 0.1);  color: #1a5f9e; }
     .status-card  { background: rgba(156, 39, 176, 0.1);  color: #6a1b9a; }
 
-    .change-positive { color: var(--deep-sage); font-weight: 600; }
-    .change-zero     { color: var(--muted); }
-
     .action-btn {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        border: 1.5px solid var(--border-strong);
-        background: none;
-        color: var(--muted);
-        cursor: pointer;
-        transition: var(--transition);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
+        width: 32px; height: 32px; border-radius: 50%;
+        border: 1.5px solid rgba(107,76,59,.22); background: none; color: var(--muted);
+        cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
     .action-btn:hover { background: var(--cream); color: var(--charcoal); border-color: var(--charcoal); }
-    .action-btn i { font-size: 14px; line-height: 1; }
 
-    .pagination { display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: var(--spacing-xl); flex-wrap: wrap; }
-    .page-btn { min-width: 36px; height: 36px; border-radius: var(--radius-md); border: 1.5px solid var(--border-strong); background: var(--warm-white); font-size: 13px; color: var(--charcoal); cursor: pointer; transition: var(--transition); display: flex; align-items: center; justify-content: center; padding: 0 0.5rem; }
-    .page-btn:hover:not(:disabled) { border-color: var(--deep-rose); color: var(--deep-rose); background: rgba(181, 68, 90, 0.02); }
-    .page-btn.active { background: var(--deep-rose); border-color: var(--deep-rose); color: white; }
-    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    .empty-state { text-align: center; padding: var(--spacing-xxl) var(--spacing-xl); background: var(--cream); border-radius: var(--radius-lg); }
-    .empty-state i { font-size: 48px; color: var(--muted); opacity: 0.3; margin-bottom: var(--spacing-md); }
-    .empty-state h3 { font-family: var(--font-display); font-size: clamp(18px, 4vw, 20px); font-weight: 400; color: var(--charcoal); margin-bottom: var(--spacing-xs); }
-    .empty-state p  { color: var(--muted); margin-bottom: var(--spacing-lg); font-size: clamp(13px, 3vw, 14px); }
-
-    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(42, 35, 30, 0.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: var(--spacing-md); }
-    .modal-overlay.active { display: flex; }
-    .modal { background: rgba(255, 255, 255, 0.92); border-radius: var(--radius-xl); max-width: 600px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(90, 40, 80, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.75); border: 1px solid rgba(255, 255, 255, 0.7); backdrop-filter: blur(18px) saturate(1.25); -webkit-backdrop-filter: blur(18px) saturate(1.25); animation: modalSlideIn 0.3s ease; display: flex; flex-direction: column; }
-    @keyframes modalSlideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-    .modal-header { padding: 1.5rem 1.75rem 1.15rem; border-bottom: 1px solid rgba(194, 78, 104, 0.12); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: linear-gradient(90deg, rgba(194, 78, 104, 0.08), rgba(255, 255, 255, 0.88)); backdrop-filter: blur(12px); z-index: 1; }
-    .modal-title { font-family: var(--font-display); font-size: clamp(18px, 4vw, 24px); font-weight: 500; color: var(--charcoal); letter-spacing: -0.02em; }
-    .modal-close { background: rgba(194, 78, 104, 0.08); border: none; font-size: 18px; color: var(--muted); cursor: pointer; transition: var(--transition); width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
-    .modal-close:hover { color: var(--deep-rose); background: rgba(194, 78, 104, 0.14); }
-    .modal-body { padding: 1.5rem 1.75rem; flex: 1; overflow-y: auto; }
-    .modal-footer { padding: 1.1rem 1.75rem 1.5rem; border-top: 1px solid rgba(194, 78, 104, 0.12); display: flex; justify-content: flex-end; gap: var(--spacing-sm); background: linear-gradient(180deg, rgba(255, 252, 248, 0.55), rgba(255, 245, 248, 0.7)); position: sticky; bottom: 0; }
-
-    .loading-spinner { width: 28px; height: 28px; border: 2.5px solid var(--border-strong); border-top-color: var(--deep-rose); border-radius: 50%; animation: spin 0.75s linear infinite; margin: 0 auto; }
+    .loading-spinner { width: 28px; height: 28px; border: 2.5px solid rgba(107,76,59,.18); border-top-color: var(--deep-rose); border-radius: 50%; animation: spin 0.75s linear infinite; margin: 0 auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    @media print {
-        body::before,
-        .sidebar,
-        .topbar,
-        .dashboard-footer,
-        .toast-container,
-        .orders-container,
-        .header-actions,
-        .filters-card,
-        .pagination,
-        .action-btn,
-        .modal-footer,
-        .modal-header,
-        .modal-close,
-        .modal-close i,
-        .menu-toggle,
-        #chat-fab,
-        #chat-overlay,
-        #chat-lightbox,
-        .chat-lightbox,
-        .notif-wrap,
-        #notifPanel,
-        .notif-panel,
-        .notif-backdrop,
-        .store-status-pill,
-        .sidebar-logo,
-        .nav-section {
-            display: none !important;
-        }
+    .empty-state { text-align: center; padding: 2rem 1rem; }
+    .empty-state i { font-size: 36px; color: var(--dusty-rose); opacity: 0.35; display: block; margin-bottom: .5rem; }
+    .empty-state h3 { font-family: var(--font-display); font-size: 20px; font-weight: 500; margin: 0 0 .25rem; }
+    .empty-state p { color: var(--muted); font-size: 13px; }
 
-        html, body,
-        .app-shell,
-        .main-area,
-        .page-content {
-            background: #fff !important;
-            overflow: visible !important;
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            position: static !important;
-            transform: none !important;
-            width: 100% !important;
-        }
-
-        .modal-overlay.active {
-            display: block !important;
-            position: static !important;
-            inset: auto !important;
-            background: #fff !important;
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
-            padding: 0.4in !important;
-            z-index: auto !important;
-        }
-
-        .modal,
-        .order-details-modal-surface {
-            box-shadow: none !important;
-            border: none !important;
-            max-width: 100% !important;
-            max-height: none !important;
-            width: 100% !important;
-            overflow: visible !important;
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
-            background: #fff !important;
-            animation: none !important;
-            border-radius: 0 !important;
-        }
-
-        .modal-header {
-            position: static !important;
-            background: none !important;
-            backdrop-filter: none !important;
-        }
-
-        .modal-body {
-            overflow: visible !important;
-            max-height: none !important;
-        }
-
-        #orderModal .modal-header,
-        #orderModal .modal-close {
-            display: none !important;
-            visibility: hidden !important;
-        }
-
-        table, tr { page-break-inside: avoid; }
+    .pos-filters {
+      background: #ffffff;
+      border: 1px solid rgba(194, 78, 104, 0.14);
+      border-radius: 16px;
+      padding: 0.85rem 1rem;
+      margin-bottom: 1.1rem;
+      box-shadow: 0 6px 18px rgba(80, 40, 70, 0.05), inset 0 1px 0 rgba(255,255,255,.9);
     }
-
-    @media (max-width: 1024px) {
-        .orders-container { padding: 0; }
-        .stats-grid, .filters-card { gap: var(--spacing-md); }
-        .filters-card { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    .pos-filters-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
     }
+    .pos-filters .period-bar {
+      margin: 0;
+      flex: 1 1 auto;
+      min-width: min(100%, 420px);
+      box-shadow: none;
+      border: 1px solid rgba(194, 78, 104, 0.12);
+      background: rgba(250, 246, 240, 0.65);
+    }
+    .pos-filters .dash-search {
+      flex: 1 1 220px;
+      max-width: none;
+      min-width: 180px;
+      background: rgba(250, 246, 240, 0.65);
+      border: 1px solid rgba(194, 78, 104, 0.12);
+      border-radius: 100px;
+      padding: 0.15rem 0.2rem 0.15rem 0.85rem;
+    }
+    .pos-filters select#paymentFilter {
+      appearance: none;
+      -webkit-appearance: none;
+      min-width: 148px;
+      height: 38px;
+      padding: 0 2rem 0 0.9rem;
+      border: 1px solid rgba(194, 78, 104, 0.12);
+      border-radius: 100px;
+      background: rgba(250, 246, 240, 0.65) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239a8d85'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 0.7rem center / 16px;
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--charcoal);
+      cursor: pointer;
+    }
+    .pos-filters select#paymentFilter:focus,
+    .pos-filters .dash-search:focus-within {
+      outline: none;
+      border-color: var(--deep-rose);
+      box-shadow: 0 0 0 2px rgba(181,68,90,.12);
+      background-color: #fff;
+    }
+    .pos-filters .custom-drawer {
+      margin: 0.75rem 0 0;
+      padding: 0.75rem 0 0;
+      border: 0;
+      border-top: 1px solid rgba(194, 78, 104, 0.1);
+      border-radius: 0;
+      box-shadow: none;
+      background: transparent;
+    }
+    .kpi-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .kpi-card:nth-child(5)::before { background: linear-gradient(90deg, #8a9bb8, #5a6a88); }
+    .kpi-card:nth-child(5) .kpi-icon {
+      background: linear-gradient(135deg, rgba(90,106,136,.18), rgba(90,106,136,.08));
+      color: #5a6a88;
+    }
+    @media (max-width: 1100px) { .kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 640px) { .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 768px) {
-        .orders-container { padding: 0; }
-        .page-header { flex-direction: column; align-items: stretch; gap: var(--spacing-md); }
-        .page-header-text { min-width: auto; }
-        .header-actions { justify-content: flex-start; }
-        .header-actions .btn { flex: 1; justify-content: center; }
-        .stats-grid { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
-        .stat-card { padding: var(--spacing-md); }
-        .filters-card { grid-template-columns: 1fr; gap: var(--spacing-md); padding: var(--spacing-md); }
-        .modal-body { padding: var(--spacing-md); }
-        .modal-footer { flex-direction: column; }
-        .modal-footer .btn { width: 100%; justify-content: center; }
-    }
-    @media (max-width: 576px) {
-        .stats-grid { grid-template-columns: 1fr; }
-        .stat-card { padding: var(--spacing-sm) var(--spacing-md); }
-        .stat-value { font-size: 28px; }
-        .table-wrapper { border-radius: var(--radius-md); }
-        td, th { padding: var(--spacing-sm) var(--spacing-md); }
-        .action-btn { width: 30px; height: 30px; padding: 0; }
-        .action-btn i { font-size: 12px; }
-        .pagination { gap: 0.25rem; }
-        .page-btn { min-width: 32px; height: 32px; font-size: 12px; }
-    }
-    @media (hover: none) and (pointer: coarse) {
-        .action-btn, .page-btn, .modal-close { min-height: 44px; min-width: 44px; }
-        .filter-group select, .filter-group input { font-size: 16px; }
+      .pos-filters { padding: 0.75rem; border-radius: 14px; }
+      .pos-filters-row { gap: 0.55rem; }
+      .pos-filters .period-bar,
+      .pos-filters .dash-search,
+      .pos-filters select#paymentFilter { width: 100%; min-width: 0; flex: 1 1 100%; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="orders-container">
-
-    <!-- Header -->
-    <div class="page-header">
-        <div class="page-header-text">
-            <h1 class="section-title">POS Orders</h1>
-            <p style="color: var(--muted); font-size: 14px;">View and manage your point of sale transactions</p>
-        </div>
-        <div class="header-actions">
-            <a href="{{ url_for('templates.seller_pos') }}" class="btn btn-rose">
-                <i class="ri-shopping-cart-line"></i> Open POS
-            </a>
-            <a href="{{ url_for('templates.seller_products') }}" class="btn btn-outline">
-                <i class="ri-arrow-left-line"></i> Back to Products
-            </a>
-        </div>
+<div class="dash">
+  <div class="dash-header">
+    <div>
+      <div class="dash-greeting-label">Point of sale</div>
+      <h1 class="dash-title">POS Orders, <em>in bloom</em></h1>
     </div>
-
-    <!-- Stats Cards -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-label">Today's Sales</div>
-            <div class="stat-value" id="todaySales">₱0.00</div>
-            <div class="stat-trend positive">
-                <i class="ri-arrow-up-line"></i> <span id="todayCount">0</span> orders
-            </div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">This Week</div>
-            <div class="stat-value" id="weekSales">₱0.00</div>
-            <div class="stat-trend" id="weekCount">0 orders</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">This Month</div>
-            <div class="stat-value" id="monthSales">₱0.00</div>
-            <div class="stat-trend" id="monthCount">0 orders</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Average Order</div>
-            <div class="stat-value" id="avgOrder">₱0.00</div>
-            <div class="stat-trend" id="totalOrders">0 total orders</div>
-        </div>
+    <div class="dash-header-actions">
+      <div class="dash-date"><i class="ri-calendar-line"></i><span class="dash-date-str">…</span></div>
+      <a href="{{ url_for('templates.seller_products') }}" class="dash-ghost-btn"><i class="ri-arrow-left-line"></i> Products</a>
+      <a href="{{ url_for('templates.seller_pos') }}" class="apply-btn"><i class="ri-shopping-cart-line"></i> Open POS</a>
     </div>
+  </div>
 
-    <!-- Filters -->
-    <div class="filters-card">
-        <div class="filter-group">
-            <label>Date Range</label>
-            <select id="dateFilter" onchange="applyFilters()">
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="this_week" selected>This Week</option>
-                <option value="this_month">This Month</option>
-                <option value="custom">Custom Range</option>
-            </select>
-        </div>
-        <div class="filter-group" id="customDateStart" style="display: none;">
-            <label>Start Date</label>
-            <input type="date" id="startDate">
-        </div>
-        <div class="filter-group" id="customDateEnd" style="display: none;">
-            <label>End Date</label>
-            <input type="date" id="endDate">
-        </div>
-        <div class="filter-group">
-            <label>Payment Method</label>
-            <select id="paymentFilter" onchange="applyFilters()">
-                <option value="all">All Methods</option>
-                <option value="cash">Cash</option>
-                <option value="gcash">GCash</option>
-            </select>
-        </div>
-        <div class="filter-group">
-            <label>Search</label>
-            <!-- onkeyup removed — debounced in JS -->
-            <input type="text" id="searchInput" placeholder="Order ID or customer...">
-        </div>
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-label">Today's Sales</div><div class="kpi-icon"><i class="ri-sun-line"></i></div></div>
+      <div class="kpi-value" id="todaySales">₱0.00</div>
+      <div class="kpi-sub"><span id="todayCount">0</span> orders today</div>
     </div>
+    <div class="kpi-card green">
+      <div class="kpi-top"><div class="kpi-label">This Week</div><div class="kpi-icon"><i class="ri-calendar-event-line"></i></div></div>
+      <div class="kpi-value" id="weekSales">₱0.00</div>
+      <div class="kpi-sub" id="weekCount">0 orders</div>
+    </div>
+    <div class="kpi-card terra">
+      <div class="kpi-top"><div class="kpi-label">This Month</div><div class="kpi-icon"><i class="ri-calendar-line"></i></div></div>
+      <div class="kpi-value" id="monthSales">₱0.00</div>
+      <div class="kpi-sub" id="monthCount">0 orders</div>
+    </div>
+    <div class="kpi-card bark">
+      <div class="kpi-top"><div class="kpi-label">This Year</div><div class="kpi-icon"><i class="ri-calendar-2-line"></i></div></div>
+      <div class="kpi-value" id="yearSales">₱0.00</div>
+      <div class="kpi-sub" id="yearCount">0 orders</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-label">Average Order</div><div class="kpi-icon"><i class="ri-funds-line"></i></div></div>
+      <div class="kpi-value" id="avgOrder">₱0.00</div>
+      <div class="kpi-sub" id="totalOrders">0 total orders</div>
+    </div>
+  </div>
 
-    <!-- Orders Table -->
-    <div class="table-wrapper">
-        <table id="ordersTable">
-            <thead>
-                <tr>
-                    <th>Order #</th>
-                    <th>Date &amp; Time</th>
-                    <th>Customer</th>
-                    <th>Items</th>
-                    <th>Total</th>
-                    <th>Amount Given</th>
-                    <th>Payment</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="ordersTableBody">
-                <tr>
-                    <td colspan="8" style="text-align: center; padding: 3rem;">
-                        <div class="loading-spinner" style="margin: 0 auto 1rem;"></div>
-                        <span style="color: var(--muted);">Loading orders...</span>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+  <div class="pos-filters">
+    <div class="pos-filters-row">
+      <div class="period-bar">
+        <button type="button" class="period-btn" data-date="today" onclick="setPosDate('today', this)">Today</button>
+        <button type="button" class="period-btn" data-date="yesterday" onclick="setPosDate('yesterday', this)">Yesterday</button>
+        <button type="button" class="period-btn active" data-date="this_week" onclick="setPosDate('this_week', this)">This Week</button>
+        <button type="button" class="period-btn" data-date="this_month" onclick="setPosDate('this_month', this)">Month</button>
+        <button type="button" class="period-btn" data-date="this_year" onclick="setPosDate('this_year', this)">Year</button>
+        <div class="period-divider"></div>
+        <button type="button" class="custom-btn" id="customToggle" onclick="setPosDate('custom', this)"><i class="ri-calendar-2-line"></i> Custom</button>
+      </div>
+      <div class="dash-search">
+        <i class="ri-search-line"></i>
+        <input type="text" id="searchInput" placeholder="Search order ID or customer…">
+      </div>
+      <select id="paymentFilter" onchange="applyFilters()" aria-label="Payment method">
+        <option value="all">All payments</option>
+        <option value="cash">Cash</option>
+        <option value="gcash">GCash</option>
+      </select>
     </div>
+    <select id="dateFilter" hidden>
+      <option value="today">Today</option>
+      <option value="yesterday">Yesterday</option>
+      <option value="this_week" selected>This Week</option>
+      <option value="this_month">This Month</option>
+      <option value="this_year">This Year</option>
+      <option value="custom">Custom Range</option>
+    </select>
+    <div class="custom-drawer" id="customDrawer">
+      <div class="drawer-field" id="customDateStart">
+        <span class="drawer-label">From</span>
+        <input type="date" id="startDate" class="drawer-input">
+      </div>
+      <div class="drawer-field" id="customDateEnd">
+        <span class="drawer-label">To</span>
+        <input type="date" id="endDate" class="drawer-input">
+      </div>
+    </div>
+  </div>
 
-    <!-- Pagination -->
-    <div class="pagination" id="pagination">
-        <button class="page-btn" onclick="changePage('prev')" disabled>
-            <i class="ri-arrow-left-line"></i>
-        </button>
-        <span id="pageInfo">Page 1 of 1</span>
-        <button class="page-btn" onclick="changePage('next')" disabled>
-            <i class="ri-arrow-right-line"></i>
-        </button>
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Transactions</span>
     </div>
+    <div class="table-scroll">
+      <table class="dash-table" id="ordersTable">
+        <thead>
+          <tr>
+            <th>Order #</th>
+            <th>Date &amp; Time</th>
+            <th>Customer</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Amount Given</th>
+            <th>Payment</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="ordersTableBody">
+          <tr>
+            <td colspan="8" style="text-align:center;padding:2.5rem;">
+              <div class="loading-spinner" style="margin:0 auto 1rem;"></div>
+              <span style="color:var(--muted);">Loading orders…</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="dash-pagination pagination" id="pagination">
+    <button class="page-btn" onclick="changePage('prev')" disabled><i class="ri-arrow-left-line"></i></button>
+    <span id="pageInfo">Page 1 of 1</span>
+    <button class="page-btn" onclick="changePage('next')" disabled><i class="ri-arrow-right-line"></i></button>
+  </div>
 </div>
 
-<!-- Order Detail Modal -->
-<div class="modal-overlay" id="orderModal">
-    <div class="modal order-details-modal-surface">
-        <div class="modal-header">
-            <div class="modal-title">Order Details</div>
-            <button class="modal-close" onclick="closeModal()"><i class="ri-close-line"></i></button>
-        </div>
-        <div class="modal-body" id="orderDetailContent"></div>
-        <div class="modal-footer">
-            <button class="btn btn-outline" type="button" onclick="printPosOrder()">
+<!-- Order receipt (same design as POS) -->
+<div class="receipt-overlay" id="orderModal" onclick="handleOrderOverlayClick(event)">
+    <div class="receipt-card" onclick="event.stopPropagation()">
+        {% include 'partials/pos_receipt_paper.html' %}
+        <div class="receipt-ftr">
+            <button class="btn btn-outline" type="button" style="flex:1;" onclick="closeModal()">
+                <i class="ri-close-line"></i> Close
+            </button>
+            <button class="btn btn-rose" type="button" style="flex:1;" onclick="printPosOrder()">
                 <i class="ri-printer-line"></i> Print
             </button>
         </div>
@@ -526,18 +333,28 @@ document.addEventListener('DOMContentLoaded', function () {
 /* ═══════════════════════════════════════
    DATE FILTER LISTENER
 ═══════════════════════════════════════ */
+function setPosDate(value, btn) {
+    const dateFilter = document.getElementById('dateFilter');
+    dateFilter.value = value;
+    document.querySelectorAll('.period-bar .period-btn, .period-bar .custom-btn').forEach(el => el.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const drawer = document.getElementById('customDrawer');
+    if (value === 'custom') {
+        drawer.classList.add('open');
+    } else {
+        drawer.classList.remove('open');
+        applyFilters();
+    }
+}
+
 function setupDateFilterListener() {
     const dateFilter = document.getElementById('dateFilter');
     dateFilter.addEventListener('change', function () {
-        const customStart = document.getElementById('customDateStart');
-        const customEnd   = document.getElementById('customDateEnd');
-
+        const drawer = document.getElementById('customDrawer');
         if (this.value === 'custom') {
-            customStart.style.display = 'block';
-            customEnd.style.display   = 'block';
+            drawer.classList.add('open');
         } else {
-            customStart.style.display = 'none';
-            customEnd.style.display   = 'none';
+            drawer.classList.remove('open');
             applyFilters();
         }
     });
@@ -683,30 +500,31 @@ async function updateStats(data) {
 
     try {
         // Parallel — all 3 fire at the same time
-        const [todayRes, weekRes, monthRes] = await Promise.all([
-            fetch('/api/seller/pos/orders?date=today&per_page=100&payment=all&search='),
-            fetch('/api/seller/pos/orders?date=this_week&per_page=100&payment=all&search='),
-            fetch('/api/seller/pos/orders?date=this_month&per_page=100&payment=all&search=')
+        const [todayRes, weekRes, monthRes, yearRes] = await Promise.all([
+            fetch('/api/seller/pos/orders?date=today&per_page=1&payment=all&search='),
+            fetch('/api/seller/pos/orders?date=this_week&per_page=1&payment=all&search='),
+            fetch('/api/seller/pos/orders?date=this_month&per_page=1&payment=all&search='),
+            fetch('/api/seller/pos/orders?date=this_year&per_page=1&payment=all&search=')
         ]);
 
-        const [todayData, weekData, monthData] = await Promise.all([
+        const [todayData, weekData, monthData, yearData] = await Promise.all([
             todayRes.json(),
             weekRes.json(),
-            monthRes.json()
+            monthRes.json(),
+            yearRes.json()
         ]);
 
-        const sum = arr => arr.reduce((s, o) => s + o.total_amount, 0);
+        const money = (n) => `₱${Number(n || 0).toFixed(2)}`;
+        const count = (d) => Number(d.total || 0);
 
-        const todayOrders = todayData.orders  || [];
-        const weekOrders  = weekData.orders   || [];
-        const monthOrders = monthData.orders  || [];
-
-        document.getElementById('todaySales').textContent  = `₱${sum(todayOrders).toFixed(2)}`;
-        document.getElementById('todayCount').textContent  = todayOrders.length;
-        document.getElementById('weekSales').textContent   = `₱${sum(weekOrders).toFixed(2)}`;
-        document.getElementById('weekCount').textContent   = `${weekOrders.length} orders`;
-        document.getElementById('monthSales').textContent  = `₱${sum(monthOrders).toFixed(2)}`;
-        document.getElementById('monthCount').textContent  = `${monthOrders.length} orders`;
+        document.getElementById('todaySales').textContent  = money(todayData.revenue_sum);
+        document.getElementById('todayCount').textContent  = count(todayData);
+        document.getElementById('weekSales').textContent   = money(weekData.revenue_sum);
+        document.getElementById('weekCount').textContent   = `${count(weekData)} orders`;
+        document.getElementById('monthSales').textContent  = money(monthData.revenue_sum);
+        document.getElementById('monthCount').textContent  = `${count(monthData)} orders`;
+        document.getElementById('yearSales').textContent   = money(yearData.revenue_sum);
+        document.getElementById('yearCount').textContent   = `${count(yearData)} orders`;
 
         statsLoaded = true;   // never refetch until page refresh
 
@@ -741,12 +559,24 @@ function escapeAttrPos(s) {
     return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-function posLineThumb(url) {
-    const u = (url && String(url).trim()) ? String(url).trim() : '';
-    if (!u) {
-        return '<span class="sdm-line-thumb-ph" aria-hidden="true"><i class="ri-flower-line"></i></span>';
-    }
-    return `<img class="sdm-line-thumb" src="${escapeAttrPos(u)}" alt="" width="24" height="24" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';"><span class="sdm-line-thumb-ph" style="display:none;" aria-hidden="true"><i class="ri-flower-line"></i></span>`;
+function peso(n) {
+    return '₱' + (Number(n) || 0).toFixed(2);
+}
+
+function formatReceiptDatePH(value) {
+    const parsed = parseApiDateTime(value);
+    if (!parsed || Number.isNaN(parsed.getTime())) return '—';
+    const parts = new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Manila',
+    }).formatToParts(parsed);
+    const get = (t) => (parts.find(p => p.type === t) || {}).value || '';
+    return `${get('month')} ${get('day')}, ${get('year')} ${get('hour')}:${get('minute')} ${get('dayPeriod')}`;
 }
 
 async function viewOrder(orderId) {
@@ -764,12 +594,8 @@ async function viewOrder(orderId) {
 }
 
 function renderOrderModal(order) {
-    const modal   = document.getElementById('orderModal');
-    const content = document.getElementById('orderDetailContent');
-
-    // Same PH timezone formatting as the table
-    const dateTimeStr = formatPosDateTimePH(order.created_at);
-
+    const modal = document.getElementById('orderModal');
+    const PAY_LABELS = { cash: 'Cash', gcash: 'GCash' };
     const items = Array.isArray(order.items) ? order.items : [];
     const lineSum = items.reduce((sum, i) => {
         const st = parseFloat(i.subtotal);
@@ -786,76 +612,45 @@ function renderOrderModal(order) {
     const total = (Number.isFinite(apiTotal) && Math.abs(apiTotal - computedTotal) <= 0.05)
         ? apiTotal
         : computedTotal;
-
-    const itemsHtml = items.map(item => `
-        <tr>
-            <td class="sdm-line-thumb-cell">${posLineThumb(item.product_image_url)}</td>
-            <td>${escapeHtmlPos(item.product_name)}${item.is_addon ? ' <span style="color:var(--muted);font-size:11px;font-weight:600;">(add-on)</span>' : ''}</td>
-            <td>${item.quantity}</td>
-            <td>₱${(parseFloat(item.unit_price) || 0).toFixed(2)}</td>
-            <td>₱${(Number.isFinite(parseFloat(item.subtotal)) ? parseFloat(item.subtotal) : ((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0))).toFixed(2)}</td>
-        </tr>`).join('');
-
     const changeAmount = parseFloat(order.change_amount) || 0;
     const amountGivenRaw = parseFloat(order.amount_given);
     const amountGiven = Number.isFinite(amountGivenRaw) ? amountGivenRaw : total;
-    const method       = order.payment_method || 'cash';
-    const subtotalRow = discount > 0 ? `
-                <tr>
-                    <td colspan="4" style="text-align:right;font-weight:600;">Subtotal</td>
-                    <td>₱${subtotal.toFixed(2)}</td>
-                </tr>` : '';
-    const discountRow = discount > 0 ? `
-                <tr>
-                    <td colspan="4" style="text-align:right;font-weight:600;">Discount</td>
-                    <td>−₱${discount.toFixed(2)}</td>
-                </tr>` : '';
+    const method = order.payment_method || 'cash';
+    const itemCount = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
 
-    content.innerHTML = `
-        <div class="sdm">
-            <header class="sdm-topbar">
-                <div class="sdm-topbar-left">
-                    <span class="sdm-oid">#POS-${String(order.id).padStart(4,'0')}</span>
-                    <span class="status-badge status-${method}">${method.charAt(0).toUpperCase() + method.slice(1)}</span>
-                </div>
-                <span class="sdm-when">${dateTimeStr}</span>
-            </header>
-            <div class="sdm-grid">
-                <section class="sdm-block">
-                    <h4>Customer</h4>
-                    <div class="sdm-rows">
-                        <div class="sdm-row"><span class="sdm-k">Name</span><span class="sdm-v">${order.customer_name ? escapeHtmlPos(order.customer_name) : 'Walk-in'}</span></div>
-                        <div class="sdm-row"><span class="sdm-k">Contact</span><span class="sdm-v">${order.customer_contact ? escapeHtmlPos(order.customer_contact) : '—'}</span></div>
-                    </div>
-                </section>
-                <section class="sdm-block">
-                    <h4>Payment</h4>
-                    <div class="sdm-rows">
-                        <div class="sdm-row"><span class="sdm-k">Amount given</span><span class="sdm-v">₱${amountGiven.toFixed(2)}</span></div>
-                        <div class="sdm-row"><span class="sdm-k">Change</span><span class="sdm-v ${changeAmount > 0 ? 'sdm-v--success' : ''}">${changeAmount > 0 ? `₱${changeAmount.toFixed(2)}` : '₱0.00'}</span></div>
-                    </div>
-                </section>
+    document.getElementById('receiptTs').textContent = formatReceiptDatePH(order.created_at);
+    document.getElementById('receiptId').textContent = 'POS-' + String(order.id).padStart(4, '0');
+    document.getElementById('receiptPay').textContent = PAY_LABELS[method] || method;
+    document.getElementById('receiptCust').textContent = order.customer_name || 'Walk-in';
+    document.getElementById('receiptCount').textContent = itemCount + (itemCount === 1 ? ' item' : ' items');
+    document.getElementById('receiptSubtotal').textContent = peso(subtotal);
+    document.getElementById('receiptDiscount').textContent = peso(discount);
+    document.getElementById('receiptDiscountRow').style.display = discount > 0 ? '' : 'none';
+    document.getElementById('receiptTotal').textContent = peso(total);
+
+    const cashBlock = document.getElementById('receiptCashBlock');
+    if (method === 'cash') {
+        cashBlock.style.display = '';
+        document.getElementById('receiptTendered').textContent = peso(amountGiven);
+        document.getElementById('receiptChange').textContent = peso(changeAmount);
+    } else {
+        cashBlock.style.display = 'none';
+    }
+
+    document.getElementById('receiptLines').innerHTML = items.map(item => {
+        const qty = Number(item.quantity) || 1;
+        const amt = Number.isFinite(parseFloat(item.subtotal))
+            ? parseFloat(item.subtotal)
+            : qty * (parseFloat(item.unit_price) || 0);
+        const name = item.product_name || 'Item';
+        const addonTag = item.is_addon ? ' (add-on)' : '';
+        return `<div class="rcpt-item">
+            <div class="rcpt-item-top">
+                <span class="rcpt-item-name">${qty}  ${escapeHtmlPos(name)}${addonTag}</span>
+                <span class="rcpt-item-amt">${peso(amt)}</span>
             </div>
-            <section class="sdm-block sdm-block--full">
-                <h4>Line items</h4>
-                <div class="sdm-table-wrap">
-                    <table class="sdm-table">
-                        <thead>
-                            <tr><th class="sdm-line-thumb-cell" aria-label="Preview"></th><th>Product</th><th>Qty</th><th>Price</th><th>Amount</th></tr>
-                        </thead>
-                        <tbody>${itemsHtml}</tbody>
-                        <tfoot>
-                            ${subtotalRow}
-                            ${discountRow}
-                            <tr>
-                                <td colspan="4" style="text-align:right;font-weight:700;">Total</td>
-                                <td style="font-weight:700;">₱${total.toFixed(2)}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </section>
         </div>`;
+    }).join('');
 
     modal.classList.add('active');
 }
@@ -866,10 +661,11 @@ function printPosOrder() {
         showToast('Open an order first, then print.', 'error');
         return;
     }
-    document.body.classList.add('printing-pos-order');
-    const done = () => document.body.classList.remove('printing-pos-order');
-    window.addEventListener('afterprint', done, { once: true });
-    setTimeout(() => window.print(), 50);
+    window.print();
+}
+
+function handleOrderOverlayClick(e) {
+    if (e.target === document.getElementById('orderModal')) closeModal();
 }
 
 function closeModal() {

@@ -4,6 +4,7 @@ from app import db
 from app.models import User, Rider, Order, OrderItem, RiderLocation, Store, Product
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from app.utils.report_service import period_range
 from sqlalchemy.orm import joinedload, selectinload
 from app.utils.cloudinary_helper import upload_delivery_proof
 
@@ -40,19 +41,22 @@ def rider_dashboard():
     if not rider:
         return jsonify({'error': 'Rider profile not found'}), 404
     
-    # Today's stats
-    today = datetime.utcnow().date()
+    # Today's stats (Philippine calendar day)
+    today_start, today_end, _ = period_range('today')
+    fulfill_at = func.coalesce(Order.delivered_at, Order.updated_at, Order.created_at)
     
     today_orders = Order.query.filter(
         Order.rider_id == rider.id,
-        func.date(Order.created_at) == today
+        Order.created_at >= today_start,
+        Order.created_at < today_end,
     ).count()
     
     # Count delivered + completed (customer-confirmed) using fulfillment date.
     today_delivered = Order.query.filter(
         Order.rider_id == rider.id,
         Order.status.in_(_DELIVERED_STATUSES),
-        func.date(func.coalesce(Order.delivered_at, Order.updated_at, Order.created_at)) == today
+        fulfill_at >= today_start,
+        fulfill_at < today_end,
     ).count()
     
     # Current active delivery

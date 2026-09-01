@@ -1659,6 +1659,52 @@ def _get_primary_image(product):
     return f'/static/uploads/products/{img.filename}'
 
 
+def _product_listing_thumb(product, variant=None, size=80):
+    """Cloudinary (or stored) square thumbnail for seller dashboard lists."""
+    if variant is not None:
+        url = variant.get_transformed_url(width=size, height=size) or variant.image_url
+        if url:
+            return url
+    if not product:
+        return None
+    images = list(getattr(product, 'images', None) or [])
+    if not images:
+        return None
+    primary = next((img for img in images if img.is_primary), images[0])
+    return (
+        primary.get_transformed_url(width=size, height=size)
+        or primary.image_url
+        or getattr(primary, 'cloudinary_url', None)
+    )
+
+
+def _attach_listing_thumbs(items, size=80):
+    """Attach image_url onto product-row dicts that include id / variant_id."""
+    prod_ids = [item.get('id') for item in items if item.get('id')]
+    if not prod_ids:
+        for item in items:
+            item.setdefault('image_url', None)
+        return items
+    products_by_id = {
+        p.id: p
+        for p in Product.query.options(selectinload(Product.images)).filter(
+            Product.id.in_(prod_ids)
+        ).all()
+    }
+    var_ids = [item.get('variant_id') for item in items if item.get('variant_id')]
+    variants_by_id = {}
+    if var_ids:
+        variants_by_id = {
+            v.id: v
+            for v in ProductVariant.query.filter(ProductVariant.id.in_(var_ids)).all()
+        }
+    for item in items:
+        product = products_by_id.get(item.get('id'))
+        variant = variants_by_id.get(item.get('variant_id'))
+        item['image_url'] = _product_listing_thumb(product, variant, size=size)
+    return items
+
+
 
 # Add context processor to make user available to all templates
 @templates_bp.context_processor
@@ -4686,6 +4732,7 @@ def _render_admin_dashboard():
         key = (int(r.id), int(r.variant_id) if r.variant_id else None)
         entry = merged_top.setdefault(key, {
             'id': r.id,
+            'variant_id': int(r.variant_id) if r.variant_id else None,
             'name': f"{r.name} — {r.variant_name}" if r.variant_name else r.name,
             'store_name': r.store_name or '—',
             'category': r.category_name or 'General',
@@ -4693,6 +4740,7 @@ def _render_admin_dashboard():
         })
         entry['total_sold'] += int(r.total_sold or 0)
     top_products = sorted(merged_top.values(), key=lambda x: x['total_sold'], reverse=True)[:5]
+    _attach_listing_thumbs(top_products)
 
     # Recent orders: completed online + POS, sorted by real timestamp
     online_recent_q = (Order.query
@@ -4800,6 +4848,41 @@ def _render_admin_dashboard():
     avg_rating = round(float(avg_rating_row[0]), 1) if avg_rating_row else 0
     total_reviews = int(avg_rating_row[1]) if avg_rating_row else 0
 
+    low_stock_products = Product.query.options(
+        selectinload(Product.images),
+        joinedload(Product.store),
+    ).filter(
+        Product.is_archived == False,
+        Product.stock_quantity <= 5,
+        Product.stock_quantity > 0,
+    ).order_by(Product.stock_quantity.asc(), Product.name.asc()).limit(5).all()
+
+    out_of_stock = Product.query.filter(
+        Product.is_archived == False,
+        Product.stock_quantity == 0,
+    ).count()
+    out_of_stock_products = Product.query.options(
+        selectinload(Product.images),
+        joinedload(Product.store),
+    ).filter(
+        Product.is_archived == False,
+        Product.stock_quantity == 0,
+    ).order_by(Product.name.asc()).limit(5).all()
+
+    customer_users = db.session.query(func.count(User.id)).filter(User.role == 'customer').scalar() or 0
+    seller_users = db.session.query(func.count(User.id)).filter(User.role == 'seller').scalar() or 0
+    total_catalog_products = db.session.query(func.count(Product.id)).filter(
+        Product.is_archived == False
+    ).scalar() or 0
+    low_stock_count = db.session.query(func.count(Product.id)).filter(
+        Product.is_archived == False,
+        Product.stock_quantity <= 5,
+        Product.stock_quantity > 0,
+    ).scalar() or 0
+    pending_applications = db.session.query(func.count(SellerApplication.id)).filter(
+        SellerApplication.status == 'pending'
+    ).scalar() or 0
+
     return render_template(
         'dashboard.html',
         is_admin=True,
@@ -4826,6 +4909,14 @@ def _render_admin_dashboard():
         total_riders=total_riders,
         active_riders=active_riders,
         pending_orders=pending_orders,
+        low_stock_products=[p.to_dict() for p in low_stock_products],
+        out_of_stock=out_of_stock,
+        out_of_stock_products=[p.to_dict() for p in out_of_stock_products],
+        customer_users=customer_users,
+        seller_users=seller_users,
+        total_catalog_products=total_catalog_products,
+        low_stock_count=low_stock_count,
+        pending_applications=pending_applications,
     )
 
 
@@ -5012,25 +5103,55 @@ def seller_dashboard():
         POSOrder.created_at < range_end,
     ).group_by(Product.id, Product.name, ProductVariant.id, ProductVariant.name, Category.name).all()
 
-    tp_map = defaultdict(lambda: {'total_sold': 0, 'category': 'General', 'variant_name': None})
+    tp_map = defaultdict(lambda: {
+        'total_sold': 0,
+        'category': 'General',
+        'variant_name': None,
+        'id': None,
+        'variant_id': None,
+    })
     for r in online_top:
         key = (r.id, r.variant_id)
+        tp_map[key]['id'] = r.id
+        tp_map[key]['variant_id'] = r.variant_id
         tp_map[key]['name'] = r.name
         tp_map[key]['variant_name'] = r.variant_name
         tp_map[key]['category'] = r.category_name or 'General'
         tp_map[key]['total_sold'] += int(r.total_sold or 0)
     for r in pos_top:
         key = (r.id, r.variant_id)
+        tp_map[key]['id'] = r.id
+        tp_map[key]['variant_id'] = r.variant_id
         tp_map[key]['name'] = r.name
         tp_map[key]['variant_name'] = r.variant_name
         tp_map[key]['category'] = r.category_name or 'General'
         tp_map[key]['total_sold'] += int(r.total_sold or 0)
 
     top_products = sorted(tp_map.values(), key=lambda x: x['total_sold'], reverse=True)[:5]
+    prod_ids = [tp['id'] for tp in top_products if tp.get('id')]
+    products_by_id = {}
+    if prod_ids:
+        products_by_id = {
+            p.id: p
+            for p in Product.query.options(selectinload(Product.images)).filter(
+                Product.id.in_(prod_ids)
+            ).all()
+        }
+    var_ids = [tp['variant_id'] for tp in top_products if tp.get('variant_id')]
+    variants_by_id = {}
+    if var_ids:
+        variants_by_id = {
+            v.id: v
+            for v in ProductVariant.query.filter(ProductVariant.id.in_(var_ids)).all()
+        }
     for tp in top_products:
-        if tp['variant_name']:
+        if tp.get('variant_name'):
             tp['name'] = f"{tp['name']} — {tp['variant_name']}"
-        del tp['variant_name']
+        product = products_by_id.get(tp.get('id'))
+        variant = variants_by_id.get(tp.get('variant_id'))
+        tp['image_url'] = _product_listing_thumb(product, variant)
+        tp.pop('variant_name', None)
+        tp.pop('variant_id', None)
 
     # ── Recent orders (online + POS, last 10 combined) ──
     online_recent = Order.query.filter(
@@ -5134,18 +5255,19 @@ def seller_dashboard():
 
     # Products count & low stock
     total_products = Product.query.filter_by(store_id=store.id, is_archived=False).count()
-    low_stock_products = Product.query.filter(
+    low_stock_products = Product.query.options(selectinload(Product.images)).filter(
         Product.store_id == store.id,
         Product.is_archived == False,
         Product.stock_quantity <= 5,
         Product.stock_quantity > 0
-    ).all()
+    ).order_by(Product.stock_quantity.asc(), Product.name.asc()).all()
 
-    out_of_stock = Product.query.filter(
+    out_of_stock_products = Product.query.options(selectinload(Product.images)).filter(
         Product.store_id == store.id,
         Product.is_archived == False,
         Product.stock_quantity == 0
-    ).count()
+    ).order_by(Product.name.asc()).all()
+    out_of_stock = len(out_of_stock_products)
 
     # Active riders
     active_riders = Rider.query.filter_by(store_id=store.id, is_active=True).count()
@@ -5371,8 +5493,12 @@ def seller_dashboard():
     # True first-time buyers at this store (lifetime first order falls in period)
     new_customers = _new_customer_count(store.id, range_start, range_end)
 
+    from app.utils.store_schedule import format_store_hours_parts
+    store_hours_parts = format_store_hours_parts(store.store_schedule)
+
     return render_template('seller_dashboard.html',
         store=store,
+        store_hours_parts=store_hours_parts,
         period=period,
         period_label=period_label,
         custom_from=custom_from,
@@ -5394,6 +5520,7 @@ def seller_dashboard():
         total_products=total_products,
         low_stock_products=[p.to_dict() for p in low_stock_products],
         out_of_stock=out_of_stock,
+        out_of_stock_products=[p.to_dict() for p in out_of_stock_products],
         active_riders=active_riders,
         total_riders=total_riders,
         pending_orders=pending_orders,
@@ -6262,10 +6389,50 @@ def seller_products():
     products = Product.query.filter_by(
         store_id=store.id,
         is_archived=False  # ← ADD THIS LINE
+    ).options(
+        selectinload(Product.addon_groups).selectinload(ProductAddonGroup.options),
+        selectinload(Product.variants),
+        selectinload(Product.images),
     ).order_by(Product.created_at.desc()).all()
     
     # FIX: Convert products to dict for template
     product_list = [product.to_dict() for product in products]
+    for item in product_list:
+        item['store_name'] = store.name
+
+    from sqlalchemy import func
+    from app.utils.report_service import COMPLETED_ORDER_STATUSES
+
+    online_sold = dict(
+        db.session.query(
+            OrderItem.product_id,
+            func.coalesce(func.sum(OrderItem.quantity), 0),
+        )
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(
+            Order.store_id == store.id,
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
+            OrderItem.product_id.isnot(None),
+        )
+        .group_by(OrderItem.product_id)
+        .all()
+    )
+    pos_sold = dict(
+        db.session.query(
+            POSOrderItem.product_id,
+            func.coalesce(func.sum(POSOrderItem.quantity), 0),
+        )
+        .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id)
+        .filter(
+            POSOrder.store_id == store.id,
+            POSOrderItem.product_id.isnot(None),
+        )
+        .group_by(POSOrderItem.product_id)
+        .all()
+    )
+    for item in product_list:
+        pid = item.get('id')
+        item['total_sold'] = int(online_sold.get(pid, 0) or 0) + int(pos_sold.get(pid, 0) or 0)
     
     return render_template('products.html', products=product_list, categories=categories)
 
@@ -6416,7 +6583,12 @@ def create_product():
             stock_quantity=stock_int,
             main_category_id=int(main_category_id),
             store_category_id=int(store_category_id) if store_category_id else None,
-            is_available=is_available
+            is_available=is_available,
+            keep_ymal_addons_when_unavailable=(
+                (not is_available)
+                and request.form.get('keep_ymal_addons_when_unavailable', 'false').lower()
+                in ('true', '1', 'yes', 'on')
+            ),
         )
         
         db.session.add(product)
@@ -6650,6 +6822,10 @@ def manage_product(product_id):
             if 'is_available' in request.form:
                 is_avail_str = request.form['is_available']
                 product.is_available = is_avail_str.lower() in ['true', '1', 'yes']
+                keep_ymal = request.form.get('keep_ymal_addons_when_unavailable', 'false').lower() in (
+                    'true', '1', 'yes', 'on'
+                )
+                product.keep_ymal_addons_when_unavailable = (not product.is_available) and keep_ymal
 
             # ===== HANDLE PRODUCT IMAGES (CLOUDINARY ONLY) =====
             
@@ -7023,6 +7199,12 @@ def update_product_availability(product_id):
             return jsonify({'error': 'is_available field is required'}), 400
         
         product.is_available = bool(is_available)
+        if product.is_available:
+            product.keep_ymal_addons_when_unavailable = False
+        else:
+            product.keep_ymal_addons_when_unavailable = bool(
+                data.get('keep_ymal_addons_when_unavailable')
+            )
         product.updated_at = datetime.utcnow()
         db.session.commit()
         
@@ -9186,33 +9368,39 @@ def pos_statistics():
     
     # Get date range from query params
     days = request.args.get('days', 7, type=int)
-    
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=days)
-    
-    # Get daily sales
+    from app.utils.report_service import pht_sql_date, period_range
+    import pytz
+    today_pht = datetime.now(pytz.timezone('Asia/Manila')).date()
+    start_pht = today_pht - timedelta(days=max(days - 1, 0))
+    range_start, range_end, _ = period_range(
+        'custom',
+        custom_from=start_pht.isoformat(),
+        custom_to=today_pht.isoformat(),
+    )
+    ph_date = pht_sql_date(POSOrder.created_at)
+
     daily_sales = db.session.query(
-        db.func.date(POSOrder.created_at).label('date'),
+        ph_date.label('date'),
         db.func.count(POSOrder.id).label('order_count'),
         db.func.sum(POSOrder.total_amount).label('revenue')
     ).filter(
         POSOrder.store_id == store.id,
-        db.func.date(POSOrder.created_at) >= start_date,
-        db.func.date(POSOrder.created_at) <= end_date
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
     ).group_by(
-        db.func.date(POSOrder.created_at)
+        ph_date
     ).order_by(
-        db.func.date(POSOrder.created_at)
+        ph_date
     ).all()
-    
-    # Get payment method breakdown
+
     payment_breakdown = db.session.query(
         POSOrder.payment_method,
         db.func.count(POSOrder.id).label('count'),
         db.func.sum(POSOrder.total_amount).label('total')
     ).filter(
         POSOrder.store_id == store.id,
-        db.func.date(POSOrder.created_at) >= start_date
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
     ).group_by(
         POSOrder.payment_method
     ).all()
@@ -9228,7 +9416,8 @@ def pos_statistics():
         POSOrder, POSOrder.id == POSOrderItem.pos_order_id
     ).filter(
         POSOrder.store_id == store.id,
-        db.func.date(POSOrder.created_at) >= start_date
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
     ).group_by(
         Product.id
     ).order_by(
@@ -13259,6 +13448,11 @@ def pos_order_history_api():
         start, _ = _ph_day_bounds_as_utc_naive(start_of_month)
         query = query.filter(POSOrder.created_at >= start)
 
+    elif date_filter == 'this_year':
+        start_of_year = today_ph.replace(month=1, day=1)
+        start, _ = _ph_day_bounds_as_utc_naive(start_of_year)
+        query = query.filter(POSOrder.created_at >= start)
+
     elif date_filter == 'custom' and start_date and end_date:
         try:
             start_day = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -13286,6 +13480,9 @@ def pos_order_history_api():
     # ── Paginate ──────────────────────────────────────────────────────────────
     pagination = query.order_by(POSOrder.created_at.desc()).paginate(
         page=page, per_page=per_page, error_out=False
+    )
+    revenue_sum = float(
+        query.with_entities(db.func.coalesce(db.func.sum(POSOrder.total_amount), 0)).scalar() or 0
     )
 
     # ── Serialize ─────────────────────────────────────────────────────────────
@@ -13327,6 +13524,7 @@ def pos_order_history_api():
     return jsonify({
         'orders':       orders,
         'total':        pagination.total,
+        'revenue_sum':  revenue_sum,
         'pages':        pagination.pages,
         'current_page': pagination.page,
         'has_next':     pagination.has_next,

@@ -2,8 +2,9 @@ from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from app import db
 from app.models import User, Store, Order, Product, Rider, OrderAnalytics, SellerApplication, Notification
-from sqlalchemy import func, extract
+from sqlalchemy import func, text
 from datetime import datetime, timedelta
+from app.utils.report_service import period_range, pht_sql_date
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -77,15 +78,23 @@ def get_dashboard():
     pending_stores = Store.query.filter_by(status='pending').count()
     active_stores = Store.query.filter_by(status='active').count()
     
-    # Revenue (last 30 days)
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    # Revenue (last 30 Philippine calendar days)
+    import pytz
+    today_pht = datetime.now(pytz.timezone('Asia/Manila')).date()
+    thirty_start, thirty_end, _ = period_range(
+        'custom',
+        custom_from=(today_pht - timedelta(days=29)).isoformat(),
+        custom_to=today_pht.isoformat(),
+    )
+    day = pht_sql_date(Order.created_at)
     revenue_data = db.session.query(
-        func.date(Order.created_at).label('date'),
+        day.label('date'),
         func.sum(Order.total_amount).label('revenue')
     ).filter(
-        Order.created_at >= thirty_days_ago,
+        Order.created_at >= thirty_start,
+        Order.created_at < thirty_end,
         Order.status == 'delivered'
-    ).group_by(func.date(Order.created_at)).all()
+    ).group_by(day).all()
     
     return jsonify({
         'stats': {
@@ -230,22 +239,23 @@ def get_all_orders():
 @admin_required
 def get_analytics():
     period = request.args.get('period', 'month')  # day, week, month, year
-    
-    now = datetime.utcnow()
-    
+    day = pht_sql_date(Order.created_at)
+
     if period == 'day':
-        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        group_by = func.date(Order.created_at)
+        start_date, end_date, _ = period_range('today')
+        group_by = day
     elif period == 'week':
-        start_date = now - timedelta(days=7)
-        group_by = func.date(Order.created_at)
-    elif period == 'month':
-        start_date = now - timedelta(days=30)
-        group_by = func.date(Order.created_at)
-    else:  # year
-        start_date = now - timedelta(days=365)
-        group_by = func.date_trunc('month', Order.created_at)
-    
+        start_date, end_date, _ = period_range('week')
+        group_by = day
+    elif period == 'year':
+        start_date, end_date, _ = period_range('year')
+        group_by = func.date_trunc(
+            'month', Order.created_at + text("INTERVAL '8 hours'")
+        )
+    else:  # month
+        start_date, end_date, _ = period_range('month')
+        group_by = day
+
     # Revenue trend
     revenue_trend = db.session.query(
         group_by.label('period'),
@@ -253,6 +263,7 @@ def get_analytics():
         func.sum(Order.total_amount).label('revenue')
     ).filter(
         Order.created_at >= start_date,
+        Order.created_at < end_date,
         Order.status == 'delivered'
     ).group_by(group_by).order_by(group_by).all()
     
@@ -260,7 +271,10 @@ def get_analytics():
     status_distribution = db.session.query(
         Order.status,
         func.count(Order.id).label('count')
-    ).filter(Order.created_at >= start_date).group_by(Order.status).all()
+    ).filter(
+        Order.created_at >= start_date,
+        Order.created_at < end_date,
+    ).group_by(Order.status).all()
     
     # Top stores
     top_stores = db.session.query(
@@ -269,6 +283,7 @@ def get_analytics():
         func.sum(Order.total_amount).label('revenue')
     ).join(Order, Store.id == Order.store_id).filter(
         Order.created_at >= start_date,
+        Order.created_at < end_date,
         Order.status == 'delivered'
     ).group_by(Store.id, Store.name).order_by(func.sum(Order.total_amount).desc()).limit(10).all()
     
