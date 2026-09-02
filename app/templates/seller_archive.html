@@ -84,10 +84,11 @@
             <label class="form-label">Category</label>
             <select id="categoryFilter" class="form-control" onchange="filterArchived()">
                 <option value="">All Categories</option>
-                <option value="flowers">Fresh Flowers</option>
-                <option value="plants">Potted Plants</option>
+                <option value="fresh-flowers">Fresh Flowers</option>
+                <option value="potted-plants">Potted Plants</option>
                 <option value="bouquets">Bouquets</option>
                 <option value="succulents">Succulents</option>
+                <option value="others">Others</option>
             </select>
         </div>
     </div>
@@ -1056,7 +1057,7 @@
         const card = document.createElement('div');
         card.className = 'product-card';
         card.dataset.productId = product.id;
-        card.dataset.category = product.category || '';
+        card.dataset.category = product.main_category_slug || product.category || '';
         card.dataset.name = product.name;
         card.dataset.archivedAt = product.archived_at;
         
@@ -1080,7 +1081,7 @@
             
             <div class="product-card-body">
                 <div class="product-name">${product.name}</div>
-                <div class="product-category">${product.category || 'General'}</div>
+                <div class="product-category">${product.main_category_name || product.category || 'General'}</div>
                 
                 <div style="font-size: 15px; font-weight: 600; color: var(--deep-rose); margin: 0.25rem 0;">
                     ₱${product.price.toFixed(2)}
@@ -1308,7 +1309,9 @@
         
         // Apply category filter
         if (category) {
-            filtered = filtered.filter(p => p.category === category);
+            filtered = filtered.filter(p =>
+                p.main_category_slug === category || p.category === category
+            );
         }
         
         // Apply sorting

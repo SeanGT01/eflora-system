@@ -39,6 +39,12 @@ def generate_default_password():
     return f"Rider@{suffix}"
 
 
+def generate_store_admin_password():
+    chars = string.ascii_letters + string.digits
+    suffix = ''.join(random.choices(chars, k=6))
+    return f"Admin@{suffix}"
+
+
 def _get_gmail_access_token():
     """
     Get a fresh Gmail API access token using the refresh token.
@@ -545,6 +551,86 @@ def send_rider_credentials_email(recipient_email, full_name, default_password, s
 
     except Exception as e:
         current_app.logger.error(f"❌ Failed to queue credentials email for {recipient_email}: {e}")
+        return False
+
+
+def send_store_admin_otp_email(recipient_email, otp_code, store_name, seller_name):
+    """6-digit OTP for inviting a store admin (seller dashboard)."""
+    try:
+        subject = f"E-Flora Store Admin Verification Code - {store_name}"
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #b5445a 0%, #d4788a 100%); border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">&#127800; E-Flora</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">Store Admin Verification Code</p>
+            </div>
+            <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
+                <h2 style="color: #333; margin-top: 0;">Hello!</h2>
+                <p style="color: #555; font-size: 16px;">
+                    <strong>{seller_name}</strong> from <strong>{store_name}</strong> is setting up your
+                    store admin account on E-Flora. Share this code with the store owner so they can verify you.
+                </p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="display: inline-block; background: #f4f4f8; border: 2px dashed #b5445a;
+                                border-radius: 12px; padding: 20px 40px;">
+                        <span style="font-family: 'Courier New', monospace; font-size: 36px; font-weight: bold;
+                                     letter-spacing: 8px; color: #333;">{otp_code}</span>
+                    </div>
+                </div>
+                <p style="color: #888; font-size: 14px; text-align: center;">
+                    This code expires in <strong>10 minutes</strong>.
+                </p>
+            </div>
+        </div>
+        """
+        sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
+        app = current_app._get_current_object()
+        thread = threading.Thread(
+            target=_send_email_async,
+            args=(app, recipient_email, subject, html_body, sender)
+        )
+        thread.daemon = True
+        thread.start()
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Failed to queue store admin OTP email: {e}")
+        return False
+
+
+def send_store_admin_credentials_email(recipient_email, full_name, default_password, store_name):
+    try:
+        subject = f"E-Flora Store Admin Account - {store_name}"
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #b5445a 0%, #d4788a 100%); border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0;">&#127800; E-Flora</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">Welcome, Store Admin!</p>
+            </div>
+            <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
+                <h2 style="color: #333; margin-top: 0;">Hi {full_name}!</h2>
+                <p style="color: #555; font-size: 16px;">
+                    Your store admin account for <strong>{store_name}</strong> is ready.
+                    Log in on the E-Flora website with:
+                </p>
+                <div style="background: #f4f4f8; border-radius: 10px; padding: 20px; margin: 25px 0;">
+                    <p style="margin: 0 0 8px;"><strong>Login:</strong> {recipient_email}</p>
+                    <p style="margin: 0;"><strong>Password:</strong> {default_password}</p>
+                </div>
+                <p style="color: #888; font-size: 13px;">Please change your password after you sign in.</p>
+            </div>
+        </div>
+        """
+        sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@eflowers.com')
+        app = current_app._get_current_object()
+        thread = threading.Thread(
+            target=_send_email_async,
+            args=(app, recipient_email, subject, html_body, sender)
+        )
+        thread.daemon = True
+        thread.start()
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Failed to queue store admin credentials email: {e}")
         return False
 
 

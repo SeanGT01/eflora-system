@@ -73,24 +73,19 @@ def seller_required(f):
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
             return jsonify({'error': 'Not logged in'}), 401
-        if session.get('role') != 'seller':
+        if session.get('role') not in ('seller', 'store_admin'):
             return jsonify({'error': 'Seller access required'}), 403
+        from app.utils.store_admin_perms import deny_if_forbidden
+        denied = deny_if_forbidden()
+        if denied:
+            return denied
         return f(*args, **kwargs)
     return decorated
 
 def get_seller_store():
-    """Return the seller's manageable store (active or self-hidden inactive)."""
-    user_id = session.get('user_id')
-    if not user_id:
-        return None
-    return (
-        Store.query.filter(
-            Store.seller_id == user_id,
-            Store.status.in_(('active', 'inactive')),
-        )
-        .order_by(Store.updated_at.desc().nullslast(), Store.id.desc())
-        .first()
-    )
+    """Return the seller's or store admin's manageable store."""
+    from app.templates_routes import _seller_portal_manageable_store
+    return _seller_portal_manageable_store(session.get('user_id'))
 
 @archive_bp.route('/products', methods=['GET'])
 @seller_required

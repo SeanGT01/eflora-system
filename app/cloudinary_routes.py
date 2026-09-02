@@ -143,7 +143,8 @@ def upload_product_image_endpoint(product_id):
     if not product:
         return jsonify({'success': False, 'error': 'Product not found'}), 404
     
-    store = Store.query.filter_by(seller_id=user_id).first()
+    from app.templates_routes import _seller_portal_manageable_store
+    store = _seller_portal_manageable_store(user_id)
     if not store or product.store_id != store.id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     
@@ -195,7 +196,8 @@ def delete_product_image(image_id):
     
     # Check authorization
     product = image.product
-    store = Store.query.filter_by(seller_id=user_id).first()
+    from app.templates_routes import _seller_portal_manageable_store
+    store = _seller_portal_manageable_store(user_id)
     if not store or product.store_id != store.id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     
@@ -223,7 +225,8 @@ def upload_variant_image_endpoint(variant_id):
     
     # Check authorization
     product = variant.product
-    store = Store.query.filter_by(seller_id=user_id).first()
+    from app.templates_routes import _seller_portal_manageable_store
+    store = _seller_portal_manageable_store(user_id)
     if not store or product.store_id != store.id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     

@@ -196,9 +196,11 @@
 }
     /* ─── Layout ─── */
     .settings-container {
-        max-width: 1400px;
-        margin: 2rem auto;
-        padding: 0 1.5rem;
+        max-width: none;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
     }
     
     .settings-header {
@@ -1095,17 +1097,11 @@
         position: absolute;
         inset: 0;
         background: rgba(255, 255, 255, 0.2);
-        pointer-events: none;
+        pointer-events: auto;
+        cursor: pointer;
         border-radius: var(--radius-lg);
+        z-index: 5;
     }
-
-/* Keep QR section clean in read-only mode: no top overlay strip */
-#qr-settings-content:not(.editing) .qr-gallery {
-    filter: none !important;
-}
-#qr-settings-content:not(.editing)::after {
-    display: none !important;
-}
     
     .summary-field {
         margin-bottom: 0.6rem;
@@ -1416,22 +1412,23 @@
     
     /* Responsive Container */
     .settings-container {
-        max-width: 1400px;
-        margin: 1rem auto;
-        padding: 0 0.75rem;
+        max-width: none;
+        width: 100%;
+        margin: 0;
+        padding: 0;
     }
     
     @media (min-width: 640px) {
         .settings-container {
-            margin: 1.5rem auto;
-            padding: 0 1.5rem;
+            margin: 0;
+            padding: 0;
         }
     }
     
     @media (min-width: 1024px) {
         .settings-container {
-            margin: 2rem auto;
-            padding: 0 2rem;
+            margin: 0;
+            padding: 0;
         }
     }
     
@@ -1917,8 +1914,8 @@
     @media (max-width: 720px) {
         /* General container compression */
         .settings-container {
-            margin: 1.2rem auto !important;
-            padding: 0 1rem !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         
         /* Header stays inline, no wrapping */
@@ -2437,8 +2434,10 @@
         color: white;
     }
 .settings-wrapper{
-    max-width: 1360px;
-    margin: 0 auto;
+    max-width: none;
+    width: 100%;
+    margin: 0;
+    padding: 0;
 }
 .settings-page-grid{
     display:grid;
@@ -4206,6 +4205,30 @@
         }
     }
 
+    let lastEditPromptAt = 0;
+    function promptEnableEditingFirst() {
+        const now = Date.now();
+        if (now - lastEditPromptAt < 1800) return;
+        lastEditPromptAt = now;
+        if (typeof saWriteAllowed === 'function' && !saWriteAllowed('store_settings')) {
+            showToast('You do not have permission to edit store settings.', 'warning');
+            return;
+        }
+        showToast('Enable editing first to perform this action. Click Edit.', 'info');
+    }
+
+    ['basic-info-content', 'qr-settings-content'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', (e) => {
+            if (el.classList.contains('editing')) return;
+            if (e.target.closest('.btn-section-edit, .section-actions')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            promptEnableEditingFirst();
+        });
+    });
+
     function isBasicInfoEditing() {
         return !!document.getElementById('basic-info-content')?.classList.contains('editing');
     }
@@ -5217,6 +5240,7 @@
     
     // Edit button
     document.getElementById('edit-basic-info')?.addEventListener('click', async () => {
+        if (typeof saWriteAllowed === 'function' && !saWriteAllowed('store_settings')) return;
         toggleBasicInfoSection(true);
         
         // Auto-detect location on first edit (when municipality is not yet selected)
@@ -5553,6 +5577,7 @@
     syncFreeDeliveryMinFields();
 
     document.getElementById('edit-qr-settings')?.addEventListener('click', () => {
+        if (typeof saWriteAllowed === 'function' && !saWriteAllowed('store_settings')) return;
         toggleQRSettingsSection(true);
     });
 

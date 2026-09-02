@@ -1807,13 +1807,40 @@
     .ep-price__sale    { font-weight: 700; color: var(--deep-rose, #b5445a); }
     .ep-price__original { font-weight: 500; color: #9e9e9e; text-decoration: line-through; font-size: 0.88em; }
     .ep-price__badge { background: #b5445a; color: #fff; font-size: 0.72em; font-weight: 700; border-radius: 20px; padding: 1px 7px; white-space: nowrap; }
+    .sa-readonly-banner {
+        display: none;
+        align-items: center;
+        gap: 0.65rem;
+        margin: 0 0 1.25rem;
+        padding: 0.85rem 1.1rem;
+        border-radius: 12px;
+        border: 1px solid rgba(194, 78, 104, 0.18);
+        background: rgba(194, 78, 104, 0.08);
+        color: #7a3148;
+        font-size: 13.5px;
+        line-height: 1.45;
+    }
+    body.sa-view-only .sa-readonly-banner { display: flex; }
+    body.sa-view-only .sa-write-disabled {
+        pointer-events: none !important;
+        opacity: 0.42 !important;
+        cursor: not-allowed !important;
+        filter: grayscale(0.15);
+    }
+    body.sa-view-only .btn-section-edit,
+    body.sa-view-only #edit-basic-info,
+    body.sa-view-only #edit-qr-settings {
+        pointer-events: none !important;
+        opacity: 0.42 !important;
+        cursor: not-allowed !important;
+    }
     </style>
 
     {% block extra_css %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
     <style>{% include 'partials/modal_close_styles.html' %}</style>
 </head>
-<body class="{% if session.get('role') == 'admin' %}role-admin{% elif session.get('role') == 'seller' %}role-seller{% endif %}">
+<body class="{% if session.get('role') == 'admin' %}role-admin{% elif session.get('role') in ['seller', 'store_admin'] %}role-seller{% endif %}">
 
 <!-- Toast Stack -->
 <div class="toast-stack" id="toastStack"></div>
@@ -1843,7 +1870,7 @@
         </div>
 
         <!-- Store status (seller only) -->
-        {% if session.role == 'seller' %}
+        {% if session.role in ['seller', 'store_admin'] %}
         <div class="store-status-pill">
             <span class="store-status-dot"></span>
             <span class="store-status-text">Store</span>
@@ -1856,7 +1883,7 @@
             <div class="nav-section-label">Main</div>
             <ul class="nav-list">
                 <li class="nav-item">
-                    {% if session.role == 'seller' %}
+                    {% if session.role in ['seller', 'store_admin'] %}
                     <a href="{{ url_for('templates.seller_dashboard') }}" class="nav-link {% if request.endpoint == 'templates.seller_dashboard' %}active{% endif %}">
                         <i class="ri-layout-grid-line nav-icon"></i> Dashboard
                     </a>
@@ -1898,7 +1925,7 @@
                         <i class="ri-customer-service-2-line nav-icon"></i> Support
                     </a>
                 </li>
-                {% elif session.role == 'seller' %}
+                {% elif session.role in ['seller', 'store_admin'] %}
                 <li class="nav-item">
                     <a href="{{ url_for('templates.seller_products') }}" class="nav-link {% if request.endpoint == 'templates.seller_products' %}active{% endif %}">
                         <i class="ri-leaf-line nav-icon"></i> Products
@@ -1926,6 +1953,13 @@
                         <i class="ri-motorbike-line nav-icon"></i> Riders
                     </a>
                 </li>
+                {% if session.role == 'seller' %}
+                <li class="nav-item">
+                    <a href="{{ url_for('store_admin.seller_admins_page') }}" class="nav-link {% if request.endpoint == 'store_admin.seller_admins_page' %}active{% endif %}">
+                        <i class="ri-shield-user-line nav-icon"></i> Admins
+                    </a>
+                </li>
+                {% endif %}
                 <li class="nav-item">
                     <a href="{{ url_for('templates.seller_pos') }}" class="nav-link {% if request.endpoint == 'templates.seller_pos' %}active{% endif %}">
                         <i class="ri-cash-line nav-icon"></i> POS System
@@ -1941,7 +1975,7 @@
             </ul>
         </nav>
 
-        {% if session.role == 'seller' %}
+        {% if session.role in ['seller', 'store_admin'] %}
         <hr class="sidebar-divider">
 
         <nav class="nav-section">
@@ -2075,10 +2109,183 @@
 
 <script>
     const CURRENT_ROLE = {{ (session.get('role') or '')|tojson }};
-    const NOTIF_ENABLED = CURRENT_ROLE === 'seller' || CURRENT_ROLE === 'admin';
+    const STORE_ADMIN_PERMS = {{ (store_admin_perms if store_admin_perms is defined else {})|tojson }};
+    const NOTIF_ENABLED = CURRENT_ROLE === 'seller' || CURRENT_ROLE === 'store_admin' || CURRENT_ROLE === 'admin';
     const NOTIF_API_BASE = CURRENT_ROLE === 'admin'
         ? '/api/admin/notifications'
         : '/api/seller/notifications';
+
+    function saWriteAllowed(key) {
+        if (CURRENT_ROLE !== 'store_admin') return true;
+        if (!key) return true;
+        return STORE_ADMIN_PERMS[key] !== false;
+    }
+
+    function saPathPerm(pathname) {
+        const p = String(pathname || '').replace(/\/+$/, '') || '/';
+        if (p.indexOf('/seller/products') === 0 && /\/(reduce-stock|add-stock|stock-history)/.test(p)) {
+            return 'inventory';
+        }
+        if (p.indexOf('/seller/products') === 0 && p.indexOf('archive-choice') !== -1) {
+            return 'archive';
+        }
+        const rules = [
+            ['/seller/archive', 'archive'],
+            ['/api/v1/seller/archive', 'archive'],
+            ['/seller/inventory', 'inventory'],
+            ['/seller/orders', 'orders'],
+            ['/api/seller/orders', 'orders'],
+            ['/seller/riders', 'riders'],
+            ['/api/seller/riders', 'riders'],
+            ['/seller/pos', 'pos'],
+            ['/api/seller/pos', 'pos'],
+            ['/seller/store-settings', 'store_settings'],
+            ['/api/seller/store', 'store_settings'],
+            ['/seller/products', 'products'],
+            ['/api/seller/products', 'products'],
+            ['/api/seller/variants', 'products'],
+            ['/api/store/categories', 'products'],
+            ['/api/v1/cloudinary/product', 'products'],
+            ['/api/v1/cloudinary/variant', 'products'],
+            ['/api/v1/cloudinary/upload', 'products'],
+            ['/api/v1/cloudinary/gcash', 'store_settings'],
+        ];
+        for (let i = 0; i < rules.length; i++) {
+            const prefix = rules[i][0];
+            if (p === prefix || p.indexOf(prefix + '/') === 0) return rules[i][1];
+        }
+        return null;
+    }
+
+    function saDisableWriteEl(el) {
+        if (!el || el.classList.contains('sa-write-disabled')) return;
+        el.classList.add('sa-write-disabled');
+        if (el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+            el.disabled = true;
+        }
+        if (el.tagName === 'A') {
+            el.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); }, true);
+        }
+        el.setAttribute('title', 'View only — you cannot make changes on this page');
+        el.setAttribute('aria-disabled', 'true');
+    }
+
+    function saApplyReadonlyUi() {
+        if (CURRENT_ROLE !== 'store_admin') return;
+        const key = saPathPerm(location.pathname);
+        if (!key || saWriteAllowed(key)) return;
+        document.body.classList.add('sa-view-only');
+        const page = document.querySelector('.page-content');
+        if (page && !page.querySelector('.sa-readonly-banner')) {
+            const banner = document.createElement('div');
+            banner.className = 'sa-readonly-banner';
+            banner.innerHTML = '<i class="ri-eye-line"></i><span>View only. You can browse this page, but you cannot save changes or perform actions.</span>';
+            page.insertBefore(banner, page.firstChild);
+        }
+        const byKey = {
+            products: [
+                '.dash-header-actions .apply-btn',
+                'a[href*="/seller/products/add"]',
+                '.action-buttons',
+                '.availability-toggle',
+                '.bulk-bar',
+                'button[onclick*="submitProduct"]',
+                'button[onclick*="editProduct"]',
+                'button[onclick*="deleteProduct"]',
+                '#selectAllBtn',
+            ],
+            archive: [
+                'button[onclick*="restoreProduct"]',
+                'button[onclick*="permanentDeleteProduct"]',
+                '#bulkRestoreBtn',
+                '#bulkDeleteBtn',
+                '.bulk-bar',
+            ],
+            inventory: [
+                'button[onclick*="openStockAdditionModal"]',
+                'button[onclick*="openStockReductionModal"]',
+                '#submitReductionBtn',
+                '#submitAdditionBtn',
+            ],
+            orders: [
+                '.seller-mark-done',
+                '.seller-approve-cod',
+                '.batch-action-btn',
+                '#batchMarkDoneBtn',
+            ],
+            riders: [
+                '.toolbar-right .apply-btn',
+                'button[onclick*="openInviteModal"]',
+                'button[onclick*="editRider"]',
+                'button[onclick*="resetRiderPassword"]',
+                'button[onclick*="toggleRiderStatus"]',
+                'button[onclick*="deleteRider"]',
+            ],
+            pos: [
+                '#chargeBtn',
+                '.btn-charge',
+                'button[onclick*="void"]',
+            ],
+            store_settings: [
+                '.btn-section-edit',
+                '#edit-basic-info',
+                '#edit-qr-settings',
+                '.btn-section-save',
+                '#save-basic-info',
+                'input[type="file"]',
+            ],
+        };
+        (byKey[key] || []).forEach(function (sel) {
+            document.querySelectorAll(sel).forEach(saDisableWriteEl);
+        });
+        if (key === 'riders') {
+            document.querySelectorAll('.action-btn').forEach(function (btn) {
+                const oc = btn.getAttribute('onclick') || '';
+                if (oc.indexOf('viewRider') !== -1) return;
+                saDisableWriteEl(btn);
+            });
+        }
+        if (key === 'archive') {
+            document.querySelectorAll('button[onclick*="permanentDeleteProduct"], button[onclick*="restoreProduct"]').forEach(saDisableWriteEl);
+        }
+        if (key === 'store_settings') {
+            document.querySelectorAll('.btn-section-edit, #edit-basic-info, #edit-qr-settings, button.btn-rose, button.btn-section-save').forEach(saDisableWriteEl);
+        }
+    }
+
+    (function saGuardWrites() {
+        if (CURRENT_ROLE !== 'store_admin' || typeof window.fetch !== 'function') return;
+        const origFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+            const method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+            if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+                return origFetch(input, init);
+            }
+            let url = '';
+            if (typeof input === 'string') url = input;
+            else if (input && input.url) url = input.url;
+            try {
+                const path = new URL(url, window.location.origin).pathname;
+                const permKey = saPathPerm(path);
+                if (permKey && !saWriteAllowed(permKey)) {
+                    if (typeof showToast === 'function') {
+                        showToast('You can view this page, but you cannot make changes.', 'warning');
+                    }
+                    return Promise.resolve(new Response(JSON.stringify({
+                        error: 'You can view this page, but you cannot make changes.',
+                    }), { status: 403, headers: { 'Content-Type': 'application/json' } }));
+                }
+            } catch (e) {}
+            return origFetch(input, init);
+        };
+        document.addEventListener('DOMContentLoaded', function () {
+            saApplyReadonlyUi();
+            const page = document.querySelector('.page-content');
+            if (!page) return;
+            const obs = new MutationObserver(function () { saApplyReadonlyUi(); });
+            obs.observe(page, { childList: true, subtree: true });
+        });
+    })();
 
     // Sidebar
     function toggleSidebar() {
@@ -2674,7 +2881,7 @@
 })();
 </script>
 
-{% if session.get('role') in ['seller', 'admin'] %}
+{% if session.get('role') in ['seller', 'store_admin', 'admin'] %}
 <!-- Seller/Admin Chat Widget -->
 {% include 'chat_widget.html' %}
 <script>

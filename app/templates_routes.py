@@ -937,6 +937,7 @@ FEATURED_HOME_CATEGORY_ROWS = (
     ('potted-plants', 'Potted Plants'),
     ('fresh-flowers', 'Fresh Flowers'),
     ('succulents', 'Succulents'),
+    ('others', 'Others'),
 )
 FEATURED_PRODUCTS_PER_CATEGORY = 48
 
@@ -1561,7 +1562,7 @@ def seller_required(f):
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('templates.login'))
-        if session.get('role') != 'seller':
+        if session.get('role') not in ('seller', 'store_admin'):
             return redirect(url_for('templates.dashboard'))
         # Admin-suspended storefronts cannot use seller tools.
         # Seller-chosen "inactive" still allows portal access (store is just hidden).
@@ -1571,6 +1572,10 @@ def seller_required(f):
                 and not _seller_portal_manageable_store(session['user_id'])
             ):
                 return redirect(url_for('templates.seller_store_suspended'))
+        from app.utils.store_admin_perms import deny_if_forbidden
+        denied = deny_if_forbidden()
+        if denied:
+            return denied
         return f(*args, **kwargs)
     return decorated
 
@@ -1718,13 +1723,9 @@ def inject_user():
         user_obj = User.query.get(session['user_id'])
         if user_obj:
             user = user_obj.to_dict()
-            if session.get('role') == 'seller':
-                active_store_ids = [
-                    store.id for store in Store.query.filter(
-                        Store.seller_id == session['user_id'],
-                        Store.status.in_(('active', 'inactive')),
-                    ).all()
-                ]
+            if session.get('role') in ('seller', 'store_admin'):
+                portal_store = _seller_portal_manageable_store(session['user_id'])
+                active_store_ids = [portal_store.id] if portal_store else []
                 if active_store_ids:
                     seller_orders_badge_count = Order.query.filter(
                         Order.store_id.in_(active_store_ids),
@@ -1768,11 +1769,18 @@ def inject_user():
                 chat_unread_count = int(seller_total or 0) + int(customer_total or 0)
             except Exception:
                 chat_unread_count = 0
+    from app.utils.store_admin_perms import current_store_admin_permissions, default_permissions
+    store_admin_perms = (
+        current_store_admin_permissions()
+        if session.get('role') == 'store_admin'
+        else default_permissions()
+    )
     return dict(
         user=user,
         seller_orders_badge_count=seller_orders_badge_count,
         pos_orders_badge_count=pos_orders_badge_count,
         chat_unread_count=chat_unread_count,
+        store_admin_perms=store_admin_perms,
         current_year=datetime.utcnow().year,
     )
 
@@ -2309,6 +2317,9 @@ def login():
             if u:
                 return _seller_home_redirect(u.id)
             return redirect(url_for('templates.seller_signup_complete'))
+        if role == 'store_admin':
+            from app.utils.store_admin_perms import store_admin_home_redirect
+            return store_admin_home_redirect()
         if role == 'rider':
             # Riders sign in via the mobile app. There is no web rider dashboard.
             session.pop('user_id', None)
@@ -2385,7 +2396,18 @@ def login():
                 return redirect(url_for('templates.admin_users'))
             elif user.role == 'seller':
                 return _seller_home_redirect(user.id)
-            else:  # customer
+            elif user.role == 'store_admin':
+                store = _seller_portal_manageable_store(user.id)
+                if not store:
+                    session.clear()
+                    return render_template(
+                        'login.html',
+                        error='This store admin account is inactive. Ask the store owner to reactivate it.',
+                        form_data={'identifier': raw_id or ''},
+                    )
+                from app.utils.store_admin_perms import store_admin_home_redirect
+                return store_admin_home_redirect()
+            else:
                 return redirect(url_for('templates.index'))
         else:
             return invalid_login()
@@ -3202,18 +3224,32 @@ def _seller_portal_active_store(user_id):
 
 
 def _seller_portal_manageable_store(user_id):
-    """Store the seller can still manage: visible (active) or self-hidden (inactive).
-
-    Admin `suspended` is excluded so those sellers stay on the suspended screen.
-    """
+    """Store the user can manage: owner (seller_id) or invited store_admin."""
     if not user_id:
         return None
-    return (
+    owned = (
         Store.query.filter(
             Store.seller_id == user_id,
             Store.status.in_(('active', 'inactive')),
         )
         .order_by(Store.updated_at.desc().nullslast(), Store.id.desc())
+        .first()
+    )
+    if owned:
+        return owned
+    from app.models import StoreAdmin
+    staff = (
+        StoreAdmin.query.filter_by(user_id=user_id, is_active=True, is_archived=False)
+        .order_by(StoreAdmin.id.desc())
+        .first()
+    )
+    if not staff:
+        return None
+    return (
+        Store.query.filter(
+            Store.id == staff.store_id,
+            Store.status.in_(('active', 'inactive')),
+        )
         .first()
     )
 
@@ -4399,6 +4435,7 @@ def categories():
         {'id': 'plants', 'name': 'Potted Plants', 'icon': 'plant-line', 'count': 28},
         {'id': 'bouquets', 'name': 'Bouquets', 'icon': 'bouquet-line', 'count': 35},
         {'id': 'succulents', 'name': 'Succulents', 'icon': 'cactus-line', 'count': 19},
+        {'id': 'others', 'name': 'Others', 'icon': 'more-2-line', 'count': 0},
     ]
     
     return render_template('categories.html', categories=categories_list)
@@ -4581,7 +4618,7 @@ def product_detail(product_id):
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('templates.login'))
-    if session.get('role') == 'seller':
+    if session.get('role') in ('seller', 'store_admin'):
         return redirect(url_for('templates.seller_dashboard'))
 
     if session.get('role') == 'admin':
@@ -4924,7 +4961,7 @@ def _render_admin_dashboard():
 def seller_dashboard():
     if 'user_id' not in session:
         return redirect(url_for('templates.login'))
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return redirect(url_for('templates.dashboard'))
 
     from sqlalchemy import func, extract
@@ -6371,7 +6408,7 @@ def api_admin_home_testimonial_visibility(tid):
 
 @templates_bp.route('/seller/products')
 def seller_products():
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return redirect(url_for('templates.dashboard'))
     user_id = session.get('user_id')
     if (
@@ -6439,7 +6476,7 @@ def seller_products():
 
 @templates_bp.route('/seller/inventory')
 def seller_inventory():
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return redirect(url_for('templates.dashboard'))
     user_id = session.get('user_id')
     if (
@@ -6455,10 +6492,11 @@ def seller_inventory():
     products = Product.query.filter_by(
         store_id=store.id,
         is_archived=False
-    ).order_by(Product.name.asc()).all()
+    ).order_by(Product.created_at.desc().nullslast(), Product.id.desc()).all()
 
     product_list = [product.to_dict(include_inactive_addons=True) for product in products]
-    return render_template('seller_inventory.html', products=product_list)
+    categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order.asc(), Category.name.asc()).all()
+    return render_template('seller_inventory.html', products=product_list, categories=categories)
 
 def generate_short_filename(original_filename, product_id, index):
     """Generate a short, safe filename for images"""
@@ -6487,12 +6525,12 @@ def generate_short_filename(original_filename, product_id, index):
 @seller_required
 def create_product():
     """Create a new product with Cloudinary images (no local storage)"""
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     
     try:
         # Get seller's store
-        store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+        store = _seller_portal_manageable_store(session.get('user_id'))
         if not store:
             return jsonify({'error': 'Store not found. Please create a store first.'}), 404
         
@@ -6736,11 +6774,11 @@ def create_product():
 @templates_bp.route('/seller/products/<int:product_id>', methods=['GET', 'PUT', 'DELETE'])
 @seller_required
 def manage_product(product_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     try:
-        store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+        store = _seller_portal_manageable_store(session.get('user_id'))
         if not store:
             return jsonify({'error': 'Store not found'}), 404
 
@@ -7177,12 +7215,12 @@ def manage_product(product_id):
 @templates_bp.route('/seller/products/<int:product_id>/availability', methods=['PUT'])
 def update_product_availability(product_id):
     """Update just the availability status of a product"""
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     
     try:
         # Get seller's store
-        store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+        store = _seller_portal_manageable_store(session.get('user_id'))
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -7211,7 +7249,8 @@ def update_product_availability(product_id):
         return jsonify({
             'success': True,
             'message': f'Product {"available" if is_available else "unavailable"}',
-            'product': product.to_dict()
+            'product_id': product.id,
+            'is_available': product.is_available,
         })
         
     except Exception as e:
@@ -7220,6 +7259,60 @@ def update_product_availability(product_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+@templates_bp.route('/seller/products/bulk-availability', methods=['PUT', 'POST'])
+@seller_required
+def bulk_update_product_availability():
+    """Set availability for many products in one request."""
+    store = _seller_portal_manageable_store(session.get('user_id'))
+    if not store:
+        return jsonify({'error': 'Store not found'}), 404
+
+    data = request.get_json(silent=True) or {}
+    raw_ids = data.get('product_ids') or []
+    ids = []
+    for value in raw_ids:
+        try:
+            ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify({'error': 'No products selected'}), 400
+
+    is_available = data.get('is_available')
+    if is_available is None:
+        return jsonify({'error': 'is_available field is required'}), 400
+    is_available = bool(is_available)
+    keep_ymal = bool(data.get('keep_ymal_addons_when_unavailable'))
+
+    products = Product.query.filter(
+        Product.id.in_(ids),
+        Product.store_id == store.id,
+    ).all()
+    if not products:
+        return jsonify({'error': 'No matching products found'}), 404
+
+    now = datetime.utcnow()
+    for product in products:
+        product.is_available = is_available
+        if is_available:
+            product.keep_ymal_addons_when_unavailable = False
+        else:
+            product.keep_ymal_addons_when_unavailable = keep_ymal
+        product.updated_at = now
+    db.session.commit()
+
+    updated_ids = [p.id for p in products]
+    missing = [pid for pid in ids if pid not in updated_ids]
+    return jsonify({
+        'success': True,
+        'updated': len(updated_ids),
+        'updated_ids': updated_ids,
+        'missing_ids': missing,
+        'message': f'{len(updated_ids)} product(s) marked {"available" if is_available else "unavailable"}',
+    })
 
 
 
@@ -7243,7 +7336,7 @@ def reduce_product_stock(product_id):
         "addon_option_id": 45  # Optional, only for add-on options
     }
     """
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     
     user_id = session.get('user_id')
@@ -7418,7 +7511,7 @@ def add_product_stock(product_id):
         "addon_option_id": 45  # Optional, only for add-on options
     }
     """
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     
     user_id = session.get('user_id')
@@ -7588,7 +7681,7 @@ def get_stock_history(product_id):
     """
     Get audit log of all stock reductions for a product, variant, or add-on option.
     """
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     
     user_id = session.get('user_id')
@@ -7849,13 +7942,13 @@ def date_format(value):
 
 @templates_bp.route('/seller/orders')
 def seller_orders():
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return redirect(url_for('templates.dashboard'))
     _ensure_order_fulfillment_columns()
 
     def _load_page():
         # Get seller's store
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             return None
 
@@ -8013,13 +8106,23 @@ def _serialize_seller_order_for_template(order):
     return order_dict
 
 
+def _session_notification_inbox_user_id():
+    """Store admins share the shop owner's notification inbox."""
+    user_id = session.get('user_id')
+    if session.get('role') == 'store_admin':
+        store = _seller_portal_manageable_store(user_id)
+        if store and store.seller_id:
+            return store.seller_id
+    return user_id
+
+
 @templates_bp.route('/api/seller/notifications', methods=['GET'])
 @templates_bp.route('/api/admin/notifications', methods=['GET'])
 @templates_bp.route('/api/notifications', methods=['GET'])
 def session_notifications_api():
-    if session.get('role') not in ('seller', 'admin'):
+    if session.get('role') not in ('seller', 'store_admin', 'admin'):
         return jsonify({'error': 'Unauthorized'}), 401
-    user_id = session.get('user_id')
+    user_id = _session_notification_inbox_user_id()
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
     notifications = Notification.query.filter_by(user_id=user_id)\
@@ -8035,9 +8138,9 @@ def session_notifications_api():
 @templates_bp.route('/api/admin/notifications/read-all', methods=['POST'])
 @templates_bp.route('/api/notifications/read-all', methods=['POST'])
 def session_notifications_read_all_api():
-    if session.get('role') not in ('seller', 'admin'):
+    if session.get('role') not in ('seller', 'store_admin', 'admin'):
         return jsonify({'error': 'Unauthorized'}), 401
-    user_id = session.get('user_id')
+    user_id = _session_notification_inbox_user_id()
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
     Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
@@ -8049,9 +8152,9 @@ def session_notifications_read_all_api():
 @templates_bp.route('/api/admin/notifications/<int:notif_id>/read', methods=['POST'])
 @templates_bp.route('/api/notifications/<int:notif_id>/read', methods=['POST'])
 def session_notification_read_api(notif_id):
-    if session.get('role') not in ('seller', 'admin'):
+    if session.get('role') not in ('seller', 'store_admin', 'admin'):
         return jsonify({'error': 'Unauthorized'}), 401
-    user_id = session.get('user_id')
+    user_id = _session_notification_inbox_user_id()
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
     notif = Notification.query.filter_by(id=notif_id, user_id=user_id).first()
@@ -8063,11 +8166,11 @@ def session_notification_read_api(notif_id):
 
 @templates_bp.route('/api/seller/orders/<int:order_id>', methods=['GET'])
 def seller_order_details_api(order_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     _ensure_order_fulfillment_columns()
 
-    store = Store.query.filter_by(seller_id=session['user_id']).first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -8090,12 +8193,12 @@ def seller_order_details_api(order_id):
 
 @templates_bp.route('/api/seller/orders/<int:order_id>/status', methods=['PUT'])
 def seller_order_status_api(order_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     if not _ensure_order_fulfillment_columns():
         return jsonify({'error': 'Order fulfillment columns are not ready yet. Please refresh and try again.'}), 503
-    store = Store.query.filter_by(seller_id=session['user_id']).first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -8151,10 +8254,10 @@ def seller_order_status_api(order_id):
 
 @templates_bp.route('/api/seller/orders/<int:order_id>/verify-payment', methods=['PUT'])
 def seller_order_verify_payment_api(order_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
-    store = Store.query.filter_by(seller_id=session['user_id']).first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -8187,7 +8290,7 @@ def seller_order_verify_payment_api(order_id):
 @templates_bp.route('/api/seller/orders/<int:order_id>/update-status', methods=['PUT'])
 def seller_order_update_status(order_id):
     """Update order status (e.g., accepted → preparing)"""
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     data = request.get_json()
@@ -8200,7 +8303,7 @@ def seller_order_update_status(order_id):
     if new_status not in valid_statuses:
         return jsonify({'error': 'Invalid status'}), 400
 
-    store = Store.query.filter_by(seller_id=session['user_id']).first()
+    store = _seller_portal_manageable_store(session['user_id'])
     if not store:
         return jsonify({'error': 'No active store found'}), 404
 
@@ -8233,7 +8336,7 @@ def seller_order_update_status(order_id):
 
 @templates_bp.route('/seller/riders')
 def seller_riders():
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return redirect(url_for('templates.dashboard'))
     return render_template('seller_riders.html')
 
@@ -8273,7 +8376,7 @@ def rider_set_password():
 
 @templates_bp.route('/api/seller/riders', methods=['GET'])
 def seller_riders_api():
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     store = _seller_portal_manageable_store(session['user_id'])
@@ -8313,7 +8416,7 @@ def seller_riders_api():
 
 @templates_bp.route('/api/seller/riders', methods=['POST'])
 def seller_invite_rider_api():
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     user_id = session['user_id']
@@ -8419,7 +8522,7 @@ def seller_invite_rider_api():
 
 @templates_bp.route('/api/seller/riders/resend-invitation', methods=['POST'])
 def seller_resend_rider_invitation_api():
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     user_id = session['user_id']
@@ -8476,7 +8579,7 @@ def seller_resend_rider_invitation_api():
 @templates_bp.route('/api/seller/riders/verify-otp', methods=['POST'])
 def seller_verify_rider_otp_api():
     """Seller verifies the OTP from the rider, creates the account with a default password"""
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     user_id = session['user_id']
@@ -8601,7 +8704,7 @@ def seller_verify_rider_otp_api():
 
 @templates_bp.route('/api/seller/riders/cancel-invitation', methods=['POST'])
 def seller_cancel_rider_invitation_api():
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     store = _seller_portal_manageable_store(session['user_id'])
@@ -8625,7 +8728,7 @@ def seller_cancel_rider_invitation_api():
 
 @templates_bp.route('/api/seller/riders/<int:rider_id>', methods=['GET'])
 def seller_rider_detail_api(rider_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     store = _seller_portal_manageable_store(session['user_id'])
@@ -8648,7 +8751,7 @@ def seller_rider_detail_api(rider_id):
 
 @templates_bp.route('/api/seller/riders/<int:rider_id>', methods=['PUT'])
 def seller_update_rider_api(rider_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     store = _seller_portal_manageable_store(session['user_id'])
@@ -8687,7 +8790,7 @@ def seller_update_rider_api(rider_id):
 
 @templates_bp.route('/api/seller/riders/<int:rider_id>/reset-password', methods=['POST'])
 def seller_reset_rider_password_api(rider_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     store = _seller_portal_manageable_store(session['user_id'])
@@ -8741,7 +8844,7 @@ def seller_reset_rider_password_api(rider_id):
 
 @templates_bp.route('/api/seller/riders/<int:rider_id>/status', methods=['PUT'])
 def seller_rider_status_api(rider_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     store = _seller_portal_manageable_store(session['user_id'])
@@ -8770,7 +8873,7 @@ def seller_rider_status_api(rider_id):
 
 @templates_bp.route('/api/seller/riders/<int:rider_id>', methods=['DELETE'])
 def seller_delete_rider_api(rider_id):
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
 
     store = _seller_portal_manageable_store(session['user_id'])
@@ -8908,6 +9011,8 @@ def pos_create_order():
         return jsonify({'error': 'No active store found for your account.'}), 403
 
     user_id = session.get('user_id')
+    cashier = User.query.get(user_id) if user_id else None
+    cashier_name = (cashier.full_name if cashier else None) or 'Staff'
     
     data = request.get_json(silent=True)
     if not data:
@@ -9035,7 +9140,8 @@ def pos_create_order():
         customer_name=customer_name,
         customer_contact=customer_contact,
         is_seen_by_seller=False,
-        discount=discount  # Save the discount
+        discount=discount,
+        created_by=user_id,
     )
     db.session.add(pos_order)
     db.session.flush()  # Assign ID to pos_order without committing
@@ -9111,7 +9217,7 @@ def pos_create_order():
                         variant_id=item['variant_id'],
                         reduction_amount=item['quantity'],
                         reason='pos_sale',
-                        reason_notes=f'POS Sale - Order #{pos_order.id}',
+                        reason_notes=f'POS Sale - Order #{pos_order.id} by {cashier_name}',
                         reduced_by=user_id
                     )
                     db.session.add(stock_reduction)
@@ -9124,7 +9230,7 @@ def pos_create_order():
                         variant_id=None,
                         reduction_amount=item['quantity'],
                         reason='pos_sale',
-                        reason_notes=f'POS Sale - Order #{pos_order.id}',
+                        reason_notes=f'POS Sale - Order #{pos_order.id} by {cashier_name}',
                         reduced_by=user_id
                     )
                     db.session.add(stock_reduction)
@@ -9135,7 +9241,7 @@ def pos_create_order():
                     item['addon_lines'],
                     user_id=user_id,
                     reason='pos_sale',
-                    reason_notes=f'POS Sale add-on - Order #{pos_order.id}',
+                    reason_notes=f'POS Sale add-on - Order #{pos_order.id} by {cashier_name}',
                 )
 
         db.session.commit()
@@ -10050,7 +10156,7 @@ def checkout():
         flash('Please login to checkout', 'warning')
         return redirect(url_for('templates.login'))
     role = session.get('role')
-    if role in ('seller', 'admin'):
+    if role in ('seller', 'store_admin', 'admin'):
         flash('Checkout is not available for seller/admin accounts.', 'warning')
         return redirect(url_for('templates.index'))
     
@@ -10189,7 +10295,7 @@ def add_to_cart():
     user = get_current_user()
     if not user:
         return jsonify({'error': 'Not logged in'}), 401
-    if user.role in ('seller', 'admin'):
+    if user.role in ('seller', 'store_admin', 'admin'):
         return jsonify({'error': 'Cart is not available for seller/admin accounts'}), 403
     
     try:
@@ -10912,12 +11018,12 @@ def seller_archive():
 @templates_bp.route('/seller/products/<int:product_id>/images/<int:image_id>', methods=['DELETE'])
 def delete_product_image(product_id, image_id):
     """Delete a specific product image"""
-    if session.get('role') != 'seller':
+    if session.get('role') not in ('seller', 'store_admin'):
         return jsonify({'error': 'Unauthorized'}), 401
     
     try:
         # Get seller's store
-        store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+        store = _seller_portal_manageable_store(session.get('user_id'))
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -11235,7 +11341,7 @@ def get_store_time_slots_web(store_id):
 def store_settings():
     try:
         _ensure_store_payment_settings_table()
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             flash('Store not found.', 'error')
             return redirect(url_for('templates.seller_dashboard'))
@@ -11305,7 +11411,7 @@ def update_store_settings():
     
     try:
         _ensure_store_payment_settings_table()
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -12500,7 +12606,7 @@ def merge_municipality_boundaries():
 def get_product_variants(product_id):
     """Get all variants for a product"""
     try:
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -12525,7 +12631,7 @@ def get_product_variants(product_id):
 def get_variant(variant_id):
     """Get a single variant by ID"""
     try:
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -12554,7 +12660,7 @@ def create_variant():
     print("📥 CREATE VARIANT REQUEST RECEIVED")
     
     try:
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             print("❌ Store not found")
             return jsonify({'error': 'Store not found'}), 404
@@ -12697,7 +12803,7 @@ def create_variant():
 def update_variant(variant_id):
     """Update a product variant"""
     try:
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -12783,7 +12889,7 @@ def update_variant(variant_id):
 def delete_variant(variant_id):
     """Delete a product variant"""
     try:
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -12830,7 +12936,7 @@ def delete_variant(variant_id):
 def reorder_variants():
     """Reorder variants for a product"""
     try:
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -12953,7 +13059,7 @@ def get_store_gcash_qrs(store_id):
 def delete_gcash_qr(filename):
     """Delete a specific GCash QR code"""
     try:
-        store = Store.query.filter_by(seller_id=session['user_id']).first()
+        store = _seller_portal_manageable_store(session['user_id'])
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         
@@ -13112,7 +13218,7 @@ def delete_cloudinary_file():
 def get_products_image_count():
     """Get total Cloudinary image count for selected products"""
     try:
-        store = Store.query.filter_by(seller_id=session.get('user_id')).first()
+        store = _seller_portal_manageable_store(session.get('user_id'))
         if not store:
             return jsonify({'error': 'Store not found'}), 404
         

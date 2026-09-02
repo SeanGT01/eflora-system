@@ -229,3 +229,13 @@ def send_rider_credentials_sms(phone, full_name, default_password, store_name, l
     )
     ok, _err = send_sms_message(phone, message)
     return ok
+
+
+def send_store_admin_credentials_sms(phone, full_name, default_password, store_name, login_id=None):
+    login = (login_id or normalize_ph_mobile(phone) or phone or '').strip()
+    message = (
+        f'E-Flora: Hi {full_name}, your store admin account for {store_name} is ready. '
+        f'Login: {login} Password: {default_password}. Change password after login.'
+    )
+    ok, _err = send_sms_message(phone, message)
+    return ok

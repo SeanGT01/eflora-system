@@ -5,18 +5,18 @@
 {% block page_title %}Products{% endblock %}
 
 {% block content %}
-<!-- Header Section -->
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem;" class="header-section">
+<div class="dash">
+  <div class="dash-header">
     <div>
-        <div class="section-eyebrow">Manage Your Store</div>
-        <h2 class="section-title">Products & Inventory</h2>
-        <p style="color: var(--muted); margin-top: 0.5rem;">Add, edit, and organize your floral collection</p>
+      <div class="dash-greeting-label">Manage your store</div>
+      <h1 class="dash-title">Products, <em>in bloom</em></h1>
     </div>
-    <a href="{{ url_for('templates.add_product_page') }}" class="btn btn-rose">
-        <i class="ri-add-line"></i>
-        Add New Product
-    </a>
-</div>
+    <div class="dash-header-actions">
+      <a href="{{ url_for('templates.add_product_page') }}" class="apply-btn">
+        <i class="ri-add-line"></i> Add New Product
+      </a>
+    </div>
+  </div>
 
 <!-- Filters Section -->
 <div class="card" style="padding: 1.5rem; margin-bottom: 2rem;">
@@ -92,6 +92,26 @@
     </div>
 </div>
 
+{% if products %}
+<div class="bulk-bar">
+    <div class="bulk-bar-label">Bulk Actions</div>
+    <div class="bulk-bar-actions">
+        <button class="btn btn-outline btn-sm" id="selectAllBtn">
+            <i class="ri-checkbox-multiple-line"></i> Select All
+        </button>
+        <button class="btn btn-outline btn-sm" id="bulkAvailableBtn" disabled>
+            <i class="ri-eye-line"></i> Mark Available
+        </button>
+        <button class="btn btn-outline btn-sm" id="bulkUnavailableBtn" disabled>
+            <i class="ri-eye-off-line"></i> Mark Unavailable
+        </button>
+        <button class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
+            <i class="ri-delete-bin-line"></i> Delete Selected
+        </button>
+    </div>
+</div>
+{% endif %}
+
 <!-- Products Grid -->
 <div id="productsGrid" class="products-grid">
     {% for product in products %}
@@ -117,15 +137,20 @@
                 {{ product.main_category_name if product.main_category_name else (product.category|capitalize if product.category else 'General') }}
             </span>
             
-            <!-- Stock Badge -->
-            <div class="product-stock-badge">
-                {% if product.stock_quantity > 10 %}
-                <span class="status-badge badge-available">In Stock</span>
-                {% elif product.stock_quantity > 0 %}
-                <span class="status-badge badge-low">Low Stock</span>
-                {% else %}
-                <span class="status-badge badge-out">Out of Stock</span>
-                {% endif %}
+            <div class="product-img-top-right">
+                <label class="product-select" title="Select for bulk actions">
+                    <input type="checkbox" class="product-select-input" data-product-id="{{ product.id }}">
+                    <span class="product-select-box"><i class="ri-check-line"></i></span>
+                </label>
+                <div class="product-stock-badge">
+                    {% if product.stock_quantity > 10 %}
+                    <span class="status-badge badge-available">In Stock</span>
+                    {% elif product.stock_quantity > 0 %}
+                    <span class="status-badge badge-low">Low Stock</span>
+                    {% else %}
+                    <span class="status-badge badge-out">Out of Stock</span>
+                    {% endif %}
+                </div>
             </div>
             
             <!-- Price Tag -->
@@ -209,27 +234,6 @@
     {% endfor %}
 </div>
 
-<!-- Bulk Actions Bar (visible when products exist) -->
-{% if products %}
-<div class="bulk-bar">
-    <div class="bulk-bar-label">Bulk Actions</div>
-    <div class="bulk-bar-actions">
-        <button class="btn btn-outline btn-sm" id="selectAllBtn">
-            <i class="ri-checkbox-multiple-line"></i> Select All
-        </button>
-        <button class="btn btn-outline btn-sm" id="bulkAvailableBtn" disabled>
-            <i class="ri-eye-line"></i> Mark Available
-        </button>
-        <button class="btn btn-outline btn-sm" id="bulkUnavailableBtn" disabled>
-            <i class="ri-eye-off-line"></i> Mark Unavailable
-        </button>
-        <button class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
-            <i class="ri-delete-bin-line"></i> Delete Selected
-        </button>
-    </div>
-</div>
-{% endif %}
-
 <div class="qa-picker qa-preview" id="sellerQaPicker" role="dialog" aria-label="Product details" hidden>
     <div class="qa-picker-head">
         <div class="qa-picker-img qa-picker-img-fallback" id="sellerQaImgWrap" aria-hidden="true">
@@ -255,11 +259,14 @@
     </div>
 </div>
 <script type="application/json" id="sellerProductsPreviewData">{{ products|tojson }}</script>
+</div>
 {% endblock %}
 
 {% block extra_css %}
+{% include 'partials/seller_dash_theme.html' %}
 {% include 'partials/qa_picker_styles.html' %}
 <style>
+    .qa-picker:not(.open) { display: none !important; }
     .qa-preview.qa-picker {
         z-index: 540;
         width: min(380px, calc(100vw - 1.5rem));
@@ -471,6 +478,52 @@
         flex-direction: column;
         height: fit-content;
     }
+
+    .product-card.is-selected {
+        border-color: var(--deep-rose);
+        box-shadow: 0 0 0 2px rgba(181, 68, 90, 0.35), var(--shadow-sm);
+    }
+
+    .product-img-top-right {
+        position: absolute;
+        top: 0.55rem;
+        right: 0.55rem;
+        z-index: 4;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.3rem;
+    }
+    .product-select {
+        position: relative;
+        cursor: pointer;
+        margin: 0;
+        flex-shrink: 0;
+    }
+    .product-select-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+    }
+    .product-select-box {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 253, 249, 0.92);
+        border: 1.5px solid rgba(107, 76, 59, 0.28);
+        color: transparent;
+        font-size: 14px;
+        box-shadow: 0 1px 4px rgba(42, 35, 30, 0.12);
+    }
+    .product-select-input:checked + .product-select-box {
+        background: var(--deep-rose);
+        border-color: var(--deep-rose);
+        color: #fff;
+    }
     
     .product-card:hover {
         transform: translateY(-3px);
@@ -538,10 +591,9 @@
     }
     
     .product-stock-badge {
-        position: absolute;
-        top: 0.75rem;
-        right: 0.75rem;
+        position: static;
         z-index: 2;
+        flex-shrink: 0;
     }
     
     .product-stock-badge .status-badge {
@@ -758,7 +810,8 @@
         justify-content: space-between;
         gap: 1rem;
         flex-wrap: wrap;
-        margin-top: 2rem;
+        margin-bottom: 1rem;
+        margin-top: 0;
     }
     
     .bulk-bar-label {
@@ -1895,112 +1948,123 @@
         }
     }
 
-    // ===== BULK ACTIONS WITH CLOUDINARY SUPPORT =====
-    document.getElementById('selectAllBtn')?.addEventListener('click', function() {
-        const visibleCards = Array.from(document.querySelectorAll('.product-card'))
-            .filter(c => c.style.display !== 'none');
-        
-        const allSelected = visibleCards.length > 0 && 
-                           visibleCards.every(c => c.style.outline === '2px solid var(--deep-rose)');
-        
-        selectedProducts.clear();
-        visibleCards.forEach(card => {
-            if (!allSelected) {
-                const id = card.dataset.productId;
-                if (id) selectedProducts.add(id);
-                card.style.outline = '2px solid var(--deep-rose)';
-                card.style.outlineOffset = '2px';
-            } else {
-                card.style.outline = '';
-                card.style.outlineOffset = '';
-            }
-        });
-        
-        this.innerHTML = !allSelected
-            ? '<i class="ri-checkbox-multiple-line"></i> Select All'
-            : '<i class="ri-checkbox-multiple-line"></i> Select All';
-        
-        updateBulkButtons();
-    });
-
-    function updateBulkButtons() {
-        const hasSelected = selectedProducts.size > 0;
-        ['bulkAvailableBtn', 'bulkUnavailableBtn', 'bulkDeleteBtn'].forEach(id => {
-            const btn = document.getElementById(id);
-            if (btn) btn.disabled = !hasSelected;
+    // ===== BULK ACTIONS =====
+    function visibleProductCards() {
+        return Array.from(document.querySelectorAll('#productsGrid .product-card')).filter((card) => {
+            return card.style.display !== 'none';
         });
     }
 
-    document.getElementById('bulkAvailableBtn')?.addEventListener('click', async function() {
-        if (!selectedProducts.size) return;
-        
-        if (await window.openConfirmModal(`Mark ${selectedProducts.size} product(s) as available?`)) {
-            showToast(`Updating ${selectedProducts.size} products...`, 'info');
-            
-            const csrfToken = getCsrfToken();
-            let successCount = 0;
-            
-            for (const id of selectedProducts) {
-                try {
-                    const response = await fetch(`/seller/products/${id}/availability`, {
-                        method: 'PUT',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrfToken
-                        },
-                        body: JSON.stringify({ is_available: true })
-                    });
-                    const data = await response.json();
-                    if (data.success) successCount++;
-                } catch (error) {
-                    console.error('Error updating product:', id, error);
-                }
-            }
-            
-            showToast(`${successCount} of ${selectedProducts.size} products marked available`, 'success');
-            setTimeout(() => location.reload(), 800);
+    function setCardSelected(card, selected) {
+        const id = card.dataset.productId;
+        if (!id) return;
+        card.classList.toggle('is-selected', selected);
+        const box = card.querySelector('.product-select-input');
+        if (box) box.checked = selected;
+        if (selected) selectedProducts.add(String(id));
+        else selectedProducts.delete(String(id));
+    }
+
+    function updateBulkButtons() {
+        const hasSelected = selectedProducts.size > 0;
+        const visible = visibleProductCards();
+        const allSelected = visible.length > 0 && visible.every((c) => selectedProducts.has(String(c.dataset.productId)));
+        const selectBtn = document.getElementById('selectAllBtn');
+        if (selectBtn) {
+            selectBtn.innerHTML = allSelected
+                ? '<i class="ri-checkbox-multiple-blank-line"></i> Deselect All'
+                : '<i class="ri-checkbox-multiple-line"></i> Select All';
         }
+        ['bulkAvailableBtn', 'bulkUnavailableBtn', 'bulkDeleteBtn'].forEach((id) => {
+            const btn = document.getElementById(id);
+            if (btn && !btn.classList.contains('sa-write-disabled')) btn.disabled = !hasSelected;
+        });
+    }
+
+    document.getElementById('productsGrid')?.addEventListener('change', function (e) {
+        const input = e.target.closest('.product-select-input');
+        if (!input) return;
+        const card = input.closest('.product-card');
+        if (!card) return;
+        setCardSelected(card, input.checked);
+        updateBulkButtons();
     });
 
-    document.getElementById('bulkUnavailableBtn')?.addEventListener('click', async function() {
-        if (!selectedProducts.size) return;
-        
-        if (await window.openConfirmModal(`Mark ${selectedProducts.size} product(s) as unavailable?`)) {
-            showToast(`Updating ${selectedProducts.size} products...`, 'info');
-            
-            const csrfToken = getCsrfToken();
-            let successCount = 0;
-            let keepYmal = false;
-            if (await window.openConfirmModal(
+    document.getElementById('selectAllBtn')?.addEventListener('click', function () {
+        const visible = visibleProductCards();
+        const allSelected = visible.length > 0 && visible.every((c) => selectedProducts.has(String(c.dataset.productId)));
+        visible.forEach((card) => setCardSelected(card, !allSelected));
+        if (allSelected) {
+            document.querySelectorAll('.product-card').forEach((card) => {
+                if (card.style.display === 'none') setCardSelected(card, false);
+            });
+        }
+        updateBulkButtons();
+    });
+
+    async function bulkSetAvailability(isAvailable) {
+        if (!selectedProducts.size) {
+            showToast('Select one or more products first.', 'info');
+            return;
+        }
+        const count = selectedProducts.size;
+        const ok = await window.openConfirmModal(
+            isAvailable
+                ? `Mark ${count} product(s) as available?`
+                : `Mark ${count} product(s) as unavailable?`
+        );
+        if (!ok) return;
+
+        let keepYmal = false;
+        if (!isAvailable) {
+            keepYmal = await window.openConfirmModal(
                 'Keep You May Also Like add-ons from these products available for other products?',
                 { confirmText: 'Keep add-ons', cancelText: 'Hide add-ons too' }
-            )) {
-                keepYmal = true;
-            }
-            
-            for (const id of selectedProducts) {
-                try {
-                    const response = await fetch(`/seller/products/${id}/availability`, {
-                        method: 'PUT',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrfToken
-                        },
-                        body: JSON.stringify({
-                            is_available: false,
-                            keep_ymal_addons_when_unavailable: keepYmal
-                        })
-                    });
-                    const data = await response.json();
-                    if (data.success) successCount++;
-                } catch (error) {
-                    console.error('Error updating product:', id, error);
-                }
-            }
-            
-            showToast(`${successCount} of ${selectedProducts.size} products marked unavailable`, 'success');
-            setTimeout(() => location.reload(), 800);
+            );
         }
+
+        showToast(`Updating ${count} products...`, 'info');
+        const csrfToken = getCsrfToken();
+        const ids = Array.from(selectedProducts);
+
+        try {
+            const response = await fetch('/seller/products/bulk-availability', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    product_ids: ids,
+                    is_available: isAvailable,
+                    keep_ymal_addons_when_unavailable: keepYmal
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.success) {
+                showToast(data.error || 'Could not update products. Please try again.', 'error');
+                return;
+            }
+            const updated = Number(data.updated) || 0;
+            if (updated === count) {
+                showToast(data.message || `${updated} product(s) marked ${isAvailable ? 'available' : 'unavailable'}`, 'success');
+            } else {
+                showToast(`Updated ${updated} of ${count} products.`, 'warning');
+            }
+            setTimeout(() => location.reload(), 800);
+        } catch (error) {
+            console.error('Bulk availability error:', error);
+            showToast('Network error. Please try again.', 'error');
+        }
+    }
+
+    document.getElementById('bulkAvailableBtn')?.addEventListener('click', function () {
+        bulkSetAvailability(true);
+    });
+
+    document.getElementById('bulkUnavailableBtn')?.addEventListener('click', function () {
+        bulkSetAvailability(false);
     });
 
     // ===== BULK DELETE WITH CLOUDINARY WARNING =====

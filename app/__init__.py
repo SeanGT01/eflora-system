@@ -162,8 +162,42 @@ def create_app(config_class='default'):
                     db.session.commit()
         except Exception:
             db.session.rollback()
-    
-    # Log mail config for debugging (mask password)
+
+    def _ensure_store_admin_tables():
+        try:
+            with app.app_context():
+                existing = inspect(db.engine).get_table_names()
+                from app.models import StoreAdmin, StoreAdminOTP
+                if 'store_admins' not in existing:
+                    StoreAdmin.__table__.create(db.engine, checkfirst=True)
+                if 'store_admin_otps' not in existing:
+                    StoreAdminOTP.__table__.create(db.engine, checkfirst=True)
+                if 'store_admins' in inspect(db.engine).get_table_names():
+                    cols = {c['name'] for c in inspect(db.engine).get_columns('store_admins')}
+                    if 'permissions' not in cols:
+                        dialect = db.engine.dialect.name
+                        coltype = 'JSONB' if dialect == 'postgresql' else 'TEXT'
+                        db.session.execute(text(
+                            f"ALTER TABLE store_admins ADD COLUMN permissions {coltype}"
+                        ))
+                        db.session.commit()
+                if 'pos_orders' in existing:
+                    cols = {c['name'] for c in inspect(db.engine).get_columns('pos_orders')}
+                    if 'created_by' not in cols:
+                        db.session.execute(text(
+                            "ALTER TABLE pos_orders ADD COLUMN created_by INTEGER"
+                        ))
+                        db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    def _ensure_main_categories():
+        try:
+            from app.models import ensure_default_main_categories
+            ensure_default_main_categories()
+        except Exception:
+            db.session.rollback()
+
     mail_user = app.config.get('MAIL_USERNAME', '')
     mail_sender = app.config.get('MAIL_DEFAULT_SENDER', '')
     mail_server = app.config.get('MAIL_SERVER', '')
@@ -193,6 +227,8 @@ def create_app(config_class='default'):
         _ensure_store_free_delivery_column()
         _ensure_pos_order_item_line_columns()
         _ensure_keep_ymal_addons_column()
+        _ensure_store_admin_tables()
+        _ensure_main_categories()
     
     # ====================================================
     # INITIALIZE CLOUDINARY
@@ -328,6 +364,7 @@ def create_app(config_class='default'):
     from app.customer import customer_bp
     from app.rider import rider_bp
     from app.templates_routes import templates_bp
+    from app.store_admin_routes import store_admin_bp
     from app.archive_routes import archive_bp
     from app.cloudinary_routes import cloudinary_bp  # Import Cloudinary blueprint
     from app.checkout_routes import checkout_bp  # Import Checkout blueprint
@@ -358,6 +395,7 @@ def create_app(config_class='default'):
     app.register_blueprint(customer_bp, url_prefix='/api/v1/customer')
     app.register_blueprint(rider_bp, url_prefix='/api/v1/rider')
     app.register_blueprint(templates_bp)
+    app.register_blueprint(store_admin_bp)
     
     # Register bg_removal blueprint only if available
     if BG_REMOVAL_AVAILABLE and bg_removal_bp:
@@ -379,6 +417,14 @@ def create_app(config_class='default'):
     # ====================================================
     # ADD MAPBOX TO TEMPLATE CONTEXT
     # ====================================================
+    @app.context_processor
+    def inject_store_admin_perms():
+        from app.utils.store_admin_perms import current_store_admin_permissions, default_permissions
+        from flask import session
+        if session.get('role') == 'store_admin':
+            return dict(store_admin_perms=current_store_admin_permissions())
+        return dict(store_admin_perms=default_permissions())
+
     @app.context_processor
     def inject_mapbox_token():
         return dict(mapbox_public_token=app.config.get('MAPBOX_PUBLIC_TOKEN', ''))
@@ -502,6 +548,15 @@ def create_app(config_class='default'):
             return jsonify({'error': 'CSRF token missing or invalid'}), 400
 
     @app.before_request
+    def enforce_store_admin_page_permissions():
+        if request.path.startswith('/static/'):
+            return
+        if session.get('role') != 'store_admin':
+            return
+        from app.utils.store_admin_perms import deny_if_forbidden
+        return deny_if_forbidden()
+
+    @app.before_request
     def enforce_role_page_access():
         """Block access to other role account pages."""
         # Ignore static and API requests (API endpoints already have own checks).
@@ -535,8 +590,9 @@ def create_app(config_class='default'):
                 return redirect(url_for('templates.admin_users'))
             if role == 'seller':
                 return redirect(url_for('templates.seller_dashboard'))
+            if role == 'store_admin':
+                return redirect(url_for('templates.seller_dashboard'))
             if role == 'rider':
-                # Rider dashboard lives in rider blueprint.
                 return redirect(url_for('rider.rider_dashboard'))
             return redirect(url_for('templates.index'))
 
@@ -550,13 +606,13 @@ def create_app(config_class='default'):
 
         if (
             any(normalized_path == p or normalized_path.startswith(f'{p}/') for p in seller_only_paths)
-            and role != 'seller'
+            and role not in ('seller', 'store_admin')
         ):
             return role_home_redirect()
 
         if (
             any(normalized_path == p or normalized_path.startswith(f'{p}/') for p in seller_admin_shared_paths)
-            and role not in ('seller', 'admin')
+            and role not in ('seller', 'admin', 'store_admin')
         ):
             return role_home_redirect()
 

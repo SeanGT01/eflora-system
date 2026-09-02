@@ -31,6 +31,39 @@
     .inventory-page .variant-row-inner,
     .inventory-page .addon-row-inner { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
     .inventory-page .status-badge { padding: 2px 8px; font-size: 10px; }
+    .inventory-page .inv-cat-hidden { display: none !important; }
+    .inventory-page .inv-filter-select,
+    .inventory-page .inv-search-input {
+        appearance: none;
+        min-width: 148px;
+        max-width: 220px;
+        padding: 0.4rem 2rem 0.4rem 0.75rem;
+        border: 1px solid rgba(194, 78, 104, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239a8d85' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.7rem center;
+        color: var(--charcoal);
+        font-size: 12px;
+        font-family: inherit;
+    }
+    .inventory-page .inv-search-input {
+        min-width: 200px;
+        max-width: 260px;
+        padding-left: 2rem;
+        background-image: none;
+        background-color: rgba(255, 255, 255, 0.92);
+    }
+    .inventory-page .inv-search-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+    .inventory-page .inv-search-wrap i {
+        position: absolute;
+        left: 0.7rem;
+        color: var(--muted);
+        font-size: 14px;
+        pointer-events: none;
+    }
     #stockHistoryModal .modal { max-width: 720px; }
     .stock-history-list { display: flex; flex-direction: column; gap: 0.75rem; }
 </style>
@@ -80,6 +113,38 @@
     <div class="panel-head">
         <span class="panel-title">Product Inventory</span>
         <div class="dash-header-actions">
+            <div class="inv-search-wrap">
+                <i class="ri-search-line"></i>
+                <input type="search" id="invSearchInput" class="inv-search-input" placeholder="Search products…"
+                       oninput="filterInventory()" aria-label="Search inventory">
+            </div>
+            <select id="invCategoryFilter" class="inv-filter-select" onchange="filterInventory()" aria-label="Filter by category">
+                <option value="">All Categories</option>
+                {% for cat in (categories or []) %}
+                <option value="{{ cat.slug }}">{{ cat.name }}</option>
+                {% endfor %}
+                <option value="uncategorized">Uncategorized</option>
+            </select>
+            <select id="invSaleFilter" class="inv-filter-select" onchange="filterInventory()" aria-label="Filter by sale status">
+                <option value="">All Sale Status</option>
+                <option value="active">Active</option>
+                <option value="unavailable">Unavailable</option>
+            </select>
+            <select id="invStockFilter" class="inv-filter-select" onchange="filterInventory()" aria-label="Filter by stock status">
+                <option value="">All Stock</option>
+                <option value="in">In Stock</option>
+                <option value="low">Low Stock</option>
+                <option value="out">Out of Stock</option>
+            </select>
+            <select id="invSortFilter" class="inv-filter-select" onchange="filterInventory()" aria-label="Sort inventory">
+                <option value="newest">Newest First</option>
+                <option value="price_low">Price: Low to High</option>
+                <option value="price_high">Price: High to Low</option>
+                <option value="name">Name A-Z</option>
+            </select>
+            <button type="button" class="panel-action" id="invResetFiltersBtn" onclick="resetInventoryFilters()" title="Reset filters">
+                <i class="ri-refresh-line"></i> Reset
+            </button>
             <button type="button" class="panel-action" id="variantToggleBtn" onclick="toggleVariantRows()">
                 <i class="ri-eye-off-line"></i> Hide Variants
             </button>
@@ -103,10 +168,11 @@
                     <th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="inventoryTableBody">
                 {% for product in products %}
                 {% set product_img = product.thumbnail_url or product.image_url %}
-                <tr>
+                {% set cat_slug = product.main_category_slug or 'uncategorized' %}
+                <tr class="inv-product-row" data-category="{{ cat_slug }}" data-name="{{ (product.name or '')|lower|e }}" data-price="{{ product.effective_price if product.effective_price is not none else product.price or 0 }}" data-created="{{ product.created_at or '' }}" data-stock="{% if product.stock_quantity > 10 %}in{% elif product.stock_quantity > 0 %}low{% else %}out{% endif %}" data-sale="{{ 'active' if product.is_available else 'unavailable' }}" data-search="{{ (product.name ~ ' ' ~ product.id ~ ' ' ~ (product.category_display or '') ~ ' ' ~ (product.main_category_name or ''))|lower|e }}">
                     <td>
                         <div class="inv-thumb-cell">
                             {% if product_img %}
@@ -158,7 +224,7 @@
                 {% if product.variants %}
                     {% for variant in product.variants %}
                     {% set variant_img = variant.image_thumbnail or variant.image_url or product_img %}
-                    <tr class="variant-row">
+                    <tr class="variant-row" data-category="{{ cat_slug }}" data-name="{{ (variant.name or '')|lower|e }}" data-price="{{ variant.effective_price if variant.effective_price is not none else variant.price or 0 }}" data-created="{{ variant.created_at or '' }}" data-stock="{% if variant.stock_quantity > 10 %}in{% elif variant.stock_quantity > 0 %}low{% else %}out{% endif %}" data-sale="{{ 'active' if variant.is_available else 'unavailable' }}" data-search="{{ (variant.name ~ ' ' ~ product.name)|lower|e }}">
                         <td class="variant-indent">
                             <div class="variant-row-inner">
                                 <i class="ri-corner-down-right-line" style="color: var(--muted); flex-shrink:0;"></i>
@@ -188,8 +254,8 @@
                             {% endif %}
                         </td>
                         <td>
-                            <span class="status-badge {% if product.is_available %}badge-active{% else %}badge-cancelled{% endif %}">
-                                {{ 'Active' if product.is_available else 'Unavailable' }}
+                            <span class="status-badge {% if variant.is_available %}badge-active{% else %}badge-cancelled{% endif %}">
+                                {{ 'Active' if variant.is_available else 'Unavailable' }}
                             </span>
                         </td>
                         <td>
@@ -211,7 +277,7 @@
                 {% if product.addon_groups %}
                     {% for group in product.addon_groups %}
                         {% for opt in group.options or [] %}
-                        <tr class="addon-row">
+                        <tr class="addon-row" data-category="{{ cat_slug }}" data-name="{{ (opt.name or '')|lower|e }}" data-price="{{ opt.price or 0 }}" data-created="{{ opt.created_at or '' }}" data-stock="{% if opt.stock_quantity > 10 %}in{% elif opt.stock_quantity > 0 %}low{% else %}out{% endif %}" data-sale="{{ 'active' if opt.is_available else 'unavailable' }}" data-search="{{ (opt.name ~ ' ' ~ group.name ~ ' ' ~ product.name)|lower|e }}">
                             <td class="addon-indent">
                                 <div class="addon-row-inner">
                                     <i class="ri-corner-down-right-line" style="color: var(--deep-sage); flex-shrink:0;"></i>
@@ -263,6 +329,11 @@
                     {% endfor %}
                 {% endif %}
                 {% endfor %}
+                <tr id="invNoCategoryRow" class="inv-cat-hidden">
+                    <td colspan="7" style="text-align:center;color:var(--muted);padding:1.4rem 0.9rem;font-size:13px;">
+                        No products match your filters.
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -547,6 +618,97 @@
         document.getElementById('additionCurrentStock').textContent = data.stock;
         document.getElementById('additionAmountHint').textContent = `Current: ${data.stock} units`;
     }
+
+    function filterInventory() {
+        const slug = (document.getElementById('invCategoryFilter')?.value || '').trim();
+        const query = (document.getElementById('invSearchInput')?.value || '').trim().toLowerCase();
+        const sale = (document.getElementById('invSaleFilter')?.value || '').trim();
+        const stock = (document.getElementById('invStockFilter')?.value || '').trim();
+        const sortBy = (document.getElementById('invSortFilter')?.value || 'newest').trim();
+        const tbody = document.getElementById('inventoryTableBody');
+        const rows = Array.from(document.querySelectorAll('#inventoryTableBody tr[data-category]'));
+        const groups = [];
+        let current = [];
+        rows.forEach((row) => {
+            if (row.classList.contains('inv-product-row')) {
+                if (current.length) groups.push(current);
+                current = [row];
+            } else if (current.length) {
+                current.push(row);
+            }
+        });
+        if (current.length) groups.push(current);
+
+        let visibleProducts = 0;
+        groups.forEach((group) => {
+            const catOk = !slug || group[0].getAttribute('data-category') === slug;
+            const haystack = group.map((row) => row.getAttribute('data-search') || '').join(' ');
+            const searchOk = !query || haystack.includes(query);
+            const groupOk = catOk && searchOk;
+            const matches = group.map((row) => {
+                const stockOk = !stock || row.getAttribute('data-stock') === stock;
+                const saleOk = !sale || row.getAttribute('data-sale') === sale;
+                return groupOk && stockOk && saleOk;
+            });
+            group.forEach((row, i) => {
+                row.classList.toggle('inv-cat-hidden', !matches[i]);
+            });
+            if (matches.some(Boolean)) visibleProducts += 1;
+        });
+        const compareInvRows = (a, b) => {
+            const priceA = parseFloat(a.getAttribute('data-price')) || 0;
+            const priceB = parseFloat(b.getAttribute('data-price')) || 0;
+            const nameA = a.getAttribute('data-name') || '';
+            const nameB = b.getAttribute('data-name') || '';
+            const createdA = a.getAttribute('data-created') || '';
+            const createdB = b.getAttribute('data-created') || '';
+            switch (sortBy) {
+                case 'price_low':
+                    return priceA - priceB;
+                case 'price_high':
+                    return priceB - priceA;
+                case 'name':
+                    return nameA.localeCompare(nameB);
+                default:
+                    return createdB.localeCompare(createdA);
+            }
+        };
+        groups.sort((a, b) => compareInvRows(a[0], b[0]));
+        groups.forEach((group, gi) => {
+            const parent = group[0];
+            const variants = group.filter((row) => row.classList.contains('variant-row')).sort(compareInvRows);
+            const addons = group.filter((row) => row.classList.contains('addon-row')).sort(compareInvRows);
+            groups[gi] = [parent, ...variants, ...addons];
+        });
+        const emptyRow = document.getElementById('invNoCategoryRow');
+        if (tbody) {
+            groups.forEach((group) => {
+                group.forEach((row) => tbody.appendChild(row));
+            });
+            if (emptyRow) tbody.appendChild(emptyRow);
+        }
+        if (emptyRow) {
+            const filtering = Boolean(slug || query || sale || stock);
+            emptyRow.classList.toggle('inv-cat-hidden', visibleProducts > 0 || !filtering);
+        }
+    }
+    window.filterInventory = filterInventory;
+    window.filterInventoryByCategory = filterInventory;
+
+    function resetInventoryFilters() {
+        const search = document.getElementById('invSearchInput');
+        const category = document.getElementById('invCategoryFilter');
+        const sale = document.getElementById('invSaleFilter');
+        const stock = document.getElementById('invStockFilter');
+        const sort = document.getElementById('invSortFilter');
+        if (search) search.value = '';
+        if (category) category.value = '';
+        if (sale) sale.value = '';
+        if (stock) stock.value = '';
+        if (sort) sort.value = 'newest';
+        filterInventory();
+    }
+    window.resetInventoryFilters = resetInventoryFilters;
 
     function toggleVariantRows() {
         const variantRows = document.querySelectorAll('.variant-row');

@@ -3183,7 +3183,7 @@
 
         <!-- CTA Buttons -->
         {% set has_variant_stock = product.variants | selectattr('is_available') | selectattr('stock_quantity', 'gt', 0) | list | length > 0 %}
-        {% if product.is_available %}
+        {% if product.is_available and session.get('role') not in ['seller', 'store_admin', 'admin'] %}
         <div class="cta-row">
             <button class="btn btn-outline" id="addToCartBtn" onclick="addToCartWithVariant()">
                 <i class="ri-shopping-bag-line"></i> Add to Basket
@@ -3192,6 +3192,8 @@
                 <i class="ri-secure-payment-line"></i> Buy Now
             </button>
         </div>
+        {% elif product.is_available %}
+        <p style="color:var(--muted);font-size:14px;margin:0;">Shopping is disabled for store staff accounts.</p>
         {% else %}
         <button class="btn btn-outline" id="productUnavailableBtn" disabled style="opacity:0.5;cursor:not-allowed;border-radius:var(--radius-pill);">
             <i class="ri-close-circle-line"></i> Out of Stock

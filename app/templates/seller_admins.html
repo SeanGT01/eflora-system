@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
-{% block title %}Riders — E-FLORA Seller{% endblock %}
-{% block page_title %}Riders{% endblock %}
+{% block title %}Admins — E-FLORA Seller{% endblock %}
+{% block page_title %}Admins{% endblock %}
 
 {% block extra_css %}
 {% include 'partials/seller_dash_theme.html' %}
@@ -329,6 +329,20 @@
 
     .riders-modal.sm { max-width: 440px; }
     .riders-modal.md { max-width: 560px; }
+    .perm-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.85rem;
+        padding: 0.85rem 1rem;
+        border: 1px solid rgba(194, 78, 104, 0.12);
+        border-radius: 12px;
+        background: rgba(255, 252, 248, 0.7);
+        margin-bottom: 0.65rem;
+        cursor: pointer;
+    }
+    .perm-row input { margin-top: 0.2rem; accent-color: var(--deep-rose); width: 16px; height: 16px; }
+    .perm-row strong { display: block; font-size: 13.5px; color: var(--charcoal); }
+    .perm-row span { display: block; font-size: 12px; color: var(--muted); margin-top: 0.15rem; }
     .riders-modal.lg { max-width: 800px; }
 
     .riders-modal .modal-header {
@@ -737,21 +751,21 @@
 
   <div class="dash-header">
     <div>
-      <div class="dash-greeting-label">Delivery team</div>
-      <h1 class="dash-title">Riders, <em>in bloom</em></h1>
+      <div class="dash-greeting-label">Store team</div>
+      <h1 class="dash-title">Admins, <em>in bloom</em></h1>
     </div>
     <div class="dash-header-actions">
       <div class="dash-date"><i class="ri-calendar-line"></i><span class="dash-date-str">…</span></div>
-      <button type="button" class="dash-ghost-btn" onclick="loadRiders()"><i class="ri-refresh-line"></i> Refresh</button>
+      <button type="button" class="dash-ghost-btn" onclick="loadAdmins()"><i class="ri-refresh-line"></i> Refresh</button>
       <button type="button" class="dash-ghost-btn" data-archive-toggle onclick="toggleArchivedSection()"><i class="ri-archive-line"></i> Archived</button>
-      <button type="button" class="apply-btn" onclick="openInviteModal()"><i class="ri-user-add-line"></i> Invite Rider</button>
+      <button type="button" class="apply-btn" onclick="openInviteModal()"><i class="ri-user-add-line"></i> Invite Admin</button>
     </div>
   </div>
 
   <div class="dash-toolbar">
     <div class="dash-search">
       <i class="ri-search-line"></i>
-      <input type="text" id="searchInput" placeholder="Search riders…">
+      <input type="text" id="searchInput" placeholder="Search admins…">
     </div>
     <select class="filter-select" id="statusFilter">
       <option value="">All Status</option>
@@ -762,19 +776,19 @@
 
   <div class="kpi-row">
     <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-label">Total Riders</div><div class="kpi-icon"><i class="ri-motorbike-line"></i></div></div>
+      <div class="kpi-top"><div class="kpi-label">Total Admins</div><div class="kpi-icon"><i class="ri-shield-user-line"></i></div></div>
       <div class="kpi-value" id="statTotal">0</div>
-      <div class="kpi-sub">Registered riders</div>
+      <div class="kpi-sub">Registered admins</div>
     </div>
     <div class="kpi-card green">
       <div class="kpi-top"><div class="kpi-label">Active</div><div class="kpi-icon"><i class="ri-checkbox-circle-line"></i></div></div>
       <div class="kpi-value" id="statActive">0</div>
-      <div class="kpi-sub">Ready to deliver</div>
+      <div class="kpi-sub">Can run POS & inventory</div>
     </div>
     <div class="kpi-card bark">
       <div class="kpi-top"><div class="kpi-label">Inactive</div><div class="kpi-icon"><i class="ri-user-unfollow-line"></i></div></div>
       <div class="kpi-value" id="statInactive">0</div>
-      <div class="kpi-sub">Currently offline</div>
+      <div class="kpi-sub">Temporarily disabled</div>
     </div>
     <div class="kpi-card terra">
       <div class="kpi-top"><div class="kpi-label">Pending Invites</div><div class="kpi-icon"><i class="ri-mail-send-line"></i></div></div>
@@ -794,7 +808,7 @@
     <!-- Riders Panel -->
     <div class="panel riders-panel">
         <div class="panel-head">
-            <div class="panel-title">Verified Riders</div>
+            <div class="panel-title">Verified Admins</div>
             <button class="panel-action" data-archive-toggle onclick="toggleArchivedSection()">
                 <i class="ri-archive-line"></i> Archived
             </button>
@@ -802,16 +816,16 @@
 
         <!-- Loading -->
         <div class="riders-loading" id="ridersLoading" style="display: none;">
-            <div class="spinner"></div> Loading riders…
+            <div class="spinner"></div> Loading admins…
         </div>
 
         <!-- Empty State -->
         <div id="noRiders" class="empty-panel" style="display: none;">
-            <i class="ri-motorbike-line"></i>
-            No riders yet. Invite with email or mobile — we'll send a verification OTP.
+            <i class="ri-shield-user-line"></i>
+            No admins yet. Invite with email or mobile — we'll send a verification OTP.
             <div style="margin-top:.85rem;">
             <button class="apply-btn" onclick="openInviteModal()">
-                <i class="ri-user-add-line"></i> Invite Your First Rider
+                <i class="ri-user-add-line"></i> Invite Your First Admin
             </button>
             </div>
         </div>
@@ -821,11 +835,10 @@
                 <thead>
                     <tr>
                         <th>#</th>
-                        <th>Rider</th>
+                        <th>Admin</th>
                         <th>Contact</th>
-                        <th>Vehicle</th>
+                        <th>Role</th>
                         <th>Status</th>
-                        <th>Deliveries</th>
                         <th style="text-align: right;">Actions</th>
                     </tr>
                 </thead>
@@ -834,25 +847,24 @@
         </div>
     </div>
 
-    <!-- Archived Riders Panel -->
-    <div class="panel riders-panel" id="archivedRidersSection" style="display: none;">
+    <!-- Archived Admins Panel -->
+    <div class="panel riders-panel" id="archivedAdminsSection" style="display: none;">
         <div class="panel-head">
-            <div class="panel-title">Archived Riders <span class="panel-badge" id="archivedRidersCount">0</span></div>
+            <div class="panel-title">Archived Admins <span class="panel-badge" id="archivedAdminsCount">0</span></div>
         </div>
-        <div id="archivedRidersTableContainer" class="table-scroll">
+        <div id="archivedAdminsTableContainer" class="table-scroll">
             <table class="dash-table">
                 <thead>
                     <tr>
                         <th>#</th>
-                        <th>Rider</th>
+                        <th>Admin</th>
                         <th>Contact</th>
-                        <th>Vehicle</th>
+                        <th>Role</th>
                         <th>Status</th>
-                        <th>Deliveries</th>
                         <th style="text-align: right;">Actions</th>
                     </tr>
                 </thead>
-                <tbody id="archivedRidersTableBody"></tbody>
+                <tbody id="archivedAdminsTableBody"></tbody>
             </table>
         </div>
     </div>
@@ -862,10 +874,10 @@
 <div class="riders-overlay" id="inviteOverlay">
     <div class="riders-modal md">
         <div class="modal-header">
-            <div class="modal-title">Invite New Rider</div>
+            <div class="modal-title">Invite Store Admin</div>
             <button class="modal-close" onclick="closeModal('inviteOverlay')"><i class="ri-close-line"></i></button>
         </div>
-        <form id="inviteRiderForm">
+        <form id="inviteAdminForm">
             <div class="modal-body">
                 <div class="info-hint">
                     <i class="ri-information-line"></i>
@@ -884,22 +896,6 @@
                            placeholder="email@gmail.com or 09xxxxxxxxx" required autocomplete="username">
                 </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">Vehicle Type <span style="color: var(--deep-rose);">*</span></label>
-                        <select class="form-select" name="vehicle_type" id="inviteVehicle" required>
-                            <option value="">Select Vehicle</option>
-                            <option value="motorcycle">Motorcycle</option>
-                            <option value="car">Car</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">License Plate</label>
-                        <input type="text" class="form-control" name="license_plate" id="inviteLicensePlate"
-                               placeholder="ABC-1234">
-                    </div>
-                </div>
-
                 <div id="inviteError" class="info-hint" style="display: none; background: rgba(192,57,43,0.06); border-color: rgba(192,57,43,0.15); color: #9b1c1c;"></div>
             </div>
             <div class="modal-footer">
@@ -916,7 +912,7 @@
 <div class="riders-overlay" id="viewOverlay">
     <div class="riders-modal lg">
         <div class="modal-header">
-            <div class="modal-title">Rider Details</div>
+            <div class="modal-title">Admin Details</div>
             <button class="modal-close" onclick="closeModal('viewOverlay')"><i class="ri-close-line"></i></button>
         </div>
         <div class="modal-body" id="viewRiderBody"></div>
@@ -927,7 +923,7 @@
 <div class="riders-overlay" id="editOverlay">
     <div class="riders-modal md">
         <div class="modal-header">
-            <div class="modal-title">Edit Rider</div>
+            <div class="modal-title">Edit Admin</div>
             <button class="modal-close" onclick="closeModal('editOverlay')"><i class="ri-close-line"></i></button>
         </div>
         <form id="editRiderForm">
@@ -944,20 +940,6 @@
                     <input type="tel" class="form-control" id="editPhone" name="phone" placeholder="09xxxxxxxxx or +639xxxxxxxxx" inputmode="numeric" maxlength="13">
                 </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">Vehicle Type</label>
-                        <select class="form-select" id="editVehicle" name="vehicle_type">
-                            <option value="motorcycle">Motorcycle</option>
-                            <option value="car">Car</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">License Plate</label>
-                        <input type="text" class="form-control" id="editLicensePlate" name="license_plate">
-                    </div>
-                </div>
-
                 <label class="toggle-wrap">
                     <input type="checkbox" class="toggle-input" id="editIsActive">
                     <span class="toggle-track"></span>
@@ -969,6 +951,33 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline" onclick="closeModal('editOverlay')">Cancel</button>
                 <button type="submit" class="btn btn-rose">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ═══════════ PERMISSIONS MODAL ═══════════ -->
+<div class="riders-overlay" id="permsOverlay">
+    <div class="riders-modal md">
+        <div class="modal-header">
+            <div class="modal-title">Edit permissions</div>
+            <button class="modal-close" onclick="closeModal('permsOverlay')"><i class="ri-close-line"></i></button>
+        </div>
+        <form id="permsAdminForm">
+            <div class="modal-body">
+                <input type="hidden" id="permsAdminId">
+                <p style="font-size: 13px; color: var(--muted); margin: 0 0 1rem;">
+                    Checked: <strong id="permsAdminName"></strong> can perform actions on that page.
+                    Unchecked: they can still open the page, but cannot edit, save, charge POS, or change settings.
+                </p>
+                <div id="permsCheckboxes"></div>
+                <div id="permsError" class="info-hint" style="display: none; background: rgba(192,57,43,0.06); border-color: rgba(192,57,43,0.15); color: #9b1c1c;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('permsOverlay')">Cancel</button>
+                <button type="submit" class="btn btn-rose" id="permsSubmitBtn">
+                    <i class="ri-save-line"></i> Save permissions
+                </button>
             </div>
         </form>
     </div>
@@ -995,16 +1004,16 @@
 <div class="riders-overlay" id="credentialsOverlay">
     <div class="riders-modal sm">
         <div class="modal-header">
-            <div class="modal-title">Rider Account Ready</div>
+            <div class="modal-title">Admin Account Ready</div>
             <button class="modal-close" onclick="closeModal('credentialsOverlay')"><i class="ri-close-line"></i></button>
         </div>
         <div class="modal-body">
             <div class="info-hint" id="credentialsHint">
                 <i class="ri-key-2-line"></i>
-                <span>Share these login details with the rider. Ask them to change the password after first login.</span>
+                <span>Share these login details with the admin. Ask them to change the password after first login.</span>
             </div>
             <div class="form-group">
-                <label class="form-label">Rider</label>
+                <label class="form-label">Admin</label>
                 <div class="form-control" id="credentialsName" style="background:var(--surface-2, #f7f5f3);"></div>
             </div>
             <div class="form-group">
@@ -1179,7 +1188,7 @@ function showConfirmModal(message) {
 }
 
 function openInviteModal() {
-    document.getElementById('inviteRiderForm').reset();
+    document.getElementById('inviteAdminForm').reset();
     document.getElementById('inviteError').style.display = 'none';
     openModal('inviteOverlay');
 }
@@ -1191,7 +1200,7 @@ function toggleArchivedSection() {
         ? '<i class="ri-archive-line"></i> Hide Archived'
         : '<i class="ri-archive-line"></i> Archived';
     });
-    loadRiders();
+    loadAdmins();
 }
 
 document.querySelectorAll('.riders-overlay').forEach(overlay => {
@@ -1203,12 +1212,12 @@ document.querySelectorAll('.riders-overlay').forEach(overlay => {
 // ───────────────────────────────────────────────────
 // LOAD RIDERS
 // ───────────────────────────────────────────────────
-async function loadRiders() {
+async function loadAdmins() {
     const loading = document.getElementById('ridersLoading');
     const noRiders = document.getElementById('noRiders');
     const tableContainer = document.getElementById('ridersTableContainer');
     const pendingSection = document.getElementById('pendingSection');
-    const archivedSection = document.getElementById('archivedRidersSection');
+    const archivedSection = document.getElementById('archivedAdminsSection');
 
     loading.style.display = 'flex';
     noRiders.style.display = 'none';
@@ -1216,7 +1225,7 @@ async function loadRiders() {
     archivedSection.style.display = 'none';
 
     try {
-        const data = await apiFetch(`${API_BASE}/riders`);
+        const data = await apiFetch(`${API_BASE}/admins`);
         loading.style.display = 'none';
 
         document.getElementById('statTotal').textContent = data.stats.total;
@@ -1232,11 +1241,11 @@ async function loadRiders() {
             pendingSection.style.display = 'none';
         }
 
-        if (data.riders.length === 0) {
+        if (data.admins.length === 0) {
             noRiders.style.display = 'block';
         } else {
             tableContainer.style.display = 'block';
-            renderRidersTable(data.riders);
+            renderAdminsTable(data.admins);
         }
     } catch (err) {
         loading.style.display = 'none';
@@ -1283,11 +1292,11 @@ function renderPendingInvitations(invitations) {
     }).join('');
 }
 
-function renderRidersTable(riders) {
+function renderAdminsTable(riders) {
     const tbody = document.getElementById('ridersTableBody');
-    const archivedTbody = document.getElementById('archivedRidersTableBody');
-    const archivedSection = document.getElementById('archivedRidersSection');
-    const archivedCount = document.getElementById('archivedRidersCount');
+    const archivedTbody = document.getElementById('archivedAdminsTableBody');
+    const archivedSection = document.getElementById('archivedAdminsSection');
+    const archivedCount = document.getElementById('archivedAdminsCount');
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const statusFilter = document.getElementById('statusFilter').value;
 
@@ -1302,19 +1311,19 @@ function renderRidersTable(riders) {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 2.5rem;">No riders match your filter</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 2.5rem;">No admins match your filter</td></tr>';
         archivedTbody.innerHTML = '';
         archivedSection.style.display = 'none';
         return;
     }
 
-    const activeRiders = filtered.filter(rider => rider.is_active || (!rider.is_active && !rider.is_archived));
-    const archivedRiders = filtered.filter(rider => rider.is_archived);
+    const activeAdmins = filtered.filter(rider => rider.is_active || (!rider.is_active && !rider.is_archived));
+    const archivedAdmins = filtered.filter(rider => rider.is_archived);
 
-    if (activeRiders.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 2.5rem;">No active riders match your filter</td></tr>';
+    if (activeAdmins.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 2.5rem;">No active admins match your filter</td></tr>';
     } else {
-        tbody.innerHTML = activeRiders.map((rider, idx) => `
+        tbody.innerHTML = activeAdmins.map((rider, idx) => `
         <tr>
             <td style="color: var(--muted);">${idx + 1}</td>
             <td>
@@ -1322,7 +1331,7 @@ function renderRidersTable(riders) {
                     <div class="rider-avatar">
                         ${rider.avatar_url
                             ? `<img src="${rider.avatar_url}" alt="">`
-                            : '<i class="ri-motorbike-line"></i>'}
+                            : '<i class="ri-shield-user-line"></i>'}
                     </div>
                     <div>
                         <div class="rider-name">${escapeHtml(rider.full_name || 'Unknown')}</div>
@@ -1334,18 +1343,11 @@ function renderRidersTable(riders) {
                 <div style="font-size: 13.5px;">${escapeHtml(rider.email || '')}</div>
                 <div class="rider-sub">${escapeHtml(rider.phone || 'No phone')}</div>
             </td>
-            <td>
-                <div style="font-size: 13.5px;">${escapeHtml(rider.vehicle_type || 'N/A')}</div>
-                <div class="rider-sub">${escapeHtml(rider.license_plate || '')}</div>
-            </td>
+            <td>Store Admin</td>
             <td>
                 <span class="status-badge ${rider.is_active ? 'badge-active' : 'badge-cancelled'}">
                     ${rider.is_active ? 'Active' : 'Inactive'}
                 </span>
-                ${rider.has_active_delivery ? '<div class="rider-sub" style="margin-top: 4px; color: var(--terracotta);"><i class="ri-truck-line"></i> On delivery</div>' : ''}
-            </td>
-            <td style="text-align: center;">
-                <span style="font-family: var(--font-display); font-size: 20px; font-weight: 500;">${rider.total_deliveries || 0}</span>
             </td>
             <td style="text-align: right;">
                 <div class="action-btn-group" style="justify-content: flex-end;">
@@ -1354,6 +1356,9 @@ function renderRidersTable(riders) {
                     </button>
                     <button class="action-btn success" onclick="editRider(${rider.id})" title="Edit">
                         <i class="ri-edit-line"></i>
+                    </button>
+                    <button class="action-btn" onclick="editAdminPermissions(${rider.id})" title="Edit permissions">
+                        <i class="ri-lock-password-line"></i>
                     </button>
                     <button class="action-btn" onclick="resetRiderPassword(${rider.id}, '${escapeHtml(rider.full_name || '')}')" title="Reset password" style="color: var(--terracotta);">
                         <i class="ri-key-2-line"></i>
@@ -1370,10 +1375,10 @@ function renderRidersTable(riders) {
     `).join('');
     }
 
-    if (archivedRiders.length > 0 && isArchivedSectionOpen) {
+    if (archivedAdmins.length > 0 && isArchivedSectionOpen) {
         archivedSection.style.display = 'block';
-        archivedCount.textContent = archivedRiders.length;
-        archivedTbody.innerHTML = archivedRiders.map((rider, idx) => `
+        archivedCount.textContent = archivedAdmins.length;
+        archivedTbody.innerHTML = archivedAdmins.map((rider, idx) => `
         <tr>
             <td style="color: var(--muted);">${idx + 1}</td>
             <td>
@@ -1381,7 +1386,7 @@ function renderRidersTable(riders) {
                     <div class="rider-avatar">
                         ${rider.avatar_url
                             ? `<img src="${rider.avatar_url}" alt="">`
-                            : '<i class="ri-motorbike-line"></i>'}
+                            : '<i class="ri-shield-user-line"></i>'}
                     </div>
                     <div>
                         <div class="rider-name">${escapeHtml(rider.full_name || 'Unknown')}</div>
@@ -1393,15 +1398,9 @@ function renderRidersTable(riders) {
                 <div style="font-size: 13.5px;">${escapeHtml(rider.email || '')}</div>
                 <div class="rider-sub">${escapeHtml(rider.phone || 'No phone')}</div>
             </td>
-            <td>
-                <div style="font-size: 13.5px;">${escapeHtml(rider.vehicle_type || 'N/A')}</div>
-                <div class="rider-sub">${escapeHtml(rider.license_plate || '')}</div>
-            </td>
+            <td>Store Admin</td>
             <td>
                 <span class="status-badge badge-cancelled">Archived</span>
-            </td>
-            <td style="text-align: center;">
-                <span style="font-family: var(--font-display); font-size: 20px; font-weight: 500;">${rider.total_deliveries || 0}</span>
             </td>
             <td style="text-align: right;">
                 <div class="action-btn-group" style="justify-content: flex-end;">
@@ -1418,7 +1417,7 @@ function renderRidersTable(riders) {
     } else {
         archivedTbody.innerHTML = '';
         archivedSection.style.display = 'none';
-        archivedCount.textContent = archivedRiders.length;
+        archivedCount.textContent = archivedAdmins.length;
     }
 }
 
@@ -1447,7 +1446,7 @@ function parseInviteIdentifier(raw) {
     return { ok: true, identifier: phoneValidation.normalized };
 }
 
-document.getElementById('inviteRiderForm').addEventListener('submit', async function(e) {
+document.getElementById('inviteAdminForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const btn = document.getElementById('inviteSubmitBtn');
     const errorDiv = document.getElementById('inviteError');
@@ -1464,23 +1463,21 @@ document.getElementById('inviteRiderForm').addEventListener('submit', async func
     const payload = {
         full_name: document.getElementById('inviteFullName').value.trim(),
         identifier: parsed.identifier,
-        vehicle_type: document.getElementById('inviteVehicle').value,
-        license_plate: document.getElementById('inviteLicensePlate').value.trim(),
     };
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Sending OTP…';
 
     try {
-        const data = await apiFetch(`${API_BASE}/riders`, {
+        const data = await apiFetch(`${API_BASE}/admins`, {
             method: 'POST',
             body: JSON.stringify(payload)
         });
 
         closeModal('inviteOverlay');
         showToast('success', data.message);
-        document.getElementById('inviteRiderForm').reset();
-        loadRiders();
+        document.getElementById('inviteAdminForm').reset();
+        loadAdmins();
 
     } catch (err) {
         errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${escapeHtml(err.error || 'Failed to send OTP')}`;
@@ -1492,7 +1489,7 @@ document.getElementById('inviteRiderForm').addEventListener('submit', async func
 });
 
 // ───────────────────────────────────────────────────
-// VERIFY OTP (seller enters the code from rider)
+// VERIFY OTP (seller enters the code from the admin)
 // ───────────────────────────────────────────────────
 async function verifyOtp(otpId) {
     const input = document.getElementById(`otpInput_${otpId}`);
@@ -1509,15 +1506,15 @@ async function verifyOtp(otpId) {
     btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>';
 
     try {
-        const data = await apiFetch(`${API_BASE}/riders/verify-otp`, {
+        const data = await apiFetch(`${API_BASE}/admins/verify-otp`, {
             method: 'POST',
             body: JSON.stringify({ otp_id: otpId, otp_code: code })
         });
-        showToast('success', data.message || 'Rider account created');
+        showToast('success', data.message || 'Admin account created');
         if (data.login_id && data.temporary_password) {
             showCredentialsModal(data);
         }
-        loadRiders();
+        loadAdmins();
     } catch (err) {
         showToast('error', err.error || 'OTP verification failed');
     } finally {
@@ -1527,7 +1524,7 @@ async function verifyOtp(otpId) {
 }
 
 function showCredentialsModal(data) {
-    document.getElementById('credentialsName').textContent = data.full_name || 'Rider';
+    document.getElementById('credentialsName').textContent = data.full_name || 'Admin';
     document.getElementById('credentialsLogin').textContent = data.login_id || '';
     document.getElementById('credentialsPassword').textContent = data.temporary_password || '';
 
@@ -1536,7 +1533,7 @@ function showCredentialsModal(data) {
     if (data.credentials_delivered) {
         hint.innerHTML = `<i class="ri-check-line"></i> <span>Credentials were also sent by ${channel} to <strong>${escapeHtml(data.login_id || '')}</strong>. You can still copy them below.</span>`;
     } else {
-        hint.innerHTML = `<i class="ri-error-warning-line"></i> <span>Could not auto-send by ${channel}. Copy and share these details with the rider.</span>`;
+        hint.innerHTML = `<i class="ri-error-warning-line"></i> <span>Could not auto-send by ${channel}. Copy and share these details with the admin.</span>`;
     }
     openModal('credentialsOverlay');
 }
@@ -1557,12 +1554,12 @@ async function copyCredentialsField(elementId) {
 // ───────────────────────────────────────────────────
 async function resendInvitation(otpId) {
     try {
-        const data = await apiFetch(`${API_BASE}/riders/resend-invitation`, {
+        const data = await apiFetch(`${API_BASE}/admins/resend-invitation`, {
             method: 'POST',
             body: JSON.stringify({ otp_id: otpId })
         });
         showToast('success', data.message);
-        loadRiders();
+        loadAdmins();
     } catch (err) {
         showToast('error', err.error || 'Failed to resend invitation');
     }
@@ -1575,12 +1572,12 @@ async function cancelInvitation(otpId) {
     const confirmed = await showConfirmModal('Cancel this rider invitation?');
     if (!confirmed) return;
     try {
-        const data = await apiFetch(`${API_BASE}/riders/cancel-invitation`, {
+        const data = await apiFetch(`${API_BASE}/admins/cancel-invitation`, {
             method: 'POST',
             body: JSON.stringify({ otp_id: otpId })
         });
         showToast('success', data.message);
-        loadRiders();
+        loadAdmins();
     } catch (err) {
         showToast('error', err.error || 'Failed to cancel invitation');
     }
@@ -1589,10 +1586,10 @@ async function cancelInvitation(otpId) {
 // ───────────────────────────────────────────────────
 // VIEW RIDER
 // ───────────────────────────────────────────────────
-async function viewRider(riderId) {
+async function viewRider(adminId) {
     try {
-        const data = await apiFetch(`${API_BASE}/riders/${riderId}`);
-        const rider = data.rider;
+        const data = await apiFetch(`${API_BASE}/admins/${adminId}`);
+        const rider = data.admin;
 
         document.getElementById('viewRiderBody').innerHTML = `
             <div class="rider-detail-grid">
@@ -1600,7 +1597,7 @@ async function viewRider(riderId) {
                     <div class="rider-detail-avatar-circle">
                         ${rider.avatar_url
                             ? `<img src="${rider.avatar_url}" alt="">`
-                            : '<i class="ri-motorbike-line"></i>'}
+                            : '<i class="ri-shield-user-line"></i>'}
                     </div>
                     <div class="detail-name">${escapeHtml(rider.full_name || 'Unknown')}</div>
                     <span class="status-badge ${rider.is_active ? 'badge-active' : 'badge-cancelled'}">
@@ -1611,8 +1608,7 @@ async function viewRider(riderId) {
                     <table class="detail-table">
                         <tr><th>Email</th><td>${escapeHtml(rider.email || '')}</td></tr>
                         <tr><th>Phone</th><td>${escapeHtml(rider.phone || 'N/A')}</td></tr>
-                        <tr><th>Vehicle</th><td>${escapeHtml(rider.vehicle_type || 'N/A')} ${rider.license_plate ? '(' + escapeHtml(rider.license_plate) + ')' : ''}</td></tr>
-                        <tr><th>Total Deliveries</th><td style="font-family: var(--font-display); font-size: 20px; font-weight: 500;">${rider.total_deliveries || 0}</td></tr>
+                        <tr><th>Role</th><td>Store Admin</td></tr>
                     </table>
                 </div>
             </div>
@@ -1635,48 +1631,44 @@ async function viewRider(riderId) {
                         </table>
                     </div>
                 </div>
-            ` : '<div style="margin-top: 1.75rem; text-align: center; padding: 2rem; color: var(--muted); font-size: 13px;">No delivery history yet.</div>'}
+            ` : ''}
         `;
 
         openModal('viewOverlay');
     } catch (err) {
-        showToast('error', err.error || 'Failed to load rider details');
+        showToast('error', err.error || 'Failed to load admin details');
     }
 }
 
 // ───────────────────────────────────────────────────
 // EDIT RIDER
 // ───────────────────────────────────────────────────
-async function editRider(riderId) {
+async function editRider(adminId) {
     try {
-        const data = await apiFetch(`${API_BASE}/riders/${riderId}`);
-        const rider = data.rider;
+        const data = await apiFetch(`${API_BASE}/admins/${adminId}`);
+        const rider = data.admin;
 
         document.getElementById('editRiderId').value = rider.id;
         document.getElementById('editFullName').value = rider.full_name || '';
         document.getElementById('editPhone').value = rider.phone || '';
-        document.getElementById('editVehicle').value = rider.vehicle_type || 'motorcycle';
-        document.getElementById('editLicensePlate').value = rider.license_plate || '';
         document.getElementById('editIsActive').checked = rider.is_active;
         document.getElementById('editError').style.display = 'none';
 
         openModal('editOverlay');
     } catch (err) {
-        showToast('error', err.error || 'Failed to load rider');
+        showToast('error', err.error || 'Failed to load admin');
     }
 }
 
 document.getElementById('editRiderForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const riderId = document.getElementById('editRiderId').value;
+    const adminId = document.getElementById('editRiderId').value;
     const errorDiv = document.getElementById('editError');
     errorDiv.style.display = 'none';
 
     const payload = {
         full_name: document.getElementById('editFullName').value.trim(),
         phone: document.getElementById('editPhone').value.trim(),
-        vehicle_type: document.getElementById('editVehicle').value,
-        license_plate: document.getElementById('editLicensePlate').value.trim(),
         is_active: document.getElementById('editIsActive').checked
     };
 
@@ -1690,16 +1682,76 @@ document.getElementById('editRiderForm').addEventListener('submit', async functi
     payload.phone = editPhoneValidation.normalized;
 
     try {
-        const data = await apiFetch(`${API_BASE}/riders/${riderId}`, {
+        const data = await apiFetch(`${API_BASE}/admins/${adminId}`, {
             method: 'PUT',
             body: JSON.stringify(payload)
         });
 
         closeModal('editOverlay');
         showToast('success', data.message);
-        loadRiders();
+        loadAdmins();
     } catch (err) {
         errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${escapeHtml(err.error || 'Failed to update rider')}`;
+        errorDiv.style.display = 'flex';
+    }
+});
+
+const ADMIN_PERM_FIELDS = [
+    ['products', 'Products', 'Add, edit, delete, and change catalog items'],
+    ['archive', 'Archive', 'Restore or permanently delete archived products'],
+    ['inventory', 'Inventory', 'Add or reduce stock'],
+    ['orders', 'Orders', 'Update order status and approve payments'],
+    ['riders', 'Riders', 'Invite and manage delivery riders'],
+    ['pos', 'POS System', 'Charge sales and void POS orders'],
+    ['store_settings', 'Store settings', 'Change hours, payments, delivery, and store profile'],
+];
+
+function renderPermCheckboxes(perms) {
+    const box = document.getElementById('permsCheckboxes');
+    box.innerHTML = ADMIN_PERM_FIELDS.map(([key, label, hint]) => `
+        <label class="perm-row">
+            <input type="checkbox" data-perm-key="${key}" ${perms[key] ? 'checked' : ''}>
+            <div>
+                <strong>${label}</strong>
+                <span>${hint}</span>
+            </div>
+        </label>
+    `).join('');
+}
+
+async function editAdminPermissions(adminId) {
+    try {
+        const data = await apiFetch(`${API_BASE}/admins/${adminId}`);
+        const rider = data.admin;
+        document.getElementById('permsAdminId').value = rider.id;
+        document.getElementById('permsAdminName').textContent = rider.full_name || 'this admin';
+        document.getElementById('permsError').style.display = 'none';
+        renderPermCheckboxes(rider.permissions || {});
+        openModal('permsOverlay');
+    } catch (err) {
+        showToast('error', err.error || 'Failed to load permissions');
+    }
+}
+
+document.getElementById('permsAdminForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const adminId = document.getElementById('permsAdminId').value;
+    const errorDiv = document.getElementById('permsError');
+    errorDiv.style.display = 'none';
+    const permissions = {};
+    document.querySelectorAll('#permsCheckboxes [data-perm-key]').forEach((el) => {
+        permissions[el.getAttribute('data-perm-key')] = el.checked;
+    });
+    try {
+        await apiFetch(`${API_BASE}/admins/${adminId}/permissions`, {
+            method: 'PUT',
+            body: JSON.stringify({ permissions }),
+        });
+        closeModal('permsOverlay');
+        showToast('success', 'Permissions updated');
+        loadAdmins();
+    } catch (err) {
+        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${escapeHtml(err.error || 'Failed to save permissions')}`;
         errorDiv.style.display = 'flex';
     }
 });
@@ -1707,26 +1759,26 @@ document.getElementById('editRiderForm').addEventListener('submit', async functi
 // ───────────────────────────────────────────────────
 // TOGGLE STATUS / DELETE
 // ───────────────────────────────────────────────────
-async function toggleRiderStatus(riderId, newActive) {
+async function toggleRiderStatus(adminId, newActive) {
     try {
-        const data = await apiFetch(`${API_BASE}/riders/${riderId}/status`, {
+        const data = await apiFetch(`${API_BASE}/admins/${adminId}/status`, {
             method: 'PUT',
             body: JSON.stringify({ is_active: newActive })
         });
         showToast('success', data.message);
-        loadRiders();
+        loadAdmins();
     } catch (err) {
         showToast('error', err.error || 'Failed to update status');
     }
 }
 
-async function resetRiderPassword(riderId, name) {
+async function resetRiderPassword(adminId, name) {
     const confirmed = await showConfirmModal(
-        `Reset temporary password for "${name}"? The new password will be shown once — share it with the rider.`
+        `Reset temporary password for "${name}"? The new password will be shown once — share it with the admin.`
     );
     if (!confirmed) return;
     try {
-        const data = await apiFetch(`${API_BASE}/riders/${riderId}/reset-password`, {
+        const data = await apiFetch(`${API_BASE}/admins/${adminId}/reset-password`, {
             method: 'POST',
             body: JSON.stringify({}),
         });
@@ -1739,13 +1791,13 @@ async function resetRiderPassword(riderId, name) {
     }
 }
 
-async function deleteRider(riderId, name) {
+async function deleteRider(adminId, name) {
     const confirmed = await showConfirmModal(`Archive rider "${name}"? This will set the rider to inactive instead of permanently deleting.`);
     if (!confirmed) return;
     try {
-        const data = await apiFetch(`${API_BASE}/riders/${riderId}`, { method: 'DELETE' });
+        const data = await apiFetch(`${API_BASE}/admins/${adminId}`, { method: 'DELETE' });
         showToast('success', data.message);
-        loadRiders();
+        loadAdmins();
     } catch (err) {
         showToast('error', err.error || 'Failed to remove rider');
     }
@@ -1754,8 +1806,8 @@ async function deleteRider(riderId, name) {
 // ───────────────────────────────────────────────────
 // SEARCH / FILTER
 // ───────────────────────────────────────────────────
-document.getElementById('searchInput').addEventListener('input', () => loadRiders());
-document.getElementById('statusFilter').addEventListener('change', () => loadRiders());
+document.getElementById('searchInput').addEventListener('input', () => loadAdmins());
+document.getElementById('statusFilter').addEventListener('change', () => loadAdmins());
 document.getElementById('editPhone')?.addEventListener('input', enforcePhoneInputLimit);
 
 // ───────────────────────────────────────────────────
@@ -1786,7 +1838,7 @@ function parseServerDate(isoStr) {
 // INIT
 // ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    loadRiders();
+    loadAdmins();
 });
 </script>
 {% endblock %}

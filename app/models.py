@@ -702,6 +702,143 @@ class Rider(db.Model):
             'is_archived': self.is_archived
         }
 
+
+class StoreAdmin(db.Model):
+    """Store staff (seller-side admin) invited by the shop owner."""
+    __tablename__ = 'store_admins'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    is_archived = db.Column(db.Boolean, default=False, nullable=False)
+    permissions = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref='store_admin_profiles', lazy=True)
+    store = db.relationship('Store', backref='store_admins', lazy=True)
+
+    def to_dict(self):
+        from app.utils.phone_utils import display_login_id
+        from app.utils.store_admin_perms import normalize_permissions
+
+        u = self.user
+        login_id = display_login_id(email=u.email if u else None, phone=u.phone if u else None) if u else None
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'store_id': self.store_id,
+            'full_name': u.full_name if u else None,
+            'email': login_id,
+            'phone': u.phone if u else None,
+            'avatar_url': u.avatar_url if u else None,
+            'is_active': self.is_active,
+            'is_archived': self.is_archived,
+            'permissions': normalize_permissions(self.permissions),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class StoreAdminOTP(db.Model):
+    """Email/SMS OTP for inviting a store admin (same flow as riders)."""
+    __tablename__ = 'store_admin_otps'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False, index=True)
+    verification_token = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    admin_data = db.Column(db.JSON, nullable=False)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    is_verified = db.Column(db.Boolean, default=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    store = db.relationship('Store', backref='store_admin_otps')
+    creator = db.relationship('User', backref='created_store_admin_otps')
+
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+
+    def to_dict(self):
+        from app.utils.phone_utils import display_login_id
+
+        data = self.admin_data or {}
+        login_id = data.get('login_id') or display_login_id(
+            email=self.email, phone=data.get('phone')
+        )
+        return {
+            'id': self.id,
+            'email': login_id,
+            'contact': login_id,
+            'otp_channel': data.get('otp_channel') or ('sms' if data.get('phone') else 'email'),
+            'full_name': data.get('full_name'),
+            'store_id': self.store_id,
+            'is_verified': self.is_verified,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+DEFAULT_MAIN_CATEGORIES = (
+    {
+        'name': 'Fresh Flowers',
+        'slug': 'fresh-flowers',
+        'icon': 'ri-flower-line',
+        'description': 'Fresh cut flowers arranged beautifully',
+        'sort_order': 1,
+    },
+    {
+        'name': 'Potted Plants',
+        'slug': 'potted-plants',
+        'icon': 'ri-plant-line',
+        'description': 'Live plants in pots for your home or garden',
+        'sort_order': 2,
+    },
+    {
+        'name': 'Bouquets',
+        'slug': 'bouquets',
+        'icon': 'ri-gift-line',
+        'description': 'Hand-tied bouquets for any occasion',
+        'sort_order': 3,
+    },
+    {
+        'name': 'Succulents',
+        'slug': 'succulents',
+        'icon': 'ri-leaf-line',
+        'description': 'Low-maintenance succulent plants',
+        'sort_order': 4,
+    },
+    {
+        'name': 'Others',
+        'slug': 'others',
+        'icon': 'ri-more-2-line',
+        'description': 'Gifts, extras, and items that do not fit the other categories',
+        'sort_order': 5,
+    },
+)
+
+
+def ensure_default_main_categories():
+    """Insert any missing global main categories (idempotent)."""
+    existing = {row.slug for row in Category.query.all()}
+    added = False
+    for row in DEFAULT_MAIN_CATEGORIES:
+        if row['slug'] in existing:
+            continue
+        db.session.add(Category(
+            name=row['name'],
+            slug=row['slug'],
+            icon=row['icon'],
+            description=row['description'],
+            sort_order=row['sort_order'],
+            is_active=True,
+        ))
+        added = True
+    if added:
+        db.session.commit()
+    return added
+
+
 class Category(db.Model):
     """Global main categories (same for all stores)"""
     __tablename__ = 'categories'
@@ -1341,6 +1478,7 @@ class ProductAddonOption(db.Model):
             'is_available': self.is_available,
             'show_in_you_may_also_like': bool(self.show_in_you_may_also_like),
             'is_oos': int(self.stock_quantity or 0) <= 0,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 
@@ -1884,11 +2022,13 @@ class POSOrder(db.Model):
     customer_name = db.Column(db.String(100))
     customer_contact = db.Column(db.String(20))
     is_seen_by_seller = db.Column(db.Boolean, default=False, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # FIXED: Use back_populates instead of backref
     items = db.relationship('POSOrderItem', back_populates='pos_order', lazy=True, cascade='all, delete-orphan')
+    cashier = db.relationship('User', foreign_keys=[created_by], lazy=True)
     
     @property
     def subtotal(self):
@@ -1914,7 +2054,9 @@ class POSOrder(db.Model):
             'is_seen_by_seller': self.is_seen_by_seller,
             'items': [item.to_dict() for item in self.items],
             'item_count': len(self.items),
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_by': self.created_by,
+            'created_by_name': self.cashier.full_name if self.cashier else None,
         }
 
 class POSOrderItem(db.Model):
