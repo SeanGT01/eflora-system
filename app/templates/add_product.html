@@ -1794,6 +1794,25 @@
     .variant-row .form-control-sm::placeholder {
         color: var(--border-strong);
     }
+    .vf { min-width: 0; }
+    .vf > .form-control-sm { width: 100%; }
+    .vf::before {
+        display: none;
+        content: attr(data-label);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 0.2rem;
+    }
+    .vf-inline {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        min-width: 0;
+    }
 
     /* Variant thumb image */
     .variant-thumb-area {
@@ -2076,14 +2095,6 @@
         .footer-right .btn {
             flex: 1;
         }
-        /* On small screens, allow horizontal scroll for variant table */
-        .variant-table-wrapper {
-            overflow-x: auto;
-        }
-        .variant-table-head,
-        .variant-row {
-            min-width: 640px;
-        }
         .variants-header {
             flex-direction: column;
             align-items: flex-start;
@@ -2103,22 +2114,111 @@
     }
 
     @media (max-width: 767px) {
-        .add-product-container { min-width: 0; max-width: 100%; overflow-x: clip; }
+        .add-product-container { min-width: 0; max-width: 100%; overflow-x: clip; margin-bottom: 5.5rem; }
         .page-header {
             flex-direction: column;
             align-items: stretch;
         }
+        .page-title { font-size: 20px; overflow-wrap: anywhere; }
         .header-actions {
             width: 100%;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
+            flex-wrap: wrap;
         }
         .header-actions .btn {
-            width: 100%;
+            flex: 1;
             min-height: 44px;
             justify-content: center;
         }
+        .form-layout-top,
+        .form-layout-bottom { gap: 0.75rem; }
         .form-card, .card-body { min-width: 0; }
+        .form-card { margin-bottom: 0.65rem; border-radius: 14px; }
+        .card-header { padding: 0.65rem 0.85rem; flex-wrap: wrap; gap: 0.35rem; }
+        .card-body { padding: 0.75rem 0.85rem; }
+        .form-row { grid-template-columns: 1fr; gap: 0.75rem; }
+        .add-product-container .form-control,
+        .add-product-container .form-select,
+        .add-product-container textarea.form-control {
+            min-height: 44px;
+            font-size: 16px;
+        }
+        .image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+        .addon-group-header { flex-wrap: wrap; }
+        .addon-group-header .form-control { min-width: 0; width: 100%; }
+        .toggle-label { white-space: normal; line-height: 1.35; }
+        .variant-table-wrapper {
+            overflow: visible;
+            border: none;
+            background: transparent;
+        }
+        .variant-table-head,
+        .addon-options-head {
+            display: none;
+        }
+        .variant-row,
+        .addon-option-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.55rem 0.65rem;
+            min-width: 0;
+            padding: 0.75rem;
+            margin-bottom: 0.65rem;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--warm-white);
+        }
+        .variant-row .vf,
+        .addon-option-row .vf {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .variant-row .vf::before,
+        .addon-option-row .vf::before {
+            display: block;
+        }
+        .vf-span,
+        .vf[data-span="full"] {
+            grid-column: 1 / -1;
+        }
+        .variant-row .form-control-sm,
+        .addon-option-row .form-control-sm {
+            min-height: 44px;
+            font-size: 16px;
+            padding: 0.45rem 0.55rem;
+        }
+        .vf-inline {
+            justify-content: flex-start;
+            min-height: 44px;
+        }
+        .variant-thumb-area,
+        .variant-thumb-btn,
+        .variant-thumb-img-wrap {
+            width: 52px;
+            height: 52px;
+        }
+        .example-chips { flex-wrap: wrap; }
+        .available-toggle-row { align-items: flex-start; }
+        .form-footer {
+            left: 0;
+            padding: 0.55rem 0.85rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+        }
+        .footer-content {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.45rem;
+        }
+        .footer-left,
+        .footer-right { width: 100%; }
+        .footer-right { justify-content: stretch; }
+        .form-footer .btn {
+            min-height: 44px;
+            flex: 1;
+            justify-content: center;
+        }
+        .reason-options { grid-template-columns: 1fr; }
     }
 </style>
 {% endblock %}
@@ -2418,31 +2518,45 @@
         const removeRowCallback = isExisting ? `removeVariantRow('${rowId}', true)` : `removeVariantRow('${rowId}', false)`;
 
         return `
-            <input type="text" class="form-control-sm" name="variant_name" value="${nameVal}" placeholder="e.g., Red" required>
-            <input type="number" class="form-control-sm" name="variant_price" step="0.01" min="0" value="${priceVal}" placeholder="0.00" required>
-            <input type="number" class="form-control-sm" name="variant_special_price" step="0.01" min="0" value="${specialPriceVal}" placeholder="—">
-            <input type="number" class="form-control-sm" name="variant_stock" min="0" value="${stockVal}" placeholder="0" ${stockDisabled} ${stockRequired} ${stockTitle}>
-            <input type="text" class="form-control-sm" name="variant_sku" value="${skuVal}" placeholder="Auto">
-            <input type="text" class="form-control-sm" name="variant_attributes" value="${escapeHtml(attrValue)}" placeholder="red, bouquet…">
-            <div class="variant-thumb-area">
-                <input type="file" class="variant-image-input" id="variant-image-${rowId}" accept="image/*" style="display:none;">
-                <div class="variant-thumb-btn" id="thumb-btn-${rowId}" style="display:${hasImg ? 'none' : 'flex'};" onclick="document.getElementById('variant-image-${rowId}').click()">
-                    <i class="ri-image-add-line"></i>
-                </div>
-                <div class="variant-thumb-img-wrap" id="thumb-img-${rowId}" style="display:${hasImg ? 'block' : 'none'};">
-                    <img class="variant-image-img" src="${imgSrc}" alt="Variant">
-                    <button type="button" class="remove-variant-image" onclick="${removeCallback}">
-                        <i class="ri-close-line"></i>
-                    </button>
+            <div class="vf vf-span" data-label="Variant name">
+                <input type="text" class="form-control-sm" name="variant_name" value="${nameVal}" placeholder="e.g., Red" required>
+            </div>
+            <div class="vf" data-label="Price (₱)">
+                <input type="number" class="form-control-sm" name="variant_price" step="0.01" min="0" value="${priceVal}" placeholder="0.00" required>
+            </div>
+            <div class="vf" data-label="Sale price">
+                <input type="number" class="form-control-sm" name="variant_special_price" step="0.01" min="0" value="${specialPriceVal}" placeholder="—">
+            </div>
+            <div class="vf" data-label="Stock">
+                <input type="number" class="form-control-sm" name="variant_stock" min="0" value="${stockVal}" placeholder="0" ${stockDisabled} ${stockRequired} ${stockTitle}>
+            </div>
+            <div class="vf" data-label="SKU">
+                <input type="text" class="form-control-sm" name="variant_sku" value="${skuVal}" placeholder="Auto">
+            </div>
+            <div class="vf vf-span" data-label="Tags">
+                <input type="text" class="form-control-sm" name="variant_attributes" value="${escapeHtml(attrValue)}" placeholder="red, bouquet…">
+            </div>
+            <div class="vf" data-label="Image">
+                <div class="variant-thumb-area">
+                    <input type="file" class="variant-image-input" id="variant-image-${rowId}" accept="image/*" style="display:none;">
+                    <div class="variant-thumb-btn" id="thumb-btn-${rowId}" style="display:${hasImg ? 'none' : 'flex'};" onclick="document.getElementById('variant-image-${rowId}').click()">
+                        <i class="ri-image-add-line"></i>
+                    </div>
+                    <div class="variant-thumb-img-wrap" id="thumb-img-${rowId}" style="display:${hasImg ? 'block' : 'none'};">
+                        <img class="variant-image-img" src="${imgSrc}" alt="Variant">
+                        <button type="button" class="remove-variant-image" onclick="${removeCallback}">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;">
+            <div class="vf vf-inline" data-label="Active">
                 <label class="toggle-switch" style="margin:0;width:auto;">
                     <input type="checkbox" name="variant_available" ${isAvail ? 'checked' : ''}>
                     <span class="toggle-slider"></span>
                 </label>
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;">
+            <div class="vf vf-inline vf-span" data-label="Remove">
                 <button type="button" class="btn-icon-danger" onclick="${removeRowCallback}" title="Delete variant">
                     <i class="ri-delete-bin-line"></i>
                 </button>
@@ -4578,32 +4692,40 @@ function updateVariantStockInData(variantId, newStock) {
         const stockRequired = isExistingOpt && isEditMode ? '' : 'required';
         const stockTitle = isExistingOpt && isEditMode ? 'title="Use Reduce / Add Stock to modify"' : '';
         row.innerHTML = `
-            <input type="text" class="form-control-sm" name="addon_opt_name" value="${nameVal}" placeholder="e.g. 3 pcs Ferrero" required>
-            <input type="number" class="form-control-sm" name="addon_opt_price" step="0.01" min="0" value="${priceVal}" placeholder="0.00" required>
-            <input type="number" class="form-control-sm" name="addon_opt_stock" min="0" value="${stockVal}" placeholder="0" ${stockDisabled} ${stockRequired} ${stockTitle}>
-            <div class="variant-thumb-area">
-                <input type="file" class="addon-image-input" id="addon-image-${oid}" accept="image/*" style="display:none;">
-                <div class="variant-thumb-btn" id="addon-thumb-btn-${oid}" style="display:${hasImg ? 'none' : 'flex'};" onclick="document.getElementById('addon-image-${oid}').click()" title="Image required">
-                    <i class="ri-image-add-line"></i>
-                </div>
-                <div class="variant-thumb-img-wrap" id="addon-thumb-img-${oid}" style="display:${hasImg ? 'block' : 'none'};">
-                    <img class="variant-image-img" src="${imgSrc}" alt="Add-on">
-                    <button type="button" class="remove-variant-image" onclick="removeAddonOptionImage('${oid}', ${existing && existing.id ? 'true' : 'false'})">
-                        <i class="ri-close-line"></i>
-                    </button>
+            <div class="vf vf-span" data-label="Option name">
+                <input type="text" class="form-control-sm" name="addon_opt_name" value="${nameVal}" placeholder="e.g. 3 pcs Ferrero" required>
+            </div>
+            <div class="vf" data-label="Price (₱)">
+                <input type="number" class="form-control-sm" name="addon_opt_price" step="0.01" min="0" value="${priceVal}" placeholder="0.00" required>
+            </div>
+            <div class="vf" data-label="Stock">
+                <input type="number" class="form-control-sm" name="addon_opt_stock" min="0" value="${stockVal}" placeholder="0" ${stockDisabled} ${stockRequired} ${stockTitle}>
+            </div>
+            <div class="vf" data-label="Image *">
+                <div class="variant-thumb-area">
+                    <input type="file" class="addon-image-input" id="addon-image-${oid}" accept="image/*" style="display:none;">
+                    <div class="variant-thumb-btn" id="addon-thumb-btn-${oid}" style="display:${hasImg ? 'none' : 'flex'};" onclick="document.getElementById('addon-image-${oid}').click()" title="Image required">
+                        <i class="ri-image-add-line"></i>
+                    </div>
+                    <div class="variant-thumb-img-wrap" id="addon-thumb-img-${oid}" style="display:${hasImg ? 'block' : 'none'};">
+                        <img class="variant-image-img" src="${imgSrc}" alt="Add-on">
+                        <button type="button" class="remove-variant-image" onclick="removeAddonOptionImage('${oid}', ${existing && existing.id ? 'true' : 'false'})">
+                            <i class="ri-close-line"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;" title="Show in You might also like on all products in this store">
+            <div class="vf vf-inline" data-label="YMAL" title="Show in You might also like on all products in this store">
                 <input type="checkbox" name="addon_opt_ymal" ${ymal ? 'checked' : ''}>
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;">
+            <div class="vf vf-inline" data-label="Active">
                 <label class="toggle-switch" style="margin:0;width:auto;">
                     <input type="checkbox" name="addon_opt_available" ${isAvail ? 'checked' : ''}
                            onchange="syncAddonGroupActiveFromOptions('${gid}')">
                     <span class="toggle-slider"></span>
                 </label>
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;">
+            <div class="vf vf-inline vf-span" data-label="Remove">
                 <button type="button" class="btn-icon-danger" onclick="removeAddonOptionRow('${oid}', ${existing && existing.id ? 'true' : 'false'})" title="Delete option">
                     <i class="ri-delete-bin-line"></i>
                 </button>
