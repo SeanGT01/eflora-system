@@ -99,10 +99,33 @@
     @media (max-width: 640px) { .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 768px) {
       .pos-filters { padding: 0.75rem; border-radius: 14px; }
-      .pos-filters-row { gap: 0.55rem; }
-      .pos-filters .period-bar,
+      .pos-filters-row {
+        gap: 0.55rem;
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .pos-filters .period-bar {
+        width: 100%;
+        min-width: 0;
+        flex: none;
+        border-radius: 16px;
+        flex-wrap: wrap;
+      }
       .pos-filters .dash-search,
-      .pos-filters select#paymentFilter { width: 100%; min-width: 0; flex: 1 1 100%; }
+      .pos-filters select#paymentFilter {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        flex: none;
+        min-height: 44px;
+      }
+      .dash-header-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+      }
+      .dash-header-actions .dash-date { grid-column: 1 / -1; }
+      .dash-header-actions .apply-btn { grid-column: 1 / -1; }
     }
 </style>
 {% endblock %}
@@ -435,24 +458,24 @@ function renderOrders(orders) {
 
         return `
             <tr>
-                <td style="font-family:monospace;font-weight:600;">#POS-${String(order.id).padStart(4,'0')}</td>
-                <td>
+                <td data-label="Order #" style="font-family:monospace;font-weight:600;">#POS-${String(order.id).padStart(4,'0')}</td>
+                <td data-label="Date">
                     <div>${dateStr}</div>
                     <div style="font-size:11px;color:var(--muted);">${timeStr}</div>
                 </td>
-                <td>
+                <td data-label="Customer">
                     <div>${order.customer_name || 'Walk-in'}</div>
                     ${order.customer_contact ? `<div style="font-size:11px;color:var(--muted);">${order.customer_contact}</div>` : ''}
                 </td>
-                <td>${order.item_count} items</td>
-                <td style="font-weight:600;">₱${(Number(order.total_amount) || 0).toFixed(2)}</td>
-                <td>₱${amountGiven.toFixed(2)}</td>
-                <td>
+                <td data-label="Items">${order.item_count} items</td>
+                <td data-label="Total" style="font-weight:600;">₱${(Number(order.total_amount) || 0).toFixed(2)}</td>
+                <td data-label="Amount Given">₱${amountGiven.toFixed(2)}</td>
+                <td data-label="Payment">
                     <span class="status-badge status-${method}">
                         ${method.charAt(0).toUpperCase() + method.slice(1)}
                     </span>
                 </td>
-                <td>
+                <td data-label="Actions">
                     <button class="action-btn" onclick="viewOrder(${order.id})" title="View" aria-label="View">
                         <i class="ri-eye-line"></i>
                     </button>

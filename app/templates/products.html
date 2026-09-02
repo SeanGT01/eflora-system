@@ -19,8 +19,8 @@
   </div>
 
 <!-- Filters Section -->
-<div class="card" style="padding: 1.5rem; margin-bottom: 2rem;">
-    <div class="filters-grid" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem;">
+<div class="card filters-card">
+    <div class="filters-grid">
         <!-- Category Filter -->
         <div class="form-group" style="margin-bottom: 0; min-width: 0;">
             <label class="form-label">Category</label>
@@ -77,14 +77,14 @@
         </div>
         
         <!-- Search -->
-        <div class="form-group" style="margin-bottom: 0; min-width: 0;">
+        <div class="form-group filters-search" style="margin-bottom: 0; min-width: 0;">
             <label class="form-label">Search</label>
-            <div style="display: flex; gap: 0.35rem;">
+            <div class="filters-search-row">
                 <div style="position: relative; flex: 1; min-width: 0;">
                     <i class="ri-search-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted); z-index: 1;"></i>
                     <input type="text" id="searchInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Search products..." onkeyup="filterProducts()">
                 </div>
-                <button class="btn btn-primary" onclick="filterProducts()" style="padding: 0 0.75rem; flex-shrink: 0;">
+                <button type="button" class="btn btn-primary filters-search-btn" onclick="filterProducts()">
                     <i class="ri-search-line"></i>
                 </button>
             </div>
@@ -94,7 +94,14 @@
 
 {% if products %}
 <div class="bulk-bar">
-    <div class="bulk-bar-label">Bulk Actions</div>
+    <div class="bulk-bar-top">
+        <div class="bulk-bar-label">Bulk Actions</div>
+        <div class="card-size-toggle" role="group" aria-label="Product card size">
+            <button type="button" class="card-size-btn" data-card-size="small" title="Small cards">Small</button>
+            <button type="button" class="card-size-btn" data-card-size="medium" title="Medium cards">Medium</button>
+            <button type="button" class="card-size-btn" data-card-size="large" title="Large cards">Large</button>
+        </div>
+    </div>
     <div class="bulk-bar-actions">
         <button class="btn btn-outline btn-sm" id="selectAllBtn">
             <i class="ri-checkbox-multiple-line"></i> Select All
@@ -108,11 +115,6 @@
         <button class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
             <i class="ri-delete-bin-line"></i> Delete Selected
         </button>
-        <div class="card-size-toggle" role="group" aria-label="Product card size">
-            <button type="button" class="card-size-btn" data-card-size="small" title="Small cards">Small</button>
-            <button type="button" class="card-size-btn" data-card-size="medium" title="Medium cards">Medium</button>
-            <button type="button" class="card-size-btn" data-card-size="large" title="Large cards">Large</button>
-        </div>
     </div>
 </div>
 {% endif %}
@@ -813,22 +815,31 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 1rem;
+        gap: 0.75rem 1rem;
         flex-wrap: wrap;
         margin-bottom: 1rem;
         margin-top: 0;
+    }
+
+    .bulk-bar-top {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-shrink: 0;
     }
     
     .bulk-bar-label {
         font-size: 12px;
         color: var(--muted);
         font-weight: 500;
+        white-space: nowrap;
     }
     
     .bulk-bar-actions {
         display: flex;
         gap: 0.5rem;
         flex-wrap: wrap;
+        margin-left: auto;
     }
     
     .bulk-bar-actions .btn-sm {
@@ -1650,6 +1661,238 @@
     #productsGrid[data-card-size="medium"] .product-card-body { padding: 0.7rem !important; }
     #productsGrid[data-card-size="medium"] .product-name { font-size: 13.5px !important; }
     #productsGrid[data-card-size="medium"] .product-desc { font-size: 11px; }
+
+    /* ── Products page responsive (page-scoped; later rules override shrink-to-fit) ── */
+    .dash { min-width: 0; max-width: 100%; overflow-x: clip; }
+    .dash .products-grid,
+    .dash .product-card,
+    .dash .filters-grid,
+    .dash .filters-card,
+    .dash .bulk-bar { min-width: 0; }
+    .dash img { max-width: 100%; height: auto; }
+    .dash .product-img-wrap img { width: 100%; height: 100%; object-fit: contain; }
+
+    .filters-card {
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    .filters-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 1rem;
+    }
+    .filters-search-row {
+        display: flex;
+        gap: 0.35rem;
+        min-width: 0;
+    }
+    .filters-search-btn {
+        padding: 0 0.75rem;
+        flex-shrink: 0;
+        min-width: 44px;
+    }
+
+    .modal-overlay {
+        box-sizing: border-box;
+        max-width: 100vw;
+    }
+    .modal {
+        box-sizing: border-box;
+        max-width: min(480px, 100%);
+    }
+
+    @media (max-width: 1366px) {
+        .dash .products-grid {
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        }
+    }
+
+    @media (max-width: 1279px) {
+        .dash .filters-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+        .dash .filters-search { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 991px) {
+        .dash .filters-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.85rem !important;
+        }
+        .dash .filters-search { grid-column: 1 / -1; }
+        .dash .products-grid {
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+        }
+        .dash .bulk-bar {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .dash .bulk-bar-top {
+            width: 100%;
+            justify-content: space-between;
+        }
+        .dash .bulk-bar-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            width: 100%;
+            margin-left: 0;
+            gap: 0.5rem;
+        }
+        .dash .bulk-bar-actions .btn-sm {
+            width: 100%;
+            min-height: 44px;
+            font-size: 12.5px;
+            white-space: normal;
+            line-height: 1.25;
+            justify-content: center;
+        }
+        .dash .card-size-toggle { flex-shrink: 0; }
+        .dash .card-size-btn { min-height: 36px; }
+        .dash .form-label { font-size: 12px; }
+        .dash .form-control,
+        .dash .form-select { font-size: 14px; min-height: 42px; }
+    }
+
+    @media (max-width: 767px) {
+        .dash .dash-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .dash .dash-title { overflow-wrap: anywhere; }
+        .dash .dash-header-actions { width: 100%; }
+        .dash .dash-header-actions .apply-btn {
+            width: 100%;
+            justify-content: center;
+            min-height: 44px;
+        }
+        .dash .filters-card {
+            padding: 1rem 0.9rem;
+            margin-bottom: 0.85rem;
+            border-radius: 16px;
+        }
+        .dash .filters-grid { gap: 0.75rem !important; }
+        .dash .filters-search-btn { display: none; }
+        .dash .bulk-bar {
+            padding: 0.85rem 0.9rem;
+            margin-bottom: 0.85rem;
+            border-radius: 16px;
+        }
+        .dash .bulk-bar-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .dash .action-buttons .btn-sm {
+            min-height: 40px;
+            font-size: 12px;
+            padding: 0.45rem 0.65rem;
+        }
+        .dash .action-buttons .btn-icon {
+            width: 40px;
+            height: 40px;
+            font-size: 16px;
+        }
+        .dash .product-name { font-size: 15px; min-height: 0; }
+        .dash .product-desc {
+            display: -webkit-box;
+            font-size: 12px;
+        }
+        .dash .product-cat-badge,
+        .dash .product-stock-badge .status-badge {
+            font-size: 10px;
+            padding: 3px 8px;
+        }
+        .dash .price-tag { font-size: 13px; }
+        .modal-overlay {
+            padding: 0.75rem;
+            align-items: flex-end;
+        }
+        .modal {
+            max-width: 100%;
+            max-height: min(92vh, 100%);
+            border-radius: 16px 16px 12px 12px;
+        }
+        .modal-header,
+        .modal-body,
+        .modal-footer { padding-left: 1rem; padding-right: 1rem; }
+        .modal-title { font-size: 20px; overflow-wrap: anywhere; }
+        .modal-footer {
+            flex-wrap: wrap;
+            justify-content: stretch;
+        }
+        .modal-footer .btn {
+            min-height: 44px;
+            flex: 1 1 calc(50% - 0.5rem);
+        }
+    }
+
+    @media (max-width: 430px) {
+        .dash .filters-grid {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 0.65rem !important;
+        }
+        .dash .filters-search { grid-column: 1 / -1; }
+        .dash .filters-card .form-group i { display: none; }
+        .dash .filters-grid .form-control {
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+            font-size: 13px;
+            min-height: 44px;
+        }
+        .dash .filters-grid .form-label {
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+        }
+        .dash .card-size-toggle { width: 100%; }
+        .dash .bulk-bar-top { flex-direction: column; align-items: stretch; gap: 0.55rem; }
+        .dash .card-size-btn {
+            flex: 1;
+            min-height: 40px;
+            font-size: 12px;
+        }
+        .dash .bulk-bar-actions .btn-sm {
+            flex: none;
+            min-height: 44px;
+            font-size: 12.5px;
+        }
+        .dash .products-grid,
+        .dash #productsGrid[data-card-size="small"],
+        .dash #productsGrid[data-card-size="medium"],
+        .dash #productsGrid[data-card-size="large"] {
+            grid-template-columns: 1fr !important;
+        }
+        .dash .product-img-wrap,
+        .dash #productsGrid[data-card-size="small"] .product-img-wrap,
+        .dash #productsGrid[data-card-size="medium"] .product-img-wrap {
+            height: 180px !important;
+        }
+        .dash #productsGrid[data-card-size="small"] .product-desc,
+        .dash #productsGrid[data-card-size="small"] .product-card-notes {
+            display: none !important;
+        }
+        .dash #productsGrid[data-card-size="small"] .action-buttons .btn-sm {
+            font-size: 12px;
+            padding: 0.45rem 0.65rem;
+        }
+        .dash .stock-info,
+        .dash .stock-info span { font-size: 12px; }
+        .qa-preview.qa-picker {
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+    }
+
+    @media (max-width: 360px) {
+        .dash .filters-grid {
+            grid-template-columns: 1fr !important;
+        }
+        .dash .bulk-bar-actions {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 {% endblock %}
 

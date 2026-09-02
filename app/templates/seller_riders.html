@@ -745,6 +745,35 @@
         padding: 0.4rem 2rem 0.4rem 0.75rem;
         font-size: 12px;
     }
+
+    @media (max-width: 767px) {
+        .dash.riders-page .dash-header-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+        .dash.riders-page .dash-header-actions .dash-date { grid-column: 1 / -1; }
+        .dash.riders-page .dash-header-actions .apply-btn { grid-column: 1 / -1; width: 100%; }
+        .dash.riders-page .panel-head {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .dash.riders-page .panel-head-tools {
+            margin-left: 0;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+        }
+        .dash.riders-page .panel-head .dash-search,
+        .dash.riders-page .panel-head .filter-select {
+            max-width: none;
+            width: 100%;
+            min-width: 0;
+            min-height: 44px;
+        }
+        .stat-row { grid-template-columns: 1fr 1fr !important; }
+    }
 </style>
 {% endblock %}
 
@@ -1334,8 +1363,8 @@ function renderRidersTable(riders) {
     } else {
         tbody.innerHTML = activeRiders.map((rider, idx) => `
         <tr>
-            <td style="color: var(--muted);">${idx + 1}</td>
-            <td>
+            <td data-label="#">${idx + 1}</td>
+            <td data-label="Rider">
                 <div class="rider-info">
                     <div class="rider-avatar">
                         ${rider.avatar_url || rider.store_logo_url
@@ -1348,24 +1377,24 @@ function renderRidersTable(riders) {
                     </div>
                 </div>
             </td>
-            <td>
+            <td data-label="Contact">
                 <div style="font-size: 13.5px;">${escapeHtml(rider.email || '')}</div>
                 <div class="rider-sub">${escapeHtml(rider.phone || 'No phone')}</div>
             </td>
-            <td>
+            <td data-label="Vehicle">
                 <div style="font-size: 13.5px;">${escapeHtml(formatVehicleType(rider.vehicle_type))}</div>
                 <div class="rider-sub">${escapeHtml(rider.license_plate || '')}</div>
             </td>
-            <td>
+            <td data-label="Status">
                 <span class="status-badge ${rider.is_active ? 'badge-active' : 'badge-cancelled'}">
                     ${rider.is_active ? 'Active' : 'Inactive'}
                 </span>
                 ${rider.has_active_delivery ? '<div class="rider-sub" style="margin-top: 4px; color: var(--terracotta);"><i class="ri-truck-line"></i> On delivery</div>' : ''}
             </td>
-            <td style="text-align: center;">
+            <td data-label="Deliveries" style="text-align: center;">
                 <span style="font-family: var(--font-display); font-size: 20px; font-weight: 500;">${rider.total_deliveries || 0}</span>
             </td>
-            <td style="text-align: right;">
+            <td data-label="Actions" style="text-align: right;">
                 <div class="action-btn-group" style="justify-content: flex-end;">
                     <button class="action-btn" onclick="viewRider(${rider.id})" title="View">
                         <i class="ri-eye-line"></i>
@@ -1393,8 +1422,8 @@ function renderRidersTable(riders) {
         archivedCount.textContent = archivedRiders.length;
         archivedTbody.innerHTML = archivedRiders.map((rider, idx) => `
         <tr>
-            <td style="color: var(--muted);">${idx + 1}</td>
-            <td>
+            <td data-label="#">${idx + 1}</td>
+            <td data-label="Rider">
                 <div class="rider-info">
                     <div class="rider-avatar">
                         ${rider.avatar_url || rider.store_logo_url
@@ -1407,21 +1436,21 @@ function renderRidersTable(riders) {
                     </div>
                 </div>
             </td>
-            <td>
+            <td data-label="Contact">
                 <div style="font-size: 13.5px;">${escapeHtml(rider.email || '')}</div>
                 <div class="rider-sub">${escapeHtml(rider.phone || 'No phone')}</div>
             </td>
-            <td>
+            <td data-label="Vehicle">
                 <div style="font-size: 13.5px;">${escapeHtml(formatVehicleType(rider.vehicle_type))}</div>
                 <div class="rider-sub">${escapeHtml(rider.license_plate || '')}</div>
             </td>
-            <td>
+            <td data-label="Status">
                 <span class="status-badge badge-cancelled">Archived</span>
             </td>
-            <td style="text-align: center;">
+            <td data-label="Deliveries" style="text-align: center;">
                 <span style="font-family: var(--font-display); font-size: 20px; font-weight: 500;">${rider.total_deliveries || 0}</span>
             </td>
-            <td style="text-align: right;">
+            <td data-label="Actions" style="text-align: right;">
                 <div class="action-btn-group" style="justify-content: flex-end;">
                     <button class="action-btn" onclick="viewRider(${rider.id})" title="View">
                         <i class="ri-eye-line"></i>

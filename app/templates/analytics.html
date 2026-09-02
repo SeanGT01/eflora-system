@@ -1059,8 +1059,42 @@ table.ana-table {
 }
 
 @media (max-width: 480px) {
-  .kpi-row, .kpi-row.kpi-row-3, .kpi-row.kpi-row-4 { grid-template-columns: 1fr; }
+  .kpi-row, .kpi-row.kpi-row-3, .kpi-row.kpi-row-4 { grid-template-columns: 1fr 1fr; }
   .delivery-stats { grid-template-columns: 1fr; }
+  .ana { min-width: 0; overflow-x: clip; }
+  .period-bar { flex-wrap: wrap; overflow-x: visible; }
+  .custom-drawer { flex-direction: column; align-items: stretch; width: 100%; }
+  .drawer-input { min-width: 0; width: 100%; }
+  .apply-btn { width: 100%; min-height: 44px; justify-content: center; }
+}
+
+@media (max-width: 767px) {
+  .ana .table-scroll { overflow: visible; }
+  .ana-table thead { display: none; }
+  .ana-table, .ana-table tbody { display: block; width: 100%; }
+  .ana-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 0.75rem;
+    margin: 0.55rem 0;
+    padding: 0.85rem 0.9rem;
+    border: 1px solid rgba(194, 78, 104, 0.14);
+    border-radius: 14px;
+    background: #fff;
+  }
+  .ana-table td { display: block; padding: 0; border: none; min-width: 0; }
+  .ana-table td[colspan] { grid-column: 1 / -1; }
+  .ana-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.2rem;
+  }
+  .ana-table td:first-child { grid-column: 1 / -1; }
 }
 </style>
 {% endblock %}
@@ -1255,19 +1289,19 @@ table.ana-table {
             </thead>
             <tbody>
               <tr>
-                <td>Online</td>
-                <td>₱{{ '{:,.2f}'.format(online_rev_total) }}</td>
-                <td>{{ '{:,}'.format(online_ord_total|int) }}</td>
+                <td data-label="Channel">Online</td>
+                <td data-label="Revenue">₱{{ '{:,.2f}'.format(online_rev_total) }}</td>
+                <td data-label="Orders">{{ '{:,}'.format(online_ord_total|int) }}</td>
               </tr>
               <tr>
-                <td>POS</td>
-                <td>₱{{ '{:,.2f}'.format(pos_rev_total) }}</td>
-                <td>{{ '{:,}'.format(pos_ord_total|int) }}</td>
+                <td data-label="Channel">POS</td>
+                <td data-label="Revenue">₱{{ '{:,.2f}'.format(pos_rev_total) }}</td>
+                <td data-label="Orders">{{ '{:,}'.format(pos_ord_total|int) }}</td>
               </tr>
               <tr>
-                <td><strong>Total</strong></td>
-                <td><strong>₱{{ '{:,.2f}'.format(online_rev_total + pos_rev_total) }}</strong></td>
-                <td><strong>{{ '{:,}'.format((online_ord_total + pos_ord_total)|int) }}</strong></td>
+                <td data-label="Channel"><strong>Total</strong></td>
+                <td data-label="Revenue"><strong>₱{{ '{:,.2f}'.format(online_rev_total + pos_rev_total) }}</strong></td>
+                <td data-label="Orders"><strong>{{ '{:,}'.format((online_ord_total + pos_ord_total)|int) }}</strong></td>
               </tr>
             </tbody>
           </table>
@@ -1365,10 +1399,10 @@ table.ana-table {
               {% if sales_by_category %}
                 {% for cat in sales_by_category %}
                 <tr>
-                  <td>{{ cat.name }}</td>
-                  <td>₱{{ '{:,.2f}'.format(cat.online_revenue|default(0)) }} <span style="color:var(--muted);">({{ cat.online_qty|default(0) }})</span></td>
-                  <td>₱{{ '{:,.2f}'.format(cat.pos_revenue|default(0)) }} <span style="color:var(--muted);">({{ cat.pos_qty|default(0) }})</span></td>
-                  <td><strong>₱{{ '{:,.2f}'.format(cat.revenue|default(0)) }}</strong> <span style="color:var(--muted);">({{ cat.qty|default((cat.online_qty|default(0)) + (cat.pos_qty|default(0))) }})</span></td>
+                  <td data-label="Category">{{ cat.name }}</td>
+                  <td data-label="Online">₱{{ '{:,.2f}'.format(cat.online_revenue|default(0)) }} <span style="color:var(--muted);">({{ cat.online_qty|default(0) }})</span></td>
+                  <td data-label="POS">₱{{ '{:,.2f}'.format(cat.pos_revenue|default(0)) }} <span style="color:var(--muted);">({{ cat.pos_qty|default(0) }})</span></td>
+                  <td data-label="Total"><strong>₱{{ '{:,.2f}'.format(cat.revenue|default(0)) }}</strong> <span style="color:var(--muted);">({{ cat.qty|default((cat.online_qty|default(0)) + (cat.pos_qty|default(0))) }})</span></td>
                 </tr>
                 {% endfor %}
               {% else %}
@@ -1516,16 +1550,16 @@ table.ana-table {
                 'cancelled':   'sp-cancel',
               }.get(st, 'sp-processing') %}
               <tr>
-                <td><span class="oid">{{ o.order_no }}</span></td>
-                <td>
+                <td data-label="Order"><span class="oid">{{ o.order_no }}</span></td>
+                <td data-label="Customer">
                   <div class="cust-cell">
                     <div class="c-av"><img src="{{ url_for('static', filename='images/default-customer-avatar.svg') }}" alt="" style="width:100%;height:100%;object-fit:cover;"></div>
                     <span class="c-nm">{{ o.customer_name }}</span>
                   </div>
                 </td>
-                <td><span class="amt-cell">₱{{ '{:,.2f}'.format(o.amount) }}</span></td>
-                <td><span class="s-pill {{ pill_class }}">{{ st.replace('_',' ')|title }}</span></td>
-                <td style="color:var(--muted);font-size:12px;">{{ o.created_at_display if o.created_at_display is defined else (o.created_at.strftime('%b %d, %Y %I:%M %p') if o.created_at else '') }}</td>
+                <td data-label="Amount"><span class="amt-cell">₱{{ '{:,.2f}'.format(o.amount) }}</span></td>
+                <td data-label="Status"><span class="s-pill {{ pill_class }}">{{ st.replace('_',' ')|title }}</span></td>
+                <td data-label="Time" style="color:var(--muted);font-size:12px;">{{ o.created_at_display if o.created_at_display is defined else (o.created_at.strftime('%b %d, %Y %I:%M %p') if o.created_at else '') }}</td>
               </tr>
             {% endfor %}
           {% else %}

@@ -173,7 +173,7 @@
                 {% set product_img = product.thumbnail_url or product.image_url %}
                 {% set cat_slug = product.main_category_slug or 'uncategorized' %}
                 <tr class="inv-product-row" data-category="{{ cat_slug }}" data-name="{{ (product.name or '')|lower|e }}" data-price="{{ product.effective_price if product.effective_price is not none else product.price or 0 }}" data-created="{{ product.created_at or '' }}" data-stock="{% if product.stock_quantity > 10 %}in{% elif product.stock_quantity > 0 %}low{% else %}out{% endif %}" data-sale="{{ 'active' if product.is_available else 'unavailable' }}" data-search="{{ (product.name ~ ' ' ~ product.id ~ ' ' ~ (product.category_display or '') ~ ' ' ~ (product.main_category_name or ''))|lower|e }}">
-                    <td>
+                    <td data-label="Product">
                         <div class="inv-thumb-cell">
                             {% if product_img %}
                             <img class="inv-thumb" src="{{ product_img }}" alt="" loading="lazy"
@@ -188,10 +188,10 @@
                             </div>
                         </div>
                     </td>
-                    <td>{{ product.category_display or 'Uncategorized' }}</td>
-                    <td>{{ price_tag(product, 'sm') }}</td>
-                    <td>{{ product.stock_quantity }}</td>
-                    <td>
+                    <td data-label="Category">{{ product.category_display or 'Uncategorized' }}</td>
+                    <td data-label="Price">{{ price_tag(product, 'sm') }}</td>
+                    <td data-label="Stock Qty">{{ product.stock_quantity }}</td>
+                    <td data-label="Stock Status">
                         {% if product.stock_quantity > 10 %}
                             <span class="status-badge badge-available">In Stock</span>
                         {% elif product.stock_quantity > 0 %}
@@ -200,14 +200,14 @@
                             <span class="status-badge badge-out">Out of Stock</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Sale Status">
                         {% if product.is_available %}
                             <span class="status-badge badge-active">Active</span>
                         {% else %}
                             <span class="status-badge badge-cancelled">Unavailable</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Actions">
                         <div class="row-actions">
                             <button class="btn btn-outline btn-sm" onclick='openStockHistoryModal({{ product.id }})' title="Stock history">
                                 <i class="ri-history-line"></i>
@@ -225,7 +225,7 @@
                     {% for variant in product.variants %}
                     {% set variant_img = variant.image_thumbnail or variant.image_url or product_img %}
                     <tr class="variant-row" data-category="{{ cat_slug }}" data-name="{{ (variant.name or '')|lower|e }}" data-price="{{ variant.effective_price if variant.effective_price is not none else variant.price or 0 }}" data-created="{{ variant.created_at or '' }}" data-stock="{% if variant.stock_quantity > 10 %}in{% elif variant.stock_quantity > 0 %}low{% else %}out{% endif %}" data-sale="{{ 'active' if variant.is_available else 'unavailable' }}" data-search="{{ (variant.name ~ ' ' ~ product.name)|lower|e }}">
-                        <td class="variant-indent">
+                        <td class="variant-indent" data-label="Product">
                             <div class="variant-row-inner">
                                 <i class="ri-corner-down-right-line" style="color: var(--muted); flex-shrink:0;"></i>
                                 {% if variant_img %}
@@ -241,10 +241,10 @@
                                 </div>
                             </div>
                         </td>
-                        <td><span class="product-meta">Variant</span></td>
-                        <td>{{ price_tag(variant, 'sm') if variant.price is not none else price_tag(product, 'sm') }}</td>
-                        <td>{{ variant.stock_quantity }}</td>
-                        <td>
+                        <td data-label="Category"><span class="product-meta">Variant</span></td>
+                        <td data-label="Price">{{ price_tag(variant, 'sm') if variant.price is not none else price_tag(product, 'sm') }}</td>
+                        <td data-label="Stock Qty">{{ variant.stock_quantity }}</td>
+                        <td data-label="Stock Status">
                             {% if variant.stock_quantity > 10 %}
                                 <span class="status-badge badge-available">In Stock</span>
                             {% elif variant.stock_quantity > 0 %}
@@ -253,12 +253,12 @@
                                 <span class="status-badge badge-out">Out of Stock</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td data-label="Sale Status">
                             <span class="status-badge {% if variant.is_available %}badge-active{% else %}badge-cancelled{% endif %}">
                                 {{ 'Active' if variant.is_available else 'Unavailable' }}
                             </span>
                         </td>
-                        <td>
+                        <td data-label="Actions">
                             <div class="row-actions">
                                 <button class="btn btn-outline btn-sm" onclick='openStockHistoryModal({{ product.id }}, {{ variant.id }}, null)' title="Stock history">
                                     <i class="ri-history-line"></i>
@@ -278,7 +278,7 @@
                     {% for group in product.addon_groups %}
                         {% for opt in group.options or [] %}
                         <tr class="addon-row" data-category="{{ cat_slug }}" data-name="{{ (opt.name or '')|lower|e }}" data-price="{{ opt.price or 0 }}" data-created="{{ opt.created_at or '' }}" data-stock="{% if opt.stock_quantity > 10 %}in{% elif opt.stock_quantity > 0 %}low{% else %}out{% endif %}" data-sale="{{ 'active' if opt.is_available else 'unavailable' }}" data-search="{{ (opt.name ~ ' ' ~ group.name ~ ' ' ~ product.name)|lower|e }}">
-                            <td class="addon-indent">
+                            <td class="addon-indent" data-label="Product">
                                 <div class="addon-row-inner">
                                     <i class="ri-corner-down-right-line" style="color: var(--deep-sage); flex-shrink:0;"></i>
                                     {% if opt.image_url %}
@@ -294,10 +294,10 @@
                                     </div>
                                 </div>
                             </td>
-                            <td><span class="product-meta">Add-on</span></td>
-                            <td>₱{{ '%.2f'|format(opt.price|float) }}</td>
-                            <td>{{ opt.stock_quantity }}</td>
-                            <td>
+                            <td data-label="Category"><span class="product-meta">Add-on</span></td>
+                            <td data-label="Price">₱{{ '%.2f'|format(opt.price|float) }}</td>
+                            <td data-label="Stock Qty">{{ opt.stock_quantity }}</td>
+                            <td data-label="Stock Status">
                                 {% if opt.stock_quantity > 10 %}
                                     <span class="status-badge badge-available">In Stock</span>
                                 {% elif opt.stock_quantity > 0 %}
@@ -306,12 +306,12 @@
                                     <span class="status-badge badge-out">Out of Stock</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Sale Status">
                                 <span class="status-badge {% if opt.is_available %}badge-active{% else %}badge-cancelled{% endif %}">
                                     {{ 'Active' if opt.is_available else 'Unavailable' }}
                                 </span>
                             </td>
-                            <td>
+                            <td data-label="Actions">
                                 <div class="row-actions">
                                     <button class="btn btn-outline btn-sm" onclick='openStockHistoryModal({{ product.id }}, null, {{ opt.id }})' title="Stock history">
                                         <i class="ri-history-line"></i>

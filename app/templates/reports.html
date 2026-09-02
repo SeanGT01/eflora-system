@@ -1080,9 +1080,47 @@ table.saved-table {
 }
 
 @media (max-width: 480px) {
-  .rpt { padding: 0; }
-  .quick-row { grid-template-columns: 1fr; }
-  .report-kpi-row { grid-template-columns: 1fr; }
+  .rpt { padding: 0; min-width: 0; overflow-x: clip; }
+  .quick-row { grid-template-columns: 1fr 1fr; }
+  .report-kpi-row { grid-template-columns: 1fr 1fr; }
+  .rpt-header { flex-direction: column; align-items: stretch; }
+}
+
+@media (max-width: 767px) {
+  .rpt .table-scroll { overflow: visible; }
+  .rpt-table thead,
+  .saved-table thead { display: none; }
+  .rpt-table, .rpt-table tbody,
+  .saved-table, .saved-table tbody { display: block; width: 100%; }
+  .rpt-table tbody tr,
+  .saved-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 0.75rem;
+    margin: 0.55rem 0;
+    padding: 0.85rem 0.9rem;
+    border: 1px solid rgba(194, 78, 104, 0.14);
+    border-radius: 14px;
+    background: #fff;
+  }
+  .rpt-table td,
+  .saved-table td { display: block; padding: 0; border: none; min-width: 0; }
+  .rpt-table td[colspan],
+  .saved-table td[colspan] { grid-column: 1 / -1; }
+  .rpt-table td[data-label]::before,
+  .saved-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.2rem;
+  }
+  .saved-table td:first-child,
+  .saved-table td:last-child { grid-column: 1 / -1; }
+  .rpt-table td:first-child { grid-column: 1 / -1; }
 }
 
 @media print {
@@ -1258,7 +1296,7 @@ table.saved-table {
         <tbody>
           {% for report in saved_reports %}
           <tr data-report-id="{{ report.id }}" data-report-types="{{ report.type or '' }}">
-            <td>
+            <td data-label="Name">
               <div class="file-cell">
                 <div class="file-ico {% if report.format == 'pdf' %}fi-pdf{% elif report.format == 'excel' %}fi-excel{% else %}fi-html{% endif %}">
                   <i class="ri-file-{% if report.format == 'pdf' %}pdf{% elif report.format == 'excel' %}excel-2{% else %}chart{% endif %}-line"></i>
@@ -1269,17 +1307,17 @@ table.saved-table {
                 </div>
               </div>
             </td>
-            <td style="font-size:13px;color:var(--muted);">{{ report.type|capitalize }}</td>
-            <td style="font-size:13px;color:var(--muted);">{{ report.last_generated or 'Not yet' }}</td>
-            <td>
+            <td data-label="Type" style="font-size:13px;color:var(--muted);">{{ report.type|capitalize }}</td>
+            <td data-label="Last Generated" style="font-size:13px;color:var(--muted);">{{ report.last_generated or 'Not yet' }}</td>
+            <td data-label="Schedule">
               {% if report.schedule %}
                 <span class="sched-badge"><i class="ri-time-line"></i> {{ report.schedule }}</span>
               {% else %}
                 <span style="font-size:12px;color:var(--muted);">Manual</span>
               {% endif %}
             </td>
-            <td style="font-size:13px;color:var(--muted);">{{ report.size }}</td>
-            <td>
+            <td data-label="Size" style="font-size:13px;color:var(--muted);">{{ report.size }}</td>
+            <td data-label="Actions">
               <div class="row-actions">
                 <button type="button" class="row-btn" title="View" onclick="viewSavedReport(this)"><i class="ri-eye-line"></i></button>
                 <button type="button" class="row-btn" title="Download PDF" onclick="downloadSavedReport(this, 'pdf')"><i class="ri-download-line"></i></button>
@@ -1755,9 +1793,9 @@ function renderPreview(payload) {
         const columnName = section.columns[i] || '';
         const displayValue = formatReportCell(columnName, cell);
         if (statusIdx > -1 && i === statusIdx) {
-          html += `<td><span class="s-pill ${statusPillFor(displayValue)}">${escapeHtml(displayValue)}</span></td>`;
+          html += `<td data-label="${escapeHtml(columnName)}"><span class="s-pill ${statusPillFor(displayValue)}">${escapeHtml(displayValue)}</span></td>`;
         } else {
-          html += `<td>${escapeHtml(displayValue)}</td>`;
+          html += `<td data-label="${escapeHtml(columnName)}">${escapeHtml(displayValue)}</td>`;
         }
       });
       html += `</tr>`;
