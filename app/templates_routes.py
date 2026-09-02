@@ -8434,6 +8434,12 @@ def seller_invite_rider_api():
     license_plate = (data.get('license_plate') or '').strip()
     from app.utils.otp_delivery import deliver_otp
     from app.utils.phone_utils import parse_email_or_phone_identifier
+    from app.utils.validators import normalize_ph_license_plate
+
+    plate, plate_err = normalize_ph_license_plate(license_plate)
+    if plate_err:
+        return jsonify({'error': plate_err}), 400
+    license_plate = plate
 
     if not full_name:
         return jsonify({'error': 'Full name is required'}), 400
@@ -8769,7 +8775,11 @@ def seller_update_rider_api(rider_id):
     if 'vehicle_type' in data:
         rider.vehicle_type = data['vehicle_type']
     if 'license_plate' in data:
-        rider.license_plate = data['license_plate']
+        from app.utils.validators import normalize_ph_license_plate
+        plate, plate_err = normalize_ph_license_plate(data.get('license_plate'))
+        if plate_err:
+            return jsonify({'error': plate_err}), 400
+        rider.license_plate = plate
     if 'is_active' in data:
         rider.is_active = bool(data['is_active'])
 

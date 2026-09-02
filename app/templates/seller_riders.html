@@ -725,9 +725,25 @@
         border: 1px solid rgba(194, 78, 104, 0.14);
         background: #fff;
     }
-    .dash.riders-page .panel-title {
-        font-size: 16px;
-        font-weight: 500;
+    .dash.riders-page .panel-head-tools {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        margin-left: auto;
+    }
+    .dash.riders-page .panel-head .dash-search {
+        flex: 1;
+        min-width: 160px;
+        max-width: 240px;
+        background: #fff;
+        border: 1.5px solid rgba(107, 76, 59, 0.18);
+        border-radius: 10px;
+    }
+    .dash.riders-page .panel-head .filter-select {
+        min-width: 138px;
+        padding: 0.4rem 2rem 0.4rem 0.75rem;
+        font-size: 12px;
     }
 </style>
 {% endblock %}
@@ -746,18 +762,6 @@
       <button type="button" class="dash-ghost-btn" data-archive-toggle onclick="toggleArchivedSection()"><i class="ri-archive-line"></i> Archived</button>
       <button type="button" class="apply-btn" onclick="openInviteModal()"><i class="ri-user-add-line"></i> Invite Rider</button>
     </div>
-  </div>
-
-  <div class="dash-toolbar">
-    <div class="dash-search">
-      <i class="ri-search-line"></i>
-      <input type="text" id="searchInput" placeholder="Search riders…">
-    </div>
-    <select class="filter-select" id="statusFilter">
-      <option value="">All Status</option>
-      <option value="active">Active</option>
-      <option value="inactive">Inactive</option>
-    </select>
   </div>
 
   <div class="kpi-row">
@@ -795,9 +799,20 @@
     <div class="panel riders-panel">
         <div class="panel-head">
             <div class="panel-title">Verified Riders</div>
-            <button class="panel-action" data-archive-toggle onclick="toggleArchivedSection()">
-                <i class="ri-archive-line"></i> Archived
-            </button>
+            <div class="panel-head-tools">
+                <div class="dash-search">
+                    <i class="ri-search-line"></i>
+                    <input type="text" id="searchInput" placeholder="Search riders…" aria-label="Search riders">
+                </div>
+                <select class="filter-select" id="statusFilter" aria-label="Filter by status">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+                <button class="panel-action" data-archive-toggle onclick="toggleArchivedSection()">
+                    <i class="ri-archive-line"></i> Archived
+                </button>
+            </div>
         </div>
 
         <!-- Loading -->
@@ -890,13 +905,14 @@
                         <select class="form-select" name="vehicle_type" id="inviteVehicle" required>
                             <option value="">Select Vehicle</option>
                             <option value="motorcycle">Motorcycle</option>
-                            <option value="car">Car</option>
+                            <option value="4-wheels">4-wheels</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">License Plate</label>
                         <input type="text" class="form-control" name="license_plate" id="inviteLicensePlate"
-                               placeholder="ABC-1234">
+                               placeholder="ABC 1234" maxlength="8" autocomplete="off"
+                               title="Philippine plate: ABC 1234, ABC 123, or AB 12345">
                     </div>
                 </div>
 
@@ -949,12 +965,14 @@
                         <label class="form-label">Vehicle Type</label>
                         <select class="form-select" id="editVehicle" name="vehicle_type">
                             <option value="motorcycle">Motorcycle</option>
-                            <option value="car">Car</option>
+                            <option value="4-wheels">4-wheels</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">License Plate</label>
-                        <input type="text" class="form-control" id="editLicensePlate" name="license_plate">
+                        <input type="text" class="form-control" id="editLicensePlate" name="license_plate"
+                               placeholder="ABC 1234" maxlength="8" autocomplete="off"
+                               title="Philippine plate: ABC 1234, ABC 123, or AB 12345">
                     </div>
                 </div>
 
@@ -1320,8 +1338,8 @@ function renderRidersTable(riders) {
             <td>
                 <div class="rider-info">
                     <div class="rider-avatar">
-                        ${rider.avatar_url
-                            ? `<img src="${rider.avatar_url}" alt="">`
+                        ${rider.avatar_url || rider.store_logo_url
+                            ? `<img src="${rider.avatar_url || rider.store_logo_url}" alt="">`
                             : '<i class="ri-motorbike-line"></i>'}
                     </div>
                     <div>
@@ -1335,7 +1353,7 @@ function renderRidersTable(riders) {
                 <div class="rider-sub">${escapeHtml(rider.phone || 'No phone')}</div>
             </td>
             <td>
-                <div style="font-size: 13.5px;">${escapeHtml(rider.vehicle_type || 'N/A')}</div>
+                <div style="font-size: 13.5px;">${escapeHtml(formatVehicleType(rider.vehicle_type))}</div>
                 <div class="rider-sub">${escapeHtml(rider.license_plate || '')}</div>
             </td>
             <td>
@@ -1379,8 +1397,8 @@ function renderRidersTable(riders) {
             <td>
                 <div class="rider-info">
                     <div class="rider-avatar">
-                        ${rider.avatar_url
-                            ? `<img src="${rider.avatar_url}" alt="">`
+                        ${rider.avatar_url || rider.store_logo_url
+                            ? `<img src="${rider.avatar_url || rider.store_logo_url}" alt="">`
                             : '<i class="ri-motorbike-line"></i>'}
                     </div>
                     <div>
@@ -1394,7 +1412,7 @@ function renderRidersTable(riders) {
                 <div class="rider-sub">${escapeHtml(rider.phone || 'No phone')}</div>
             </td>
             <td>
-                <div style="font-size: 13.5px;">${escapeHtml(rider.vehicle_type || 'N/A')}</div>
+                <div style="font-size: 13.5px;">${escapeHtml(formatVehicleType(rider.vehicle_type))}</div>
                 <div class="rider-sub">${escapeHtml(rider.license_plate || '')}</div>
             </td>
             <td>
@@ -1461,11 +1479,19 @@ document.getElementById('inviteRiderForm').addEventListener('submit', async func
         return;
     }
 
+    const plateCheck = normalizePhPlate(document.getElementById('inviteLicensePlate').value);
+    if (!plateCheck.ok) {
+        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${plateCheck.message}`;
+        errorDiv.style.display = 'flex';
+        document.getElementById('inviteLicensePlate').focus();
+        return;
+    }
+
     const payload = {
         full_name: document.getElementById('inviteFullName').value.trim(),
         identifier: parsed.identifier,
         vehicle_type: document.getElementById('inviteVehicle').value,
-        license_plate: document.getElementById('inviteLicensePlate').value.trim(),
+        license_plate: plateCheck.value,
     };
 
     btn.disabled = true;
@@ -1598,8 +1624,8 @@ async function viewRider(riderId) {
             <div class="rider-detail-grid">
                 <div class="rider-detail-avatar">
                     <div class="rider-detail-avatar-circle">
-                        ${rider.avatar_url
-                            ? `<img src="${rider.avatar_url}" alt="">`
+                        ${rider.avatar_url || rider.store_logo_url
+                            ? `<img src="${rider.avatar_url || rider.store_logo_url}" alt="">`
                             : '<i class="ri-motorbike-line"></i>'}
                     </div>
                     <div class="detail-name">${escapeHtml(rider.full_name || 'Unknown')}</div>
@@ -1611,7 +1637,7 @@ async function viewRider(riderId) {
                     <table class="detail-table">
                         <tr><th>Email</th><td>${escapeHtml(rider.email || '')}</td></tr>
                         <tr><th>Phone</th><td>${escapeHtml(rider.phone || 'N/A')}</td></tr>
-                        <tr><th>Vehicle</th><td>${escapeHtml(rider.vehicle_type || 'N/A')} ${rider.license_plate ? '(' + escapeHtml(rider.license_plate) + ')' : ''}</td></tr>
+                        <tr><th>Vehicle</th><td>${escapeHtml(formatVehicleType(rider.vehicle_type))} ${rider.license_plate ? '(' + escapeHtml(rider.license_plate) + ')' : ''}</td></tr>
                         <tr><th>Total Deliveries</th><td style="font-family: var(--font-display); font-size: 20px; font-weight: 500;">${rider.total_deliveries || 0}</td></tr>
                     </table>
                 </div>
@@ -1655,7 +1681,7 @@ async function editRider(riderId) {
         document.getElementById('editRiderId').value = rider.id;
         document.getElementById('editFullName').value = rider.full_name || '';
         document.getElementById('editPhone').value = rider.phone || '';
-        document.getElementById('editVehicle').value = rider.vehicle_type || 'motorcycle';
+        document.getElementById('editVehicle').value = vehicleTypeValue(rider.vehicle_type);
         document.getElementById('editLicensePlate').value = rider.license_plate || '';
         document.getElementById('editIsActive').checked = rider.is_active;
         document.getElementById('editError').style.display = 'none';
@@ -1679,6 +1705,15 @@ document.getElementById('editRiderForm').addEventListener('submit', async functi
         license_plate: document.getElementById('editLicensePlate').value.trim(),
         is_active: document.getElementById('editIsActive').checked
     };
+
+    const plateCheck = normalizePhPlate(payload.license_plate);
+    if (!plateCheck.ok) {
+        errorDiv.innerHTML = `<i class="ri-error-warning-line"></i> ${plateCheck.message}`;
+        errorDiv.style.display = 'flex';
+        document.getElementById('editLicensePlate').focus();
+        return;
+    }
+    payload.license_plate = plateCheck.value;
 
     const editPhoneValidation = validatePhMobile(payload.phone);
     if (!editPhoneValidation.ok) {
@@ -1761,6 +1796,32 @@ document.getElementById('editPhone')?.addEventListener('input', enforcePhoneInpu
 // ───────────────────────────────────────────────────
 // HELPERS
 // ───────────────────────────────────────────────────
+function formatVehicleType(type) {
+    const key = String(type || '').toLowerCase();
+    if (key === 'motorcycle') return 'Motorcycle';
+    if (key === 'van' || key === 'car' || key === '4-wheels') return '4-wheels';
+    return type || 'N/A';
+}
+
+function vehicleTypeValue(type) {
+    const key = String(type || '').toLowerCase();
+    if (key === 'car' || key === 'van') return '4-wheels';
+    return key || 'motorcycle';
+}
+
+function normalizePhPlate(raw) {
+    const text = String(raw || '').trim().toUpperCase();
+    if (!text) return { ok: true, value: '' };
+    const car = text.match(/^([A-Z]{3})[\s-]?(\d{3,4})$/);
+    if (car) return { ok: true, value: `${car[1]} ${car[2]}` };
+    const mc = text.match(/^([A-Z]{2})[\s-]?(\d{4,5})$/);
+    if (mc) return { ok: true, value: `${mc[1]} ${mc[2]}` };
+    return {
+        ok: false,
+        message: 'Enter a Philippine plate number (e.g. ABC 1234, ABC 123, or AB 12345).'
+    };
+}
+
 function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str || '';

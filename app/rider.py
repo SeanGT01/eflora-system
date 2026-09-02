@@ -489,7 +489,11 @@ def update_rider_profile():
     if 'vehicle_type' in data:
         rider.vehicle_type = data['vehicle_type']
     if 'license_plate' in data:
-        rider.license_plate = data['license_plate']
+        from app.utils.validators import normalize_ph_license_plate
+        plate, plate_err = normalize_ph_license_plate(data.get('license_plate'))
+        if plate_err:
+            return jsonify({'error': plate_err}), 400
+        rider.license_plate = plate
     if 'is_active' in data:
         rider.is_active = data['is_active']
     

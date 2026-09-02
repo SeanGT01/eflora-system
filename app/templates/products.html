@@ -108,12 +108,17 @@
         <button class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
             <i class="ri-delete-bin-line"></i> Delete Selected
         </button>
+        <div class="card-size-toggle" role="group" aria-label="Product card size">
+            <button type="button" class="card-size-btn" data-card-size="small" title="Small cards">Small</button>
+            <button type="button" class="card-size-btn" data-card-size="medium" title="Medium cards">Medium</button>
+            <button type="button" class="card-size-btn" data-card-size="large" title="Large cards">Large</button>
+        </div>
     </div>
 </div>
 {% endif %}
 
 <!-- Products Grid -->
-<div id="productsGrid" class="products-grid">
+<div id="productsGrid" class="products-grid" data-card-size="large">
     {% for product in products %}
     <div class="product-card" data-product-id="{{ product.id }}" data-category="{{ (product.main_category_slug or product.category or 'general')|lower }}" data-stock="{{ product.stock_quantity }}" data-price="{{ product.price }}" data-name="{{ product.name }}" data-sold="{{ product.total_sold or 0 }}" {% if product.has_addons or product.has_variants %}data-preview="1"{% endif %}>
     
@@ -1586,6 +1591,65 @@
             font-size: 9px;
         }
     }
+
+    .card-size-toggle {
+        display: inline-flex;
+        align-items: stretch;
+        border: 1.5px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--warm-white);
+    }
+    .card-size-btn {
+        border: none;
+        background: transparent;
+        color: var(--charcoal);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 0.38rem 0.65rem;
+        cursor: pointer;
+        line-height: 1.2;
+        border-right: 1px solid var(--border);
+    }
+    .card-size-btn:last-child { border-right: none; }
+    .card-size-btn.is-active {
+        background: var(--deep-rose);
+        color: #fff;
+    }
+    .card-size-btn:hover:not(.is-active) {
+        background: rgba(181, 68, 90, 0.08);
+    }
+
+    #productsGrid[data-card-size="small"] {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+        gap: 0.65rem !important;
+    }
+    #productsGrid[data-card-size="small"] .product-img-wrap { height: 108px !important; }
+    #productsGrid[data-card-size="small"] .product-card-body { padding: 0.55rem !important; gap: 0.28rem !important; }
+    #productsGrid[data-card-size="small"] .product-name { font-size: 12px !important; min-height: 0 !important; }
+    #productsGrid[data-card-size="small"] .product-desc,
+    #productsGrid[data-card-size="small"] .product-card-notes { display: none !important; }
+    #productsGrid[data-card-size="small"] .stock-info { font-size: 10px; }
+    #productsGrid[data-card-size="small"] .action-buttons .btn-sm {
+        font-size: 9px;
+        padding: 0.22rem 0.35rem;
+    }
+    #productsGrid[data-card-size="small"] .price-tag { font-size: 11px; padding: 0.2rem 0.45rem; }
+    #productsGrid[data-card-size="small"] .product-cat-badge,
+    #productsGrid[data-card-size="small"] .product-stock-badge .status-badge {
+        font-size: 8px;
+        padding: 1px 5px;
+    }
+
+    #productsGrid[data-card-size="medium"] {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+        gap: 0.9rem !important;
+    }
+    #productsGrid[data-card-size="medium"] .product-img-wrap { height: 140px !important; }
+    #productsGrid[data-card-size="medium"] .product-card-body { padding: 0.7rem !important; }
+    #productsGrid[data-card-size="medium"] .product-name { font-size: 13.5px !important; }
+    #productsGrid[data-card-size="medium"] .product-desc { font-size: 11px; }
 </style>
 {% endblock %}
 
@@ -2284,10 +2348,33 @@
         }, 4000);
     };
 
+    function initProductCardSize() {
+        const grid = document.getElementById('productsGrid');
+        const buttons = document.querySelectorAll('.card-size-btn');
+        if (!grid || !buttons.length) return;
+        const key = 'seller-products-card-size';
+        const allowed = { small: 1, medium: 1, large: 1 };
+        const apply = (size) => {
+            const next = allowed[size] ? size : 'large';
+            grid.setAttribute('data-card-size', next);
+            try { localStorage.setItem(key, next); } catch (e) {}
+            buttons.forEach((btn) => {
+                btn.classList.toggle('is-active', btn.getAttribute('data-card-size') === next);
+            });
+        };
+        let saved = 'large';
+        try { saved = localStorage.getItem(key) || 'large'; } catch (e) {}
+        apply(saved);
+        buttons.forEach((btn) => {
+            btn.addEventListener('click', () => apply(btn.getAttribute('data-card-size')));
+        });
+    }
+
     // ===== INIT =====
     document.addEventListener('DOMContentLoaded', function() {
         addCsrfMetaTag();
         updateBulkButtons();
+        initProductCardSize();
         
         // Add click outside modal to close
         document.addEventListener('click', function(e) {

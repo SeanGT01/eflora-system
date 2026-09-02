@@ -66,10 +66,41 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
     
+    def affiliated_store(self):
+        """Store this user belongs to (seller owner, store admin, or rider)."""
+        role = (self.role or '').lower()
+        if role == 'seller':
+            stores = list(self.stores or [])
+            return stores[0] if stores else None
+        if role == 'store_admin':
+            for profile in (self.store_admin_profiles or []):
+                if getattr(profile, 'store', None):
+                    return profile.store
+            return None
+        if role == 'rider':
+            profiles = self.rider_profile
+            if profiles is None:
+                return None
+            if not isinstance(profiles, (list, tuple)):
+                profiles = [profiles]
+            for profile in profiles:
+                if profile is not None and getattr(profile, 'store', None):
+                    return profile.store
+            return None
+        return None
+
+    @property
+    def display_avatar_url(self):
+        """Uploaded photo, or store logo for seller / store admin / rider."""
+        if self.avatar_url:
+            return self.avatar_url
+        store = self.affiliated_store()
+        return store.logo_url if store else None
+
     @property
     def avatar_image_url(self):
-        """Get Cloudinary URL - no local fallback"""
-        return self.avatar_url
+        """Profile image shown in UI (custom avatar or store logo)."""
+        return self.display_avatar_url
     
     def get_avatar_transformed(self, width=None, height=None, crop='fill'):
         """Generate transformed avatar URL"""
@@ -113,8 +144,8 @@ class User(db.Model):
             'needs_phone': not is_valid_ph_mobile(self.phone),
             'birthday': self.birthday.isoformat() if self.birthday else None,
             'gender': self.gender,
-            'avatar_url': self.avatar_url,  # Cloudinary only
-            'avatar_thumbnail': self.get_avatar_transformed(width=100, height=100),
+            'avatar_url': self.display_avatar_url,
+            'avatar_thumbnail': self.get_avatar_transformed(width=100, height=100) or self.display_avatar_url,
             'avatar_public_id': self.avatar_public_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
@@ -693,7 +724,7 @@ class Rider(db.Model):
             'full_name': u.full_name if u else None,
             'email': login_id,
             'phone': u.phone if u else None,
-            'avatar_url': u.avatar_url if u else None,  # Cloudinary only
+            'avatar_url': (u.display_avatar_url if u else None) or (self.store.logo_url if self.store else None),
             'store_name': self.store.name if self.store else None,
             'store_logo_url': self.store.logo_url if self.store else None,
             'vehicle_type': self.vehicle_type,
@@ -732,7 +763,8 @@ class StoreAdmin(db.Model):
             'full_name': u.full_name if u else None,
             'email': login_id,
             'phone': u.phone if u else None,
-            'avatar_url': u.avatar_url if u else None,
+            'avatar_url': (u.display_avatar_url if u else None) or (self.store.logo_url if self.store else None),
+            'store_logo_url': self.store.logo_url if self.store else None,
             'is_active': self.is_active,
             'is_archived': self.is_archived,
             'permissions': normalize_permissions(self.permissions),
@@ -3007,7 +3039,7 @@ class Conversation(db.Model):
             'other_user': {
                 'id': other.id,
                 'full_name': other.full_name,
-                'avatar_url': other.avatar_url,
+                'avatar_url': other.display_avatar_url,
                 'role': other.role,
             } if other else None,
             'last_message_text': self.last_message_text,
@@ -3058,7 +3090,7 @@ class ChatMessage(db.Model):
             'conversation_id': self.conversation_id,
             'sender_id': self.sender_id,
             'sender_name': self.sender.full_name if self.sender else None,
-            'sender_avatar': self.sender.avatar_url if self.sender else None,
+            'sender_avatar': self.sender.display_avatar_url if self.sender else None,
             'sender_role': self.sender.role if self.sender else None,
             'message_type': self.message_type,
             'is_deleted': self.is_deleted or False,

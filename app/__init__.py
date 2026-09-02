@@ -426,6 +426,16 @@ def create_app(config_class='default'):
         return dict(store_admin_perms=default_permissions())
 
     @app.context_processor
+    def inject_profile_avatar():
+        from flask import session
+        from app.models import User
+        uid = session.get('user_id')
+        if not uid:
+            return dict(profile_avatar_url=None)
+        user = User.query.get(uid)
+        return dict(profile_avatar_url=user.display_avatar_url if user else None)
+
+    @app.context_processor
     def inject_mapbox_token():
         return dict(mapbox_public_token=app.config.get('MAPBOX_PUBLIC_TOKEN', ''))
 

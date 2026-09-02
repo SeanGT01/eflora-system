@@ -739,9 +739,25 @@
         border: 1px solid rgba(194, 78, 104, 0.14);
         background: #fff;
     }
-    .dash.riders-page .panel-title {
-        font-size: 16px;
-        font-weight: 500;
+    .dash.riders-page .panel-head-tools {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        margin-left: auto;
+    }
+    .dash.riders-page .panel-head .dash-search {
+        flex: 1;
+        min-width: 160px;
+        max-width: 240px;
+        background: #fff;
+        border: 1.5px solid rgba(107, 76, 59, 0.18);
+        border-radius: 10px;
+    }
+    .dash.riders-page .panel-head .filter-select {
+        min-width: 138px;
+        padding: 0.4rem 2rem 0.4rem 0.75rem;
+        font-size: 12px;
     }
 </style>
 {% endblock %}
@@ -760,18 +776,6 @@
       <button type="button" class="dash-ghost-btn" data-archive-toggle onclick="toggleArchivedSection()"><i class="ri-archive-line"></i> Archived</button>
       <button type="button" class="apply-btn" onclick="openInviteModal()"><i class="ri-user-add-line"></i> Invite Admin</button>
     </div>
-  </div>
-
-  <div class="dash-toolbar">
-    <div class="dash-search">
-      <i class="ri-search-line"></i>
-      <input type="text" id="searchInput" placeholder="Search admins…">
-    </div>
-    <select class="filter-select" id="statusFilter">
-      <option value="">All Status</option>
-      <option value="active">Active</option>
-      <option value="inactive">Inactive</option>
-    </select>
   </div>
 
   <div class="kpi-row">
@@ -809,9 +813,20 @@
     <div class="panel riders-panel">
         <div class="panel-head">
             <div class="panel-title">Verified Admins</div>
-            <button class="panel-action" data-archive-toggle onclick="toggleArchivedSection()">
-                <i class="ri-archive-line"></i> Archived
-            </button>
+            <div class="panel-head-tools">
+                <div class="dash-search">
+                    <i class="ri-search-line"></i>
+                    <input type="text" id="searchInput" placeholder="Search admins…" aria-label="Search admins">
+                </div>
+                <select class="filter-select" id="statusFilter" aria-label="Filter by status">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+                <button class="panel-action" data-archive-toggle onclick="toggleArchivedSection()">
+                    <i class="ri-archive-line"></i> Archived
+                </button>
+            </div>
         </div>
 
         <!-- Loading -->
@@ -1329,8 +1344,8 @@ function renderAdminsTable(riders) {
             <td>
                 <div class="rider-info">
                     <div class="rider-avatar">
-                        ${rider.avatar_url
-                            ? `<img src="${rider.avatar_url}" alt="">`
+                        ${rider.avatar_url || rider.store_logo_url
+                            ? `<img src="${rider.avatar_url || rider.store_logo_url}" alt="">`
                             : '<i class="ri-shield-user-line"></i>'}
                     </div>
                     <div>
@@ -1384,8 +1399,8 @@ function renderAdminsTable(riders) {
             <td>
                 <div class="rider-info">
                     <div class="rider-avatar">
-                        ${rider.avatar_url
-                            ? `<img src="${rider.avatar_url}" alt="">`
+                        ${rider.avatar_url || rider.store_logo_url
+                            ? `<img src="${rider.avatar_url || rider.store_logo_url}" alt="">`
                             : '<i class="ri-shield-user-line"></i>'}
                     </div>
                     <div>
@@ -1595,8 +1610,8 @@ async function viewRider(adminId) {
             <div class="rider-detail-grid">
                 <div class="rider-detail-avatar">
                     <div class="rider-detail-avatar-circle">
-                        ${rider.avatar_url
-                            ? `<img src="${rider.avatar_url}" alt="">`
+                        ${rider.avatar_url || rider.store_logo_url
+                            ? `<img src="${rider.avatar_url || rider.store_logo_url}" alt="">`
                             : '<i class="ri-shield-user-line"></i>'}
                     </div>
                     <div class="detail-name">${escapeHtml(rider.full_name || 'Unknown')}</div>
