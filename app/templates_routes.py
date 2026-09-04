@@ -9959,7 +9959,13 @@ def reports_generate():
         or ''
     ).strip().lower() in {'1', 'true', 'yes'}
 
-    from app.utils.report_service import render_pdf, render_csv_bundle
+    from app.utils.report_service import apply_php_sort, render_pdf, render_csv_bundle
+
+    php_sort = (
+        request.values.get('php_sort')
+        or (request.get_json(silent=True) or {}).get('php_sort')
+        or 'original'
+    )
 
     if session.get('role') == 'admin':
         from app.utils.report_service import build_admin_report_payload
@@ -9971,6 +9977,7 @@ def reports_generate():
         from app.utils.report_service import build_report_payload
         payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
 
+    apply_php_sort(payload, php_sort)
     payload['requested_by'] = _report_requester_name()
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M')
     if fmt == 'pdf':

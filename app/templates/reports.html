@@ -374,15 +374,15 @@
   font-size: 22px;
   font-weight: 500;
   color: var(--deep-rose);
-  margin-bottom: .35rem;
+  margin-bottom: .75rem;
 }
 
 .section-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  padding: .75rem 1rem;
+  gap: 1.25rem;
+  margin-bottom: 1.35rem;
+  padding: 1rem 1.15rem;
   background: var(--cream);
   border-radius: var(--radius-md);
 }
@@ -551,6 +551,19 @@
 .pa-btn.primary { background: var(--deep-rose); color: white; border-color: var(--deep-rose); }
 .pa-btn.primary:hover { background: #9b3048; color: white; }
 
+.pa-sort {
+  padding: .42rem .85rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--border-md);
+  background: var(--warm-white);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  min-width: 11.5rem;
+}
+
 /* ─── Report Preview ────────────────────────────────────── */
 .preview-body { padding: 2rem 2.25rem; min-height: 280px; }
 
@@ -673,7 +686,7 @@
 }
 
 .rpt-table thead th {
-  padding: .65rem .75rem;
+  padding: .85rem .9rem;
   text-align: left;
   font-size: 10px;
   font-weight: 700;
@@ -689,8 +702,8 @@
 .rpt-table tbody tr:last-child { border-bottom: none; }
 .rpt-table tbody tr:hover { background: rgba(250,246,240,.6); }
 .rpt-table td {
-  padding: .8rem .75rem;
-  vertical-align: middle;
+  padding: 1rem .9rem;
+  vertical-align: top;
   white-space: nowrap;
   word-break: normal;
   overflow-wrap: normal;
@@ -699,13 +712,21 @@
 .rpt-table td[data-label*="Add-on"],
 .rpt-table td[data-label*="Customer"],
 .rpt-table td[data-label*="Product"],
-.rpt-table td[data-label*="Email"],
 .rpt-table td[data-label*="Details"] {
   white-space: normal;
-  min-width: 10rem;
-  max-width: 18rem;
-            overflow-wrap: break-word;
+  min-width: 12rem;
+  max-width: 22rem;
+  line-height: 1.45;
+  overflow-wrap: break-word;
   word-break: normal;
+}
+.rpt-table td[data-label*="Email"] {
+  white-space: normal;
+  min-width: 16rem;
+  max-width: 24rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .growth-up   { color: var(--deep-sage);  font-weight: 600; font-size: 12px; }
@@ -1312,6 +1333,11 @@ table.saved-table {
     <div class="panel-head">
       <span class="panel-title">Report Preview <small id="previewMeta" style="font-size:12px;color:var(--muted);font-family:var(--font-sans);font-weight:400;margin-left:.5rem;"></small></span>
       <div class="panel-actions">
+        <select class="pa-sort" id="phpSortSelect" aria-label="Sort by peso amount" onchange="applyPhpSort(this.value)">
+          <option value="original">₱ Sort: Original</option>
+          <option value="php-desc">₱ High to low</option>
+          <option value="php-asc">₱ Low to high</option>
+        </select>
         <button class="pa-btn" type="button" onclick="generateReport()"><i class="ri-refresh-line"></i> Refresh</button>
         <button class="pa-btn" type="button" onclick="downloadReport('pdf')"><i class="ri-file-pdf-2-line"></i> PDF</button>
         <button class="pa-btn" type="button" onclick="downloadReport('csv')"><i class="ri-file-excel-2-line"></i> CSV</button>
@@ -1654,6 +1680,11 @@ function getReportParams() {
   return { types, period, from, to };
 }
 
+function currentPhpSort() {
+  const sortEl = document.getElementById('phpSortSelect');
+  return (sortEl && sortEl.value) || previewPhpSort || 'original';
+}
+
 function buildSearchParams(params, format) {
   const sp = new URLSearchParams();
   params.types.forEach(t => sp.append('types[]', t));
@@ -1661,6 +1692,8 @@ function buildSearchParams(params, format) {
   if (params.from) sp.set('from', params.from);
   if (params.to)   sp.set('to', params.to);
   if (format) sp.set('format', format);
+  const phpSort = currentPhpSort();
+  if (phpSort && phpSort !== 'original') sp.set('php_sort', phpSort);
   return sp;
 }
 
@@ -1698,6 +1731,13 @@ async function generateReport() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to load report');
+    lastPreviewPayload = data;
+    data.sections.forEach(function(section) {
+      section._originalRows = (section.rows || []).map(function(row) { return row.slice(); });
+    });
+    const sortEl = document.getElementById('phpSortSelect');
+    if (sortEl) sortEl.value = 'original';
+    previewPhpSort = 'original';
     renderPreview(data);
     showToast('Report generated');
   } catch (err) {
@@ -1784,6 +1824,43 @@ function formatReportCell(columnName, cellValue) {
 
   return raw;
 }
+
+let lastPreviewPayload = null;
+let previewPhpSort = 'original';
+
+function moneySortValue(cell) {
+  const n = Number(String(cell ?? '').replace(/[^0-9.\-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function applyPhpSort(mode) {
+  previewPhpSort = mode || 'original';
+  const sortEl = document.getElementById('phpSortSelect');
+  if (sortEl && sortEl.value !== previewPhpSort) sortEl.value = previewPhpSort;
+  if (!lastPreviewPayload || !lastPreviewPayload.sections) return;
+
+  lastPreviewPayload.sections.forEach(function(section) {
+    const source = section._originalRows || section.rows || [];
+    const rows = source.map(function(row) { return row.slice(); });
+    if (previewPhpSort === 'original') {
+      section.rows = rows;
+      return;
+    }
+    const colIdx = (section.columns || []).findIndex(function(col) { return isMoneyColumn(col); });
+    if (colIdx < 0) {
+      section.rows = rows;
+      return;
+    }
+    rows.sort(function(a, b) {
+      const av = moneySortValue(a[colIdx]);
+      const bv = moneySortValue(b[colIdx]);
+      return previewPhpSort === 'php-desc' ? bv - av : av - bv;
+    });
+    section.rows = rows;
+  });
+  renderPreview(lastPreviewPayload);
+}
+window.applyPhpSort = applyPhpSort;
 
 function renderPreview(payload) {
   const preview  = document.getElementById('previewBody');
