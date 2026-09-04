@@ -1596,7 +1596,7 @@ table.dash-table {
         <div class="kpi-label">Total Revenue</div>
         <div class="kpi-icon"><i class="ri-money-dollar-circle-line"></i></div>
       </div>
-      <div class="kpi-value">₱{{ '{:,.0f}'.format(revenue_this_month) }}</div>
+      <div class="kpi-value">₱{{ '{:,.2f}'.format(revenue_this_month) }}</div>
       <div class="kpi-sub">{{ period_label or 'Selected period' }}</div>
       {% if revenue_change > 0 %}
         <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> {{ revenue_change }}%</span>
@@ -1683,17 +1683,17 @@ table.dash-table {
           <tbody>
             <tr>
               <td data-label="Channel">Online</td>
-              <td data-label="Revenue" id="revOnlineCell">₱0</td>
+              <td data-label="Revenue" id="revOnlineCell">₱0.00</td>
               <td data-label="Orders" id="ordOnlineCell">0</td>
             </tr>
             <tr>
               <td data-label="Channel">POS</td>
-              <td data-label="Revenue" id="revPosCell">₱0</td>
+              <td data-label="Revenue" id="revPosCell">₱0.00</td>
               <td data-label="Orders" id="ordPosCell">0</td>
             </tr>
             <tr>
               <td data-label="Channel"><strong>Total</strong></td>
-              <td data-label="Revenue" id="revTotalCell"><strong>₱0</strong></td>
+              <td data-label="Revenue" id="revTotalCell"><strong>₱0.00</strong></td>
               <td data-label="Orders" id="ordTotalCell"><strong>0</strong></td>
             </tr>
           </tbody>
@@ -1777,7 +1777,7 @@ table.dash-table {
               </div>
             </td>
             <td data-label="Date" style="color:var(--muted);font-size:12.5px;">{{ order.date }}</td>
-            <td data-label="Amount"><span class="amount-cell">₱{{ '{:,.0f}'.format(order.total) }}</span></td>
+            <td data-label="Amount"><span class="amount-cell">₱{{ '{:,.2f}'.format(order.total) }}</span></td>
             <td data-label="Status">
               {% if order.status == 'delivered' %}
                 <span class="status-pill s-delivered">Delivered</span>
@@ -1834,7 +1834,7 @@ table.dash-table {
           <a href="{{ url_for('templates.seller_pos') }}" class="qa-btn">
             <div class="qa-icon bark"><i class="ri-store-2-line"></i></div>
             <div class="qa-label">POS System</div>
-            <div class="qa-desc">₱{{ '{:,.0f}'.format(pos_revenue_today) }} today ({{ pos_orders_today }} sales)</div>
+            <div class="qa-desc">₱{{ '{:,.2f}'.format(pos_revenue_today) }} today ({{ pos_orders_today }} sales)</div>
           </a>
         </div>
       </div>
@@ -1990,13 +1990,13 @@ table.dash-table {
           </div>
           <div class="info-row">
             <span class="info-label"><i class="ri-truck-line"></i> Delivery fee</span>
-            <span class="info-value">₱{{ '{:,.0f}'.format(store.base_delivery_fee or 0) }} + ₱{{ '{:,.0f}'.format(store.delivery_rate_per_km or 0) }}/km</span>
+            <span class="info-value">₱{{ '{:,.2f}'.format(store.base_delivery_fee or 0) }} + ₱{{ '{:,.2f}'.format(store.delivery_rate_per_km or 0) }}/km</span>
           </div>
           <div class="info-row">
             <span class="info-label"><i class="ri-gift-line"></i> Free delivery</span>
             <span class="info-value">
               {% if store.free_delivery_enabled %}
-                Over ₱{{ '{:,.0f}'.format(store.free_delivery_minimum or 0) }}
+                Over ₱{{ '{:,.2f}'.format(store.free_delivery_minimum or 0) }}
               {% else %}
                 Off
               {% endif %}
@@ -2026,7 +2026,7 @@ table.dash-table {
           </div>
           <div class="info-row">
             <span class="info-label"><i class="ri-store-3-line"></i> POS today</span>
-            <span class="info-value">₱{{ '{:,.0f}'.format(pos_revenue_today) }} · {{ pos_orders_today }} sale{{ 's' if pos_orders_today != 1 else '' }}</span>
+            <span class="info-value">₱{{ '{:,.2f}'.format(pos_revenue_today) }} · {{ pos_orders_today }} sale{{ 's' if pos_orders_today != 1 else '' }}</span>
           </div>
         </div>
       </div>
@@ -2086,7 +2086,7 @@ table.dash-table {
           {% for method, amount in revenue_by_payment.items() %}
           <div class="mini-stat">
             <div class="mini-stat-label">{{ method|upper }}</div>
-            <div class="mini-stat-value">₱{{ '{:,.0f}'.format(amount) }}</div>
+            <div class="mini-stat-value">₱{{ '{:,.2f}'.format(amount) }}</div>
           </div>
           {% endfor %}
           {% if not revenue_by_payment %}
@@ -2123,7 +2123,7 @@ table.dash-table {
       <div class="chart-panel-head">
         <div>
           <div class="chart-panel-title">Peak Hours</div>
-          <div class="chart-panel-subtitle">{{ period_label }} orders by hour</div>
+          <div class="chart-panel-subtitle">{{ period_label }} · Philippine time, 2-hour windows</div>
         </div>
       </div>
       <div class="chart-panel-body">
@@ -2161,9 +2161,9 @@ table.dash-table {
               {% for cat in sales_by_category %}
               <tr>
                 <td data-label="Category">{{ cat.name }}</td>
-                <td data-label="Online">₱{{ '{:,.0f}'.format(cat.online_revenue) }} <span style="color:var(--muted);">({{ cat.online_qty }})</span></td>
-                <td data-label="POS">₱{{ '{:,.0f}'.format(cat.pos_revenue) }} <span style="color:var(--muted);">({{ cat.pos_qty }})</span></td>
-                <td data-label="Total"><strong>₱{{ '{:,.0f}'.format(cat.revenue) }}</strong> <span style="color:var(--muted);">({{ cat.qty }})</span></td>
+                <td data-label="Online">₱{{ '{:,.2f}'.format(cat.online_revenue) }} <span style="color:var(--muted);">({{ cat.online_qty }})</span></td>
+                <td data-label="POS">₱{{ '{:,.2f}'.format(cat.pos_revenue) }} <span style="color:var(--muted);">({{ cat.pos_qty }})</span></td>
+                <td data-label="Total"><strong>₱{{ '{:,.2f}'.format(cat.revenue) }}</strong> <span style="color:var(--muted);">({{ cat.qty }})</span></td>
               </tr>
               {% endfor %}
             </tbody>
@@ -2191,7 +2191,7 @@ table.dash-table {
         <div class="mini-stats">
           <div class="mini-stat">
             <div class="mini-stat-label">Avg AOV</div>
-            <div class="mini-stat-value">₱{{ '{:,.0f}'.format((aov_trend['values']|sum) / (aov_trend['values']|length)) }}</div>
+            <div class="mini-stat-value">₱{{ '{:,.2f}'.format((aov_trend['values']|sum) / (aov_trend['values']|length)) }}</div>
           </div>
           <div class="mini-stat">
             <div class="mini-stat-label">Total Days</div>
@@ -2338,7 +2338,10 @@ function fmtInt(v) {
 }
 
 function fmtPeso(v) {
-  return '₱' + (Number(v) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return '₱' + (Number(v) || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function updateRevenueBreakdownTable(d) {
@@ -2431,7 +2434,7 @@ let chart = new Chart(ctx, {
         bodyFont:  { family: "'DM Sans', sans-serif", size: 12 },
         callbacks: {
           label: c => c.datasetIndex === 0
-            ? `  Revenue: ₱${c.parsed.y.toLocaleString()}`
+            ? `  Revenue: ₱${Number(c.parsed.y).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : `  Orders: ${c.parsed.y}`
         }
       }
@@ -2447,7 +2450,7 @@ let chart = new Chart(ctx, {
         ticks: {
           font: { family: "'DM Sans'", size: 11 },
           color: '#9a8d85',
-          callback: v => '₱' + v.toLocaleString()
+          callback: v => fmtPeso(v)
         }
       },
       y1: {
@@ -2562,12 +2565,12 @@ const tooltipStyle = {
       indexAxis: 'y',
       plugins: {
         legend: { display: false },
-        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ₱${c.parsed.x.toLocaleString()}` } }
+        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ${fmtPeso(c.parsed.x)}` } }
       },
       scales: {
         x: {
           grid: { color: 'rgba(107,76,59,.06)' },
-          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => '₱' + v.toLocaleString() }
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => fmtPeso(v) }
         },
         y: {
           grid: { display: false },
@@ -2612,7 +2615,7 @@ const tooltipStyle = {
           position: 'top',
           labels: { font: { ...chartFont, size: 11 }, boxWidth: 10, padding: 14, color: '#9a8d85' }
         },
-        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ${c.dataset.label}: ₱${c.parsed.y.toLocaleString()}` } }
+        tooltip: { ...tooltipStyle, callbacks: { label: c => ` ${c.dataset.label}: ${fmtPeso(c.parsed.y)}` } }
       },
       scales: {
         x: {
@@ -2623,26 +2626,19 @@ const tooltipStyle = {
         y: {
           stacked: true,
           grid: { color: 'rgba(107,76,59,.06)' },
-          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => '₱' + v.toLocaleString() }
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => fmtPeso(v) }
         }
       }
     }
   });
 })();
 
-/* ── 4. Hourly Distribution Bar ─────────────────────── */
+/* ── 4. Peak Hours (equal 2-hour PHT windows) ─────────── */
 (function(){
-  const hourlyData = {{ hourly_distribution|tojson }};
-  const labels = [];
-  const values = [];
-  let maxVal = 0;
-  for (let h = 0; h < 24; h++) {
-    const ampm = h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h-12}pm`;
-    labels.push(ampm);
-    const v = hourlyData[h] || 0;
-    values.push(v);
-    if (v > maxVal) maxVal = v;
-  }
+  const peaks = {{ peak_hours|tojson }};
+  const labels = peaks.map(p => p.label);
+  const values = peaks.map(p => p.count || 0);
+  const maxVal = values.reduce((m, v) => Math.max(m, v), 0);
   new Chart(document.getElementById('hourlyChart'), {
     type: 'bar',
     data: {
@@ -2658,7 +2654,7 @@ const tooltipStyle = {
         ),
         borderRadius: 4,
         borderSkipped: false,
-        maxBarThickness: 18
+        maxBarThickness: 22
       }]
     },
     options: {
@@ -2671,7 +2667,7 @@ const tooltipStyle = {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { font: { ...chartFont, size: 9 }, color: '#9a8d85', maxRotation: 0 }
+          ticks: { font: { ...chartFont, size: 9 }, color: '#9a8d85', maxRotation: 45, minRotation: 0, autoSkip: false }
         },
         y: {
           grid: { color: 'rgba(107,76,59,.06)' },
@@ -2715,7 +2711,7 @@ const tooltipStyle = {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { ...tooltipStyle, callbacks: { label: c => ` AOV: ₱${c.parsed.y.toLocaleString()}` } }
+        tooltip: { ...tooltipStyle, callbacks: { label: c => ` AOV: ${fmtPeso(c.parsed.y)}` } }
       },
       scales: {
         x: {
@@ -2724,7 +2720,7 @@ const tooltipStyle = {
         },
         y: {
           grid: { color: 'rgba(107,76,59,.06)' },
-          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => '₱' + v.toLocaleString() }
+          ticks: { font: { ...chartFont, size: 11 }, color: '#9a8d85', callback: v => fmtPeso(v) }
         }
       }
     }

@@ -229,6 +229,7 @@ class StorePaymentSetting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id', ondelete='CASCADE'), nullable=False, unique=True, index=True)
     allow_cod = db.Column(db.Boolean, default=False, nullable=False)
+    allow_gcash = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -14,6 +14,14 @@
     }
 }
 
+{% if request.endpoint == 'templates.seller_pos' %}
+#chat-fab {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+{% endif %}
+
 /* ══════════ FLOATING BUTTON ══════════ */
 #chat-fab {
     position: fixed;
@@ -826,7 +834,7 @@
 </div>
 
 <!-- FLOATING ACTION BUTTON -->
-<button id="chat-fab" onclick="chatWidget.toggle()" style="display:flex;" title="Messages">
+<button id="chat-fab" onclick="chatWidget.toggle()" title="Messages"{% if request.endpoint == 'templates.seller_pos' %} style="display:none !important;" hidden{% else %} style="display:flex;"{% endif %}>
     <i class="ri-chat-3-fill"></i>
     <span class="badge{% if chat_unread_count|default(0) > 0 %} show{% endif %}" id="chat-badge">{% if chat_unread_count|default(0) > 99 %}99+{% else %}{{ chat_unread_count|default(0) }}{% endif %}</span>
 </button>
@@ -1083,7 +1091,7 @@ const chatWidget = (() => {
         _userId = userId;
         _userRole = role || _userRole;
         const fab = document.getElementById('chat-fab');
-        if (fab) fab.style.display = 'flex';
+        if (fab && !fab.hasAttribute('hidden')) fab.style.display = 'flex';
         _updateSupportEntryVisibility();
         _updateStoreDiscoveryVisibility();
         if (_userId) {
@@ -1794,7 +1802,7 @@ const chatWidget = (() => {
     function _formatPeso(n) {
         const num = Number(n || 0);
         return '₱' + num.toLocaleString('en-PH', {
-            minimumFractionDigits: num % 1 === 0 ? 0 : 2,
+            minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
     }

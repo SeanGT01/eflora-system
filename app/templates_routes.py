@@ -292,14 +292,26 @@ def _ensure_support_faqs_table():
 
 def _ensure_store_payment_settings_table():
     """Create store_payment_settings from ORM if migration wasn't run yet."""
-    from sqlalchemy import inspect
+    from sqlalchemy import inspect, text
 
     try:
-        if inspect(db.engine).has_table('store_payment_settings'):
+        insp = inspect(db.engine)
+        if not insp.has_table('store_payment_settings'):
+            StorePaymentSetting.__table__.create(db.engine, checkfirst=True)
             return True
-        StorePaymentSetting.__table__.create(db.engine, checkfirst=True)
+        cols = {c['name'] for c in insp.get_columns('store_payment_settings')}
+        if 'allow_gcash' not in cols:
+            db.session.execute(text(
+                'ALTER TABLE store_payment_settings '
+                'ADD COLUMN allow_gcash BOOLEAN NOT NULL DEFAULT TRUE'
+            ))
+            db.session.commit()
         return True
     except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return False
 
 
@@ -1196,7 +1208,7 @@ def google_site_verification():
 @templates_bp.route('/favicon.ico')
 @limiter.exempt
 def favicon():
-    return redirect('/static/favicon.svg', code=301)
+    return redirect('/static/images/eflora-flower-logo.png', code=301)
 
 
 @templates_bp.route('/robots.txt')
@@ -4973,6 +4985,7 @@ def seller_dashboard():
         _iter_pht_days,
         _new_customer_count,
         _to_pht,
+        _peak_hours,
     )
 
     user_id = session['user_id']
@@ -5463,25 +5476,9 @@ def seller_dashboard():
     ).group_by(StoreRating.rating).all()
     store_rating_distribution = {int(r[0]): r[1] for r in store_rating_dist_query}
 
-    # ── Analytics: Hourly order distribution in PHT (online + POS, all statuses) ──
-    hourly_distribution = defaultdict(int)
-    for (ts,) in db.session.query(Order.created_at).filter(
-        Order.store_id == store.id,
-        Order.created_at >= range_start,
-        Order.created_at < range_end,
-    ).all():
-        local = _to_pht(ts)
-        if local:
-            hourly_distribution[local.hour] += 1
-    for (ts,) in db.session.query(POSOrder.created_at).filter(
-        POSOrder.store_id == store.id,
-        POSOrder.created_at >= range_start,
-        POSOrder.created_at < range_end,
-    ).all():
-        local = _to_pht(ts)
-        if local:
-            hourly_distribution[local.hour] += 1
-    hourly_distribution = {int(k): int(v) for k, v in hourly_distribution.items()}
+    # ── Analytics: Peak hours in PHT (online + POS, equal 2-hour windows) ──
+    peak_hours = _peak_hours(store.id, range_start, range_end)
+    hourly_distribution = {row['label']: row['count'] for row in peak_hours}
 
     # ── Analytics: AOV trend by PHT day (completed online + POS) ──
     aov_by_day = defaultdict(lambda: [0.0, 0])  # rev, count
@@ -5570,6 +5567,7 @@ def seller_dashboard():
         rating_distribution=rating_distribution,
         store_rating_distribution=store_rating_distribution,
         hourly_distribution=hourly_distribution,
+        peak_hours=peak_hours,
         aov_trend=aov_trend,
         new_customers=new_customers,
         repeat_customers=repeat_customers,
@@ -8125,9 +8123,29 @@ def session_notifications_api():
     user_id = _session_notification_inbox_user_id()
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
-    notifications = Notification.query.filter_by(user_id=user_id)\
-        .order_by(Notification.created_at.desc()).limit(20).all()
-    unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+    def _load_inbox():
+        notes = (Notification.query.filter_by(user_id=user_id)
+                 .order_by(Notification.created_at.desc()).limit(20).all())
+        unread = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+        return notes, unread
+
+    try:
+        notifications, unread_count = _load_inbox()
+    except OperationalError:
+        db.session.rollback()
+        db.session.remove()
+        try:
+            db.engine.dispose()
+        except Exception:
+            pass
+        try:
+            notifications, unread_count = _load_inbox()
+        except OperationalError:
+            return jsonify({
+                'notifications': [],
+                'unread_count': 0,
+                'degraded': True,
+            }), 200
     return jsonify({
         'notifications': [n.to_dict() for n in notifications],
         'unread_count': unread_count,
@@ -9598,6 +9616,22 @@ def _request_period_args():
     return period, fr, to
 
 
+def _report_requester_name():
+    """Real name of the logged-in user generating a report."""
+    requester = User.query.get(session.get('user_id')) if session.get('user_id') else None
+    if requester:
+        name = (requester.full_name or '').strip()
+        if name:
+            return name
+        email = (requester.email or '').strip()
+        if email:
+            return email
+    session_name = (session.get('user_name') or '').strip()
+    if session_name:
+        return session_name
+    return 'Unknown user'
+
+
 def _human_size(num_bytes: int) -> str:
     """Format bytes into a compact human-readable string."""
     size = float(num_bytes or 0)
@@ -9867,21 +9901,7 @@ def reports_preview():
         from app.utils.report_service import build_report_payload
         payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
 
-    requester = User.query.get(session.get('user_id'))
-    payload['requested_by'] = requester.full_name if requester else 'System User'
-    payload['store_logo_url'] = getattr(payload.get('store'), 'logo_url', None)
-
-    # Prefer a real system logo file if available.
-    logo_candidates = [
-        os.path.join(current_app.root_path, 'static', 'images', 'eflora-flower-logo.png'),
-        os.path.join(current_app.root_path, 'static', 'images', 'app_logo.png'),
-        os.path.join(current_app.root_path, 'static', 'uploads', 'app_logo.png'),
-        os.path.abspath(os.path.join(current_app.root_path, '..', '..', 'eflowers_app', 'assets', 'images', 'app_logo.png')),
-    ]
-    payload['system_logo_path'] = next((p for p in logo_candidates if os.path.exists(p)), None)
-
-    requester = User.query.get(session.get('user_id'))
-    payload['requested_by'] = requester.full_name if requester else 'System User'
+    payload['requested_by'] = _report_requester_name()
     payload['store_logo_url'] = getattr(payload.get('store'), 'logo_url', None)
 
     # Prefer a real system logo file if available.
@@ -9896,13 +9916,16 @@ def reports_preview():
     return jsonify({
         'period': payload['period'],
         'period_label': payload['period_label'],
+        'generated_at': payload.get('generated_at') or datetime.now(PHT).strftime('%b %d, %Y %I:%M %p PHT'),
         'types': payload['types'],
         'sections': [{
             'key': s['key'],
             'title': s['title'],
             'columns': s['columns'],
             'rows': [[
-                f"{c:.2f}" if isinstance(c, float) else c for c in r
+                f"{float(c):.2f}" if isinstance(c, (float, Decimal)) and not isinstance(c, bool)
+                else c
+                for c in r
             ] for r in s['rows']],
             'summary': [list(t) for t in s['summary']],
             'row_count': len(s['rows']),
@@ -9948,6 +9971,7 @@ def reports_generate():
         from app.utils.report_service import build_report_payload
         payload = build_report_payload(store, raw_types, period=period, custom_from=fr, custom_to=to)
 
+    payload['requested_by'] = _report_requester_name()
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M')
     if fmt == 'pdf':
         pdf_bytes = render_pdf(payload)
@@ -11394,13 +11418,17 @@ def store_settings():
         
         payment_setting = StorePaymentSetting.query.filter_by(store_id=store.id).first()
         allow_cod = bool(payment_setting.allow_cod) if payment_setting else False
+        allow_gcash = True if not payment_setting else bool(getattr(payment_setting, 'allow_gcash', True))
+        if not allow_gcash and not allow_cod:
+            allow_gcash = True
 
         return render_template('store_settings.html', 
                              store=store,
                              municipalities=municipalities,
                              get_barangays=get_barangays,
                              gcash_qr_data=gcash_qr_data,
-                             allow_cod=allow_cod)
+                             allow_cod=allow_cod,
+                             allow_gcash=allow_gcash)
     
     except Exception as e:
         print(f"❌ Error in store_settings: {str(e)}")
@@ -11914,14 +11942,27 @@ def update_store_settings():
             store.gcash_instructions = data['gcash_instructions']
 
         # Store-level payment options
-        if 'allow_cod' in data:
-            allow_cod_raw = str(data.get('allow_cod', '')).strip().lower()
-            allow_cod = allow_cod_raw in {'1', 'true', 'yes', 'on'}
+        if 'allow_cod' in data or 'allow_gcash' in data:
+            def _flag(key, fallback):
+                if key not in data:
+                    return fallback
+                return str(data.get(key, '')).strip().lower() in {'1', 'true', 'yes', 'on'}
+
             payment_setting = StorePaymentSetting.query.filter_by(store_id=store.id).first()
             if not payment_setting:
                 payment_setting = StorePaymentSetting(store_id=store.id)
                 db.session.add(payment_setting)
+                db.session.flush()
+            current_cod = bool(payment_setting.allow_cod)
+            current_gcash = True if getattr(payment_setting, 'allow_gcash', None) is None else bool(payment_setting.allow_gcash)
+            allow_cod = _flag('allow_cod', current_cod)
+            allow_gcash = _flag('allow_gcash', current_gcash)
+            if not allow_cod and not allow_gcash:
+                return jsonify({
+                    'error': 'Keep at least one payment method enabled (GCash or Cash on Delivery).'
+                }), 400
             payment_setting.allow_cod = allow_cod
+            payment_setting.allow_gcash = allow_gcash
         
         store.updated_at = datetime.utcnow()
         db.session.commit()
@@ -13055,6 +13096,7 @@ def get_store_gcash_qrs(store_id):
             'qr_codes': qr_codes,
             'instructions': store.gcash_instructions,
             'allow_cod': bool(payment_setting.allow_cod) if payment_setting else False,
+            'allow_gcash': True if not payment_setting else bool(getattr(payment_setting, 'allow_gcash', True)),
         })
         
     except Exception as e:

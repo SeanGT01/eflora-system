@@ -3206,6 +3206,20 @@
                 </div>
                     
                     <div class="form-group">
+                        <label class="form-label">GCash</label>
+                        <label class="cod-toggle-row" for="allowGcashToggle">
+                            <span class="cod-toggle-copy">
+                                <strong>Enable GCash</strong>
+                                <small>Let customers pay with GCash QR during checkout. Keep at least one of GCash or COD on.</small>
+                            </span>
+                            <span class="cod-toggle-switch">
+                                <input type="checkbox" id="allowGcashToggle" {% if allow_gcash %}checked{% endif %}>
+                                <span class="cod-toggle-slider"></span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
                         <label class="form-label">Cash on Delivery</label>
                         <label class="cod-toggle-row" for="allowCodToggle">
                             <span class="cod-toggle-copy">
@@ -3234,7 +3248,7 @@
                         <label class="cod-toggle-row" for="freeDeliveryToggle" style="margin-bottom: 0.75rem;">
                             <span class="cod-toggle-copy">
                                 <strong>Enable free delivery</strong>
-                                <small>When on, orders at or above the minimum amount pay ₱0 delivery. Turn off to always charge base + km.</small>
+                                <small>When on, orders at or above the minimum amount pay ₱0.00 delivery. Turn off to always charge base + km.</small>
                             </span>
                             <span class="cod-toggle-switch">
                                 <input type="checkbox" id="freeDeliveryToggle" {% if store.free_delivery_enabled != false %}checked{% endif %}>
@@ -3342,6 +3356,10 @@
                             <div class="summary-value" id="sum-qr-count">0</div>
                         </div>
                         <div class="summary-field">
+                            <div class="summary-label">GCash</div>
+                            <div class="summary-value" id="sum-gcash-enabled">{{ 'Enabled' if allow_gcash else 'Disabled' }}</div>
+                        </div>
+                        <div class="summary-field">
                             <div class="summary-label">Cash on Delivery</div>
                             <div class="summary-value" id="sum-cod-enabled">{{ 'Enabled' if allow_cod else 'Disabled' }}</div>
                         </div>
@@ -3349,7 +3367,7 @@
                             <div class="summary-label">Free Delivery</div>
                             <div class="summary-value" id="sum-free-delivery">
                                 {% if store.free_delivery_enabled != false %}
-                                    Enabled at ₱{{ '%.0f'|format(store.free_delivery_minimum or 500) }}
+                                    Enabled at ₱{{ '%.2f'|format(store.free_delivery_minimum or 500) }}
                                 {% else %}
                                     Disabled
                                 {% endif %}
@@ -3428,7 +3446,8 @@
     "current_delivery_geojson": {{ store.to_dict().current_delivery_geojson|tojson if store.to_dict().current_delivery_geojson else 'null' }},
     "gcash_qr_data": {{ gcash_qr_data|tojson if gcash_qr_data else '[]' }},
     "gcash_instructions": {{ store.gcash_instructions|tojson if store.gcash_instructions else 'null' }},
-    "allow_cod": {{ (allow_cod or false)|tojson }}
+    "allow_cod": {{ (allow_cod or false)|tojson }},
+    "allow_gcash": {{ (allow_gcash if allow_gcash is defined else true)|tojson }}
 }
 </script>
 
@@ -5656,6 +5675,24 @@
         if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('qr');
         syncFreeDeliveryMinFields();
     });
+    function enforceAtLeastOneCustomerPayment(changedEl) {
+        const gcash = document.getElementById('allowGcashToggle');
+        const cod = document.getElementById('allowCodToggle');
+        if (!gcash || !cod) return;
+        if (!gcash.checked && !cod.checked) {
+            changedEl.checked = true;
+            if (typeof showToast === 'function') {
+                showToast('Keep at least one payment method enabled (GCash or Cash on Delivery).', 'error');
+            }
+        }
+        if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('qr');
+    }
+    document.getElementById('allowGcashToggle')?.addEventListener('change', (e) => {
+        enforceAtLeastOneCustomerPayment(e.target);
+    });
+    document.getElementById('allowCodToggle')?.addEventListener('change', (e) => {
+        enforceAtLeastOneCustomerPayment(e.target);
+    });
     syncFreeDeliveryMinFields();
 
     document.getElementById('edit-qr-settings')?.addEventListener('click', () => {
@@ -5686,10 +5723,18 @@
         try {
             const gcashInstructions = document.getElementById('gcashInstructions')?.value || '';
             const allowCod = document.getElementById('allowCodToggle')?.checked ? '1' : '0';
+            const allowGcash = document.getElementById('allowGcashToggle')?.checked ? '1' : '0';
+            if (allowCod === '0' && allowGcash === '0') {
+                showToast('Keep at least one payment method enabled (GCash or Cash on Delivery).', 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                return;
+            }
             
             const formData = new FormData();
             formData.append('gcash_instructions', gcashInstructions);
             formData.append('allow_cod', allowCod);
+            formData.append('allow_gcash', allowGcash);
 
             // Delivery fees (same formula for all coverage methods)
             const feeMethod = document.querySelector('input[name="delivery-method"]:checked')?.value || 'radius';
@@ -5762,6 +5807,8 @@
                 document.getElementById('sum-gcash-instructions').classList.toggle('empty', !gcashInstructions);
                 const sumCod = document.getElementById('sum-cod-enabled');
                 if (sumCod) sumCod.textContent = allowCod === '1' ? 'Enabled' : 'Disabled';
+                const sumGcash = document.getElementById('sum-gcash-enabled');
+                if (sumGcash) sumGcash.textContent = allowGcash === '1' ? 'Enabled' : 'Disabled';
                 const freeOn = document.getElementById('freeDeliveryToggle')?.checked;
                 const freeMin = document.getElementById(feeFields.free)?.value || '500';
                 const sumFree = document.getElementById('sum-free-delivery');

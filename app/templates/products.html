@@ -610,16 +610,49 @@
     
     .price-tag {
         position: absolute;
-        bottom: 0.75rem;
-        left: 0.75rem;
+        bottom: 0.65rem;
+        left: 0.65rem;
+        z-index: 2;
+        max-width: calc(100% - 3rem);
+        width: fit-content;
+        box-sizing: border-box;
         background: var(--warm-white);
-        padding: 0.3rem 0.75rem;
-        border-radius: var(--radius-pill);
+        padding: 0.16rem 0.45rem 0.18rem;
+        border-radius: 10px;
         font-weight: 600;
         color: var(--deep-rose);
         box-shadow: var(--shadow-sm);
         border: 1px solid var(--border);
-        font-size: 14px;
+        font-size: 12px;
+        line-height: 1.2;
+    }
+
+    .price-tag .ep-price {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px 5px;
+        max-width: 100%;
+    }
+
+    .price-tag .ep-price__sale,
+    .price-tag .ep-price__regular {
+        font-size: 11.5px !important;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .price-tag .ep-price__original {
+        font-size: 9.5px !important;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .price-tag .ep-price__badge {
+        font-size: 8.5px;
+        padding: 0 5px;
+        line-height: 1.45;
+        flex: 0 0 auto;
     }
     
     .variant-badge {
@@ -886,9 +919,15 @@
         }
         
         .price-tag {
-            font-size: 13px;
-            padding: 0.25rem 0.6rem;
+            font-size: 12px;
+            padding: 0.14rem 0.4rem;
+            max-width: calc(100% - 2.75rem);
         }
+
+        .price-tag .ep-price__sale,
+        .price-tag .ep-price__regular { font-size: 11px !important; }
+
+        .price-tag .ep-price__original { font-size: 9px !important; }
     }
     
     /* Filters responsive — 2 columns */
@@ -957,9 +996,13 @@
         }
         
         .price-tag {
-            font-size: 12px;
-            padding: 0.25rem 0.6rem;
+            font-size: 11px;
+            padding: 0.12rem 0.38rem;
+            max-width: calc(100% - 2.5rem);
         }
+
+        .price-tag .ep-price__sale,
+        .price-tag .ep-price__regular { font-size: 10.5px !important; }
         
         .product-cat-badge {
             font-size: 8px;
@@ -1072,11 +1115,17 @@
         }
         
         .price-tag {
-            bottom: 0.5rem;
-            left: 0.5rem;
+            bottom: 0.45rem;
+            left: 0.45rem;
             font-size: 10px;
-            padding: 0.2rem 0.45rem;
+            padding: 0.1rem 0.32rem;
+            max-width: calc(100% - 2.25rem);
         }
+
+        .price-tag .ep-price__sale,
+        .price-tag .ep-price__regular { font-size: 10px !important; }
+
+        .price-tag .ep-price__original { font-size: 8.5px !important; }
         
         .product-cat-badge {
             font-size: 7px;
@@ -1185,9 +1234,10 @@
         
         .price-tag {
             font-size: 9px;
-            padding: 0.2rem 0.4rem;
+            padding: 0.1rem 0.3rem;
             bottom: 0.4rem;
             left: 0.4rem;
+            max-width: calc(100% - 2.1rem);
         }
         
         .variant-badge {
@@ -1342,9 +1392,10 @@
         
         .price-tag {
             font-size: 8px;
-            padding: 0.15rem 0.35rem;
+            padding: 0.08rem 0.28rem;
             bottom: 0.35rem;
             left: 0.35rem;
+            max-width: calc(100% - 2rem);
         }
         
         .product-cat-badge {
@@ -1504,9 +1555,10 @@
         
         .price-tag {
             font-size: 7.5px;
-            padding: 0.1rem 0.3rem;
+            padding: 0.08rem 0.24rem;
             bottom: 0.3rem;
             left: 0.3rem;
+            max-width: calc(100% - 1.85rem);
         }
         
         .product-cat-badge {
@@ -1646,7 +1698,14 @@
         font-size: 9px;
         padding: 0.22rem 0.35rem;
     }
-    #productsGrid[data-card-size="small"] .price-tag { font-size: 11px; padding: 0.2rem 0.45rem; }
+    #productsGrid[data-card-size="small"] .price-tag {
+        font-size: 10px;
+        padding: 0.1rem 0.32rem;
+        max-width: calc(100% - 2.2rem);
+    }
+    #productsGrid[data-card-size="small"] .price-tag .ep-price__sale,
+    #productsGrid[data-card-size="small"] .price-tag .ep-price__regular { font-size: 10px !important; }
+    #productsGrid[data-card-size="small"] .price-tag .ep-price__original { font-size: 8.5px !important; }
     #productsGrid[data-card-size="small"] .product-cat-badge,
     #productsGrid[data-card-size="small"] .product-stock-badge .status-badge {
         font-size: 8px;
@@ -1821,7 +1880,7 @@
             font-size: 10px;
             padding: 3px 8px;
         }
-        .dash .price-tag { font-size: 13px; }
+        .dash .price-tag { font-size: 12px; max-width: calc(100% - 3rem); }
         .modal-overlay {
             padding: 0.75rem;
             align-items: flex-end;
@@ -2681,10 +2740,10 @@
         }
         function money(n) {
             const num = Number(n);
-            if (!Number.isFinite(num)) return '₱0';
+            if (!Number.isFinite(num)) return '₱0.00';
             const formatted = (typeof window.formatMoneyValue === 'function')
                 ? window.formatMoneyValue(num)
-                : num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                : num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return '₱' + formatted;
         }
         function thumbHtml(url) {

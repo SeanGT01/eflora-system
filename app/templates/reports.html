@@ -92,7 +92,10 @@
   position: relative;
   overflow: visible;
   animation: fadeUp .4s ease both;
-  z-index: 120;
+  z-index: 2;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .builder-panel::before {
@@ -105,12 +108,13 @@
 
 .builder-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.9fr) auto;
   gap: 1.25rem;
   align-items: end;
+  min-width: 0;
 }
 
-.field-group { display: flex; flex-direction: column; gap: .45rem; }
+.field-group { display: flex; flex-direction: column; gap: .45rem; min-width: 0; }
 
 .field-label {
   font-size: 10.5px;
@@ -159,10 +163,14 @@
   font-weight: 600;
   cursor: pointer;
   transition: var(--transition);
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: .55rem;
   white-space: nowrap;
+  max-width: 100%;
+  box-sizing: border-box;
+  justify-self: start;
 }
 
 .generate-btn:hover {
@@ -655,29 +663,50 @@
 .report-kpi-lbl { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 
 /* Report table */
-table.rpt-table {
+.rpt-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 13px;
   margin-bottom: 1.75rem;
+  table-layout: auto;
 }
 
 .rpt-table thead th {
-  padding: .65rem 1rem;
+  padding: .65rem .75rem;
   text-align: left;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: .12em;
+  letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--muted);
   background: var(--cream);
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 .rpt-table tbody tr { border-bottom: 1px solid var(--border); }
 .rpt-table tbody tr:last-child { border-bottom: none; }
 .rpt-table tbody tr:hover { background: rgba(250,246,240,.6); }
-.rpt-table td { padding: .8rem 1rem; vertical-align: middle; }
+.rpt-table td {
+  padding: .8rem .75rem;
+  vertical-align: middle;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+.rpt-table td[data-label*="Variant"],
+.rpt-table td[data-label*="Add-on"],
+.rpt-table td[data-label*="Customer"],
+.rpt-table td[data-label*="Product"],
+.rpt-table td[data-label*="Email"],
+.rpt-table td[data-label*="Details"] {
+  white-space: normal;
+  min-width: 10rem;
+  max-width: 18rem;
+            overflow-wrap: break-word;
+  word-break: normal;
+}
 
 .growth-up   { color: var(--deep-sage);  font-weight: 600; font-size: 12px; }
 .growth-down { color: var(--deep-rose);  font-weight: 600; font-size: 12px; }
@@ -688,6 +717,8 @@ table.rpt-table {
   font-size: 11px; font-weight: 600; white-space: nowrap;
 }
 .sp-green { background:rgba(122,158,126,.15); color:var(--deep-sage); }
+.sp-yellow { background:#FEF9C3; color:#854D0E; }
+.sp-red { background:#FDECEC; color:#B42318; }
 .sp-rose  { background:rgba(181,68,90,.1);  color:var(--deep-rose); }
 .sp-terra { background:rgba(196,113,75,.13); color:var(--terracotta); }
 .sp-bark  { background:rgba(107,76,59,.1);   color:var(--bark); }
@@ -1059,24 +1090,33 @@ table.saved-table {
   .quick-row { grid-template-columns: repeat(2,1fr); }
   .templates-grid { grid-template-columns: repeat(2,1fr); }
   .report-kpi-row { grid-template-columns: repeat(2,1fr); }
+  .builder-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .generate-btn {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 
 @media (max-width: 900px) {
-  .builder-grid { grid-template-columns: 1fr 1fr; }
   .date-drawer  { grid-template-columns: 1fr 1fr; }
+  .date-drawer .apply-range-btn { grid-column: 1 / -1; width: 100%; justify-content: center; }
   .report-two-col { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
-  .rpt { padding: 0; }
-  .builder-grid { grid-template-columns: 1fr; }
+  .rpt { padding: 0; min-width: 0; }
+  .builder-grid { grid-template-columns: minmax(0, 1fr); }
   .date-drawer  { grid-template-columns: 1fr; }
+  .date-drawer .apply-range-btn { width: 100%; justify-content: center; }
   .quick-row    { grid-template-columns: 1fr 1fr; }
   .templates-grid { grid-template-columns: 1fr; }
   .sched-row    { grid-template-columns: 1fr; }
   .report-kpi-row { grid-template-columns: 1fr 1fr; }
   .builder-panel { padding: 1.25rem 1.1rem; }
   .rpt-title { font-size: clamp(24px, 7vw, 32px); }
+  .generate-btn { width: 100%; }
 }
 
 @media (max-width: 480px) {
@@ -1087,7 +1127,10 @@ table.saved-table {
 }
 
 @media (max-width: 767px) {
-  .rpt .table-scroll { overflow: visible; }
+  .rpt .table-scroll { overflow-x: auto; }
+  .rpt-table {
+    min-width: 0;
+  }
   .rpt-table thead,
   .saved-table thead { display: none; }
   .rpt-table, .rpt-table tbody,
@@ -1104,7 +1147,15 @@ table.saved-table {
     background: #fff;
   }
   .rpt-table td,
-  .saved-table td { display: block; padding: 0; border: none; min-width: 0; }
+  .saved-table td { display: block; padding: 0; border: none; min-width: 0; white-space: normal; max-width: none; }
+  .rpt-table td[colspan],
+  .saved-table td[colspan] { grid-column: 1 / -1; }
+  .rpt-table td[data-label*="Variant"],
+  .rpt-table td[data-label*="Add-on"],
+  .rpt-table td[data-label="Order ID"],
+  .rpt-table td[data-label="Product"] {
+    grid-column: 1 / -1;
+  }
   .rpt-table td[colspan],
   .saved-table td[colspan] { grid-column: 1 / -1; }
   .rpt-table td[data-label]::before,
@@ -1687,9 +1738,11 @@ function escapeHtml(value) {
 
 function statusPillFor(value) {
   const v = String(value || '').toLowerCase();
+  if (/out of stock/.test(v)) return 'sp-red';
+  if (/low stock/.test(v)) return 'sp-yellow';
   if (/(delivered|paid|verified|active|available|ok)/.test(v)) return 'sp-green';
-  if (/(processing|preparing|pending|low)/.test(v))            return 'sp-rose';
-  if (/(on delivery|inactive|on leave|out of stock)/.test(v))  return 'sp-terra';
+  if (/(processing|preparing|pending)/.test(v)) return 'sp-rose';
+  if (/(on delivery|inactive|on leave)/.test(v)) return 'sp-terra';
   return 'sp-bark';
 }
 
@@ -1759,7 +1812,7 @@ function renderPreview(payload) {
       </div>
       <div class="report-meta">
         <div class="report-meta-title">${escapeHtml(titleLabel)}</div>
-        <div class="report-meta-date">Period: ${escapeHtml(payload.period_label)} &nbsp;·&nbsp; Generated ${new Date().toLocaleString('en-PH')}</div>
+        <div class="report-meta-date">Period: ${escapeHtml(payload.period_label)} &nbsp;·&nbsp; Generated ${escapeHtml(payload.generated_at || new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }))}</div>
       </div>
     </div>`;
 
@@ -1808,7 +1861,7 @@ function renderPreview(payload) {
     html += `</div>`;
   }
 
-  html += `<div class="report-timestamp">Report generated on ${new Date().toLocaleString('en-PH')}</div>`;
+  html += `<div class="report-timestamp">Report generated on ${escapeHtml(payload.generated_at || new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }))}</div>`;
   preview.innerHTML = html;
 }
 

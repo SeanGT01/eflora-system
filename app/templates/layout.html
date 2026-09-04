@@ -7,7 +7,8 @@
     <title>{% block title %}E-FLORA Dashboard{% endblock %}</title>
     <link rel="canonical" href="{{ seo_canonical_url }}">
     <meta name="robots" content="noindex, nofollow">
-    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ url_for('static', filename='images/eflora-flower-logo.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/eflora-flower-logo.png') }}">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -510,23 +511,23 @@
             position: fixed;
             inset: 0;
             background: rgba(44, 36, 32, 0.42);
-            z-index: 350;
+            z-index: 12400;
             -webkit-tap-highlight-color: transparent;
         }
 
         .notif-backdrop.show { display: block; }
 
         .notif-panel {
-            position: absolute;
-            top: calc(100% + 8px);
-            right: 0;
+            position: fixed;
+            top: 72px;
+            right: 24px;
             background: var(--warm-white);
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-lg);
             width: min(360px, 92vw);
             max-height: min(70vh, 520px);
-            z-index: 300;
+            z-index: 12450;
             display: none;
             overflow: hidden;
             flex-direction: column;
@@ -1449,7 +1450,7 @@
                 border-right: none;
                 border-bottom: none;
                 box-shadow: 0 -8px 32px rgba(44, 36, 32, 0.18);
-                z-index: 360;
+                z-index: 12450;
                 padding-bottom: env(safe-area-inset-bottom, 0px);
             }
 
@@ -2514,22 +2515,49 @@
         return window.matchMedia('(max-width: 767px)').matches;
     }
 
+    function mountNotifLayer() {
+        const panel = document.getElementById('notifPanel');
+        const backdrop = document.getElementById('notifBackdrop');
+        if (backdrop && backdrop.parentElement !== document.body) {
+            document.body.appendChild(backdrop);
+        }
+        if (panel && panel.parentElement !== document.body) {
+            document.body.appendChild(panel);
+        }
+    }
+
+    function positionNotifPanel() {
+        const panel = document.getElementById('notifPanel');
+        const btn = document.getElementById('notifBtn');
+        if (!panel) return;
+        if (isPhoneNotifLayout()) {
+            panel.style.top = '';
+            panel.style.right = '';
+            panel.style.left = '';
+            panel.style.bottom = '';
+            return;
+        }
+        if (!btn) return;
+        const rect = btn.getBoundingClientRect();
+        panel.style.top = `${Math.round(rect.bottom + 8)}px`;
+        panel.style.right = `${Math.round(window.innerWidth - rect.right)}px`;
+        panel.style.left = 'auto';
+        panel.style.bottom = 'auto';
+    }
+
     function setNotifPanelOpen(open) {
         const panel = document.getElementById('notifPanel');
         const backdrop = document.getElementById('notifBackdrop');
         const notifBtn = document.getElementById('notifBtn');
         if (!panel) return;
 
+        mountNotifLayer();
         panel.classList.toggle('show', open);
-        backdrop?.classList.toggle('show', open && isPhoneNotifLayout());
+        backdrop?.classList.toggle('show', open);
         notifBtn?.setAttribute('aria-expanded', open ? 'true' : 'false');
 
-        if (isPhoneNotifLayout()) {
-            document.body.style.overflow = open ? 'hidden' : '';
-        } else {
-            document.body.style.overflow = '';
-            backdrop?.classList.remove('show');
-        }
+        if (open) positionNotifPanel();
+        document.body.style.overflow = open && isPhoneNotifLayout() ? 'hidden' : '';
     }
 
     function closeNotifPanel() {
@@ -2574,9 +2602,14 @@
     window.addEventListener('resize', function() {
         const panel = document.getElementById('notifPanel');
         if (!panel?.classList.contains('show')) return;
-        // Re-sync backdrop / body lock when crossing the phone breakpoint
         setNotifPanelOpen(true);
     });
+    window.addEventListener('scroll', function() {
+        const panel = document.getElementById('notifPanel');
+        if (panel?.classList.contains('show')) positionNotifPanel();
+    }, true);
+
+    mountNotifLayer();
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') closeNotifPanel();
@@ -2713,16 +2746,17 @@
             const n = Number(String(value).replace(/,/g, ''));
             if (!Number.isFinite(n)) return value;
             return new Intl.NumberFormat('en-US', {
-                minimumFractionDigits: 0,
+                minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             }).format(n);
         };
 
         function formatNodeText(node) {
             if (!node || !node.nodeValue || !moneyCheckPattern.test(node.nodeValue)) return;
-            node.nodeValue = node.nodeValue.replace(moneyPattern, function(_, prefix, amount) {
+            const next = node.nodeValue.replace(moneyPattern, function(_, prefix, amount) {
                 return prefix + window.formatMoneyValue(amount);
             });
+            if (next !== node.nodeValue) node.nodeValue = next;
         }
 
         function formatMoneyIn(root) {
@@ -2732,7 +2766,10 @@
                     const parent = textNode.parentElement;
                     if (!parent) return NodeFilter.FILTER_REJECT;
                     const tag = parent.tagName;
-                    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT') {
+                    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'BUTTON') {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    if (parent.closest('[data-no-money-format], .tender-btn, .tender-quick')) {
                         return NodeFilter.FILTER_REJECT;
                     }
                     return NodeFilter.FILTER_ACCEPT;
@@ -2745,9 +2782,13 @@
         // Initial pass
         formatMoneyIn(document.body);
 
-        // Re-format dynamically injected content
+        // Re-format dynamically injected or updated content
         const observer = new MutationObserver(function(mutations) {
             for (const m of mutations) {
+                if (m.type === 'characterData') {
+                    formatNodeText(m.target);
+                    continue;
+                }
                 m.addedNodes.forEach(function(node) {
                     if (node.nodeType === Node.TEXT_NODE) {
                         formatNodeText(node);
@@ -2757,7 +2798,7 @@
                 });
             }
         });
-        observer.observe(document.body, { childList: true, subtree: true });
+        observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     })();
 </script>
 

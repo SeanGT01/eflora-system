@@ -11,7 +11,8 @@
     <meta name="keywords" content="E-FLORA, flower shops Laguna, plant shops, flowers delivery, local florists, Philippines">
     <link rel="canonical" href="{{ seo_canonical_url }}">
     <meta name="robots" content="{% block robots %}{{ seo_robots }}{% endblock %}">
-    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ url_for('static', filename='images/eflora-flower-logo.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/eflora-flower-logo.png') }}">
     <meta property="og:url" content="{{ seo_canonical_url }}">
     <meta property="og:site_name" content="E-FLORA">
     <meta property="og:type" content="website">
@@ -1486,23 +1487,103 @@
         }
 
         #checkoutActiveOrderLimit {
-            margin-bottom: 16px;
+            display: none !important;
         }
 
-        #checkoutActiveOrderLimit > div {
-            padding: 14px 16px;
-            border: 1px solid #d4a574;
-            background: #fff8ef;
-            color: #7a4a12;
-            border-radius: var(--radius-md);
-            font-size: 13px;
-            line-height: 1.55;
+        .aol-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 12100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1.25rem;
+            background: rgba(42, 35, 30, 0.55);
+            backdrop-filter: blur(7px);
         }
-
-        #checkoutActiveOrderLimit strong {
-            display: block;
-            margin-bottom: 0.35rem;
-            font-size: 14px;
+        .aol-overlay.is-open,
+        .aol-overlay.is-open[hidden] {
+            display: flex !important;
+        }
+        .aol-card {
+            width: min(420px, 100%);
+            background: #fffdf9;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 22px;
+            box-shadow: 0 22px 64px rgba(90, 40, 80, 0.18);
+            padding: 1.5rem 1.4rem 1.25rem;
+            text-align: center;
+        }
+        .aol-icon {
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 0.85rem;
+            border-radius: 50%;
+            background: rgba(194, 78, 104, 0.12);
+            color: var(--deep-rose);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.55rem;
+        }
+        .aol-title {
+            font-family: var(--font-display), Georgia, serif;
+            font-size: 1.55rem;
+            font-weight: 500;
+            color: var(--charcoal);
+            margin: 0 0 0.45rem;
+            line-height: 1.2;
+        }
+        .aol-lead {
+            font-size: 0.95rem;
+            color: var(--charcoal);
+            line-height: 1.5;
+            margin: 0 0 1rem;
+            opacity: 0.92;
+        }
+        .aol-slots {
+            display: flex;
+            justify-content: center;
+            gap: 0.45rem;
+            margin: 0 0 1rem;
+        }
+        .aol-slot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid rgba(194, 78, 104, 0.28);
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--muted);
+        }
+        .aol-slot.is-filled {
+            background: var(--deep-rose);
+            border-color: var(--deep-rose);
+            color: #fff;
+        }
+        .aol-copy {
+            font-size: 0.82rem;
+            color: var(--muted);
+            line-height: 1.5;
+            margin: 0 0 1.15rem;
+        }
+        .aol-actions {
+            display: flex;
+            gap: 0.55rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .aol-actions .btn {
+            min-height: 42px;
+            justify-content: center;
+        }
+        @media (max-width: 480px) {
+            .aol-actions { flex-direction: column; }
+            .aol-actions .btn { width: 100%; }
         }
 
         /* ===== GCASH PAYMENT CONTAINER ===== */
@@ -3103,6 +3184,22 @@
         </div>
     </div>
 
+    <div class="aol-overlay" id="activeOrderLimitModal" role="presentation">
+        <div class="aol-card" role="dialog" aria-modal="true" aria-labelledby="aolTitle">
+            <div class="aol-icon" aria-hidden="true"><i class="ri-shopping-bag-3-line"></i></div>
+            <h3 class="aol-title" id="aolTitle">Order limit reached</h3>
+            <p class="aol-lead" id="aolLead">You already have 5 active orders — the most you can have at once.</p>
+            <div class="aol-slots" id="aolSlots" aria-hidden="true"></div>
+            <p class="aol-copy">Go to <strong>My Orders</strong> and mark a delivered order as <strong>Completed</strong>. Then you can place a new one.</p>
+            <div class="aol-actions">
+                <button type="button" class="btn btn-outline" id="aolCloseBtn">Got it</button>
+                <a class="btn btn-rose" id="aolOrdersBtn" href="{{ url_for('templates.my_account') }}?page=orders">
+                    <i class="ri-file-list-3-line"></i> View my orders
+                </a>
+            </div>
+        </div>
+    </div>
+
     <!-- Stock availability modal (shown before checkout when stock fails) -->
     <div class="modal-overlay" id="stockIssueModal" onclick="if(event.target===this)closeStockIssueModal()">
         <div class="modal modal-sm" style="max-width:440px;" role="dialog" aria-modal="true" aria-labelledby="stockIssueTitle">
@@ -3204,6 +3301,11 @@
                     <i class="ri-store-2-line action-icon"></i>
                     <span class="action-text">Seller Dashboard</span>
                 </a>
+                {% elif session.get('role') == 'admin' %}
+                <a href="{{ url_for('templates.dashboard') }}" class="action-btn has-label" title="Admin Dashboard">
+                    <i class="ri-dashboard-3-line action-icon"></i>
+                    <span class="action-text">Admin Dashboard</span>
+                </a>
                 {% endif %}
 
                 {% if not hide_shop_icons %}
@@ -3297,7 +3399,7 @@
                     <ul class="footer-links">
                         {% if session.get('user_id') %}
                         {% if session.get('role') == 'admin' %}
-                        <li><a href="{{ url_for('templates.admin_users') }}">Admin</a></li>
+                        <li><a href="{{ url_for('templates.dashboard') }}">Admin Dashboard</a></li>
                         {% else %}
                         <li><a href="{{ url_for('templates.my_account') }}?page=profile">My Profile</a></li>
                         <li><a href="{{ url_for('templates.my_account') }}?page=orders">My Orders</a></li>
@@ -4122,8 +4224,12 @@ function getProofState(tempId) {
 function getOrderPaymentMethod(order) {
     if (!order || !order.temp_id) return 'gcash';
     const selected = selectedPaymentMethods[order.temp_id];
-    const codEnabled = order.allow_cod !== false;
+    const gcashEnabled = order.allow_gcash !== false;
+    const codEnabled = order.allow_cod === true;
     if (selected === 'cod' && codEnabled) return 'cod';
+    if (selected === 'gcash' && gcashEnabled) return 'gcash';
+    if (gcashEnabled) return 'gcash';
+    if (codEnabled) return 'cod';
     return 'gcash';
 }
 
@@ -5138,33 +5244,82 @@ async function fetchCheckoutAddresses() {
 }
 
 async function fetchCheckoutActiveOrderLimit() {
-    const response = await fetch('/api/v1/checkout/active-order-limit');
-    const result = await response.json();
+    const headers = { 'Authorization': 'Bearer ' + (await getAuthToken()) };
+    const response = await fetch('/api/v1/checkout/active-order-limit', {
+        headers,
+        credentials: 'same-origin',
+    });
+    const result = await response.json().catch(function () { return {}; });
+    if (result && (result.blocked || result.code === 'active_order_limit')) {
+        return result;
+    }
     if (!response.ok) {
         throw new Error(result.error || 'Could not verify active order limit');
     }
     return result;
 }
 
-function renderCheckoutActiveOrderLimit(data) {
-    const el = document.getElementById('checkoutActiveOrderLimit');
-    const nextBtn = document.getElementById('checkoutNextBtn');
-    if (!el) return !!data?.blocked;
+function isActiveOrderLimitPayload(data) {
+    if (!data) return false;
+    if (data.blocked === true || data.code === 'active_order_limit') return true;
+    const msg = String(data.error || data.message || '');
+    return /active orders/i.test(msg) && /maximum/i.test(msg);
+}
 
-    if (data && data.blocked) {
-        el.style.display = 'block';
-        el.innerHTML = `
-            <div>
-                <strong><i class="ri-error-warning-line"></i> Checkout unavailable</strong>
-                ${data.message || 'You have too many active orders. Complete an order before placing a new one.'}
-            </div>
-        `;
+function closeActiveOrderLimitModal() {
+    const overlay = document.getElementById('activeOrderLimitModal');
+    if (!overlay) return;
+    overlay.classList.remove('is-open');
+    overlay.setAttribute('aria-hidden', 'true');
+}
+
+function showActiveOrderLimitModal(data) {
+    const overlay = document.getElementById('activeOrderLimitModal');
+    if (!overlay) {
+        showToast((data && (data.message || data.error)) || 'You already have the maximum number of active orders.', 'error');
+        return true;
+    }
+    const count = Math.max(0, Number(data && data.active_order_count) || 5);
+    const limit = Math.max(1, Number(data && data.limit) || 5);
+    const lead = document.getElementById('aolLead');
+    if (lead) {
+        lead.textContent = `You already have ${limit} active orders — the most you can have at once.`;
+    }
+    const slots = document.getElementById('aolSlots');
+    if (slots) {
+        slots.innerHTML = '';
+        for (let i = 1; i <= limit; i++) {
+            const dot = document.createElement('span');
+            dot.className = 'aol-slot' + (i <= Math.min(count, limit) ? ' is-filled' : '');
+            dot.textContent = String(i);
+            slots.appendChild(dot);
+        }
+    }
+    overlay.removeAttribute('hidden');
+    overlay.setAttribute('aria-hidden', 'false');
+    overlay.classList.add('is-open');
+    if (overlay.parentElement !== document.body) {
+        document.body.appendChild(overlay);
+    }
+    const closeBtn = document.getElementById('aolCloseBtn');
+    if (closeBtn) {
+        closeBtn.onclick = closeActiveOrderLimitModal;
+        closeBtn.focus();
+    }
+    overlay.onclick = function (e) {
+        if (e.target === overlay) closeActiveOrderLimitModal();
+    };
+    return true;
+}
+
+function renderCheckoutActiveOrderLimit(data) {
+    const nextBtn = document.getElementById('checkoutNextBtn');
+    if (isActiveOrderLimitPayload(data)) {
+        showActiveOrderLimitModal(data);
         if (nextBtn) nextBtn.disabled = true;
         return true;
     }
-
-    el.style.display = 'none';
-    el.innerHTML = '';
+    if (nextBtn) nextBtn.disabled = false;
     return false;
 }
 
@@ -5244,6 +5399,10 @@ async function ensureCheckoutStockAvailable(payload) {
             body: JSON.stringify(payload || {})
         });
         const result = await response.json().catch(function () { return {}; });
+        if (isActiveOrderLimitPayload(result)) {
+            showActiveOrderLimitModal(result);
+            return false;
+        }
         if (response.ok && result.success) return true;
 
         const issues = result.stock_issues || [];
@@ -5290,6 +5449,13 @@ async function buyNowDirect(item) {
         return;
     }
 
+    const activeOrdersOk = await ensureCheckoutActiveOrderAllowed();
+    if (!activeOrdersOk) {
+        buyNowMode = false;
+        buyNowItem = null;
+        return;
+    }
+
     const stockOk = await ensureCheckoutStockAvailable({
         mode: 'buy_now',
         product_id: item.product_id,
@@ -5301,27 +5467,6 @@ async function buyNowDirect(item) {
     if (!stockOk) {
         buyNowMode = false;
         buyNowItem = null;
-        return;
-    }
-
-    const activeOrdersOk = await ensureCheckoutActiveOrderAllowed();
-    if (!activeOrdersOk) {
-        startCheckoutSession();
-        checkoutStep = 1;
-        checkoutOrders = [];
-        uploadedProofs = {};
-        uploadedProofData = {};
-        currentOrderIndex = 0;
-        isCreatingOrders = false;
-        storeDeliveryPreferences = {};
-        updateProgressIndicator(1);
-
-        document.getElementById('checkoutStep1').style.display = 'block';
-        document.getElementById('checkoutStep2').style.display = 'none';
-        document.getElementById('checkoutStep3').style.display = 'none';
-        document.getElementById('checkoutBackBtn').style.display = 'none';
-        document.getElementById('checkoutNextBtn').textContent = '→ Continue';
-        showCheckoutModal();
         return;
     }
 
@@ -5394,6 +5539,11 @@ async function checkout() {
         return;
     }
 
+    const activeOrdersOk = await ensureCheckoutActiveOrderAllowed();
+    if (!activeOrdersOk) {
+        return;
+    }
+
     const stockOk = await ensureCheckoutStockAvailable({
         mode: 'cart',
         items: selectedItems.map(item => ({
@@ -5402,26 +5552,6 @@ async function checkout() {
         }))
     });
     if (!stockOk) return;
-
-    const activeOrdersOk = await ensureCheckoutActiveOrderAllowed();
-    if (!activeOrdersOk) {
-        startCheckoutSession();
-        checkoutStep = 1;
-        checkoutOrders = [];
-        uploadedProofs = {};
-        uploadedProofData = {};
-        currentOrderIndex = 0;
-        isCreatingOrders = false;
-        updateProgressIndicator(1);
-
-        document.getElementById('checkoutStep1').style.display = 'block';
-        document.getElementById('checkoutStep2').style.display = 'none';
-        document.getElementById('checkoutStep3').style.display = 'none';
-        document.getElementById('checkoutBackBtn').style.display = 'none';
-        document.getElementById('checkoutNextBtn').textContent = '→ Continue';
-        showCheckoutModal();
-        return;
-    }
 
     startCheckoutSession();
     
@@ -5888,7 +6018,6 @@ async function proceedCheckout() {
                 // Show more helpful error message
                 if (result.code === 'active_order_limit') {
                     renderCheckoutActiveOrderLimit(result);
-                    showToast(result.error || 'Checkout unavailable', 'error');
                 } else if (result.undeliverable_stores && result.undeliverable_stores.length > 0) {
                     const issue = result.undeliverable_stores[0];
                     showDeliveryUnavailableModal({
@@ -6128,7 +6257,11 @@ async function createOrders() {
             showToast('Orders created successfully!');
             await completeCheckout();
         } else {
-            showToast('Error creating orders: ' + (result.error || 'Unknown error'), 'error');
+            if (result.code === 'active_order_limit') {
+                showActiveOrderLimitModal(result);
+            } else {
+                showToast('Error creating orders: ' + (result.error || 'Unknown error'), 'error');
+            }
             nextBtn.disabled = false;
             nextBtn.textContent = originalText;
             isCreatingOrders = false;
@@ -6303,7 +6436,7 @@ function displayOrderSummary() {
                         ${Number(order.delivery_fee || 0) <= 0
                             ? `<span>Delivery fee: <strong style="color:#27AE60;">FREE</strong><span style="display:block;font-size:12px;font-weight:500;color:#27AE60;margin-top:2px;">Your order qualifies for free delivery.</span></span>`
                             : order.free_delivery_enabled
-                                ? `<span>Delivery fee: <strong>₱${Number(order.delivery_fee || 0).toFixed(2)}</strong>${Number(order.amount_to_free_delivery || 0) > 0 ? `<span style="display:block;font-size:12px;font-weight:500;color:#9A5B00;margin-top:2px;">Add ₱${Number(order.amount_to_free_delivery).toFixed(2)} more to get free delivery (min ₱${Number(order.free_delivery_minimum || 0).toFixed(0)}).</span>` : ''}</span>`
+                                ? `<span>Delivery fee: <strong>₱${Number(order.delivery_fee || 0).toFixed(2)}</strong>${Number(order.amount_to_free_delivery || 0) > 0 ? `<span style="display:block;font-size:12px;font-weight:500;color:#9A5B00;margin-top:2px;">Add ₱${Number(order.amount_to_free_delivery).toFixed(2)} more to get free delivery (min ₱${Number(order.free_delivery_minimum || 0).toFixed(2)}).</span>` : ''}</span>`
                                 : `<span>Delivery fee: <strong>₱${Number(order.delivery_fee || 0).toFixed(2)}</strong></span>`
                         }
                         <span>Distance: <strong>${Number(order.distance_km || 0).toFixed(2)} km</strong></span>
@@ -6441,13 +6574,14 @@ async function displayGCashPayment() {
         </div>
     `;
 
-    const codEnabled = order.allow_cod !== false;
+    const gcashEnabled = order.allow_gcash !== false;
+    const codEnabled = order.allow_cod === true;
     const paymentSelector = `
         <div class="checkout-payment-card">
             <h5 class="checkout-delivery-title">Payment Method</h5>
             <div class="checkout-payment-methods">
-                <label class="checkout-payment-method-option" style="background:${paymentMethod === 'gcash' ? 'rgba(212,120,138,.12)' : '#fff'};">
-                    <input type="radio" name="checkoutPaymentMethod_${order.temp_id}" value="gcash" ${paymentMethod === 'gcash' ? 'checked' : ''} onchange="onCheckoutPaymentMethodChange('${order.temp_id}', this.value)" />
+                <label class="checkout-payment-method-option" style="cursor:${gcashEnabled ? 'pointer' : 'not-allowed'}; opacity:${gcashEnabled ? '1' : '.55'}; background:${paymentMethod === 'gcash' ? 'rgba(212,120,138,.12)' : '#fff'};">
+                    <input type="radio" name="checkoutPaymentMethod_${order.temp_id}" value="gcash" ${paymentMethod === 'gcash' ? 'checked' : ''} ${gcashEnabled ? '' : 'disabled'} onchange="onCheckoutPaymentMethodChange('${order.temp_id}', this.value)" />
                     <span style="font-size:13px;">GCash</span>
                 </label>
                 <label class="checkout-payment-method-option" style="cursor:${codEnabled ? 'pointer' : 'not-allowed'}; opacity:${codEnabled ? '1' : '.55'}; background:${paymentMethod === 'cod' ? 'rgba(212,120,138,.12)' : '#fff'};">
@@ -6455,6 +6589,7 @@ async function displayGCashPayment() {
                     <span style="font-size:13px;">Cash on Delivery</span>
                 </label>
             </div>
+            ${gcashEnabled ? '' : '<div style="font-size:12px; color:var(--muted); margin-top:8px;">GCash is currently disabled by this store.</div>'}
             ${codEnabled ? '' : '<div style="font-size:12px; color:var(--muted); margin-top:8px;">Cash on Delivery is currently disabled by this store.</div>'}
         </div>`;
     html += paymentSelector;
@@ -6887,7 +7022,7 @@ function showCartActionError(error) {
     }
 }
 window.isDeliveryUnavailableError = isDeliveryUnavailableError;
-window.showDeliveryUnavailableModal = showDeliveryUnavailableModal;
+window.showActiveOrderLimitModal = showActiveOrderLimitModal;
 window.showCartActionError = showCartActionError;
 
 // Unified confirmation modal helper
@@ -6976,16 +7111,17 @@ window.showCartActionError = showCartActionError;
         const n = Number(String(value).replace(/,/g, ''));
         if (!Number.isFinite(n)) return value;
         return new Intl.NumberFormat('en-US', {
-            minimumFractionDigits: 0,
+            minimumFractionDigits: 2,
             maximumFractionDigits: 2
         }).format(n);
     };
 
     function formatNodeText(node) {
         if (!node || !node.nodeValue || !moneyCheckPattern.test(node.nodeValue)) return;
-        node.nodeValue = node.nodeValue.replace(moneyPattern, function(_, prefix, amount) {
+        const next = node.nodeValue.replace(moneyPattern, function(_, prefix, amount) {
             return prefix + window.formatMoneyValue(amount);
         });
+        if (next !== node.nodeValue) node.nodeValue = next;
     }
 
     function formatMoneyIn(root) {
@@ -6995,7 +7131,10 @@ window.showCartActionError = showCartActionError;
                 const parent = textNode.parentElement;
                 if (!parent) return NodeFilter.FILTER_REJECT;
                 const tag = parent.tagName;
-                if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT') {
+                if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'BUTTON') {
+                    return NodeFilter.FILTER_REJECT;
+                }
+                if (parent.closest('[data-no-money-format], .tender-btn, .tender-quick')) {
                     return NodeFilter.FILTER_REJECT;
                 }
                 return NodeFilter.FILTER_ACCEPT;
@@ -7008,9 +7147,13 @@ window.showCartActionError = showCartActionError;
     // Initial pass
     formatMoneyIn(document.body);
 
-    // Re-format dynamically injected content
+    // Re-format dynamically injected or updated content
     const observer = new MutationObserver(function(mutations) {
         for (const m of mutations) {
+            if (m.type === 'characterData') {
+                formatNodeText(m.target);
+                continue;
+            }
             m.addedNodes.forEach(function(node) {
                 if (node.nodeType === Node.TEXT_NODE) {
                     formatNodeText(node);
@@ -7020,7 +7163,7 @@ window.showCartActionError = showCartActionError;
             });
         }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 })();
 
 // Initialize cart display

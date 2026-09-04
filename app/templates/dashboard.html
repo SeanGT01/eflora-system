@@ -1408,7 +1408,7 @@ table.dash-table {
         <div class="kpi-label">{% if is_admin %}Platform Revenue{% else %}Total Revenue{% endif %}</div>
         <div class="kpi-icon"><i class="ri-money-dollar-circle-line"></i></div>
       </div>
-      <div class="kpi-value" id="kpiRevenue">₱{{ '{:,.0f}'.format(revenue_this_month|default(0)) }}</div>
+      <div class="kpi-value" id="kpiRevenue">₱{{ '{:,.2f}'.format(revenue_this_month|default(0)) }}</div>
       <div class="kpi-sub">{{ period_label or 'Selected period' }}</div>
       {% if revenue_change > 0 %}
         <span class="kpi-badge up"><i class="ri-arrow-up-line"></i>{{ '%.1f'|format(revenue_change) }}%</span>
@@ -1823,7 +1823,7 @@ table.dash-table {
             <div class="activity-item">
               <div class="act-dot delivery"><i class="ri-money-dollar-circle-line"></i></div>
               <div class="act-text">
-                <div class="act-main"><strong>₱{{ '{:,.0f}'.format(revenue_this_month|default(0)) }}</strong> platform revenue</div>
+                <div class="act-main"><strong>₱{{ '{:,.2f}'.format(revenue_this_month|default(0)) }}</strong> platform revenue</div>
                 <div class="act-time">{{ '{:,}'.format(customers_this_month|default(0)) }} new customers this period</div>
               </div>
             </div>
@@ -1937,7 +1937,7 @@ let chart = new Chart(ctx, {
         bodyFont:  { family: "'DM Sans', sans-serif", size: 12 },
         callbacks: {
           label: c => c.datasetIndex === 0
-            ? `  Revenue: ₱${c.parsed.y.toLocaleString()}`
+            ? `  Revenue: ₱${Number(c.parsed.y).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : `  Orders: ${c.parsed.y}`
         }
       }
@@ -1953,7 +1953,7 @@ let chart = new Chart(ctx, {
         ticks: {
           font: { family: "'DM Sans'", size: 11 },
           color: '#9a8d85',
-          callback: v => '₱' + v.toLocaleString()
+          callback: v => '₱' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         }
       },
       y1: {

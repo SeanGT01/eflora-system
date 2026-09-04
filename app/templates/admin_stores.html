@@ -608,7 +608,7 @@
     </div>
     <div class="kpi-card bark">
       <div class="kpi-label">Combined Revenue</div>
-      <div class="kpi-value" style="font-size:24px;">{{ total_platform_revenue_display }}</div>
+      <div class="kpi-value" style="font-size:24px;">₱{{ '{:,.2f}'.format(total_platform_revenue|default(0)|float) }}</div>
       <div class="kpi-sub">All-time delivered orders</div>
     </div>
   </div>
@@ -678,7 +678,7 @@
           </td>
           <td>{{ '{:,}'.format(s.product_count) }}</td>
           <td>{{ '{:,}'.format(s.order_count) }}</td>
-          <td><span class="amount-cell">{{ s.revenue_display }}</span></td>
+          <td><span class="amount-cell">₱{{ '{:,.2f}'.format(s.revenue|default(0)|float) }}</span></td>
           <td style="color:var(--muted);font-size:12.5px;">{{ s.created_at }}</td>
           <td>
             <div class="act-row" style="justify-content:flex-end;">
@@ -799,6 +799,19 @@
   window.openModal  = id => document.getElementById(id).classList.add('show');
   window.closeModal = id => document.getElementById(id).classList.remove('show');
 
+  function formatStoreRevenue(stats) {
+    if (!stats) return '₱0.00';
+    if (stats.revenue_display) {
+      const n = Number(String(stats.revenue).replace(/,/g, ''));
+      if (Number.isFinite(n)) {
+        return '₱' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      return stats.revenue_display;
+    }
+    const n = Number(stats.revenue || 0);
+    return '₱' + (Number.isFinite(n) ? n : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   /* ── Search + filter ───────────────────────────── */
   function applyFilters(){
     const q  = (document.getElementById('searchInput').value || '').toLowerCase().trim();
@@ -896,7 +909,7 @@
           </div>
           <div class="detail-block full">
             <div class="detail-label">Delivered Revenue</div>
-            <div class="detail-value" style="color:var(--deep-rose);">${store.stats.revenue_display}</div>
+            <div class="detail-value" style="color:var(--deep-rose);">${formatStoreRevenue(store.stats)}</div>
           </div>
         </div>
       `;

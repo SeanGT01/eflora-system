@@ -36,7 +36,7 @@ print(f"✅ checkout_bp created: {checkout_bp}")
 MAX_ACTIVE_CUSTOMER_ORDERS = 5
 ACTIVE_ORDER_LIMIT_MESSAGE = (
     "You already have {count} active orders (maximum {limit}). "
-    "Please wait until an order is marked Completed before placing a new one."
+    "Mark an order as Completed in My Orders before placing a new one."
 )
 
 
@@ -106,18 +106,45 @@ print("=" * 60)
 def _ensure_store_payment_settings_table():
     try:
         if inspect(db.engine).has_table("store_payment_settings"):
+            cols = {c["name"] for c in inspect(db.engine).get_columns("store_payment_settings")}
+            if "allow_gcash" not in cols:
+                from sqlalchemy import text
+                db.session.execute(text(
+                    "ALTER TABLE store_payment_settings "
+                    "ADD COLUMN allow_gcash BOOLEAN NOT NULL DEFAULT TRUE"
+                ))
+                db.session.commit()
             return True
         StorePaymentSetting.__table__.create(db.engine, checkfirst=True)
         return True
     except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return False
+
+
+def _store_payment_flags(store_id):
+    """Return (allow_gcash, allow_cod). GCash defaults on; COD defaults off."""
+    if not _ensure_store_payment_settings_table():
+        return True, False
+    row = StorePaymentSetting.query.filter_by(store_id=store_id).first()
+    if not row:
+        return True, False
+    allow_gcash = True if getattr(row, "allow_gcash", None) is None else bool(row.allow_gcash)
+    allow_cod = bool(row.allow_cod)
+    if not allow_gcash and not allow_cod:
+        allow_gcash = True
+    return allow_gcash, allow_cod
 
 
 def _store_allows_cod(store_id):
-    if not _ensure_store_payment_settings_table():
-        return False
-    row = StorePaymentSetting.query.filter_by(store_id=store_id).first()
-    return bool(row.allow_cod) if row else False
+    return _store_payment_flags(store_id)[1]
+
+
+def _store_allows_gcash(store_id):
+    return _store_payment_flags(store_id)[0]
 
 
 def _free_delivery_fields(store, subtotal, delivery_fee):
@@ -1033,6 +1060,7 @@ def validate_checkout():
                     "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
                     "gcash_instructions": store.gcash_instructions,
                     "allow_cod": _store_allows_cod(store.id),
+                    "allow_gcash": _store_allows_gcash(store.id),
                     "store_schedule": store.store_schedule,
                     **_free_delivery_fields(store, subtotal, delivery_check["delivery_fee"]),
                 })
@@ -1214,6 +1242,8 @@ def create_orders():
                 return jsonify({"error": "Invalid payment method"}), 400
             if payment_method == "cod" and not _store_allows_cod(store.id):
                 return jsonify({"error": f"Cash on Delivery is not enabled for {store.name}"}), 400
+            if payment_method == "gcash" and not _store_allows_gcash(store.id):
+                return jsonify({"error": f"GCash is not enabled for {store.name}"}), 400
 
             # Phase 1: Extract and parse per-store delivery date/time
             order_delivery_date_str = order_data.get("requested_delivery_date")
@@ -2102,6 +2132,7 @@ def buy_now_validate():
                 "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
                 "gcash_instructions": store.gcash_instructions,
                 "allow_cod": _store_allows_cod(store.id),
+                "allow_gcash": _store_allows_gcash(store.id),
                 "store_schedule": store.store_schedule,
                 **_free_delivery_fields(store, subtotal, delivery_check["delivery_fee"]),
             }],
@@ -2180,6 +2211,8 @@ def buy_now_create_order():
             return jsonify({"error": "Store not found"}), 404
         if payment_method == "cod" and not _store_allows_cod(store.id):
             return jsonify({"error": "Cash on Delivery is not enabled for this store"}), 400
+        if payment_method == "gcash" and not _store_allows_gcash(store.id):
+            return jsonify({"error": "GCash is not enabled for this store"}), 400
         if payment_method == "gcash" and not payment_proof_url:
             return jsonify({"error": "Payment proof is required for GCash"}), 400
         if payment_method == "cod":
@@ -2356,6 +2389,7 @@ def buy_now_create_order():
         order_dict["gcash_qr_codes"] = [qr.to_dict() for qr in store.gcash_qr_images]
         order_dict["gcash_instructions"] = store.gcash_instructions
         order_dict["allow_cod"] = _store_allows_cod(store.id)
+        order_dict["allow_gcash"] = _store_allows_gcash(store.id)
         order_dict["distance_km"] = round(distance, 2) if distance is not None else None
         order_dict["selected_address"] = address.to_dict()
 

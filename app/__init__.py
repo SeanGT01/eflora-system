@@ -87,6 +87,19 @@ def create_app(config_class='default'):
     limiter.init_app(app)
     mail.init_app(app)
 
+    @app.teardown_request
+    def _recycle_dead_db_connection(exc):
+        if exc is None:
+            return
+        from sqlalchemy.exc import DisconnectionError, OperationalError
+        if not isinstance(exc, (OperationalError, DisconnectionError)):
+            return
+        try:
+            db.session.remove()
+            db.engine.dispose()
+        except Exception:
+            pass
+
     def _ensure_order_fulfillment_columns():
         try:
             with app.app_context():
@@ -120,6 +133,22 @@ def create_app(config_class='default'):
                 if 'free_delivery_enabled' not in cols:
                     db.session.execute(text(
                         "ALTER TABLE stores ADD COLUMN free_delivery_enabled BOOLEAN NOT NULL DEFAULT TRUE"
+                    ))
+                    db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    def _ensure_store_allow_gcash_column():
+        try:
+            with app.app_context():
+                existing_tables = inspect(db.engine).get_table_names()
+                if 'store_payment_settings' not in existing_tables:
+                    return
+                cols = {c['name'] for c in inspect(db.engine).get_columns('store_payment_settings')}
+                if 'allow_gcash' not in cols:
+                    db.session.execute(text(
+                        "ALTER TABLE store_payment_settings "
+                        "ADD COLUMN allow_gcash BOOLEAN NOT NULL DEFAULT TRUE"
                     ))
                     db.session.commit()
         except Exception:
@@ -225,6 +254,7 @@ def create_app(config_class='default'):
     with app.app_context():
         _ensure_order_fulfillment_columns()
         _ensure_store_free_delivery_column()
+        _ensure_store_allow_gcash_column()
         _ensure_pos_order_item_line_columns()
         _ensure_keep_ymal_addons_column()
         _ensure_store_admin_tables()

@@ -2820,11 +2820,11 @@
         <!-- Price -->
         <div class="price-block">
             {% if product.special_price and product.special_price < product.price %}
-            <div class="price-current" id="currentPrice">₱{{ "%.0f"|format(product.special_price) }}</div>
-            <div class="price-original" id="originalPrice">₱{{ "%.0f"|format(product.price) }}</div>
+            <div class="price-current" id="currentPrice">₱{{ "%.2f"|format(product.special_price) }}</div>
+            <div class="price-original" id="originalPrice">₱{{ "%.2f"|format(product.price) }}</div>
             <div class="price-discount-badge" id="discountBadge">{{ product.discount_pct }}% off</div>
             {% else %}
-            <div class="price-current" id="currentPrice">₱{{ "%.0f"|format(product.price) }}</div>
+            <div class="price-current" id="currentPrice">₱{{ "%.2f"|format(product.price) }}</div>
             <div class="price-original" id="originalPrice" style="display:none;"></div>
             <div class="price-discount-badge" id="discountBadge" style="display:none;"></div>
             {% endif %}
@@ -3066,7 +3066,7 @@
                             <div class="addon-oos-badge">Out of stock</div>
                             {% endif %}
                             <div class="addon-card-name">{{ opt.name }}</div>
-                            <div class="addon-card-price">₱{{ "%.0f"|format(opt.price|float) }}</div>
+                            <div class="addon-card-price">₱{{ "%.2f"|format(opt.price|float) }}</div>
                             <div class="addon-check"><i class="ri-check-line"></i></div>
                         </div>
                         <div class="addon-qty" aria-label="Quantity">
@@ -3125,10 +3125,10 @@
                             <div class="addon-card-name">{{ ap.name }}</div>
                             <div class="addon-card-price">
                                 {% if ap.special_price and ap.special_price < ap.price %}
-                                    ₱{{ "%.0f"|format(ap.special_price) }}
-                                    <span style="text-decoration:line-through;font-size:0.8em;opacity:0.6;margin-left:2px;">₱{{ "%.0f"|format(ap.price) }}</span>
+                                    ₱{{ "%.2f"|format(ap.special_price) }}
+                                    <span style="text-decoration:line-through;font-size:0.8em;opacity:0.6;margin-left:2px;">₱{{ "%.2f"|format(ap.price) }}</span>
                                 {% else %}
-                                    ₱{{ "%.0f"|format(ap.price) }}
+                                    ₱{{ "%.2f"|format(ap.price) }}
                                 {% endif %}
                             </div>
                             <div class="addon-check"><i class="ri-check-line"></i></div>
@@ -3178,7 +3178,7 @@
         <!-- Order Total -->
         <div class="order-total-row">
             <span class="order-total-label">Total:</span>
-            <span class="order-total-value" id="orderTotal">₱{{ "%.0f"|format(product.price) }}</span>
+            <span class="order-total-value" id="orderTotal">₱{{ "%.2f"|format(product.price) }}</span>
         </div>
 
         <!-- CTA Buttons -->
@@ -3288,11 +3288,11 @@ function updatePriceDisplay(price, specialPrice, discountPct) {
     const badgeEl    = document.getElementById('discountBadge');
     if (!priceEl) return;
     if (specialPrice && specialPrice > 0 && specialPrice < price) {
-        priceEl.textContent = '₱' + Math.round(specialPrice).toLocaleString();
-        if (origEl)  { origEl.textContent = '₱' + Math.round(price).toLocaleString(); origEl.style.display = ''; }
+        priceEl.textContent = '₱' + Number(specialPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (origEl)  { origEl.textContent = '₱' + Number(price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); origEl.style.display = ''; }
         if (badgeEl) { badgeEl.textContent = discountPct + '% off'; badgeEl.style.display = ''; }
     } else {
-        priceEl.textContent = '₱' + Math.round(price).toLocaleString();
+        priceEl.textContent = '₱' + Number(price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         if (origEl)  origEl.style.display = 'none';
         if (badgeEl) badgeEl.style.display = 'none';
     }
@@ -4064,7 +4064,7 @@ function filterAddons(cat, btn) {
             </div>
             <div>
                 <div style="font-family:var(--font-display);font-size:20px;margin-bottom:.4rem;">${card.dataset.name}</div>
-                <div style="font-family:var(--font-display);font-size:22px;color:var(--deep-rose);font-weight:600;">₱${parseFloat(card.dataset.price).toFixed(0)}</div>
+                <div style="font-family:var(--font-display);font-size:22px;color:var(--deep-rose);font-weight:600;">₱${parseFloat(card.dataset.price).toFixed(2)}</div>
                 <div style="font-size:13px;color:var(--muted);margin-top:.5rem;">
                     ${isOos
                         ? '<span style="color:#9b1c1c;font-weight:600;">Out of stock</span>'
@@ -4419,7 +4419,7 @@ function updateTotal() {
         total += addon.price * (addon.quantity || 1);
     });
     total += getStructuredAddonsTotal() * qty;
-    document.getElementById('orderTotal').textContent = '₱' + Math.round(total).toLocaleString();
+    document.getElementById('orderTotal').textContent = '₱' + Number(total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function getDropdownAddonOptionIds() {

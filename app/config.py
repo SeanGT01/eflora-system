@@ -1,11 +1,63 @@
 import os
+import time
 from datetime import timedelta
+from urllib.parse import parse_qs, unquote, urlparse
 from dotenv import load_dotenv
 
 # Load .env variables
 load_dotenv()
 
 basedir = os.path.abspath(os.path.dirname(__file__))
+
+
+def _is_postgres_url(url) -> bool:
+    return bool(url) and str(url).startswith(('postgres://', 'postgresql://'))
+
+
+def _normalize_postgres_uri(url: str) -> str:
+    if str(url).startswith('postgres://'):
+        return 'postgresql://' + str(url)[len('postgres://'):]
+    return str(url)
+
+
+def _psycopg2_connect_kwargs(url: str) -> dict:
+    parsed = urlparse(_normalize_postgres_uri(url))
+    qs = parse_qs(parsed.query or '')
+    dbname = unquote((parsed.path or '/').lstrip('/'))
+    kwargs = {
+        'host': parsed.hostname,
+        'port': parsed.port or 5432,
+        'user': unquote(parsed.username) if parsed.username else None,
+        'password': unquote(parsed.password) if parsed.password else None,
+        'dbname': dbname,
+        'connect_timeout': int((qs.get('connect_timeout') or ['10'])[0]),
+        'sslmode': (qs.get('sslmode') or ['require'])[0],
+        'keepalives': 1,
+        'keepalives_idle': 30,
+        'keepalives_interval': 10,
+        'keepalives_count': 5,
+    }
+    return {k: v for k, v in kwargs.items() if v is not None}
+
+
+def _retrying_psycopg2_creator(url: str):
+    """Retry Railway/proxy handshake drops instead of failing the request."""
+    kwargs = _psycopg2_connect_kwargs(url)
+
+    def creator():
+        import psycopg2
+        last_err = None
+        delay = 0.2
+        for _ in range(4):
+            try:
+                return psycopg2.connect(**kwargs)
+            except psycopg2.OperationalError as exc:
+                last_err = exc
+                time.sleep(delay)
+                delay = min(delay * 2, 2.0)
+        raise last_err
+
+    return creator
 
 
 class Config:
@@ -41,30 +93,27 @@ class Config:
     # =============================
     DATABASE_URL = os.getenv("DATABASE_URL")
 
-    if DATABASE_URL:
+    if _is_postgres_url(DATABASE_URL):
+        SQLALCHEMY_DATABASE_URI = _normalize_postgres_uri(DATABASE_URL)
+        # Public Railway proxy (*.proxy.rlwy.net) often drops the TCP handshake.
+        # Retry in the connector and keep the pool small/hot.
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'creator': _retrying_psycopg2_creator(DATABASE_URL),
+            'pool_pre_ping': True,
+            'pool_recycle': 120,
+            'pool_size': 3,
+            'max_overflow': 5,
+            'pool_timeout': 30,
+            'pool_use_lifo': True,
+            'pool_reset_on_return': 'rollback',
+        }
+    elif DATABASE_URL:
         SQLALCHEMY_DATABASE_URI = DATABASE_URL
     else:
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(basedir, 'dev.db')}"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SEND_FILE_MAX_AGE_DEFAULT = 86400
-    # Railway/proxy Postgres closes idle sockets; ping + recycle + TCP keepalives
-    # avoid "server closed the connection unexpectedly" on the next request.
-    if DATABASE_URL and str(DATABASE_URL).startswith(('postgres://', 'postgresql://')):
-        SQLALCHEMY_ENGINE_OPTIONS = {
-            'pool_pre_ping': True,
-            'pool_recycle': 180,
-            'pool_size': 5,
-            'max_overflow': 10,
-            'pool_reset_on_return': 'rollback',
-            'connect_args': {
-                'connect_timeout': 10,
-                'keepalives': 1,
-                'keepalives_idle': 30,
-                'keepalives_interval': 10,
-                'keepalives_count': 5,
-            },
-        }
 
     # =============================
     # File Uploads (Local - Fallback)
@@ -201,6 +250,7 @@ class ProductionConfig(Config):
 class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    SQLALCHEMY_ENGINE_OPTIONS = {}
     # Use local files in testing
     USE_CLOUDINARY_IN_DEV = False
 

@@ -4,6 +4,108 @@
 
 {% block page_title %}Orders Management{% endblock %}
 
+{% block extra_css %}
+{% include 'partials/seller_dash_theme.html' %}
+<style>
+  .kpi-row.orders-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    margin-bottom: 1rem;
+  }
+  .kpi-card[data-filter-type] { cursor: pointer; }
+  .kpi-card.gold::before { background: linear-gradient(90deg, #d7a52c, #c9a227); }
+  .kpi-card:nth-child(5) .kpi-icon {
+    background: linear-gradient(135deg, rgba(122,158,126,.22), rgba(74,107,78,.1));
+    color: #4a6b4e;
+  }
+  .kpi-card:nth-child(6) .kpi-icon {
+    background: linear-gradient(135deg, rgba(181,68,90,.16), rgba(216,120,160,.1));
+    color: #b5445a;
+  }
+  .kpi-card:nth-child(7) .kpi-icon {
+    background: linear-gradient(135deg, rgba(194,78,104,.18), rgba(216,120,160,.12));
+    color: #b5445a;
+  }
+  .payment-pill.payment-combined {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .orders-filters .inv-filter-select,
+  .orders-filters .inv-search-input {
+    appearance: none;
+    min-width: 148px;
+    max-width: 220px;
+    padding: 0.4rem 2rem 0.4rem 0.75rem;
+    border: 1px solid rgba(194, 78, 104, 0.18);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239a8d85' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.7rem center;
+    color: var(--charcoal);
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .orders-filters .inv-search-input {
+    min-width: 220px;
+    max-width: 320px;
+    padding-left: 2rem;
+    background-image: none;
+    background-color: rgba(255, 255, 255, 0.92);
+  }
+  .orders-filters .inv-search-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: 1 1 220px;
+  }
+  .orders-filters .inv-search-wrap i {
+    position: absolute;
+    left: 0.7rem;
+    color: var(--muted);
+    font-size: 14px;
+    pointer-events: none;
+  }
+  .orders-filters .orders-date-filter {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+  .orders-filters .orders-date-field {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+  .orders-filters .orders-date-field label {
+    margin: 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .orders-filters .orders-date-field input[type="date"] {
+    border: 1px solid rgba(194, 78, 104, 0.18);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--charcoal);
+    min-height: 34px;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 0.35rem 0.7rem;
+  }
+  .orders-filters .orders-date-reset {
+    min-height: 34px;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    align-self: center;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <style>
 {% include 'partials/order_detail_sdm_styles.html' %}
@@ -232,19 +334,20 @@
     }
 
     .orders-date-filter {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(130px, 1fr)) auto;
-        align-items: flex-end;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
         gap: 0.45rem;
         grid-column: 1 / -1;
     }
 
     .orders-date-field {
         display: flex;
-        flex-direction: column;
-        gap: 0.2rem;
-        min-width: 130px;
-        flex: 1 1 130px;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.4rem;
+        min-width: 0;
+        flex: 0 1 auto;
     }
 
     .orders-date-field label {
@@ -447,8 +550,11 @@
     }
 
     .orders-action-btn i {
-        font-size: 13px;
+        font-size: 15px;
         line-height: 1;
+        display: inline-block;
+        width: 1em;
+        height: 1em;
     }
 
     .orders-action-btn .btn-label {
@@ -479,10 +585,28 @@
         color: #fff;
     }
 
+    .orders-action-btn.warning {
+        background: #f59e0b;
+        border-color: #f59e0b;
+        color: #fff;
+    }
+
     .orders-action-btn.warning:hover {
-        color: var(--terracotta);
-        border-color: var(--terracotta);
-        background: rgba(196, 113, 75, 0.06);
+        background: #d97706;
+        border-color: #d97706;
+        color: #fff;
+    }
+
+    .orders-action-btn.receipt-ok {
+        background: #047857;
+        border-color: #047857;
+        color: #fff;
+    }
+
+    .orders-action-btn.receipt-ok:hover {
+        background: #065f46;
+        border-color: #065f46;
+        color: #fff;
     }
 
     .orders-action-btn.danger:hover {
@@ -801,13 +925,21 @@
         .orders-search { grid-column: 1 / -1; }
         .orders-date-filter {
             grid-column: 1 / -1;
-            grid-template-columns: 1fr 1fr;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
         }
-        .orders-date-field { min-width: 0; }
+        .orders-date-field { min-width: 0; flex: 1 1 auto; }
         .orders-date-reset {
-            grid-column: 1 / -1;
             width: 100%;
             min-height: 44px;
+        }
+        .orders-filters .inv-search-wrap,
+        .orders-filters .inv-search-input,
+        .orders-filters .inv-filter-select {
+            min-width: 0;
+            max-width: none;
+            width: 100%;
         }
         .orders-search input,
         .orders-toolbar select,
@@ -891,13 +1023,13 @@
         .orders-table td:first-child:not(:has(input)) { display: none; }
 
         .orders-table td[data-label="Order"] { grid-column: 1; }
-        .orders-table td[data-label="Status"] {
+        .orders-table td[data-label="Order Status"] {
             grid-column: 2;
             align-self: start;
             text-align: right;
         }
         .orders-table td[data-label="Customer"] { grid-column: 1 / -1; }
-        .orders-table td[data-label="Payment"] { grid-column: 1; }
+        .orders-table td[data-label="Payment Status"] { grid-column: 1; }
         .orders-table td[data-label="Summary"] {
             grid-column: 2;
             text-align: right;
@@ -948,85 +1080,65 @@
     }
 </style>
 
-<div class="orders-page">
-    <div class="orders-header">
+<div class="dash">
+    <div class="dash-header">
         <div>
-            <div class="section-eyebrow">Manage Your Store</div>
-            <h2 class="section-title">Orders & Fulfillment</h2>
-            <p class="section-subtitle">Review receipts, update order progress, and keep delivery handoff smooth.</p>
+            <div class="dash-greeting-label">Manage your store</div>
+            <h1 class="dash-title">Orders, <em>in bloom</em></h1>
         </div>
-        <button type="button" class="btn btn-rose" id="refreshOrdersBtn">
-            <i class="ri-refresh-line"></i>
-            Refresh Orders
-        </button>
-    </div>
-
-    <div class="orders-summary">
-        <div class="orders-stat rose" data-filter-type="today">
-            <div class="orders-stat-head">
-                <div class="orders-stat-label">Today</div>
-                <div class="orders-stat-icon"><i class="ri-calendar-event-line"></i></div>
-            </div>
-            <div class="orders-stat-value" data-stat-value="today">{{ order_stats.today }}</div>
-            <div class="orders-stat-sub">New orders today</div>
-        </div>
-        <div class="orders-stat gold" data-filter-type="payment" data-filter-value="pending_verification">
-            <div class="orders-stat-head">
-                <div class="orders-stat-label">Payment Review</div>
-                <div class="orders-stat-icon"><i class="ri-bank-card-line"></i></div>
-            </div>
-            <div class="orders-stat-value" data-stat-value="payment_review">{{ order_stats.payment_review }}</div>
-            <div class="orders-stat-sub">Receipts to check</div>
-        </div>
-        <div class="orders-stat terra" data-filter-type="status-group" data-filter-value="accepted,preparing">
-            <div class="orders-stat-head">
-                <div class="orders-stat-label">Preparing</div>
-                <div class="orders-stat-icon"><i class="ri-box-3-line"></i></div>
-            </div>
-            <div class="orders-stat-value" data-stat-value="preparing">{{ order_stats.preparing }}</div>
-            <div class="orders-stat-sub">Accepted and preparing</div>
-        </div>
-        <div class="orders-stat bark" data-filter-type="status" data-filter-value="on_delivery">
-            <div class="orders-stat-head">
-                <div class="orders-stat-label">On Delivery</div>
-                <div class="orders-stat-icon"><i class="ri-truck-line"></i></div>
-            </div>
-            <div class="orders-stat-value" data-stat-value="on_delivery">{{ order_stats.on_delivery }}</div>
-            <div class="orders-stat-sub">Currently out for delivery</div>
-        </div>
-        <div class="orders-stat sage" data-filter-type="status" data-filter-value="delivered">
-            <div class="orders-stat-head">
-                <div class="orders-stat-label">Delivered</div>
-                <div class="orders-stat-icon"><i class="ri-checkbox-circle-line"></i></div>
-            </div>
-            <div class="orders-stat-value" data-stat-value="delivered">{{ order_stats.delivered }}</div>
-            <div class="orders-stat-sub">Completed orders</div>
-        </div>
-        <div class="orders-stat rose" data-filter-type="status" data-filter-value="completed">
-            <div class="orders-stat-head">
-                <div class="orders-stat-label">Completed</div>
-                <div class="orders-stat-icon"><i class="ri-award-line"></i></div>
-            </div>
-            <div class="orders-stat-value" data-stat-value="completed">{{ order_stats.completed }}</div>
-            <div class="orders-stat-sub">Customer confirmed</div>
-        </div>
-        <div class="orders-stat rose" data-filter-type="status-group" data-filter-value="delivered,completed">
-            <div class="orders-stat-head">
-                <div class="orders-stat-label">Revenue</div>
-                <div class="orders-stat-icon"><i class="ri-money-dollar-circle-line"></i></div>
-            </div>
-            <div class="orders-stat-value" data-stat-value="revenue">Php {{ "%.0f"|format(order_stats.revenue) }}</div>
-            <div class="orders-stat-sub">Delivered/completed revenue</div>
+        <div class="dash-header-actions">
+            <div class="dash-date"><i class="ri-calendar-line"></i>{{ today_str }}</div>
+            <button type="button" class="apply-btn" id="refreshOrdersBtn">
+                <i class="ri-refresh-line"></i>
+                Refresh
+            </button>
         </div>
     </div>
 
-    <div class="filters-card">
-        <div class="orders-toolbar">
-            <div class="orders-search">
+    <div class="kpi-row orders-kpis">
+        <div class="kpi-card" data-filter-type="today">
+            <div class="kpi-top"><div class="kpi-label">Today</div><div class="kpi-icon"><i class="ri-calendar-event-line"></i></div></div>
+            <div class="kpi-value" data-stat-value="today">{{ order_stats.today }}</div>
+            <div class="kpi-sub">New orders today</div>
+        </div>
+        <div class="kpi-card gold" data-filter-type="payment" data-filter-value="pending_verification">
+            <div class="kpi-top"><div class="kpi-label">Payment Review</div><div class="kpi-icon"><i class="ri-bank-card-line"></i></div></div>
+            <div class="kpi-value" data-stat-value="payment_review">{{ order_stats.payment_review }}</div>
+            <div class="kpi-sub">Receipts to check</div>
+        </div>
+        <div class="kpi-card terra" data-filter-type="status-group" data-filter-value="accepted,preparing">
+            <div class="kpi-top"><div class="kpi-label">Preparing</div><div class="kpi-icon"><i class="ri-box-3-line"></i></div></div>
+            <div class="kpi-value" data-stat-value="preparing">{{ order_stats.preparing }}</div>
+            <div class="kpi-sub">Accepted and preparing</div>
+        </div>
+        <div class="kpi-card bark" data-filter-type="status" data-filter-value="on_delivery">
+            <div class="kpi-top"><div class="kpi-label">On Delivery</div><div class="kpi-icon"><i class="ri-truck-line"></i></div></div>
+            <div class="kpi-value" data-stat-value="on_delivery">{{ order_stats.on_delivery }}</div>
+            <div class="kpi-sub">Currently out for delivery</div>
+        </div>
+        <div class="kpi-card green" data-filter-type="status" data-filter-value="delivered">
+            <div class="kpi-top"><div class="kpi-label">Delivered</div><div class="kpi-icon"><i class="ri-checkbox-circle-line"></i></div></div>
+            <div class="kpi-value" data-stat-value="delivered">{{ order_stats.delivered }}</div>
+            <div class="kpi-sub">Out for confirmation</div>
+        </div>
+        <div class="kpi-card" data-filter-type="status" data-filter-value="completed">
+            <div class="kpi-top"><div class="kpi-label">Completed</div><div class="kpi-icon"><i class="ri-award-line"></i></div></div>
+            <div class="kpi-value" data-stat-value="completed">{{ order_stats.completed }}</div>
+            <div class="kpi-sub">Customer confirmed</div>
+        </div>
+        <div class="kpi-card" data-filter-type="status-group" data-filter-value="delivered,completed">
+            <div class="kpi-top"><div class="kpi-label">Revenue</div><div class="kpi-icon"><i class="ri-money-dollar-circle-line"></i></div></div>
+            <div class="kpi-value" data-stat-value="revenue">Php {{ "%.2f"|format(order_stats.revenue) }}</div>
+            <div class="kpi-sub">Delivered/completed</div>
+        </div>
+    </div>
+
+    <div class="dash-toolbar orders-filters">
+            <div class="inv-search-wrap">
                 <i class="ri-search-line"></i>
-                <input type="text" id="sellerOrderSearch" placeholder="Search order, customer, contact, address, or product">
+                <input type="search" id="sellerOrderSearch" class="inv-search-input" placeholder="Search orders…" aria-label="Search orders">
             </div>
-            <select id="sellerStatusSelect">
+            <select id="sellerStatusSelect" class="inv-filter-select" aria-label="Filter by order status">
                 <option value="all">All statuses</option>
                 <option value="pending">Pending</option>
                 <option value="preparing">Preparing</option>
@@ -1036,7 +1148,7 @@
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
             </select>
-            <select id="sellerPaymentSelect">
+            <select id="sellerPaymentSelect" class="inv-filter-select" aria-label="Filter by payment">
                 <option value="all">All payments</option>
                 <option value="gcash">GCash</option>
                 <option value="cod">COD</option>
@@ -1054,14 +1166,13 @@
                     <i class="ri-close-circle-line"></i> Clear dates
                 </button>
             </div>
-        </div>
     </div>
 
-    <div class="orders-panel">
-        <div class="orders-panel-head">
+    <div class="panel">
+        <div class="panel-head">
             <div>
-                <h2 class="orders-panel-title">Store Orders</h2>
-                <p class="orders-panel-sub" id="sellerOrdersPanelSub">{{ store.name }} • {{ order_stats.total }} total orders</p>
+                <span class="panel-title">Store Orders</span>
+                <p class="orders-panel-sub" id="sellerOrdersPanelSub" style="margin:0.15rem 0 0;font-size:12px;color:var(--muted);">{{ store.name }} • {{ order_stats.total }} total orders</p>
             </div>
         </div>
 
@@ -1093,8 +1204,8 @@
                         </th>
                         <th>Order</th>
                         <th>Customer</th>
-                        <th>Payment</th>
-                        <th>Status</th>
+                        <th>Payment Status</th>
+                        <th>Order Status</th>
                         <th>Summary</th>
                         <th>Actions</th>
                     </tr>
@@ -1137,13 +1248,30 @@
                             <div class="order-code" style="font-size:14px;">{{ order.customer_name or 'Customer' }}</div>
                             <div class="order-subline">{{ order.customer_contact or 'No contact' }}</div>
                         </td>
-                        <td data-label="Payment">
-                            <div>
-                                <span class="payment-pill payment-{{ order.payment_status }}">
-                                    {{ order.payment_status.replace('_', ' ')|title }}
-                                </span>
-                            </div>
-                            <div class="order-subline" style="margin-top:0.35rem;">{{ order.payment_method|capitalize }}</div>
+                        <td data-label="Payment Status">
+                            {% set pay_method = (order.payment_method or '')|lower %}
+                            {% set pay_status = (order.payment_status or '')|lower %}
+                            {% if pay_status == 'verified' %}
+                                {% set pay_status_label = 'Verified' %}
+                            {% elif pay_status == 'pending_verification' %}
+                                {% set pay_status_label = 'Pending' %}
+                            {% elif pay_status == 'cod_pending' %}
+                                {% set pay_status_label = 'Pending' %}
+                            {% elif pay_status == 'cod_approved' %}
+                                {% set pay_status_label = 'Approved' %}
+                            {% else %}
+                                {% set pay_status_label = pay_status.replace('_', ' ')|title %}
+                            {% endif %}
+                            {% if pay_method == 'gcash' %}
+                                {% set pay_method_label = 'GCash' %}
+                            {% elif pay_method == 'cod' %}
+                                {% set pay_method_label = 'COD' %}
+                            {% else %}
+                                {% set pay_method_label = (order.payment_method or '')|capitalize %}
+                            {% endif %}
+                            <span class="payment-pill payment-combined payment-{{ order.payment_status }}">
+                                {{ (pay_status_label ~ ' ' ~ pay_method_label)|trim }}
+                            </span>
                         </td>
                         <td data-label="Status">
                             <span class="status-pill status-{{ order.status }}">
@@ -1180,8 +1308,9 @@
                                     <span class="btn-label">View</span>
                                 </button>
                                 {% if order.payment_proof_url %}
+                                {% set needs_receipt_review = order.payment_status == 'pending_verification' %}
                                 <button type="button"
-                                        class="orders-action-btn warning seller-view-payment"
+                                        class="orders-action-btn seller-view-payment {% if needs_receipt_review %}warning{% else %}receipt-ok{% endif %}"
                                         data-order-id="{{ order.id }}"
                                         data-proof-url="{{ order.payment_proof_url }}"
                                         data-customer-name="{{ order.customer_name or 'Customer' }}"
@@ -1189,10 +1318,15 @@
                                         data-customer-contact-label="{{ order.customer_contact_label or 'Contact' }}"
                                         data-order-total="{{ '%.2f'|format(order.display_total if order.display_total is defined else (order.total_amount or 0)) }}"
                                         data-payment-method="{{ order.payment_method or '' }}"
-                                        title="Receipt"
-                                        aria-label="View payment receipt">
-                                    <i class="ri-file-image-line"></i>
+                                        title="{% if needs_receipt_review %}Review receipt{% else %}View receipt{% endif %}"
+                                        aria-label="{% if needs_receipt_review %}Review unverified payment receipt{% else %}View verified payment receipt{% endif %}">
+                                    {% if needs_receipt_review %}
+                                    <i class="ri-error-warning-line" aria-hidden="true"></i>
+                                    <span class="btn-label">Review</span>
+                                    {% else %}
+                                    <i class="ri-checkbox-circle-line" aria-hidden="true"></i>
                                     <span class="btn-label">Receipt</span>
+                                    {% endif %}
                                 </button>
                                 {% endif %}
                                 {% if order.status == 'preparing' %}
@@ -1281,7 +1415,6 @@
                     <div class="sdm-rows">
                         <div class="sdm-row"><span class="sdm-k">Customer</span><span class="sdm-v" id="sellerPaymentProofCustomer">—</span></div>
                         <div class="sdm-row"><span class="sdm-k" id="sellerPaymentProofContactLabel">Contact</span><span class="sdm-v" id="sellerPaymentProofContact">—</span></div>
-                        <div class="sdm-row"><span class="sdm-k">Method</span><span class="sdm-v" id="sellerPaymentProofMethod">—</span></div>
                     </div>
                 </section>
 
@@ -1341,7 +1474,7 @@
     const sellerOrdersPrevBtn = document.getElementById('sellerOrdersPrevBtn');
     const sellerOrdersNextBtn = document.getElementById('sellerOrdersNextBtn');
     const sellerPanelSub = document.getElementById('sellerOrdersPanelSub');
-    const sellerStatCards = Array.from(document.querySelectorAll('.orders-stat[data-filter-type]'));
+    const sellerStatCards = Array.from(document.querySelectorAll('.kpi-card[data-filter-type]'));
     const sellerNoRecordsRow = document.getElementById('sellerNoRecordsRow');
     let activePaymentOrderId = null;
     let sellerCurrentPage = 1;
@@ -1400,6 +1533,22 @@
 
     function titleCaseStatus(value) {
         return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+    }
+
+    function formatPaymentCombined(method, status) {
+        const methodKey = String(method || '').toLowerCase();
+        const statusKey = String(status || '').toLowerCase();
+        const methodLabel = methodKey === 'gcash' ? 'GCash'
+            : methodKey === 'cod' ? 'COD'
+            : titleCaseStatus(method);
+        const statusLabel = {
+            verified: 'Verified',
+            pending_verification: 'Pending',
+            pending: 'Pending',
+            cod_pending: 'Pending',
+            cod_approved: 'Approved',
+        }[statusKey] || titleCaseStatus(status);
+        return [statusLabel, methodLabel].filter(Boolean).join(' ').trim() || '—';
     }
 
     function formatAmount(value) {
@@ -1544,7 +1693,7 @@
         );
         setSellerStatValue(
             'revenue',
-            `Php ${Math.round(revenue).toLocaleString('en-PH')}`
+            `Php ${(Number(revenue) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         );
     }
 
@@ -1683,7 +1832,7 @@
         card.addEventListener('click', () => {
             const type = card.dataset.filterType;
             const rawValue = card.dataset.filterValue || '';
-            const label = card.querySelector('.orders-stat-label')?.textContent?.trim() || 'Filtered';
+            const label = card.querySelector('.kpi-label')?.textContent?.trim() || 'Filtered';
 
             const sameFilter = sellerCardFilter &&
                 sellerCardFilter.type === type &&
@@ -1820,8 +1969,7 @@
                             <section class="sdm-block">
                                 <h4>Payment</h4>
                                 <div class="sdm-rows">
-                                    <div class="sdm-row"><span class="sdm-k">Method</span><span class="sdm-v">${titleCaseStatus(order.payment_method)}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Status</span><span class="sdm-v">${titleCaseStatus(order.payment_status)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Payment</span><span class="sdm-v">${escapeHtml(formatPaymentCombined(order.payment_method, order.payment_status))}</span></div>
                                     <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">₱${formatAmount(displaySubtotal)}</span></div>
                                     <div class="sdm-row"><span class="sdm-k">Delivery</span><span class="sdm-v">₱${formatAmount(deliveryFee)}</span></div>
                                     <div class="sdm-row"><span class="sdm-k">Total</span><span class="sdm-v" style="font-weight:600;color:var(--charcoal);">₱${formatAmount(displayTotal)}</span></div>
@@ -2073,20 +2221,22 @@
             const proofEmpty = document.getElementById('sellerPaymentProofEmpty');
             const contactLabel = button.dataset.customerContactLabel || 'Contact';
             const contactValue = button.dataset.customerContact || '';
-            const methodLabel = titleCaseStatus(button.dataset.paymentMethod || '');
+            const combinedLabel = formatPaymentCombined(
+                button.dataset.paymentMethod,
+                button.closest('tr')?.dataset.paymentStatus
+            );
             const methodPill = document.getElementById('sellerPaymentProofMethodPill');
 
             document.getElementById('sellerPaymentProofOrder').textContent = `#${button.dataset.orderId || '—'}`;
             document.getElementById('sellerPaymentProofCustomer').textContent = button.dataset.customerName || '—';
             document.getElementById('sellerPaymentProofContactLabel').textContent = contactLabel;
             document.getElementById('sellerPaymentProofContact').textContent = contactValue || '—';
-            document.getElementById('sellerPaymentProofMethod').textContent = methodLabel || '—';
             document.getElementById('sellerPaymentProofAmount').textContent = `₱${formatAmount(button.dataset.orderTotal || 0)}`;
             if (methodPill) {
-                methodPill.textContent = methodLabel || 'Payment';
-                methodPill.className = 'payment-pill';
-                const methodKey = String(button.dataset.paymentMethod || '').toLowerCase().replace(/\s+/g, '_');
-                if (methodKey) methodPill.classList.add(`payment-${methodKey}`);
+                methodPill.textContent = combinedLabel;
+                methodPill.className = 'payment-pill payment-combined';
+                const statusKey = String(button.closest('tr')?.dataset.paymentStatus || '').toLowerCase().replace(/\s+/g, '_');
+                if (statusKey) methodPill.classList.add(`payment-${statusKey}`);
             }
 
             proofEmpty.style.display = 'none';
