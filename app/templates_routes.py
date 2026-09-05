@@ -3307,20 +3307,16 @@ def _seller_portal_suspended_store(user_id):
 
 def _seller_home_redirect(user_id):
     """Where a logged-in seller should land after login / portal entry."""
+    latest = _seller_portal_latest_application(user_id)
+    if latest and latest.status == 'rejected':
+        return redirect(url_for('templates.seller_signup_status'))
+    if latest and latest.status in ('pending', 'resubmitted'):
+        return redirect(url_for('templates.seller_signup_status'))
     if _seller_portal_manageable_store(user_id):
         return redirect(url_for('templates.seller_products'))
     suspended = _seller_portal_suspended_store(user_id)
     if suspended:
         return redirect(url_for('templates.seller_store_suspended'))
-    pend_app = SellerApplication.query.filter_by(
-        user_id=user_id, status='pending'
-    ).order_by(SellerApplication.submitted_at.desc()).first()
-    if pend_app:
-        return redirect(url_for('templates.seller_signup_status'))
-    # Also treat resubmitted apps as in-review
-    latest = _seller_portal_latest_application(user_id)
-    if latest and latest.status in ('pending', 'resubmitted'):
-        return redirect(url_for('templates.seller_signup_status'))
     return redirect(url_for('templates.seller_signup_complete'))
 
 
@@ -3741,15 +3737,18 @@ def seller_signup_complete():
     if not user or user.role not in ('seller', 'customer'):
         return redirect(url_for('templates.dashboard'))
 
-    if user.role == 'seller' and _seller_portal_manageable_store(user.id):
-        return redirect(url_for('templates.seller_products'))
-
-    if user.role == 'seller' and _seller_portal_suspended_store(user.id):
-        return redirect(url_for('templates.seller_store_suspended'))
-
     latest = _seller_portal_latest_application(user.id)
     if latest and latest.status in ('pending', 'resubmitted'):
         return redirect(url_for('templates.seller_signup_status'))
+
+    # Revisions requested: always show the edit form, even if an inactive
+    # store still exists from a previous approval (seller-portal accounts).
+    if not (latest and latest.status == 'rejected'):
+        if user.role == 'seller' and _seller_portal_manageable_store(user.id):
+            return redirect(url_for('templates.seller_products'))
+
+        if user.role == 'seller' and _seller_portal_suspended_store(user.id):
+            return redirect(url_for('templates.seller_store_suspended'))
 
     from app.utils.phone_utils import display_login_id
 
@@ -5020,6 +5019,13 @@ def seller_dashboard():
     )
 
     user_id = session['user_id']
+    if session.get('role') == 'seller':
+        latest_app = _seller_portal_latest_application(user_id)
+        if latest_app and latest_app.status == 'rejected':
+            return redirect(url_for('templates.seller_signup_complete'))
+        if latest_app and latest_app.status in ('pending', 'resubmitted'):
+            return redirect(url_for('templates.seller_signup_status'))
+
     store = _seller_portal_manageable_store(user_id)
 
     if not store:
@@ -6467,6 +6473,12 @@ def seller_products():
     if session.get('role') not in ('seller', 'store_admin'):
         return redirect(url_for('templates.dashboard'))
     user_id = session.get('user_id')
+    if session.get('role') == 'seller':
+        latest_app = _seller_portal_latest_application(user_id)
+        if latest_app and latest_app.status == 'rejected':
+            return redirect(url_for('templates.seller_signup_complete'))
+        if latest_app and latest_app.status in ('pending', 'resubmitted'):
+            return redirect(url_for('templates.seller_signup_status'))
     if (
         _seller_portal_suspended_store(user_id)
         and not _seller_portal_manageable_store(user_id)

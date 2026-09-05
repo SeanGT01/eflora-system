@@ -15,9 +15,9 @@ Steps:
 9. Copy the refresh_token and save to Railway
 """
 
+import argparse
 import os
 import pickle
-import base64
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -27,17 +27,24 @@ CLIENT_SECRET_FILE = 'client_secret.json'  # Download from Google Cloud Console
 OAUTH_SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 TOKEN_PICKLE_FILE = 'gmail_token.pickle'
 
-def generate_refresh_token():
+def generate_refresh_token(force_new=False):
     """
     Generate Gmail OAuth2 refresh token.
     Opens browser for user to authorize, then saves tokens.
     """
     creds = None
-    
+
+    if force_new and os.path.exists(TOKEN_PICKLE_FILE):
+        os.remove(TOKEN_PICKLE_FILE)
+        print(f"🗑️  Removed {TOKEN_PICKLE_FILE} so a new Gmail can be authorized.")
+
     # Load existing token if available
     if os.path.exists(TOKEN_PICKLE_FILE):
         with open(TOKEN_PICKLE_FILE, 'rb') as token:
             creds = pickle.load(token)
+        print("⚠️  Reusing saved Gmail credentials (same mailbox as last time).")
+        print("    To switch sender (e.g. efloralaguna@gmail.com), run:")
+        print("    python generate_gmail_oauth_token.py --force")
     
     # If no valid credentials, get new ones
     if not creds or not creds.valid:
@@ -63,7 +70,14 @@ def generate_refresh_token():
             for try_port in [8080, 8081, 8082, 8090, 9090]:
                 try:
                     print(f"   Trying port {try_port}...")
-                    creds = flow.run_local_server(port=try_port)
+                    creds = flow.run_local_server(
+                        port=try_port,
+                        prompt='consent',
+                        authorization_prompt_message=(
+                            'Sign in with the Gmail that should SEND OTPs '
+                            '(efloralaguna@gmail.com), not your personal Gmail.\n'
+                        ),
+                    )
                     port = try_port
                     print(f"   ✓ Using port {port}")
                     break
@@ -110,4 +124,11 @@ def generate_refresh_token():
         print("❌ Failed to get refresh token. Try again.")
 
 if __name__ == '__main__':
-    generate_refresh_token()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Ignore saved token and open the Google login so you can pick a different Gmail.',
+    )
+    args = parser.parse_args()
+    generate_refresh_token(force_new=args.force)
