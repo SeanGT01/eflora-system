@@ -225,8 +225,10 @@ class Config:
         MAIL_DEFAULT_SENDER = GMAIL_SENDER_EMAIL if GMAIL_SENDER_EMAIL else 'noreply@eflowers.com'
 
     # =============================
-    # iProg SMS (OTP via PH mobile)
+    # SMS: sms8.io primary, iProg backup
     # =============================
+    SMS8_API_KEY = os.getenv('SMS8_API_KEY', '')
+    SMS8_BASE_URL = os.getenv('SMS8_BASE_URL', 'https://app.sms8.io/services').rstrip('/')
     IPROG_API_TOKEN = os.getenv('IPROG_API_TOKEN', '')
     IPROG_SMS_BASE_URL = os.getenv('IPROG_SMS_BASE_URL', 'https://sms.iprogtech.com/api/v1')
 

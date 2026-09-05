@@ -4648,6 +4648,7 @@ def _render_admin_dashboard():
         _pht_date,
         _iter_pht_days,
         COMPLETED_ORDER_STATUSES,
+        _not_cancelled_order_filter,
     )
 
     period = (request.args.get('period') or 'month').lower().strip()
@@ -4692,8 +4693,9 @@ def _render_admin_dashboard():
     if revenue_prev_month > 0:
         revenue_change = round(((revenue_this_month - revenue_prev_month) / revenue_prev_month) * 100, 1)
 
-    # Orders KPI: ALL online statuses + all POS
+    # Orders KPI: online except cancelled + all POS
     online_orders_this = Order.query.filter(
+        _not_cancelled_order_filter(),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
@@ -4704,6 +4706,7 @@ def _render_admin_dashboard():
     orders_this_month = online_orders_this + pos_orders_this
 
     online_orders_prev = Order.query.filter(
+        _not_cancelled_order_filter(),
         Order.created_at >= prev_start,
         Order.created_at < prev_end,
     ).count()
@@ -4981,6 +4984,7 @@ def seller_dashboard():
     from app.utils.report_service import (
         period_range,
         COMPLETED_ORDER_STATUSES,
+        _not_cancelled_order_filter,
         _pht_date,
         _iter_pht_days,
         _new_customer_count,
@@ -5050,9 +5054,10 @@ def seller_dashboard():
     if revenue_prev_month and float(revenue_prev_month) > 0:
         revenue_change = round(((float(revenue_this_month) - float(revenue_prev_month)) / float(revenue_prev_month)) * 100, 1)
 
-    # ── KPI: Total orders (ALL online statuses + all POS) ──
+    # ── KPI: Total orders (online except cancelled + all POS) ──
     orders_this_month = Order.query.filter(
         Order.store_id == store.id,
+        _not_cancelled_order_filter(),
         Order.created_at >= range_start,
         Order.created_at < range_end,
     ).count()
@@ -5064,6 +5069,7 @@ def seller_dashboard():
 
     orders_prev_month = Order.query.filter(
         Order.store_id == store.id,
+        _not_cancelled_order_filter(),
         Order.created_at >= prev_start,
         Order.created_at < prev_end,
     ).count()
@@ -8997,6 +9003,37 @@ def seller_pos():
             product_dict['store_category_name'] = product.store_category.name
             product_dict['store_category_id'] = product.store_category.id
         products.append(product_dict)
+
+    def _pos_variant_sellable(v):
+        if not v:
+            return False
+        return (v.get('stock_quantity') or 0) > 0 and v.get('is_available') is not False
+
+    def _pos_product_sellable(p):
+        if p.get('is_available') is False:
+            return False
+        if (p.get('stock_quantity') or 0) > 0:
+            return True
+        return any(_pos_variant_sellable(v) for v in (p.get('variants') or []))
+
+    for p in products:
+        variants = p.get('variants') or []
+        if variants:
+            p['variants'] = sorted(
+                variants,
+                key=lambda v: (
+                    0 if _pos_variant_sellable(v) else 1,
+                    v.get('sort_order') or 0,
+                    (v.get('name') or '').lower(),
+                ),
+            )
+
+    cat_rank = {c.id: (c.sort_order or 0) for c in main_categories}
+    products.sort(key=lambda p: (
+        0 if _pos_product_sellable(p) else 1,
+        cat_rank.get(p.get('main_category_id'), 999),
+        (p.get('name') or '').lower(),
+    ))
 
     from app.addon_helpers import ymal_addon_option_dicts
     ymal_addon_options = ymal_addon_option_dicts(products_query[0]) if products_query else []

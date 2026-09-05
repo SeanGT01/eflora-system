@@ -148,6 +148,7 @@ def _hour_counts_for_orders(start, end, store_id=None):
     q = db.session.query(hour, func.count(Order.id)).filter(
         Order.created_at >= start,
         Order.created_at < end,
+        _not_cancelled_order_filter(),
     )
     if store_id is not None:
         q = q.filter(Order.store_id == store_id)
@@ -335,8 +336,16 @@ def _is_paid_order_status(status) -> bool:
     return _order_status_key(status) in COMPLETED_ORDER_STATUSES
 
 
+def _is_cancelled_order_status(status) -> bool:
+    return _order_status_key(status) == 'cancelled'
+
+
 def _paid_order_status_filter():
     return Order.status.in_(COMPLETED_ORDER_STATUSES)
+
+
+def _not_cancelled_order_filter():
+    return Order.status != 'cancelled'
 
 
 def _order_item_qty_subquery():
@@ -556,8 +565,10 @@ def _pos_revenue(store_id: int, start: datetime, end: datetime) -> float:
 
 
 def _online_order_count(store_id: int, start: datetime, end: datetime) -> int:
+    """Online orders in the period, excluding cancelled."""
     return db.session.query(func.count(Order.id)).filter(
         Order.store_id == store_id,
+        _not_cancelled_order_filter(),
         Order.created_at >= start,
         Order.created_at < end,
     ).scalar() or 0
@@ -2398,6 +2409,7 @@ def _platform_pos_revenue(start, end) -> float:
 
 def _platform_online_order_count(start, end) -> int:
     return db.session.query(func.count(Order.id)).filter(
+        _not_cancelled_order_filter(),
         Order.created_at >= start,
         Order.created_at < end,
     ).scalar() or 0

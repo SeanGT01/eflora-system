@@ -16,6 +16,10 @@ from app.utils.phone_utils import (
     tel_href,
 )
 
+# Flip to True to require SMS OTP again for profile phone bind.
+# Keep send_phone_bind_otp / verify_phone_bind_otp — this only skips the OTP gate.
+PHONE_BIND_OTP_REQUIRED = False
+
 
 def phone_bind_otp_email_key(user_id: int) -> str:
     return f'phonebind.{int(user_id)}@otp.eflora.internal'
@@ -25,8 +29,82 @@ def needs_delivery_phone(user) -> bool:
     return not is_valid_ph_mobile(getattr(user, 'phone', None))
 
 
-def send_phone_bind_otp(user, phone_raw):
+def _validate_phone_bind_request(user, phone_raw):
+    """Return ``(phone, error_response)``. ``error_response`` is a Flask tuple or None."""
     from app.auth import _phone_taken
+
+    if not user:
+        return None, (jsonify({'success': False, 'error': 'User not found'}), 404)
+
+    if is_synthetic_account_email(user.email or ''):
+        return None, (jsonify({
+            'success': False,
+            'error': 'Your login number cannot be changed here. It is tied to your account sign-in.',
+        }), 403)
+
+    if not is_valid_ph_mobile(phone_raw):
+        return None, (jsonify({
+            'success': False,
+            'error': 'Enter a valid Philippine mobile number (e.g. 09171234567 or +639171234567).',
+        }), 400)
+
+    phone = normalize_ph_mobile(phone_raw)
+    current = normalize_ph_mobile(user.phone)
+    if current and current == phone:
+        return None, (jsonify({
+            'success': False,
+            'error': 'That is already your saved phone number.',
+        }), 400)
+
+    if _phone_taken(
+        phone,
+        exclude_email=user.email,
+        exclude_user_id=user.id,
+        roles=('customer',),
+    ):
+        return None, (jsonify({
+            'success': False,
+            'error': 'This phone number is already used by another customer account.',
+        }), 409)
+
+    return phone, None
+
+
+def _commit_bound_phone(user, phone):
+    """Persist the delivery phone after validation (OTP or skip)."""
+    from app.auth import _phone_taken
+
+    if _phone_taken(
+        phone,
+        exclude_email=user.email,
+        exclude_user_id=user.id,
+        roles=('customer',),
+    ):
+        return None, (jsonify({
+            'success': False,
+            'error': 'This phone number is already used by another customer account.',
+        }), 409)
+
+    if is_synthetic_account_email(user.email):
+        new_email = phone_to_account_email(phone)
+        clash = User.query.filter(User.email == new_email, User.id != user.id).first()
+        if clash:
+            return None, (jsonify({
+                'success': False,
+                'error': 'This phone number is already registered to another account.',
+            }), 409)
+        user.email = new_email
+
+    user.phone = phone
+    user.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    payload = user.to_dict()
+    payload['needs_phone'] = needs_delivery_phone(user)
+    return payload, None
+
+
+def send_phone_bind_otp(user, phone_raw):
     from app.utils.otp_delivery import deliver_otp, sync_hashed_otp_record
     from app.utils.otp_service import (
         DEFAULT_EXPIRY_MINUTES,
@@ -35,39 +113,22 @@ def send_phone_bind_otp(user, phone_raw):
         new_otp_pair,
     )
 
-    if not user:
-        return jsonify({'success': False, 'error': 'User not found'}), 404
+    phone, err = _validate_phone_bind_request(user, phone_raw)
+    if err:
+        return err
 
-    if is_synthetic_account_email(user.email or ''):
+    if not PHONE_BIND_OTP_REQUIRED:
+        payload, err = _commit_bound_phone(user, phone)
+        if err:
+            return err
         return jsonify({
-            'success': False,
-            'error': 'Your login number cannot be changed here. It is tied to your account sign-in.',
-        }), 403
-
-    if not is_valid_ph_mobile(phone_raw):
-        return jsonify({
-            'success': False,
-            'error': 'Enter a valid Philippine mobile number (e.g. 09171234567 or +639171234567).',
-        }), 400
-
-    phone = normalize_ph_mobile(phone_raw)
-    current = normalize_ph_mobile(user.phone)
-    if current and current == phone:
-        return jsonify({
-            'success': False,
-            'error': 'That is already your saved phone number.',
-        }), 400
-
-    if _phone_taken(
-        phone,
-        exclude_email=user.email,
-        exclude_user_id=user.id,
-        roles=('customer',),
-    ):
-        return jsonify({
-            'success': False,
-            'error': 'This phone number is already used by another customer account.',
-        }), 409
+            'success': True,
+            'message': 'Phone number saved.',
+            'otp_required': False,
+            'user': payload,
+            'phone': phone,
+            'phone_masked': mask_phone(phone),
+        }), 200
 
     key = phone_bind_otp_email_key(user.id)
     record = CustomerOTP.query.filter_by(email=key).first()
@@ -121,6 +182,7 @@ def send_phone_bind_otp(user, phone_raw):
     return jsonify({
         'success': True,
         'message': f'A 6-digit code was sent to {mask_phone(phone)}.',
+        'otp_required': True,
         'phone': phone,
         'phone_masked': mask_phone(phone),
         'otp_channel': 'sms',
@@ -129,8 +191,14 @@ def send_phone_bind_otp(user, phone_raw):
 
 
 def verify_phone_bind_otp(user, otp_code_raw):
-    from app.auth import _phone_taken
     from app.utils.otp_service import MAX_VERIFY_ATTEMPTS, attempts_remaining, verify_otp
+
+    if not PHONE_BIND_OTP_REQUIRED:
+        return jsonify({
+            'success': False,
+            'otp_required': False,
+            'error': 'SMS OTP is temporarily disabled. Save the phone number without a code.',
+        }), 400
 
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
@@ -179,39 +247,19 @@ def verify_phone_bind_otp(user, otp_code_raw):
             'attempts_remaining': attempts_remaining(record.attempts, MAX_VERIFY_ATTEMPTS),
         }), 400
 
-    if _phone_taken(
-        phone,
-        exclude_email=user.email,
-        exclude_user_id=user.id,
-        roles=('customer',),
-    ):
+    payload, err = _commit_bound_phone(user, phone)
+    if err:
         db.session.delete(record)
         db.session.commit()
-        return jsonify({
-            'success': False,
-            'error': 'This phone number is already used by another customer account.',
-        }), 409
+        return err
 
-    if is_synthetic_account_email(user.email):
-        new_email = phone_to_account_email(phone)
-        clash = User.query.filter(User.email == new_email, User.id != user.id).first()
-        if clash:
-            return jsonify({
-                'success': False,
-                'error': 'This phone number is already registered to another account.',
-            }), 409
-        user.email = new_email
-
-    user.phone = phone
-    user.updated_at = datetime.utcnow()
     db.session.delete(record)
     db.session.commit()
 
-    payload = user.to_dict()
-    payload['needs_phone'] = needs_delivery_phone(user)
     return jsonify({
         'success': True,
         'message': 'Phone number verified and saved.',
+        'otp_required': True,
         'user': payload,
         'phone': phone,
         'phone_masked': mask_phone(phone),

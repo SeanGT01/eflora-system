@@ -109,7 +109,7 @@ def deliver_otp(
             'destination_masked': mask_email(email),
         }
 
-    # SMS — use iProg OTP API (IPROGOTP) so Smart/TNT works
+    # SMS — sms8.io first (our generated code), iProg OTP API as backup
     if not phone:
         return False, {
             'success': False,

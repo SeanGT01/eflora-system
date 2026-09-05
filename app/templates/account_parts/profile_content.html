@@ -2433,7 +2433,7 @@
         </div>
     </div>
     <div class="card-body">
-        <p class="form-hint" style="margin-bottom:0.85rem;" id="profilePhoneHint">Riders and shops use this number to contact you about deliveries. Changing it requires a 6-digit SMS code on this same form.</p>
+        <p class="form-hint" style="margin-bottom:0.85rem;" id="profilePhoneHint">Riders and shops use this number to contact you about deliveries.</p>
         <div class="form-group">
             <label class="form-label" for="profilePhoneInput">Mobile number</label>
             <input type="tel" class="form-control" id="profilePhoneInput" inputmode="tel" maxlength="16"
@@ -2447,7 +2447,7 @@
         </div>
         <p id="profilePhoneError" style="display:none;color:var(--deep-rose);font-size:12.5px;margin:0.5rem 0 0;"></p>
         <div class="profile-phone-actions profile-onboarding-actions" id="profilePhoneActions">
-            <button type="button" class="btn btn-profile-action" id="profilePhoneSendBtn" onclick="sendProfilePhoneOtp()" disabled>Send code</button>
+            <button type="button" class="btn btn-profile-action" id="profilePhoneSendBtn" onclick="sendProfilePhoneOtp()" disabled>Save number</button>
             <button type="button" class="btn btn-profile-action" id="profilePhoneVerifyBtn" onclick="verifyProfilePhoneOtp()" style="display:none;" disabled>Verify &amp; save</button>
         </div>
     </div>
@@ -2883,7 +2883,7 @@
                         <i class="ri-arrow-left-line"></i> Previous
                     </button>
                     <button type="button" class="btn btn-profile-action" id="onboardingPhoneSendBtn" onclick="sendOnboardingPhoneOtp()">
-                        Send code <i class="ri-send-plane-line"></i>
+                        Save number <i class="ri-check-line"></i>
                     </button>
                 </div>
                 <div id="onboardingPhoneOtpWrap" style="display:none;margin-top:1rem;">
@@ -3576,6 +3576,9 @@ const __profileBoot = {
     isPhoneLogin: {{ (user.is_phone_login if user else false)|tojson }},
 };
 
+// Keep in sync with PHONE_BIND_OTP_REQUIRED in app/utils/phone_bind.py
+const REQUIRE_PHONE_BIND_OTP = false;
+
 try {
     const __bootParams = new URLSearchParams(window.location.search);
     __initialAddressPrompt = __bootParams.get('prompt_address') === '1';
@@ -3692,7 +3695,7 @@ function updateProfilePhoneActions() {
     }
 
     if (!otpVisible && sendBtn && sendBtn.classList.contains('btn-profile-soft')) {
-        sendBtn.textContent = 'Send code';
+        sendBtn.textContent = REQUIRE_PHONE_BIND_OTP ? 'Send code' : 'Save number';
         sendBtn.classList.remove('btn-profile-soft');
         sendBtn.classList.add('btn-profile-action');
     }
@@ -3702,6 +3705,19 @@ let __profilePhoneFormBound = false;
 
 function setupProfilePhoneForm() {
     if (__profileBoot.isPhoneLogin) return;
+
+    const otpWrap = document.getElementById('profilePhoneOtpWrap');
+    const verifyBtn = document.getElementById('profilePhoneVerifyBtn');
+    const sendBtn = document.getElementById('profilePhoneSendBtn');
+    const hint = document.getElementById('profilePhoneHint');
+    if (!REQUIRE_PHONE_BIND_OTP) {
+        if (otpWrap) otpWrap.style.display = 'none';
+        if (verifyBtn) verifyBtn.style.display = 'none';
+        if (sendBtn) sendBtn.textContent = 'Save number';
+        if (hint && !__profileBoot.isPhoneLogin) {
+            hint.textContent = 'Riders and shops use this number to contact you about deliveries.';
+        }
+    }
 
     refreshProfilePhoneBaseline(__profileBoot.phone || '');
 
@@ -4069,6 +4085,21 @@ async function sendOnboardingPhoneOtp(isResend) {
         });
         const d = await r.json();
         if (!d.success) throw new Error(d.error || 'Could not send code');
+        if (!REQUIRE_PHONE_BIND_OTP || d.otp_required === false) {
+            __profileBoot.phone = d.phone || phone;
+            __profileBoot.needsPhone = false;
+            const pf = document.getElementById('profilePhoneInput');
+            if (pf) pf.value = d.phone || phone || '';
+            if (d.user && typeof syncProfileUI === 'function') syncProfileUI(d.user);
+            showToast(d.message || 'Phone number saved', 'success');
+            if (__onboardingAddressRequired) {
+                closeOnboardingProfileModal();
+                openRequiredAddressModal();
+            } else {
+                closeOnboardingProfileModal();
+            }
+            return;
+        }
         const wrap = document.getElementById('onboardingPhoneOtpWrap');
         if (wrap) wrap.style.display = 'block';
         const hint = document.getElementById('onboardingPhoneOtpHint');
@@ -4132,6 +4163,16 @@ async function sendProfilePhoneOtp() {
         });
         const d = await r.json();
         if (!d.success) throw new Error(d.error || 'Could not send code');
+        if (!REQUIRE_PHONE_BIND_OTP || d.otp_required === false) {
+            __profileBoot.phone = d.phone;
+            __profileBoot.needsPhone = false;
+            const pf = document.getElementById('profilePhoneInput');
+            if (pf) pf.value = d.phone || phone || '';
+            refreshProfilePhoneBaseline(d.phone || phone || '');
+            showToast(d.message || 'Phone number saved', 'success');
+            if (d.user && typeof syncProfileUI === 'function') syncProfileUI(d.user);
+            return;
+        }
         const wrap = document.getElementById('profilePhoneOtpWrap');
         const verifyBtn = document.getElementById('profilePhoneVerifyBtn');
         if (wrap) wrap.style.display = 'block';

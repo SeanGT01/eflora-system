@@ -1597,8 +1597,13 @@ function renderPosPickerBody() {
     const tile = _posPickerState.tile;
     const productName = tile.dataset.displayName;
     const productImg = tile.dataset.img || '';
-    const variants = parseTileJson(tile, 'variants', []) || [];
     const productAddons = tileProductAddons(tile);
+    const variants = [...(parseTileJson(tile, 'variants', []) || [])].sort((a, b) => {
+        const aOk = (a.stock_quantity || 0) > 0 && a.is_available !== false ? 0 : 1;
+        const bOk = (b.stock_quantity || 0) > 0 && b.is_available !== false ? 0 : 1;
+        if (aOk !== bOk) return aOk - bOk;
+        return (a.sort_order || 0) - (b.sort_order || 0);
+    });
     const ymal = getPosYmalAddons().filter(o => o && o.is_available !== false);
 
     const mainStock = parseInt(tile.dataset.stock) || 0;
@@ -1608,7 +1613,7 @@ function renderPosPickerBody() {
     let html = `<div class="variant-list">`;
     html += `<div class="pos-picker-section-label">Product option</div>`;
 
-    html += `
+    const renderStandard = () => `
         <div class="variant-item ${mainOk ? '' : 'unavailable'}"
              onclick="${mainOk ? `posClickMain(event)` : ''}">
             ${_posOptImg(productImg, productName)}
@@ -1618,6 +1623,8 @@ function renderPosPickerBody() {
             </div>
             ${_posPriceHtml(mainPrice)}
         </div>`;
+
+    if (mainOk) html += renderStandard();
 
     variants.forEach(v => {
         const inStock = (v.stock_quantity || 0) > 0 && v.is_available !== false;
@@ -1635,6 +1642,8 @@ function renderPosPickerBody() {
                 ${_posPriceHtml(eff, v.price)}
             </div>`;
     });
+
+    if (!mainOk) html += renderStandard();
 
     if (productAddons.length) {
         html += `<div class="pos-picker-section-label">Add-ons</div>`;

@@ -1,13 +1,11 @@
 """
-iProg SMS delivery for OTP codes.
+SMS delivery for OTP codes and credential texts.
 
-OTP codes use:
-  POST {base}/otp/send_otp
-so iProg routes via IPROGOTP (works on Smart/TNT + Globe/DITO).
+OTP generation and verification stay in this app. Providers only send the
+code we already created.
 
-Generic SMS (credentials, etc.) still uses:
-  POST {base}/sms_messages
-which needs an approved custom sender name for Smart/TNT.
+Order: sms8.io (Android SIM gateway) first, then iProg as backup.
+Do not use SMS8's /ajax/otp-send.php — that would store OTPs on their side.
 """
 
 from __future__ import annotations
@@ -39,6 +37,12 @@ def _iprog_config():
     return token, base
 
 
+def _sms8_config():
+    key = (current_app.config.get('SMS8_API_KEY') or '').strip()
+    base = (current_app.config.get('SMS8_BASE_URL') or 'https://app.sms8.io/services').rstrip('/')
+    return key, base
+
+
 def _iprog_phone_number(phone_raw):
     """Return (09XXXXXXXXX, 63XXXXXXXXXX) for iProg."""
     normalized = normalize_ph_mobile(phone_raw)
@@ -47,6 +51,15 @@ def _iprog_phone_number(phone_raw):
     if normalized.startswith('0') and len(normalized) == 11:
         return normalized, '63' + normalized[1:]
     return normalized, normalized
+
+
+def _e164_ph(phone_raw):
+    _local, msisdn_63 = _iprog_phone_number(phone_raw)
+    if not msisdn_63:
+        return None
+    if str(msisdn_63).startswith('+'):
+        return str(msisdn_63)
+    return f'+{msisdn_63}'
 
 
 def _is_sender_name_error(data) -> bool:
@@ -66,14 +79,80 @@ def _extract_error_text(data) -> str:
     return str(raw or '')
 
 
-def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification'):
-    """
-    Send a 6-digit OTP via iProg's OTP endpoint (IPROGOTP sender).
+def _otp_sms_body(otp_code, expiry_minutes, purpose='verification'):
+    minutes = int(expiry_minutes) if expiry_minutes else 5
+    code = str(otp_code).strip()
+    if purpose == 'password_reset':
+        return (
+            f'E-FLORA: Your password reset code is {code}. '
+            f'It expires in {minutes} minutes. Do not share this code.'
+        )
+    return (
+        f'E-FLORA: Your verification code is {code}. '
+        f'It expires in {minutes} minutes. Do not share this code.'
+    )
 
-    Returns (ok: bool, delivered_otp: str|None, error_code: str|None).
-    delivered_otp is the code iProg actually sent (may differ from otp_code).
-    Never logs the plaintext OTP or API token.
-    """
+
+def _sms8_send(phone_raw, message):
+    """Send free-form SMS via sms8.io. Returns (ok, error_code)."""
+    try:
+        import requests
+    except ImportError:
+        current_app.logger.error('SMS: requests package not available')
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+    key, base = _sms8_config()
+    if not key:
+        return False, None
+
+    e164 = _e164_ph(phone_raw)
+    if not e164:
+        current_app.logger.error('SMS: invalid phone number')
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+    text = (message or '').strip()
+    if not text:
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+    url = f'{base}/send.php'
+    try:
+        response = requests.post(
+            url,
+            data={'key': key, 'number': e164, 'message': text},
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            timeout=15,
+        )
+        data = {}
+        try:
+            data = response.json() if response.content else {}
+        except Exception:
+            data = {}
+
+        ok = response.status_code in (200, 201) and (
+            data.get('success') is True
+            or (
+                isinstance(data, dict)
+                and data.get('success') is not False
+                and bool(data.get('data'))
+            )
+        )
+        if ok:
+            current_app.logger.info('SMS: queued via sms8 for %s***', e164[:6])
+            return True, None
+
+        current_app.logger.warning(
+            'SMS: sms8 send failed status=%s body=%s',
+            response.status_code,
+            str(data)[:300] if data else (response.text or '')[:300],
+        )
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+    except Exception as exc:
+        current_app.logger.warning('SMS: sms8 request error %s: %s', type(exc).__name__, exc)
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+
+def _iprog_send_otp(phone_raw, otp_code=None, expiry_minutes=5):
+    """Send OTP via iProg /otp/send_otp. May return a provider-generated code."""
     try:
         import requests
     except ImportError:
@@ -85,7 +164,7 @@ def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification')
         current_app.logger.error('SMS: IPROG_API_TOKEN is not configured')
         return False, None, SMS_SERVICE_UNAVAILABLE_CODE
 
-    local_09, msisdn_63 = _iprog_phone_number(phone)
+    local_09, msisdn_63 = _iprog_phone_number(phone_raw)
     if not local_09:
         current_app.logger.error('SMS: invalid phone number')
         return False, None, SMS_SERVICE_UNAVAILABLE_CODE
@@ -116,7 +195,6 @@ def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification')
         )
 
         if ok:
-            delivered = None
             nested = data.get('data') if isinstance(data.get('data'), dict) else {}
             delivered = (
                 (nested.get('otp_code') if nested else None)
@@ -126,7 +204,7 @@ def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification')
             if delivered is not None:
                 delivered = str(delivered).strip()
             current_app.logger.info(
-                'SMS: OTP queued via /otp/send_otp for %s***',
+                'SMS: OTP queued via iProg /otp/send_otp for %s***',
                 local_09[:4],
             )
             return True, delivered, None
@@ -150,11 +228,51 @@ def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification')
         return False, None, SMS_SERVICE_UNAVAILABLE_CODE
 
 
+def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification'):
+    """
+    Send the app-generated OTP. sms8.io first, iProg backup.
+
+    Returns (ok: bool, delivered_otp: str|None, error_code: str|None).
+    delivered_otp is the code the user must enter (ours, unless iProg
+    generated a different one). Never logs the plaintext OTP or API keys.
+    """
+    local_09, _msisdn = _iprog_phone_number(phone)
+    if not local_09:
+        current_app.logger.error('SMS: invalid phone number')
+        return False, None, SMS_SERVICE_UNAVAILABLE_CODE
+
+    code = str(otp_code).strip() if otp_code else ''
+    sms8_key, _base = _sms8_config()
+    if sms8_key and code:
+        ok, err = _sms8_send(phone, _otp_sms_body(code, expiry_minutes, purpose))
+        if ok:
+            return True, code, None
+        current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
+    elif not sms8_key:
+        current_app.logger.info('SMS: SMS8_API_KEY not set, using iProg')
+    elif not code:
+        current_app.logger.warning('SMS: no app OTP code, skipping sms8')
+
+    return _iprog_send_otp(phone, otp_code=otp_code, expiry_minutes=expiry_minutes)
+
+
 def send_sms_message(phone, message):
     """
-    Send a free-form SMS via iProg sms_messages.
+    Send a free-form SMS. sms8.io first, then iProg sms_messages.
     Returns (ok: bool, error_code: str|None).
     """
+    sms8_key, _base = _sms8_config()
+    if sms8_key:
+        ok, err = _sms8_send(phone, message)
+        if ok:
+            return True, None
+        if err == SMS_SERVICE_UNAVAILABLE_CODE:
+            current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
+        elif err is None:
+            current_app.logger.info('SMS: SMS8_API_KEY not set, using iProg')
+        else:
+            current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
+
     try:
         import requests
     except ImportError:
