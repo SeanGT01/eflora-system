@@ -348,6 +348,32 @@ def _not_cancelled_order_filter():
     return Order.status != 'cancelled'
 
 
+def _delivery_completion_rate(start, end, store_id=None):
+    """Share of non-cancelled online orders that are already delivered.
+
+    Cancelled orders are excluded (they never entered prep). POS is excluded.
+    Returns None when there are no active online orders in the range.
+    """
+    active_q = Order.query.filter(
+        _not_cancelled_order_filter(),
+        Order.created_at >= start,
+        Order.created_at < end,
+    )
+    delivered_q = Order.query.filter(
+        Order.status.in_(COMPLETED_ORDER_STATUSES),
+        Order.created_at >= start,
+        Order.created_at < end,
+    )
+    if store_id is not None:
+        active_q = active_q.filter(Order.store_id == store_id)
+        delivered_q = delivered_q.filter(Order.store_id == store_id)
+    active = active_q.count()
+    if active <= 0:
+        return None
+    delivered = delivered_q.count()
+    return round((delivered / active) * 100, 1)
+
+
 def _order_item_qty_subquery():
     """Flower line qty plus add-on units on those lines."""
     flower_qty = (

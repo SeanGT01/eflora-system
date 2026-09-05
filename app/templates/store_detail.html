@@ -164,15 +164,14 @@
     .store-hero-tags {
         display: flex;
         flex-wrap: wrap;
+        align-items: flex-start;
         gap: 0.5rem;
+        min-width: 0;
+        width: 100%;
     }
 
     .store-hero-tags--meta {
         flex-shrink: 0;
-    }
-
-    .store-hero-details-scroll .store-hero-tags {
-        margin-top: 0.75rem;
     }
 
     .store-hero-details-scroll .store-hero-desc:last-child {
@@ -195,18 +194,24 @@
         backdrop-filter: blur(12px) saturate(1.3);
         -webkit-backdrop-filter: blur(12px) saturate(1.3);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 2px 10px rgba(0, 0, 0, 0.18);
+        min-width: 0;
+        max-width: 100%;
     }
 
     .store-tag.store-tag-address {
-        white-space: normal;
-        align-items: flex-start;
-        max-width: min(100%, 560px);
-        line-height: 1.45;
-        border-radius: 14px;
+        flex: 0 1 auto;
+        max-width: min(100%, 18rem);
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+    .store-tag.store-tag-address span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .store-tag.store-tag-address i {
-        margin-top: 1px;
         flex-shrink: 0;
     }
 
@@ -1054,6 +1059,55 @@
         overflow-wrap: anywhere;
     }
 
+    .info-row > div {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .weekly-hours {
+        display: inline-block;
+        width: max-content;
+        max-width: 100%;
+        min-width: 0;
+        margin-top: 0.45rem;
+        background: var(--cream);
+        border-radius: var(--radius-md);
+        padding: 0.35rem 0.85rem 0.35rem 0.7rem;
+        box-sizing: border-box;
+    }
+
+    .weekly-hours-day {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.35rem 0.85rem;
+        padding: 0.38rem 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        line-height: 1.35;
+    }
+
+    .weekly-hours-day:last-child {
+        border-bottom: none;
+        padding-bottom: 0.2rem;
+    }
+
+    .weekly-hours-name {
+        flex: 0 0 auto;
+        font-weight: 600;
+        color: var(--charcoal);
+        min-width: 2.1rem;
+    }
+
+    .weekly-hours-time {
+        flex: 0 1 auto;
+        text-align: left;
+        overflow-wrap: anywhere;
+    }
+
+    .weekly-hours-time.is-open { color: #276749; }
+    .weekly-hours-time.is-closed { color: var(--muted); }
+
     .status-open,
     .status-closed {
         display: inline-flex;
@@ -1236,6 +1290,14 @@
             max-height: min(220px, 36vh);
         }
 
+        .store-hero-tags {
+            gap: 0.4rem;
+        }
+
+        .store-tag.store-tag-address {
+            max-width: 100%;
+        }
+
         .store-hero-actions {
             flex-direction: row;
             align-items: stretch;
@@ -1265,7 +1327,7 @@
         .store-hero { border-radius: 22px; }
         .store-hero-desc { max-width: none; margin-bottom: 1rem; }
         .store-tag { font-size: 11px; padding: 0.3rem 0.7rem; }
-        .store-tag.store-tag-address { max-width: 100%; border-radius: 12px; }
+        .store-tag.store-tag-address { max-width: 100%; }
 
         .store-products-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1389,25 +1451,18 @@
             <!-- Info -->
             <div class="store-hero-info">
                 <h1 class="store-hero-name">{{ store.name }}</h1>
-                {% if store.description or store.public_location_label %}
+                {% if store.description %}
                 <div class="store-hero-details-scroll">
-                    {% if store.description %}
                     <p class="store-hero-desc">{{ store.description }}</p>
-                    {% endif %}
-                    {% if store.public_location_label %}
-                    <div class="store-hero-tags">
-                        <span class="store-tag store-tag-address">
-                            <i class="ri-map-pin-line"></i>
-                            {{ store.public_location_label }}
-                        </span>
-                    </div>
-                    {% endif %}
                 </div>
                 {% endif %}
                 <div class="store-hero-tags store-hero-tags--meta">
-                    <span class="store-tag">
-                        <i class="ri-truck-line"></i> {{ store.delivery_radius_km or 5 }}km delivery
+                    {% if store.public_location_label %}
+                    <span class="store-tag store-tag-address" title="{{ store.public_location_label }}">
+                        <i class="ri-map-pin-line"></i>
+                        <span>{{ store.public_location_label }}</span>
                     </span>
+                    {% endif %}
                     {% if store.contact_number %}
                     <span class="store-tag">
                         <i class="ri-phone-line"></i> {{ store.contact_number }}
@@ -1477,8 +1532,18 @@
         <div class="stat-label">Avg Rating</div>
     </div>
     <div class="stat-cell">
+        {% set method = store.delivery_method or 'radius' %}
+        {% if method == 'zone' %}
+        <div class="stat-value">Custom</div>
+        <div class="stat-label">Delivery</div>
+        {% elif method == 'municipality' %}
+        {% set muni = store.selected_municipalities or [] %}
+        <div class="stat-value">{% if muni|length %}{{ muni|length }}{% else %}—{% endif %}</div>
+        <div class="stat-label">Municipality/City coverage</div>
+        {% else %}
         <div class="stat-value">{{ store.delivery_radius_km or 5 }}<span>km</span></div>
         <div class="stat-label">Delivery Area</div>
+        {% endif %}
     </div>
     <button class="stat-cell" type="button" onclick="openReviewsModal()" style="border:none;background:none;cursor:pointer;text-align:center;" aria-haspopup="dialog">
         <div class="stat-value">{{ total_reviews|default(0) }}</div>
@@ -1608,7 +1673,7 @@
                     <i class="ri-calendar-schedule-line"></i>
                     <div>
                         <div class="info-row-label">Weekly Hours</div>
-                        <div class="info-row-value" id="storeHoursValue" style="font-size:12px; line-height:1.6;"></div>
+                        <div class="info-row-value" id="storeHoursValue"></div>
                     </div>
                 </div>
                 <div class="info-row" id="storeDeliveryWindowRow" style="display:none;">
@@ -2205,20 +2270,20 @@ function viewProduct(productId) {
             const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             const dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
             
-            let html = '<div style="width:100%;background:var(--cream);border-radius:var(--radius-md);padding:0.75rem;margin-top:0.5rem;">';
+            let html = '<div class="weekly-hours">';
             daysOfWeek.forEach((dayName, idx) => {
                 const dayKey = dayKeys[idx];
                 const times = weekSchedule[dayKey];
                 let timeStr = 'Closed';
                 const isOpen = times && times.length > 0;
-                
+
                 if (isOpen) {
-                    timeStr = times.map(t => `${formatTime12Hour(t.open)}-${formatTime12Hour(t.close)}`).join(' / ');
+                    timeStr = times.map(t => `${formatTime12Hour(t.open)} – ${formatTime12Hour(t.close)}`).join('<br>');
                 }
-                
-                html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:12px;">
-                    <span style="font-weight:600;color:var(--charcoal);min-width:45px;">${dayName.slice(0, 3)}</span>
-                    <span style="text-align:right;color:${isOpen ? '#276749' : 'var(--muted)'};">${timeStr}</span>
+
+                html += `<div class="weekly-hours-day">
+                    <span class="weekly-hours-name">${dayName.slice(0, 3)}</span>
+                    <span class="weekly-hours-time ${isOpen ? 'is-open' : 'is-closed'}">${timeStr}</span>
                 </div>`;
             });
             html += '</div>';
@@ -2301,8 +2366,8 @@ function viewProduct(productId) {
                 return (Number(coverage.radius_km) || 0) + ' km delivery radius';
             }
             if (coverage.method === 'municipality') {
-                const areas = coverage.municipalities || [];
-                return areas.length ? 'Delivers to: ' + areas.join(', ') : 'Municipality delivery area';
+                const n = (coverage.municipalities || []).length;
+                return n ? n + ' Municipality/City coverage' : 'Municipality/City coverage';
             }
             return 'Custom delivery zone';
         }

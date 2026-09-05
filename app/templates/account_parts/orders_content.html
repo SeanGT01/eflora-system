@@ -3343,13 +3343,17 @@ function buildOrderDetailHTML(order) {
         <div class="sdm-row"><span class="sdm-k">Date</span><span class="sdm-v">${order.requested_delivery_date ? formatDatePH(order.requested_delivery_date) : '—'}</span></div>
         <div class="sdm-row"><span class="sdm-k">Time</span><span class="sdm-v">${order.requested_delivery_time ? formatDeliveryTimeSlot(order.requested_delivery_time) : '—'}</span></div>`;
 
-    const deliverySection = (order.delivery_address || order.delivery_notes || order.cancellation_reason) ? `
+    const cancelReasonRows = (order.status === 'cancelled' && (order.cancellation_reason || order.cancelled_at)) ? `
+                ${order.cancellation_reason ? `<div class="sdm-row"><span class="sdm-k">Reason</span><span class="sdm-v">${esc(order.cancellation_reason)}</span></div>` : ''}
+                ${order.cancelled_at ? `<div class="sdm-row"><span class="sdm-k">Cancelled</span><span class="sdm-v">${formatDateTimePH(order.cancelled_at)}</span></div>` : ''}` : '';
+
+    const deliverySection = (order.delivery_address || order.delivery_notes || cancelReasonRows) ? `
         <section class="sdm-block sdm-block--full">
             <h4>Delivery</h4>
             <div class="sdm-rows">
                 ${order.delivery_address ? `<div class="sdm-row"><span class="sdm-k">Address</span><span class="sdm-v">${esc(order.delivery_address)}</span></div>` : ''}
                 ${order.delivery_notes ? `<div class="sdm-row"><span class="sdm-k">Notes</span><span class="sdm-v">${esc(order.delivery_notes)}</span></div>` : ''}
-                ${order.status === 'cancelled' && order.cancellation_reason ? `<div class="sdm-row"><span class="sdm-k">Cancel reason</span><span class="sdm-v">${esc(order.cancellation_reason)}</span></div>` : ''}
+                ${cancelReasonRows}
             </div>
         </section>` : '';
 

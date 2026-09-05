@@ -1358,7 +1358,6 @@ table.dash-table {
 {% set revenue_change   = revenue_change|default(0) %}
 {% set orders_change    = orders_change|default(0) %}
 {% set customers_change = customers_change|default(0) %}
-{% set delivery_rate    = delivery_rate|default(0) %}
 {% set period = period|default('month') %}
 <div class="dash">
 
@@ -1456,8 +1455,8 @@ table.dash-table {
         <div class="kpi-label">Delivery Rate</div>
         <div class="kpi-icon"><i class="ri-truck-line"></i></div>
       </div>
-      <div class="kpi-value" id="kpiDelivery">{{ '%.1f'|format(delivery_rate) }}%</div>
-      <div class="kpi-sub">Fulfilled / resolved</div>
+      <div class="kpi-value" id="kpiDelivery">{% if delivery_rate is not none %}{{ '%.1f'|format(delivery_rate) }}%{% else %}—{% endif %}</div>
+      <div class="kpi-sub">Delivered / active (excl. cancelled)</div>
     </div>
   </div>
 
@@ -1712,8 +1711,13 @@ table.dash-table {
         </div>
       {% else %}
         <div style="padding:1.4rem;text-align:center;color:var(--muted);font-size:13px;">
+          {% if (total_catalog_products|default(0)) == 0 %}
+          <i class="ri-inbox-line" style="font-size:22px;display:block;margin-bottom:.35rem;"></i>
+          No catalog products yet
+          {% else %}
           <i class="ri-checkbox-circle-line" style="font-size:22px;display:block;margin-bottom:.35rem;color:var(--sage);"></i>
           All catalog products are well-stocked
+          {% endif %}
         </div>
       {% endif %}
     </div>
@@ -1743,12 +1747,12 @@ table.dash-table {
           <div class="perf-item">
             <div class="perf-meta">
               <span class="perf-name"><i class="ri-checkbox-circle-line"></i> Delivery Rate</span>
-              <span class="perf-val">{{ '%.1f'|format(delivery_rate) }}%</span>
+              <span class="perf-val">{% if delivery_rate is not none %}{{ '%.1f'|format(delivery_rate) }}%{% else %}—{% endif %}</span>
             </div>
             <div class="perf-track">
-              <div class="perf-fill fill-sage" style="width:{{ '%.1f'|format(delivery_rate) }}%"></div>
+              <div class="perf-fill fill-sage" style="width:{{ '%.1f'|format(delivery_rate) if delivery_rate is not none else '0' }}%"></div>
             </div>
-            <div class="perf-note">Fulfilled orders · {{ period_label or 'selected period' }}</div>
+            <div class="perf-note">Delivered / active (excl. cancelled) · {{ period_label or 'selected period' }}</div>
           </div>
 
           {% if is_admin %}
@@ -1831,7 +1835,7 @@ table.dash-table {
               <div class="act-dot review"><i class="ri-star-line"></i></div>
               <div class="act-text">
                 <div class="act-main"><strong>{{ '%.1f'|format(avg_rating|default(0)) }}/5</strong> customer rating</div>
-                <div class="act-time">{{ '{:,}'.format(total_reviews|default(0)) }} reviews · {{ '%.1f'|format(delivery_rate|default(0)) }}% fulfillment</div>
+                <div class="act-time">{{ '{:,}'.format(total_reviews|default(0)) }} reviews{% if delivery_rate is not none %} · {{ '%.1f'|format(delivery_rate) }}% delivered{% endif %}</div>
               </div>
             </div>
           {% else %}

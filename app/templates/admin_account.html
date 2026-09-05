@@ -1,0 +1,151 @@
+{% extends "layout.html" %}
+
+{% block title %}Account - Admin{% endblock %}
+{% block page_title %}Account{% endblock %}
+
+{% block extra_css %}
+<style>
+.admin-account-page .account-card { padding: 1.5rem; max-width: 36rem; }
+.admin-account-page .form-group { margin-bottom: 1rem; }
+.admin-account-page .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 650;
+    margin-bottom: 0.35rem;
+    color: var(--charcoal);
+}
+.admin-account-page .form-hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 0.35rem;
+}
+#adminPwToast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.75rem 1.25rem;
+    border-radius: 999px;
+    color: #fff;
+    z-index: 80;
+    display: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-account-page">
+    <div class="card account-card">
+        <div class="section-eyebrow">Admin Console</div>
+        <h2 class="section-title" style="margin-top: 0.15rem;">Change password</h2>
+        <p style="color: var(--muted); margin: 0.45rem 0 1.25rem; font-size: 13px; line-height: 1.5;">
+            Signed in as <strong>{{ session.get('user_name', 'Admin') }}</strong>
+            ({{ session.get('email', '') }}). Enter your current password, then a new one.
+        </p>
+
+        <form id="adminPasswordForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label class="form-label" for="adminCurrentPassword">Current password</label>
+                <input type="password" class="form-control" id="adminCurrentPassword" name="current_password"
+                       required autocomplete="current-password" placeholder="Enter current password">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="adminNewPassword">New password</label>
+                <input type="password" class="form-control" id="adminNewPassword" name="new_password"
+                       required minlength="8" autocomplete="new-password"
+                       placeholder="Min. 8 chars, Aa + special">
+                <div class="form-hint">At least 8 characters with uppercase, lowercase, and a special character.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="adminConfirmPassword">Confirm new password</label>
+                <input type="password" class="form-control" id="adminConfirmPassword" name="confirm_password"
+                       required minlength="8" autocomplete="new-password" placeholder="Repeat new password">
+            </div>
+            <button type="submit" class="btn btn-rose" id="adminPasswordSubmit" disabled>
+                <i class="ri-shield-check-line"></i> Update password
+            </button>
+        </form>
+    </div>
+</div>
+<div id="adminPwToast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const form = document.getElementById('adminPasswordForm');
+    const submitBtn = document.getElementById('adminPasswordSubmit');
+    const toast = document.getElementById('adminPwToast');
+    const inputs = form.querySelectorAll('input[type="password"]');
+
+    function passwordStrengthError(password) {
+        const pw = (password || '').trim();
+        if (pw.length < 8) return 'Password must be at least 8 characters';
+        if (!/[a-z]/.test(pw)) return 'Password must include at least one lowercase letter';
+        if (!/[A-Z]/.test(pw)) return 'Password must include at least one uppercase letter';
+        if (!/[^A-Za-z0-9]/.test(pw)) return 'Password must include at least one special character';
+        return null;
+    }
+
+    function showToast(msg, ok) {
+        toast.textContent = msg;
+        toast.style.background = ok ? '#4a6b4e' : '#c24e68';
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 3200);
+    }
+
+    function syncSubmit() {
+        const hasAny = Array.from(inputs).some((el) => (el.value || '').trim().length > 0);
+        submitBtn.disabled = !hasAny;
+    }
+    inputs.forEach((el) => el.addEventListener('input', syncSubmit));
+    syncSubmit();
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const currentPassword = (fd.get('current_password') || '').trim();
+        const newPassword = (fd.get('new_password') || '').trim();
+        const confirmPassword = (fd.get('confirm_password') || '').trim();
+
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            showToast('All password fields are required', false);
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            showToast('Passwords do not match', false);
+            return;
+        }
+        const strengthError = passwordStrengthError(newPassword);
+        if (strengthError) {
+            showToast(strengthError, false);
+            return;
+        }
+        if (newPassword === currentPassword) {
+            showToast('New password must be different from current password', false);
+            return;
+        }
+
+        const orig = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Updating…';
+        try {
+            const r = await fetch('/api/account/password/change', { method: 'POST', body: fd });
+            const d = await r.json();
+            if (d.success) {
+                showToast('Password changed', true);
+                form.reset();
+            } else {
+                showToast(d.error || 'Could not update password', false);
+            }
+        } catch (err) {
+            showToast('Network error. Please try again.', false);
+        } finally {
+            submitBtn.innerHTML = orig;
+            syncSubmit();
+        }
+    });
+})();
+</script>
+{% endblock %}

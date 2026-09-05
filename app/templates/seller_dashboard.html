@@ -1647,9 +1647,11 @@ table.dash-table {
         <div class="kpi-label">Delivery Rate</div>
         <div class="kpi-icon"><i class="ri-truck-line"></i></div>
       </div>
-      <div class="kpi-value">{{ delivery_rate }}%</div>
-      <div class="kpi-sub">Fulfilled / resolved</div>
-      {% if delivery_rate >= 95 %}
+      <div class="kpi-value">{% if delivery_rate is not none %}{{ delivery_rate }}%{% else %}—{% endif %}</div>
+      <div class="kpi-sub">Delivered / active (excl. cancelled)</div>
+      {% if delivery_rate is none %}
+        <span class="kpi-badge flat">—</span>
+      {% elif delivery_rate >= 95 %}
         <span class="kpi-badge up"><i class="ri-check-line"></i> Excellent</span>
       {% elif delivery_rate >= 80 %}
         <span class="kpi-badge flat">Good</span>
@@ -1884,8 +1886,13 @@ table.dash-table {
         </div>
         {% else %}
           <div class="empty-panel">
+            {% if (total_products|default(0)) == 0 %}
+            <i class="ri-inbox-line"></i>
+            No products in this store yet
+            {% else %}
             <i class="ri-checkbox-circle-line"></i>
             All {{ total_products }} products are well-stocked!
+            {% endif %}
           </div>
         {% endif %}
       </div>
@@ -1935,12 +1942,12 @@ table.dash-table {
           <div class="perf-item">
             <div class="perf-meta">
               <span class="perf-name"><i class="ri-truck-line"></i> Delivery Success</span>
-              <span class="perf-val">{{ delivery_rate }}%</span>
+              <span class="perf-val">{% if delivery_rate is not none %}{{ delivery_rate }}%{% else %}—{% endif %}</span>
             </div>
             <div class="perf-track">
-              <div class="perf-fill fill-terra" style="width:{{ delivery_rate }}%"></div>
+              <div class="perf-fill fill-terra" style="width:{{ delivery_rate if delivery_rate is not none else 0 }}%"></div>
             </div>
-            <div class="perf-note">Fulfilled / resolved · {{ period_label or 'selected period' }}</div>
+            <div class="perf-note">Delivered / active (excl. cancelled) · {{ period_label or 'selected period' }}</div>
           </div>
         </div>
       </div>
@@ -2184,10 +2191,10 @@ table.dash-table {
         </div>
       </div>
       <div class="chart-panel-body">
+        {% if aov_trend['values'] %}
         <div class="chart-canvas-sm">
           <canvas id="aovChart"></canvas>
         </div>
-        {% if aov_trend['values'] %}
         <div class="mini-stats">
           <div class="mini-stat">
             <div class="mini-stat-label">Avg AOV</div>
@@ -2198,6 +2205,8 @@ table.dash-table {
             <div class="mini-stat-value">{{ aov_trend['values']|length }}</div>
           </div>
         </div>
+        {% else %}
+        <div class="empty-panel"><i class="ri-line-chart-line"></i>No data yet</div>
         {% endif %}
       </div>
     </div>

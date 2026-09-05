@@ -565,6 +565,7 @@ class Store(db.Model):
             'latitude': self.latitude,
             'longitude': self.longitude,
             'formatted_address': self.formatted_address,
+            'public_location_label': self.public_location_label,
             'place_id': self.place_id,
             # Delivery area data for all methods
             'radius_geojson': radius_geojson,

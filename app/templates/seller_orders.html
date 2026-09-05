@@ -1937,14 +1937,9 @@
 
             const isCancelled = String(order.status || '').toLowerCase() === 'cancelled';
             const cancelReason = (order.cancellation_reason || '').trim();
-            const cancelSection = isCancelled ? `
-                        <section class="sdm-block sdm-block--full" style="border-color:rgba(225,29,72,0.28);background:rgba(225,29,72,0.04);">
-                            <h4 style="color:#be123c;"><i class="ri-close-circle-line" style="vertical-align:-2px;"></i> Cancellation</h4>
-                            <div class="sdm-rows">
-                                <div class="sdm-row"><span class="sdm-k">Reason</span><span class="sdm-v">${escapeHtml(cancelReason) || 'No reason provided'}</span></div>
-                                <div class="sdm-row"><span class="sdm-k">Cancelled</span><span class="sdm-v">${order.cancelled_at ? formatDateTime(order.cancelled_at) : '—'}</span></div>
-                            </div>
-                        </section>` : '';
+            const cancelRows = isCancelled ? `
+                                    <div class="sdm-row"><span class="sdm-k">Reason</span><span class="sdm-v">${escapeHtml(cancelReason) || 'No reason provided'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Cancelled</span><span class="sdm-v">${order.cancelled_at ? formatDateTime(order.cancelled_at) : '—'}</span></div>` : '';
 
             body.innerHTML = `
                     <div class="sdm">
@@ -1955,8 +1950,6 @@
                             </div>
                             <span class="sdm-when">${formatDateTime(order.created_at)} · ${titleCaseStatus(order.order_type)}</span>
                         </header>
-
-                        ${cancelSection}
 
                         <div class="sdm-grid">
                             <section class="sdm-block">
@@ -1992,11 +1985,12 @@
                             </section>
                         </div>
 
-                        <section class="sdm-block sdm-block--full">
+                            <section class="sdm-block sdm-block--full">
                             <h4>Delivery</h4>
                             <div class="sdm-rows">
                                 <div class="sdm-row"><span class="sdm-k">Address</span><span class="sdm-v">${escapeHtml(order.delivery_address) || '—'}</span></div>
                                 <div class="sdm-row"><span class="sdm-k">Notes</span><span class="sdm-v">${escapeHtml(order.delivery_notes) || '—'}</span></div>
+                                ${cancelRows}
                             </div>
                         </section>
 

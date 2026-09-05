@@ -4675,6 +4675,7 @@ def _render_admin_dashboard():
         _iter_pht_days,
         COMPLETED_ORDER_STATUSES,
         _not_cancelled_order_filter,
+        _delivery_completion_rate,
     )
 
     period = (request.args.get('period') or 'month').lower().strip()
@@ -4752,18 +4753,8 @@ def _render_admin_dashboard():
     if customers_prev_month > 0:
         customers_change = round(((customers_this_month - customers_prev_month) / customers_prev_month) * 100, 1)
 
-    # Fulfillment success among resolved online orders (not punctuality)
-    total_resolved = Order.query.filter(
-        Order.status.in_(['delivered', 'completed', 'cancelled']),
-        Order.created_at >= range_start,
-        Order.created_at < range_end,
-    ).count()
-    delivered_this_month = Order.query.filter(
-        Order.status.in_(COMPLETED_ORDER_STATUSES),
-        Order.created_at >= range_start,
-        Order.created_at < range_end,
-    ).count()
-    delivery_rate = round((delivered_this_month / total_resolved * 100), 1) if total_resolved > 0 else 100.0
+    # Delivery completion: delivered / all non-cancelled online orders
+    delivery_rate = _delivery_completion_rate(range_start, range_end)
 
     # Top products: completed online + POS, merged by product/variant
     online_top = db.session.query(
@@ -5011,6 +5002,7 @@ def seller_dashboard():
         period_range,
         COMPLETED_ORDER_STATUSES,
         _not_cancelled_order_filter,
+        _delivery_completion_rate,
         _pht_date,
         _iter_pht_days,
         _new_customer_count,
@@ -5139,22 +5131,8 @@ def seller_dashboard():
     if customers_prev_month > 0:
         customers_change = round(((customers_this_month - customers_prev_month) / customers_prev_month) * 100, 1)
 
-    # ── KPI: Fulfillment success among resolved online orders ──
-    total_resolved = Order.query.filter(
-        Order.store_id == store.id,
-        Order.status.in_(['delivered', 'completed', 'cancelled']),
-        Order.created_at >= range_start,
-        Order.created_at < range_end,
-    ).count()
-
-    delivered_this_month = Order.query.filter(
-        Order.store_id == store.id,
-        Order.status.in_(COMPLETED_ORDER_STATUSES),
-        Order.created_at >= range_start,
-        Order.created_at < range_end,
-    ).count()
-
-    delivery_rate = round((delivered_this_month / total_resolved * 100), 1) if total_resolved > 0 else 100.0
+    # ── KPI: Delivered share of non-cancelled online orders ──
+    delivery_rate = _delivery_completion_rate(range_start, range_end, store_id=store.id)
 
     # ── Top products (online + POS, variant-level) ──
     online_top = db.session.query(
@@ -6088,6 +6066,13 @@ def admin_controls():
     if session.get('role') != 'admin':
         return redirect(url_for('templates.dashboard'))
     return render_template('admin_controls.html')
+
+
+@templates_bp.route('/admin/account')
+def admin_account():
+    if session.get('role') != 'admin':
+        return redirect(url_for('templates.dashboard'))
+    return render_template('admin_account.html')
 
 
 @templates_bp.route('/api/admin/feature-controls', methods=['GET', 'PUT'])

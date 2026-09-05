@@ -3262,7 +3262,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="base-fee"
-                                           value="{{ store.base_delivery_fee or 50 }}" min="0" step="5">
+                                           value="{{ store.base_delivery_fee if store.base_delivery_fee is not none else 50 }}" min="0" step="5">
                                 </div>
                             </div>
                             <div class="form-group">
@@ -3270,7 +3270,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="rate-per-km"
-                                           value="{{ store.delivery_rate_per_km or 20 }}" min="0" step="5">
+                                           value="{{ store.delivery_rate_per_km if store.delivery_rate_per_km is not none else 20 }}" min="0" step="5">
                                 </div>
                             </div>
                             <div class="form-group free-delivery-min-field">
@@ -3278,7 +3278,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="free-minimum"
-                                           value="{{ store.free_delivery_minimum or 500 }}" min="0" step="50">
+                                           value="{{ store.free_delivery_minimum if store.free_delivery_minimum is not none else 500 }}" min="0" step="50">
                                 </div>
                             </div>
                         </div>
@@ -3289,7 +3289,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="zone-base-fee"
-                                           value="{{ store.base_delivery_fee or 50 }}" min="0" step="5">
+                                           value="{{ store.base_delivery_fee if store.base_delivery_fee is not none else 50 }}" min="0" step="5">
                                 </div>
                             </div>
                             <div class="form-group">
@@ -3297,7 +3297,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="zone-rate-per-km"
-                                           value="{{ store.delivery_rate_per_km or 20 }}" min="0" step="5">
+                                           value="{{ store.delivery_rate_per_km if store.delivery_rate_per_km is not none else 20 }}" min="0" step="5">
                                 </div>
                             </div>
                             <div class="form-group free-delivery-min-field">
@@ -3305,7 +3305,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="zone-free-minimum"
-                                           value="{{ store.free_delivery_minimum or 500 }}" min="0" step="50">
+                                           value="{{ store.free_delivery_minimum if store.free_delivery_minimum is not none else 500 }}" min="0" step="50">
                                 </div>
                             </div>
                         </div>
@@ -3316,7 +3316,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="municipality-base-fee"
-                                        value="{{ store.base_delivery_fee or 50 }}" min="0" step="5">
+                                        value="{{ store.base_delivery_fee if store.base_delivery_fee is not none else 50 }}" min="0" step="5">
                                 </div>
                             </div>
                             <div class="form-group">
@@ -3324,7 +3324,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="municipality-rate-per-km"
-                                           value="{{ store.delivery_rate_per_km or 20 }}" min="0" step="5">
+                                           value="{{ store.delivery_rate_per_km if store.delivery_rate_per_km is not none else 20 }}" min="0" step="5">
                                 </div>
                             </div>
                             <div class="form-group free-delivery-min-field">
@@ -3332,7 +3332,7 @@
                                 <div class="input-group">
                                     <span class="input-group-text">₱</span>
                                     <input type="number" class="form-control" id="municipality-free-minimum"
-                                        value="{{ store.free_delivery_minimum or 500 }}" min="0" step="50">
+                                        value="{{ store.free_delivery_minimum if store.free_delivery_minimum is not none else 500 }}" min="0" step="50">
                                 </div>
                             </div>
                         </div>
@@ -3367,7 +3367,7 @@
                             <div class="summary-label">Free Delivery</div>
                             <div class="summary-value" id="sum-free-delivery">
                                 {% if store.free_delivery_enabled != false %}
-                                    Enabled at ₱{{ '%.2f'|format(store.free_delivery_minimum or 500) }}
+                                    Enabled at ₱{{ '%.2f'|format(store.free_delivery_minimum if store.free_delivery_minimum is not none else 500) }}
                                 {% else %}
                                     Disabled
                                 {% endif %}
@@ -3737,6 +3737,13 @@
             setTimeout(() => toast.remove(), 300);
         }, duration);
     };
+
+    function parseFeeValue(fieldId, fallback) {
+        const raw = document.getElementById(fieldId)?.value;
+        if (raw == null || String(raw).trim() === '') return fallback;
+        const n = parseFloat(raw);
+        return Number.isFinite(n) ? n : fallback;
+    }
 
     // Debug logger
     const debug = {
@@ -5743,9 +5750,9 @@
                 : feeMethod === 'municipality'
                     ? { base: 'municipality-base-fee', rate: 'municipality-rate-per-km', free: 'municipality-free-minimum' }
                     : { base: 'base-fee', rate: 'rate-per-km', free: 'free-minimum' };
-            formData.append('base_delivery_fee', document.getElementById(feeFields.base)?.value || 50);
-            formData.append('delivery_rate_per_km', document.getElementById(feeFields.rate)?.value || 20);
-            formData.append('free_delivery_minimum', document.getElementById(feeFields.free)?.value || 500);
+            formData.append('base_delivery_fee', parseFeeValue(feeFields.base, 50));
+            formData.append('delivery_rate_per_km', parseFeeValue(feeFields.rate, 20));
+            formData.append('free_delivery_minimum', parseFeeValue(feeFields.free, 500));
             formData.append('free_delivery_enabled', document.getElementById('freeDeliveryToggle')?.checked ? '1' : '0');
 
             // Collect QR changes so backend can persist updates.
@@ -7209,9 +7216,9 @@ async function handleQRFile(file, index) {
                         place_id: currentLocation.place_id,
                         delivery_radius_km: parseFloat(document.getElementById('delivery-radius').value) || 15,
                         max_delivery_distance: parseFloat(document.getElementById('max-distance').value) || 15,
-                        base_delivery_fee: parseFloat(document.getElementById(feeIds.base)?.value) || 50,
-                        delivery_rate_per_km: parseFloat(document.getElementById(feeIds.rate)?.value) || 20,
-                        free_delivery_minimum: parseFloat(document.getElementById(feeIds.free)?.value) || 500,
+                        base_delivery_fee: parseFeeValue(feeIds.base, 50),
+                        delivery_rate_per_km: parseFeeValue(feeIds.rate, 20),
+                        free_delivery_minimum: parseFeeValue(feeIds.free, 500),
                         selected_municipalities: Array.from(document.querySelectorAll('.municipality-check:checked')).map(cb => cb.value)
                     })
                 });

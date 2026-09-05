@@ -236,7 +236,7 @@
         max-width: 100%;
     }
 
-    .filter-label {
+    .category-page .filter-label {
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.1em;
@@ -251,7 +251,7 @@
         min-width: min(280px, 100%);
     }
 
-    .filter-select-wrap::after {
+    .category-page .filter-select-wrap::after {
         content: '';
         position: absolute;
         right: 0.95rem;
@@ -264,7 +264,7 @@
         pointer-events: none;
     }
 
-    .filter-select {
+    .category-page .filter-select {
         width: 100%;
         appearance: none;
         -webkit-appearance: none;
@@ -283,18 +283,18 @@
         box-shadow: 0 4px 14px rgba(80, 40, 70, 0.05);
     }
 
-    .filter-select:hover {
+    .category-page .filter-select:hover {
         border-color: rgba(194, 78, 104, 0.4);
         background: rgba(255, 255, 255, 0.88);
     }
 
-    .filter-select:focus {
+    .category-page .filter-select:focus {
         outline: none;
         border-color: rgba(194, 78, 104, 0.5);
         box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.12);
     }
 
-    .filter-empty {
+    .category-page .filter-empty {
         display: none;
         text-align: center;
         padding: 2.5rem 1.5rem;
@@ -302,7 +302,7 @@
         font-size: 15px;
     }
 
-    .filter-empty.is-visible { display: block; }
+    .category-page .filter-empty.is-visible { display: block; }
     
     /* Breadcrumb */
     .breadcrumb {
@@ -509,7 +509,7 @@
 
     .product-card:hover .product-overlay { background: rgba(80, 40, 70, 0.22); }
 
-    .overlay-btn {
+    .category-page .overlay-btn {
         width: 40px; height: 40px;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.9);
@@ -526,15 +526,15 @@
         box-shadow: 0 4px 12px rgba(0,0,0,0.12);
     }
 
-    .product-card:hover .overlay-btn {
+    .category-page .product-card:hover .overlay-btn {
         transform: translateY(0);
         opacity: 1;
     }
 
-    .overlay-btn:hover { background: var(--deep-rose); color: white; transform: scale(1.1) !important; }
+    .category-page .overlay-btn:hover { background: var(--deep-rose); color: white; transform: scale(1.1) !important; }
     
-    /* Empty State */
-    .empty-state {
+    /* Empty State — scoped so it does not restyle the shared cart drawer */
+    .category-page .empty-state {
         text-align: center;
         padding: 4rem 2rem;
         background: rgba(255, 255, 255, 0.55);
@@ -547,26 +547,26 @@
         -webkit-backdrop-filter: blur(14px) saturate(1.25);
     }
     
-    .empty-state i {
+    .category-page .empty-state i {
         font-size: 64px;
         color: #d878a0;
         opacity: 0.45;
         margin-bottom: 1rem;
     }
     
-    .empty-state p {
+    .category-page .empty-state p {
         color: var(--muted);
         font-size: 1.2rem;
         margin-bottom: 0.5rem;
     }
     
-    .empty-state a {
+    .category-page .empty-state a {
         color: var(--deep-rose);
         text-decoration: none;
         font-weight: 500;
     }
     
-    .empty-state a:hover {
+    .category-page .empty-state a:hover {
         text-decoration: underline;
     }
     
@@ -760,56 +760,7 @@
     {% if products and products|length > 0 %}
     <div class="product-grid" id="categoryProductGrid">
         {% for product in products %}
-        <div class="product-card" onclick="viewProduct({{ product.id }})" data-product-id="{{ product.id }}" data-sub="{{ product.subcategory_filter_key or '' }}">
-            {% set has_sellable_stock = product.is_available and product.stock_quantity > 0 %}
-            {% if product.stock_quantity < 5 and product.stock_quantity > 0 %}
-            <div class="product-badge">Low Stock</div>
-            {% endif %}
-            
-            <div class="product-image">
-                {% if product.image_url %}
-                <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy" decoding="async"
-                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;opacity:0.2\'><i class=\'ri-image-line\'></i></div>';">
-                {% else %}
-                <div style="font-size:48px;opacity:0.2"><i class="ri-image-line"></i></div>
-                {% endif %}
-                <div class="product-overlay">
-                    <button class="overlay-btn" type="button" onclick="event.stopPropagation(); viewProduct({{ product.id }})" title="View Details">
-                        <i class="ri-eye-line"></i>
-                    </button>
-                    {% if has_sellable_stock and session.get('role') not in ['seller', 'store_admin', 'admin'] %}
-                    <button class="overlay-btn" type="button" onclick="event.stopPropagation(); addToCart({
-                        id: {{ product.id }},
-                        name: {{ product.name|tojson }},
-                        price: {{ product.effective_price }},
-                        special_price: {{ product.special_price if product.special_price else 'null' }},
-                        effective_price: {{ product.effective_price }},
-                        store_id: {{ product.store_id }},
-                        store_name: {{ (product.store_name or 'Flower Shop')|tojson }},
-                        image_url: {{ (product.image_url or '')|tojson }}
-                    })" title="Quick Add">
-                        <i class="ri-shopping-bag-line"></i>
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="product-content">
-                <h3 class="product-title">{{ product.name }}</h3>
-                <div class="product-meta">
-                    <div class="product-price">{{ price_tag(product, 'sm', false) }}</div>
-                    {% set rating = product.avg_rating if product.avg_rating is defined else 0 %}
-                    {% set reviews = product.review_count if product.review_count is defined else 0 %}
-                    {% if reviews and reviews > 0 %}
-                    <div class="product-rating">
-                        <i class="ri-star-fill"></i>
-                        <span>{{ '%.1f'|format(rating) }}</span>
-                        <span class="product-rating__count">({{ reviews }})</span>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+        {% include 'partials/storefront_product_card.html' %}
         {% endfor %}
     </div>
     <div class="filter-empty" id="categoryFilterEmpty">
@@ -825,6 +776,7 @@
     </div>
     {% endif %}
 </div>
+{% include 'partials/quick_add_picker.html' %}
 {% endblock %}
 
 {% block extra_js %}
