@@ -1,0 +1,262 @@
+{% extends "layout.html" %}
+
+{% block title %}Controls - Admin{% endblock %}
+{% block page_title %}Controls{% endblock %}
+
+{% block extra_css %}
+<style>
+.admin-controls-page .control-card {
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+}
+.admin-controls-page .control-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.25rem;
+    padding: 1.1rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.admin-controls-page .control-row:last-child { border-bottom: none; padding-bottom: 0; }
+.admin-controls-page .control-row:first-child { padding-top: 0; }
+.admin-controls-page .control-copy h3 {
+    font-size: 15px;
+    font-weight: 650;
+    margin: 0 0 0.3rem;
+}
+.admin-controls-page .control-copy p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 42rem;
+}
+.admin-controls-page .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    margin-top: 0.55rem;
+}
+.admin-controls-page .status-on {
+    background: rgba(122, 158, 126, 0.14);
+    color: var(--deep-sage);
+}
+.admin-controls-page .status-off {
+    background: rgba(194, 78, 104, 0.1);
+    color: var(--deep-rose);
+}
+.admin-controls-page .save-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+#controlsToast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.75rem 1.25rem;
+    border-radius: 999px;
+    color: #fff;
+    z-index: 80;
+    display: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-controls-page">
+    <div class="card control-card">
+        <div class="section-eyebrow">Admin Console</div>
+        <h2 class="section-title" style="margin-top: 0.15rem;">Feature controls</h2>
+        <p style="color: var(--muted); margin-top: 0.45rem;">
+            Toggle customer phone OTP and which SMS APIs send verification codes.
+            If both SMS providers are on, <strong>sms8.io is tried first</strong>, then iProg.
+        </p>
+    </div>
+
+    <div class="card control-card">
+        <div class="section-eyebrow">Customer profile</div>
+        <h3 class="section-title" style="font-size: 1.35rem; margin-top: 0.2rem;">Phone number OTP</h3>
+        <div class="control-row">
+            <div class="control-copy">
+                <h3>Require OTP when adding or editing a delivery phone</h3>
+                <p>When on, customers must enter a 6-digit SMS code to save a new phone number. When off, the number is saved immediately.</p>
+                <span class="status-chip" id="chipPhoneOtp">…</span>
+            </div>
+            <label class="toggle-wrap">
+                <input type="checkbox" class="toggle-input" id="flagPhoneBindOtp">
+                <span class="toggle-track"></span>
+            </label>
+        </div>
+    </div>
+
+    <div class="card control-card">
+        <div class="section-eyebrow">SMS delivery</div>
+        <h3 class="section-title" style="font-size: 1.35rem; margin-top: 0.2rem;">OTP SMS providers</h3>
+        <p style="color: var(--muted); font-size: 13px; margin: 0 0 0.35rem;">
+            Applies to every phone OTP (registration, password reset, profile phone, riders, and similar).
+        </p>
+        <div class="control-row">
+            <div class="control-copy">
+                <h3>sms8.io</h3>
+                <p>Primary SIM gateway. Used first when this toggle is on.</p>
+                <span class="status-chip" id="chipSms8">…</span>
+            </div>
+            <label class="toggle-wrap">
+                <input type="checkbox" class="toggle-input" id="flagSms8">
+                <span class="toggle-track"></span>
+            </label>
+        </div>
+        <div class="control-row">
+            <div class="control-copy">
+                <h3>iProg SMS</h3>
+                <p>Backup provider. Used first if sms8 is off, or after sms8 fails when both are on.</p>
+                <span class="status-chip" id="chipIprog">…</span>
+            </div>
+            <label class="toggle-wrap">
+                <input type="checkbox" class="toggle-input" id="flagIprog">
+                <span class="toggle-track"></span>
+            </label>
+        </div>
+        <p id="smsPriorityNote" style="margin: 0.75rem 0 0; font-size: 13px; color: var(--muted);"></p>
+    </div>
+
+    <div class="card control-card save-bar">
+        <span id="controlsHint" style="color: var(--muted); font-size: 13px;">No unsaved changes</span>
+        <button type="button" class="btn btn-rose" id="saveControlsBtn" onclick="saveFeatureControls()" disabled>
+            <i class="ri-save-line"></i> Save controls
+        </button>
+    </div>
+</div>
+<div id="controlsToast"></div>
+
+<script>
+function csrfHeaders() {
+    const t = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    return { 'Content-Type': 'application/json', 'X-CSRFToken': t };
+}
+
+function setChip(id, on) {
+    const el = document.getElementById(id);
+    el.className = 'status-chip ' + (on ? 'status-on' : 'status-off');
+    el.textContent = on ? 'Enabled' : 'Disabled';
+}
+
+function refreshPriorityNote() {
+    const sms8 = document.getElementById('flagSms8').checked;
+    const iprog = document.getElementById('flagIprog').checked;
+    const note = document.getElementById('smsPriorityNote');
+    if (sms8 && iprog) note.textContent = 'Current order: sms8.io first, then iProg if sms8 fails.';
+    else if (sms8) note.textContent = 'Current order: sms8.io only.';
+    else if (iprog) note.textContent = 'Current order: iProg only.';
+    else note.textContent = 'Warning: both providers are off. Phone OTP SMS will not send.';
+}
+
+let savedFlags = {
+    phone_bind_otp: false,
+    sms_provider_sms8: true,
+    sms_provider_iprog: true,
+};
+
+function currentFlags() {
+    return {
+        phone_bind_otp: document.getElementById('flagPhoneBindOtp').checked,
+        sms_provider_sms8: document.getElementById('flagSms8').checked,
+        sms_provider_iprog: document.getElementById('flagIprog').checked,
+    };
+}
+
+function flagsDirty() {
+    const now = currentFlags();
+    return now.phone_bind_otp !== !!savedFlags.phone_bind_otp
+        || now.sms_provider_sms8 !== !!savedFlags.sms_provider_sms8
+        || now.sms_provider_iprog !== !!savedFlags.sms_provider_iprog;
+}
+
+function syncSaveButton() {
+    const dirty = flagsDirty();
+    const btn = document.getElementById('saveControlsBtn');
+    const hint = document.getElementById('controlsHint');
+    btn.disabled = !dirty;
+    hint.textContent = dirty ? 'Save to apply your changes.' : 'No unsaved changes';
+}
+
+function applyFlags(flags) {
+    savedFlags = {
+        phone_bind_otp: !!flags.phone_bind_otp,
+        sms_provider_sms8: !!flags.sms_provider_sms8,
+        sms_provider_iprog: !!flags.sms_provider_iprog,
+    };
+    document.getElementById('flagPhoneBindOtp').checked = savedFlags.phone_bind_otp;
+    document.getElementById('flagSms8').checked = savedFlags.sms_provider_sms8;
+    document.getElementById('flagIprog').checked = savedFlags.sms_provider_iprog;
+    setChip('chipPhoneOtp', savedFlags.phone_bind_otp);
+    setChip('chipSms8', savedFlags.sms_provider_sms8);
+    setChip('chipIprog', savedFlags.sms_provider_iprog);
+    refreshPriorityNote();
+    syncSaveButton();
+}
+
+function toast(msg, ok) {
+    const t = document.getElementById('controlsToast');
+    t.textContent = msg;
+    t.style.background = ok ? '#276749' : '#9b1c1c';
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 2800);
+}
+
+async function loadFeatureControls() {
+    const r = await fetch('/api/admin/feature-controls');
+    const d = await r.json();
+    if (!r.ok) {
+        toast(d.error || 'Could not load controls', false);
+        return;
+    }
+    applyFlags(d.flags || {});
+}
+
+async function saveFeatureControls() {
+    if (!flagsDirty()) return;
+    const btn = document.getElementById('saveControlsBtn');
+    btn.disabled = true;
+    const body = currentFlags();
+    try {
+        const r = await fetch('/api/admin/feature-controls', {
+            method: 'PUT',
+            headers: csrfHeaders(),
+            body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+            toast(d.error || 'Could not save', false);
+            syncSaveButton();
+            return;
+        }
+        applyFlags(d.flags || body);
+        toast('Controls saved', true);
+    } catch (e) {
+        toast('Could not save controls', false);
+        syncSaveButton();
+    }
+}
+
+['flagPhoneBindOtp', 'flagSms8', 'flagIprog'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', () => {
+        setChip('chipPhoneOtp', document.getElementById('flagPhoneBindOtp').checked);
+        setChip('chipSms8', document.getElementById('flagSms8').checked);
+        setChip('chipIprog', document.getElementById('flagIprog').checked);
+        refreshPriorityNote();
+        syncSaveButton();
+    });
+});
+
+loadFeatureControls();
+</script>
+{% endblock %}

@@ -12,6 +12,12 @@ import re
 auth_bp = Blueprint('auth', __name__)
 
 
+@auth_bp.route('/feature-flags', methods=['GET'])
+def auth_feature_flags():
+    from app.utils.feature_controls import public_flags
+    return jsonify(public_flags()), 200
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # CUSTOMER REGISTRATION — OTP-VERIFIED FLOW
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -307,6 +313,12 @@ def customer_send_otp():
     from app.utils.phone_utils import display_login_id
 
     data = request.get_json(silent=True) or {}
+    agree = data.get('agree_terms')
+    if agree not in (True, 1, '1', 'true', 'on', 'yes'):
+        return jsonify({
+            'success': False,
+            'error': 'Please agree to the Terms & Conditions to continue.',
+        }), 400
     fields, err = _validate_registration_payload(data, require_password=True)
     if err:
         return jsonify({'success': False, 'error': err[0]}), err[1]

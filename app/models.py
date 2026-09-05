@@ -121,6 +121,11 @@ class User(db.Model):
             secure=True
         )
         return url
+
+    @property
+    def is_phone_login(self):
+        from app.utils.phone_utils import is_synthetic_account_email
+        return is_synthetic_account_email(self.email or '')
     
     def to_dict(self):
         # Split on last space: everything before = first name, last word = last name
@@ -1799,6 +1804,13 @@ class Order(db.Model):
     
     # Relationships
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade='all, delete-orphan')
+    rider_locations = db.relationship(
+        'RiderLocation',
+        backref='order',
+        lazy=True,
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+    )
     
     @property
     def payment_proof_image(self):
@@ -2023,7 +2035,7 @@ class RiderLocation(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     rider_id = db.Column(db.Integer, db.ForeignKey('riders.id'), nullable=False)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'))
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id', ondelete='CASCADE'))
     location = db.Column(Geometry('POINT', srid=4326), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -2237,6 +2249,22 @@ class SupportFAQ(db.Model):
             'answer': self.answer,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class SystemControl(db.Model):
+    """Admin feature toggles (phone OTP, SMS providers)."""
+    __tablename__ = 'system_controls'
+
+    key = db.Column(db.String(64), primary_key=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'key': self.key,
+            'enabled': bool(self.enabled),
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 

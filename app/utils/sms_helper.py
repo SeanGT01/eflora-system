@@ -242,36 +242,77 @@ def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification')
         return False, None, SMS_SERVICE_UNAVAILABLE_CODE
 
     code = str(otp_code).strip() if otp_code else ''
+    use_sms8 = True
+    use_iprog = True
+    try:
+        from app.utils.feature_controls import iprog_enabled, sms8_enabled
+        use_sms8 = sms8_enabled()
+        use_iprog = iprog_enabled()
+    except Exception:
+        pass
+
+    if not use_sms8 and not use_iprog:
+        current_app.logger.error('SMS: both sms8 and iProg are disabled in Admin Controls')
+        return False, None, SMS_SERVICE_UNAVAILABLE_CODE
+
     sms8_key, _base = _sms8_config()
-    if sms8_key and code:
+    if use_sms8 and sms8_key and code:
         ok, err = _sms8_send(phone, _otp_sms_body(code, expiry_minutes, purpose))
         if ok:
             return True, code, None
-        current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
-    elif not sms8_key:
-        current_app.logger.info('SMS: SMS8_API_KEY not set, using iProg')
+        if use_iprog:
+            current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
+        else:
+            return False, None, err or SMS_SERVICE_UNAVAILABLE_CODE
+    elif use_sms8 and not sms8_key:
+        current_app.logger.info('SMS: SMS8_API_KEY not set')
+        if not use_iprog:
+            return False, None, SMS_SERVICE_UNAVAILABLE_CODE
+    elif not use_sms8:
+        current_app.logger.info('SMS: sms8 disabled in Admin Controls')
     elif not code:
         current_app.logger.warning('SMS: no app OTP code, skipping sms8')
 
-    return _iprog_send_otp(phone, otp_code=otp_code, expiry_minutes=expiry_minutes)
+    if use_iprog:
+        return _iprog_send_otp(phone, otp_code=otp_code, expiry_minutes=expiry_minutes)
+
+    return False, None, SMS_SERVICE_UNAVAILABLE_CODE
 
 
 def send_sms_message(phone, message):
     """
-    Send a free-form SMS. sms8.io first, then iProg sms_messages.
+    Send a free-form SMS. sms8.io first when enabled, then iProg if enabled.
     Returns (ok: bool, error_code: str|None).
     """
+    use_sms8 = True
+    use_iprog = True
+    try:
+        from app.utils.feature_controls import iprog_enabled, sms8_enabled
+        use_sms8 = sms8_enabled()
+        use_iprog = iprog_enabled()
+    except Exception:
+        pass
+
+    if not use_sms8 and not use_iprog:
+        current_app.logger.error('SMS: both sms8 and iProg are disabled in Admin Controls')
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
     sms8_key, _base = _sms8_config()
-    if sms8_key:
+    if use_sms8 and sms8_key:
         ok, err = _sms8_send(phone, message)
         if ok:
             return True, None
-        if err == SMS_SERVICE_UNAVAILABLE_CODE:
+        if use_iprog:
             current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
-        elif err is None:
-            current_app.logger.info('SMS: SMS8_API_KEY not set, using iProg')
         else:
-            current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
+            return False, err or SMS_SERVICE_UNAVAILABLE_CODE
+    elif use_sms8 and not sms8_key:
+        current_app.logger.info('SMS: SMS8_API_KEY not set')
+        if not use_iprog:
+            return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+    if not use_iprog:
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
 
     try:
         import requests

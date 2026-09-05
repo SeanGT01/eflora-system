@@ -442,3 +442,14 @@ def reject_seller_application(app_id):
 
     db.session.commit()
     return jsonify({'success': True, 'message': 'Application rejected', 'application': application.to_dict()}), 200
+
+
+@admin_bp.route('/feature-controls', methods=['GET', 'PUT'])
+@admin_session_or_jwt_required
+def api_v1_admin_feature_controls():
+    from app.utils.feature_controls import get_feature_controls, set_feature_controls
+    if request.method == 'GET':
+        return jsonify({'success': True, 'flags': get_feature_controls()}), 200
+    data = request.get_json(silent=True) or {}
+    flags = set_feature_controls(data)
+    return jsonify({'success': True, 'flags': flags}), 200

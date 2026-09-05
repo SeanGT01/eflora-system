@@ -2896,8 +2896,14 @@ def register():
             identifier       = (request.form.get('identifier') or request.form.get('email') or '').strip()
             password         = (request.form.get('password')         or '')
             confirm_password = (request.form.get('confirm_password') or '')
+            agree_terms = (request.form.get('agree_terms') or '').strip().lower()
 
             # ── Validation ────────────────────────────────────────────────
+            if agree_terms not in ('on', '1', 'true', 'yes'):
+                return render_template('register.html',
+                                       error='Please agree to the Terms & Conditions to continue.',
+                                       form_data=request.form)
+
             if not all([full_name, identifier, password, confirm_password]):
                 return render_template('register.html',
                                        error='All fields are required',
@@ -6048,6 +6054,31 @@ def admin_support():
     if session.get('role') != 'admin':
         return redirect(url_for('templates.dashboard'))
     return render_template('admin_support.html')
+
+
+@templates_bp.route('/admin/controls')
+def admin_controls():
+    if session.get('role') != 'admin':
+        return redirect(url_for('templates.dashboard'))
+    return render_template('admin_controls.html')
+
+
+@templates_bp.route('/api/admin/feature-controls', methods=['GET', 'PUT'])
+def api_admin_feature_controls():
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    from app.utils.feature_controls import get_feature_controls, set_feature_controls
+    if request.method == 'GET':
+        return jsonify({'success': True, 'flags': get_feature_controls()}), 200
+    data = request.get_json(silent=True) or {}
+    flags = set_feature_controls(data)
+    return jsonify({'success': True, 'flags': flags}), 200
+
+
+@templates_bp.route('/api/public/feature-flags', methods=['GET'])
+def api_public_feature_flags():
+    from app.utils.feature_controls import public_flags
+    return jsonify(public_flags()), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════

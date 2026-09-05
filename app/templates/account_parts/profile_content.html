@@ -2424,7 +2424,8 @@
     </div>
 </div>
 
-<!-- ─── Delivery phone (email/Gmail accounts, or change existing number) ─── -->
+<!-- ─── Delivery phone (email/Gmail accounts only) ─── -->
+{% if user and not user.is_phone_login %}
 <div class="profile-card" id="profilePhoneCard">
     <div class="card-header">
         <div class="card-header-left">
@@ -2452,6 +2453,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <!-- ─── Delivery Addresses ─── -->
 <div class="profile-card">
@@ -3456,8 +3458,14 @@ document.addEventListener('DOMContentLoaded', function() {
     setupSellerApplicationForm();
     setupAvatarUpload();
     setupProfileForm();
-    setupProfilePhoneForm();
     applyPhoneLoginProfileUi();
+    fetch('/api/public/feature-flags')
+        .then((r) => r.json())
+        .then((d) => {
+            REQUIRE_PHONE_BIND_OTP = !!d.phone_bind_otp;
+            setupProfilePhoneForm();
+        })
+        .catch(() => setupProfilePhoneForm());
 
     // Ensure the gender selection toggle works even if the radios are dynamically updated
     document.addEventListener('change', function(e) {
@@ -3577,7 +3585,7 @@ const __profileBoot = {
 };
 
 // Keep in sync with PHONE_BIND_OTP_REQUIRED in app/utils/phone_bind.py
-const REQUIRE_PHONE_BIND_OTP = false;
+let REQUIRE_PHONE_BIND_OTP = false;
 
 try {
     const __bootParams = new URLSearchParams(window.location.search);
@@ -3748,21 +3756,8 @@ window.setupProfilePhoneForm = setupProfilePhoneForm;
 
 function applyPhoneLoginProfileUi() {
     if (!__profileBoot.isPhoneLogin) return;
-    const input = document.getElementById('profilePhoneInput');
-    const hint = document.getElementById('profilePhoneHint');
-    const sendBtn = document.getElementById('profilePhoneSendBtn');
-    const verifyBtn = document.getElementById('profilePhoneVerifyBtn');
-    const otpWrap = document.getElementById('profilePhoneOtpWrap');
-    if (input) {
-        input.readOnly = true;
-        input.classList.add('is-readonly');
-    }
-    if (hint) {
-        hint.textContent = 'Cannot be changed.';
-    }
-    if (sendBtn) sendBtn.style.display = 'none';
-    if (verifyBtn) verifyBtn.style.display = 'none';
-    if (otpWrap) otpWrap.style.display = 'none';
+    const card = document.getElementById('profilePhoneCard');
+    if (card) card.style.display = 'none';
 }
 
 function _csrfJsonHeaders() {

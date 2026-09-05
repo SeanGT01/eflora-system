@@ -16,9 +16,16 @@ from app.utils.phone_utils import (
     tel_href,
 )
 
-# Flip to True to require SMS OTP again for profile phone bind.
-# Keep send_phone_bind_otp / verify_phone_bind_otp — this only skips the OTP gate.
+# Admin Controls page toggles this. Keep send/verify OTP handlers.
 PHONE_BIND_OTP_REQUIRED = False
+
+
+def _phone_bind_otp_on() -> bool:
+    try:
+        from app.utils.feature_controls import phone_bind_otp_required
+        return phone_bind_otp_required()
+    except Exception:
+        return bool(PHONE_BIND_OTP_REQUIRED)
 
 
 def phone_bind_otp_email_key(user_id: int) -> str:
@@ -117,7 +124,7 @@ def send_phone_bind_otp(user, phone_raw):
     if err:
         return err
 
-    if not PHONE_BIND_OTP_REQUIRED:
+    if not _phone_bind_otp_on():
         payload, err = _commit_bound_phone(user, phone)
         if err:
             return err
@@ -193,7 +200,7 @@ def send_phone_bind_otp(user, phone_raw):
 def verify_phone_bind_otp(user, otp_code_raw):
     from app.utils.otp_service import MAX_VERIFY_ATTEMPTS, attempts_remaining, verify_otp
 
-    if not PHONE_BIND_OTP_REQUIRED:
+    if not _phone_bind_otp_on():
         return jsonify({
             'success': False,
             'otp_required': False,
