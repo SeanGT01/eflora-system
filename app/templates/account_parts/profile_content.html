@@ -2543,6 +2543,58 @@
 </div>
 {% endif %}
 
+{% if session.get('role') == 'customer' %}
+<!-- ─── Delete account ─── -->
+<div class="profile-card" id="deleteAccountCard">
+    <div class="card-header">
+        <div class="card-header-left">
+            <div class="card-header-icon" style="background:rgba(192,57,43,0.1);color:#c0392b;"><i class="ri-user-unfollow-line"></i></div>
+            <div class="card-title">Delete account</div>
+        </div>
+    </div>
+    <div class="card-body">
+        <p style="margin:0 0 0.85rem;color:var(--muted);font-size:13.5px;line-height:1.55;">
+            Permanently close your E-FLORA customer account. This cannot be undone.
+        </p>
+        <button type="button" class="btn btn-outline" id="openDeleteAccountBtn" style="color:#c0392b;border-color:rgba(192,57,43,0.35);">
+            <i class="ri-delete-bin-line"></i> Delete my account
+        </button>
+    </div>
+</div>
+
+<div id="deleteAccountModal" style="display:none;position:fixed;inset:0;z-index:1300;background:rgba(42,35,30,0.4);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:1rem;">
+    <div style="width:min(520px,100%);background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xl);overflow:hidden;max-height:min(90vh,720px);display:flex;flex-direction:column;">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.6rem;">
+            <i class="ri-error-warning-line" style="color:#c0392b;font-size:1.25rem;"></i>
+            <strong>Delete your account?</strong>
+        </div>
+        <div style="padding:1.1rem 1.25rem;overflow:auto;font-size:13.5px;line-height:1.55;color:var(--charcoal);">
+            <p style="margin:0 0 0.75rem;">Before you continue, please read what will happen:</p>
+            <ul style="margin:0 0 1rem;padding-left:1.15rem;">
+                <li>You will be signed out immediately and will not be able to log in again.</li>
+                <li>Your name, email, phone, birthday, photo, saved addresses, cart, wishlist, and notifications will be removed.</li>
+                <li>Completed, cancelled, and refunded orders stay in shop records for accounting, with your delivery details removed.</li>
+                <li>Product and store ratings you already submitted stay, shown as a deleted customer.</li>
+                <li>You cannot delete while an order is still being prepared or delivered. Finish or cancel those orders first.</li>
+            </ul>
+            <div class="form-group" style="margin-bottom:0.85rem;">
+                <label class="form-label">Type DELETE to confirm</label>
+                <input type="text" class="form-control" id="deleteAccountConfirmInput" autocomplete="off" placeholder="DELETE">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-control" id="deleteAccountPasswordInput" autocomplete="current-password" placeholder="Enter your password">
+            </div>
+            <p id="deleteAccountError" style="display:none;margin:0.75rem 0 0;color:#c0392b;font-size:13px;"></p>
+        </div>
+        <div style="padding:0.9rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:0.5rem;">
+            <button type="button" class="btn btn-profile-soft" id="cancelDeleteAccountBtn">Cancel</button>
+            <button type="button" class="btn" id="confirmDeleteAccountBtn" style="background:#c0392b;color:#fff;border:none;" disabled>Delete account</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Discard Confirmation Modal -->
 <div id="discardConfirmModal" style="display:none;position:fixed;inset:0;z-index:1200;background:rgba(42,35,30,0.35);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:1rem;">
     <div style="width:min(460px,100%);background:var(--warm-white);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xl);overflow:hidden;">
@@ -3476,6 +3528,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     setupPasswordForm();
+    setupDeleteAccountForm();
     loadAddresses();
     loadMunicipalities();
 });
@@ -5408,6 +5461,81 @@ function setupProfileForm() {
             } else {
                 updateProfileFormActions();
             }
+        }
+    });
+}
+
+function setupDeleteAccountForm() {
+    const modal = document.getElementById('deleteAccountModal');
+    const openBtn = document.getElementById('openDeleteAccountBtn');
+    const cancelBtn = document.getElementById('cancelDeleteAccountBtn');
+    const confirmBtn = document.getElementById('confirmDeleteAccountBtn');
+    const confirmInput = document.getElementById('deleteAccountConfirmInput');
+    const passwordInput = document.getElementById('deleteAccountPasswordInput');
+    const errorEl = document.getElementById('deleteAccountError');
+    if (!modal || !openBtn || !confirmBtn || !confirmInput || !passwordInput) return;
+
+    function syncDeleteReady() {
+        const typed = (confirmInput.value || '').trim().toUpperCase() === 'DELETE';
+        const hasPw = (passwordInput.value || '').length > 0;
+        confirmBtn.disabled = !(typed && hasPw);
+    }
+
+    function closeModal() {
+        modal.style.display = 'none';
+        confirmInput.value = '';
+        passwordInput.value = '';
+        if (errorEl) {
+            errorEl.style.display = 'none';
+            errorEl.textContent = '';
+        }
+        confirmBtn.disabled = true;
+    }
+
+    openBtn.addEventListener('click', () => {
+        modal.style.display = 'flex';
+        syncDeleteReady();
+        confirmInput.focus();
+    });
+    cancelBtn?.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    confirmInput.addEventListener('input', syncDeleteReady);
+    passwordInput.addEventListener('input', syncDeleteReady);
+
+    confirmBtn.addEventListener('click', async () => {
+        if (confirmBtn.disabled) return;
+        const orig = confirmBtn.innerHTML;
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = 'Deleting…';
+        if (errorEl) errorEl.style.display = 'none';
+        try {
+            const r = await fetch('/api/account/delete', {
+                method: 'POST',
+                headers: _csrfJsonHeaders(),
+                body: JSON.stringify({
+                    confirmation: (confirmInput.value || '').trim(),
+                    password: passwordInput.value,
+                }),
+            });
+            const d = await r.json();
+            if (d.success) {
+                window.location.href = '/login?deleted=1';
+                return;
+            }
+            if (errorEl) {
+                errorEl.textContent = d.error || 'Could not delete the account.';
+                errorEl.style.display = 'block';
+            }
+        } catch (err) {
+            if (errorEl) {
+                errorEl.textContent = 'Network error. Please try again.';
+                errorEl.style.display = 'block';
+            }
+        } finally {
+            confirmBtn.innerHTML = orig;
+            syncDeleteReady();
         }
     });
 }

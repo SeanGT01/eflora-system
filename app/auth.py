@@ -1130,6 +1130,8 @@ def me():
         return jsonify({'error': 'User not found'}), 404
     
     print(f"✅ User found: {user.email}")
+    if (user.status or '').strip().lower() in ('deleted', 'banned', 'inactive', 'suspended'):
+        return jsonify({'error': 'Account is no longer available.'}), 403
     return jsonify(user.to_dict())
 
 
@@ -1338,6 +1340,29 @@ def _jwt_user_or_error():
     if not user:
         return None, (jsonify({'success': False, 'error': 'User not found'}), 404)
     return user, None
+
+
+@auth_bp.route('/account/delete', methods=['POST'])
+@jwt_required()
+def delete_own_account():
+    from app.utils.account_deletion import delete_customer_account
+
+    try:
+        user, err = _jwt_user_or_error()
+        if err:
+            return err
+        data = request.get_json(silent=True) or {}
+        return delete_customer_account(
+            user,
+            data.get('password') or data.get('current_password'),
+            data.get('confirmation'),
+        )
+    except Exception as e:
+        db.session.rollback()
+        print(f'❌ delete_own_account: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': 'Could not delete the account. Please try again.'}), 500
 
 
 @auth_bp.route('/profile/phone/send-otp', methods=['POST'])

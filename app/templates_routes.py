@@ -2200,6 +2200,27 @@ def change_password():
         print(f"Error changing password: {str(e)}")
         return jsonify({'error': 'Server error'}), 500
 
+
+@templates_bp.route('/api/account/delete', methods=['POST'])
+def api_account_delete():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+    from app.utils.account_deletion import delete_customer_account
+    try:
+        user = User.query.get(session['user_id'])
+        data = request.get_json(silent=True) or {}
+        password = data.get('password') or data.get('current_password') or request.form.get('password')
+        confirmation = data.get('confirmation') or request.form.get('confirmation')
+        resp, status = delete_customer_account(user, password, confirmation)
+        if status == 200:
+            session.clear()
+        return resp, status
+    except Exception as e:
+        db.session.rollback()
+        print(f'Account delete error: {e}')
+        return jsonify({'success': False, 'error': 'Could not delete the account. Please try again.'}), 500
+
+
 @templates_bp.route('/my-account')
 def my_account():
     if not session.get('user_id'):
