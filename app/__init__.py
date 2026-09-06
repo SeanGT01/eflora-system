@@ -489,7 +489,11 @@ def create_app(config_class='default'):
         if not uid:
             return dict(profile_avatar_url=None)
         user = User.query.get(uid)
-        return dict(profile_avatar_url=user.display_avatar_url if user else None)
+        url = user.display_avatar_url if user else None
+        if not url and session.get('role') == 'admin':
+            from flask import url_for
+            url = url_for('static', filename='images/eflora-flower-logo.png')
+        return dict(profile_avatar_url=url)
 
     @app.context_processor
     def inject_mapbox_token():
