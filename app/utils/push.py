@@ -36,21 +36,59 @@ _ORDER_COPY = {
 }
 
 
-def _service_account_info():
-    raw = (os.environ.get('FCM_SERVICE_ACCOUNT_JSON') or '').strip()
-    if raw.startswith("'") and raw.endswith("'"):
-        raw = raw[1:-1].strip()
+def _parse_service_account(raw):
+    raw = (raw or '').strip().lstrip('\ufeff')
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ('"', "'"):
+        inner = raw[1:-1].strip()
+        if inner.startswith('{'):
+            raw = inner.replace('\\n', '\n')
     if not raw:
-        path = (os.environ.get('GOOGLE_APPLICATION_CREDENTIALS') or '').strip()
-        if path and os.path.isfile(path):
-            with open(path, 'r', encoding='utf-8') as fh:
-                return json.load(fh)
         return None
-    if raw.startswith('{'):
-        return json.loads(raw)
     if os.path.isfile(raw):
         with open(raw, 'r', encoding='utf-8') as fh:
             return json.load(fh)
+    if raw.startswith('{'):
+        return json.loads(raw)
+    return None
+
+
+def fcm_config_hint():
+    """Safe diagnostic for why FCM credentials are missing. Never includes secrets."""
+    raw = os.environ.get('FCM_SERVICE_ACCOUNT_JSON')
+    alt = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    if raw is None or not str(raw).strip():
+        if alt and str(alt).strip():
+            try:
+                _parse_service_account(alt)
+                return 'using_google_application_credentials'
+            except Exception as exc:
+                return 'google_application_credentials_invalid:%s' % type(exc).__name__
+        return 'env_missing'
+    try:
+        info = _parse_service_account(raw)
+    except Exception as exc:
+        return 'json_invalid:%s' % type(exc).__name__
+    if not info:
+        prefix = str(raw).strip()[:8]
+        return 'not_json_prefix=%r_len=%s' % (prefix, len(str(raw).strip()))
+    if not info.get('private_key') or not info.get('project_id'):
+        return 'json_missing_fields'
+    return 'ok'
+
+
+def _service_account_info():
+    for key in ('FCM_SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS'):
+        raw = os.environ.get(key)
+        if not raw or not str(raw).strip():
+            continue
+        try:
+            info = _parse_service_account(raw)
+        except Exception as exc:
+            logger.warning('[FCM] %s parse failed: %s', key, exc)
+            print('[FCM]', key, 'parse failed:', exc, flush=True)
+            continue
+        if info:
+            return info
     return None
 
 

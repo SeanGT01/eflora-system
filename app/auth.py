@@ -1170,7 +1170,7 @@ def device_token():
 @jwt_required()
 def push_status():
     """Whether this account has a phone token and whether the server can send FCM."""
-    from app.utils.push import fcm_is_configured
+    from app.utils.push import fcm_is_configured, fcm_config_hint
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
     if not user:
@@ -1182,6 +1182,7 @@ def push_status():
         'has_token': bool(token),
         'token_length': len(token),
         'server_fcm_configured': fcm_is_configured(),
+        'server_fcm_hint': fcm_config_hint(),
     })
 
 
@@ -1189,7 +1190,7 @@ def push_status():
 @jwt_required()
 def push_test():
     """Send a test notification to the logged-in user's phone."""
-    from app.utils.push import fcm_is_configured, send_to_user_id
+    from app.utils.push import fcm_config_hint, fcm_is_configured, send_to_user_id
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
     if not user:
@@ -1198,6 +1199,7 @@ def push_test():
         return jsonify({
             'success': False,
             'error': 'Server is missing FCM_SERVICE_ACCOUNT_JSON',
+            'hint': fcm_config_hint(),
             'has_token': bool((user.fcm_token or '').strip()),
         }), 503
     if not (user.fcm_token or '').strip():
