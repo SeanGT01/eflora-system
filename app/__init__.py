@@ -134,9 +134,17 @@ def create_app(config_class='default'):
                 cols = {c['name'] for c in inspect(db.engine).get_columns('users')}
                 if 'fcm_token' not in cols:
                     db.session.execute(text(
-                        "ALTER TABLE users ADD COLUMN fcm_token VARCHAR(512)"
+                        "ALTER TABLE users ADD COLUMN fcm_token TEXT"
                     ))
                     db.session.commit()
+                else:
+                    try:
+                        db.session.execute(text(
+                            "ALTER TABLE users ALTER COLUMN fcm_token TYPE TEXT"
+                        ))
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
         except Exception:
             db.session.rollback()
 

@@ -46,7 +46,7 @@ class User(db.Model):
     avatar_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
     avatar_url = db.Column(db.String(500), nullable=True)  # Full Cloudinary URL
     # =================================================
-    fcm_token = db.Column(db.String(512), nullable=True)
+    fcm_token = db.Column(db.Text, nullable=True)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

@@ -1160,7 +1160,7 @@ def device_token():
     token = (data.get('token') or data.get('fcm_token') or '').strip()
     if not token:
         return jsonify({'error': 'token is required'}), 400
-    user.fcm_token = token[:512]
+    user.fcm_token = token[:4096]
     db.session.commit()
     return jsonify({'success': True})
 
