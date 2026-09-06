@@ -253,6 +253,10 @@ def _validate_registration_payload(data, require_password=True):
 
     if not full_name:
         return None, ('full_name is required', 400)
+    from app.utils.validators import normalize_full_name
+    full_name, name_err = normalize_full_name(full_name)
+    if name_err:
+        return None, (name_err, 400)
     if not raw_id:
         return None, ('Enter your email address or Philippine mobile number.', 400)
     if require_password:
@@ -1076,11 +1080,16 @@ def register():
     if pw_error:
         return jsonify({'error': pw_error}), 400
 
+    from app.utils.validators import normalize_full_name
+    full_name, name_err = normalize_full_name(data.get('full_name'))
+    if name_err:
+        return jsonify({'error': name_err}), 400
+
     if User.query.filter_by(email=data['email'].lower()).first():
         return jsonify({'error': 'Email already registered'}), 409
 
     user = User(
-        full_name=data['full_name'].strip(),
+        full_name=full_name,
         email=data['email'].lower().strip(),
         role='customer',
         status='active',
@@ -1269,7 +1278,11 @@ def update_profile():
         gender     = (data.get('gender') or '').strip()
 
         if first_name or last_name:
-            user.full_name = f"{first_name} {last_name}".strip()
+            from app.utils.validators import compose_full_name
+            full_name, name_err = compose_full_name(first_name, last_name)
+            if name_err:
+                return jsonify({'error': name_err}), 400
+            user.full_name = full_name
         if birthday:
             from app.utils import parse_and_validate_birthday
             parsed_bday, bday_err = parse_and_validate_birthday(birthday)

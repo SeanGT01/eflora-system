@@ -2053,7 +2053,11 @@ def update_profile():
         
         # Update full_name
         if first_name or last_name:
-            user.full_name = f"{first_name} {last_name}".strip()
+            from app.utils.validators import compose_full_name
+            full_name, name_err = compose_full_name(first_name, last_name)
+            if name_err:
+                return jsonify({'success': False, 'error': name_err}), 400
+            user.full_name = full_name
         
         # Login identity (email or phone) is set at registration and is not editable here.
         if birthday:
@@ -2928,6 +2932,13 @@ def register():
             if not all([full_name, identifier, password, confirm_password]):
                 return render_template('register.html',
                                        error='All fields are required',
+                                       form_data=request.form)
+
+            from app.utils.validators import normalize_full_name
+            full_name, name_err = normalize_full_name(full_name)
+            if name_err:
+                return render_template('register.html',
+                                       error=name_err,
                                        form_data=request.form)
 
             if password != confirm_password:

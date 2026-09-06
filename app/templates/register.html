@@ -1149,6 +1149,10 @@
                     <input class="form-control" type="text" name="full_name"
                            id="fullName"
                            placeholder="Maria Santos" required autofocus
+                           maxlength="81" autocomplete="name"
+                           pattern="[A-Za-zÀ-ÖØ-öø-ÿÑñ]+([ '\-][A-Za-zÀ-ÖØ-öø-ÿÑñ]+)+"
+                           title="Letters only — enter first and last name"
+                           oninput="this.value=this.value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿÑñ' \-]/g,'').replace(/\s{2,}/g,' ').replace(/^\s+/,'');"
                            value="{{ form_data.full_name if form_data else '' }}">
                 </div>
             </div>
@@ -1419,15 +1423,27 @@
 
     function sanitizeName(value) {
         return (value || '')
-            .replace(/[^A-Za-z\s]/g, '')
+            .replace(/[^A-Za-zÀ-ÖØ-öø-ÿÑñ' \-]/g, '')
             .replace(/\s{2,}/g, ' ')
-            .replace(/^\s+/, '');
+            .replace(/^\s+/, '')
+            .slice(0, 81);
     }
 
     function isValidFullName(value) {
         const trimmed = (value || '').trim();
-        return /^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmed);
+        return trimmed.length <= 81
+            && /^[A-Za-zÀ-ÖØ-öø-ÿÑñ]+(?:[ '\-][A-Za-zÀ-ÖØ-öø-ÿÑñ]+)+$/.test(trimmed);
     }
+
+    fullNameInput.addEventListener('beforeinput', function (e) {
+        if (e.inputType && e.inputType.startsWith('delete')) return;
+        const start = fullNameInput.selectionStart ?? fullNameInput.value.length;
+        const end = fullNameInput.selectionEnd ?? start;
+        const selected = Math.max(0, end - start);
+        const incoming = (e.data || '').length;
+        if (!incoming) return;
+        if (fullNameInput.value.length - selected + incoming > 81) e.preventDefault();
+    });
 
     function isValidIdentifier(value) {
         const v = (value || '').trim();

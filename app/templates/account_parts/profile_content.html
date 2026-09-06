@@ -2370,15 +2370,15 @@
                     <label class="form-label">First Name</label>
                     <input type="text" class="form-control" name="first_name" id="profileFirstName"
                            value="{{ user.first_name if user else '' }}" required
-                           placeholder="Enter first name"
-                           oninput="this.value=this.value.replace(/[^A-Za-z\s]/g,'').replace(/\s{2,}/g,' ').replace(/^\s+/,'').replace(/\b\w/g,function(c){return c.toUpperCase();});">
+                           placeholder="Enter first name" maxlength="50" autocomplete="given-name"
+                           oninput="this.value=this.value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿÑñ' \-]/g,'').replace(/\s{2,}/g,' ').replace(/^\s+/,'');">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Last Name</label>
                     <input type="text" class="form-control" name="last_name" id="profileLastName"
                            value="{{ user.last_name if user else '' }}" required
-                           placeholder="Enter last name"
-                           oninput="this.value=this.value.replace(/[^A-Za-z\s]/g,'').replace(/\s{2,}/g,' ').replace(/^\s+/,'').replace(/\b\w/g,function(c){return c.toUpperCase();});">
+                           placeholder="Enter last name" maxlength="30" autocomplete="family-name"
+                           oninput="this.value=this.value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿÑñ' \-]/g,'').replace(/\s{2,}/g,' ').replace(/^\s+/,'');">
                 </div>
 
                 <div class="form-group form-group-full">
@@ -5349,16 +5349,19 @@ function setupProfileForm() {
     
     if (!profileForm || !submitBtn) return;
 
-    function sanitizeName(value) {
+    function sanitizeName(value, maxLen) {
         return (value || '')
-            .replace(/[^A-Za-z\s]/g, '')
+            .replace(/[^A-Za-zÀ-ÖØ-öø-ÿÑñ' \-]/g, '')
             .replace(/\s{2,}/g, ' ')
-            .replace(/^\s+/, '');
+            .replace(/^\s+/, '')
+            .slice(0, maxLen || 50);
     }
 
-    function isValidName(value) {
+    function isValidName(value, maxLen) {
         const trimmed = (value || '').trim();
-        return /^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmed);
+        const limit = maxLen || 50;
+        return trimmed.length >= 2 && trimmed.length <= limit
+            && /^[A-Za-zÀ-ÖØ-öø-ÿÑñ]+(?:[ '\-][A-Za-zÀ-ÖØ-öø-ÿÑñ]+)*$/.test(trimmed);
     }
 
     function validateBirthdayValue(value) {
@@ -5377,17 +5380,28 @@ function setupProfileForm() {
         return null;
     }
 
-    function wireNameValidation(inputEl) {
+    function wireNameValidation(inputEl, maxLen) {
         if (!inputEl) return;
+        inputEl.setAttribute('maxlength', String(maxLen));
+        inputEl.addEventListener('beforeinput', function (e) {
+            if (e.inputType && e.inputType.startsWith('delete')) return;
+            const start = inputEl.selectionStart ?? inputEl.value.length;
+            const end = inputEl.selectionEnd ?? start;
+            const selected = Math.max(0, end - start);
+            const incoming = (e.data || '').length;
+            if (!incoming && e.inputType !== 'insertFromPaste') return;
+            const nextLen = inputEl.value.length - selected + incoming;
+            if (nextLen > maxLen) e.preventDefault();
+        });
         inputEl.addEventListener('input', function () {
-            const cleaned = sanitizeName(inputEl.value);
+            const cleaned = sanitizeName(inputEl.value, maxLen);
             if (cleaned !== inputEl.value) inputEl.value = cleaned;
             inputEl.setCustomValidity('');
         });
     }
 
-    wireNameValidation(firstNameInput);
-    wireNameValidation(lastNameInput);
+    wireNameValidation(firstNameInput, 50);
+    wireNameValidation(lastNameInput, 30);
     
     const inputs = profileForm.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="radio"], select, textarea');
     inputs.forEach(el => {
@@ -5399,17 +5413,17 @@ function setupProfileForm() {
 
     profileForm.addEventListener('submit', async function(e) {
         e.preventDefault();
-        if (firstNameInput) firstNameInput.value = sanitizeName(firstNameInput.value).trim();
-        if (lastNameInput) lastNameInput.value = sanitizeName(lastNameInput.value).trim();
+        if (firstNameInput) firstNameInput.value = sanitizeName(firstNameInput.value, 50).trim();
+        if (lastNameInput) lastNameInput.value = sanitizeName(lastNameInput.value, 30).trim();
 
-        if (firstNameInput && !isValidName(firstNameInput.value)) {
-            firstNameInput.setCustomValidity('First name must contain letters only, with single spaces.');
+        if (firstNameInput && !isValidName(firstNameInput.value, 50)) {
+            firstNameInput.setCustomValidity('First name: letters only, up to 50 characters.');
             firstNameInput.reportValidity();
             firstNameInput.focus();
             return;
         }
-        if (lastNameInput && !isValidName(lastNameInput.value)) {
-            lastNameInput.setCustomValidity('Last name must contain letters only, with single spaces.');
+        if (lastNameInput && !isValidName(lastNameInput.value, 30)) {
+            lastNameInput.setCustomValidity('Last name: letters only, up to 30 characters.');
             lastNameInput.reportValidity();
             lastNameInput.focus();
             return;
