@@ -86,6 +86,8 @@ def create_app(config_class='default'):
     csrf.init_app(app)
     limiter.init_app(app)
     mail.init_app(app)
+    from app.utils.push import register_push_listeners
+    register_push_listeners()
 
     @app.teardown_request
     def _recycle_dead_db_connection(exc):
@@ -119,6 +121,21 @@ def create_app(config_class='default'):
                 for stmt in stmts:
                     db.session.execute(text(stmt))
                 if stmts:
+                    db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    def _ensure_user_fcm_token_column():
+        try:
+            with app.app_context():
+                existing_tables = inspect(db.engine).get_table_names()
+                if 'users' not in existing_tables:
+                    return
+                cols = {c['name'] for c in inspect(db.engine).get_columns('users')}
+                if 'fcm_token' not in cols:
+                    db.session.execute(text(
+                        "ALTER TABLE users ADD COLUMN fcm_token VARCHAR(512)"
+                    ))
                     db.session.commit()
         except Exception:
             db.session.rollback()
@@ -273,6 +290,7 @@ def create_app(config_class='default'):
 
     with app.app_context():
         _ensure_order_fulfillment_columns()
+        _ensure_user_fcm_token_column()
         _ensure_rider_locations_order_fk()
         _ensure_store_free_delivery_column()
         _ensure_store_allow_gcash_column()

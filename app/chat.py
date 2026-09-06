@@ -1109,6 +1109,11 @@ def send_message(convo_id):
 
     _maybe_notify_seller_new_chat(convo, user, preview_text or '[Image]')
     _maybe_notify_admin_new_chat(convo, user, preview_text or '[Image]')
+    try:
+        from app.utils.push import queue_chat_push
+        queue_chat_push(convo, user, preview_text or '[Image]')
+    except Exception:
+        pass
 
     db.session.commit()
 
@@ -1174,6 +1179,11 @@ def send_image_message(convo_id):
 
     _maybe_notify_seller_new_chat(convo, user, caption if caption else '[Image]')
     _maybe_notify_admin_new_chat(convo, user, caption if caption else '[Image]')
+    try:
+        from app.utils.push import queue_chat_push
+        queue_chat_push(convo, user, caption if caption else '[Image]')
+    except Exception:
+        pass
 
     db.session.commit()
 

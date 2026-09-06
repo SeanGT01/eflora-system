@@ -1144,6 +1144,28 @@ def me():
     return jsonify(user.to_dict())
 
 
+@auth_bp.route('/device-token', methods=['POST', 'DELETE'])
+@jwt_required()
+def device_token():
+    """Save or clear the phone FCM token for push notifications."""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    if request.method == 'DELETE':
+        user.fcm_token = None
+        db.session.commit()
+        return jsonify({'success': True})
+    data = request.get_json(silent=True) or {}
+    token = (data.get('token') or data.get('fcm_token') or '').strip()
+    if not token:
+        return jsonify({'error': 'token is required'}), 400
+    user.fcm_token = token[:512]
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+
 # Debug endpoint to check token claims
 @auth_bp.route('/debug/token', methods=['GET'])
 @jwt_required()

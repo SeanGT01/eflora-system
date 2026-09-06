@@ -46,6 +46,7 @@ class User(db.Model):
     avatar_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
     avatar_url = db.Column(db.String(500), nullable=True)  # Full Cloudinary URL
     # =================================================
+    fcm_token = db.Column(db.String(512), nullable=True)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1832,6 +1833,7 @@ class Order(db.Model):
         - confirmed_at: rider accepts the order
         - delivered_at: rider submits proofs and marks delivered
         """
+        previous_status = self.status
         self.status = new_status
         now = datetime.utcnow()
         timestamp_map = {
@@ -1864,6 +1866,11 @@ class Order(db.Model):
                 self.confirmed_at = now
         
         self.updated_at = now
+        try:
+            from app.utils.push import queue_order_status_push
+            queue_order_status_push(self, new_status, previous_status)
+        except Exception:
+            pass
 
     def restore_stock_on_cancel(self, user_id):
         """Return reserved product/variant and structured add-on stock after cancel."""

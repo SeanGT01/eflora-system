@@ -224,6 +224,8 @@ def handle_send_message(data):
         from app.chat import _maybe_notify_seller_new_chat, _maybe_notify_admin_new_chat
         _maybe_notify_seller_new_chat(convo, user, text or '[Image]')
         _maybe_notify_admin_new_chat(convo, user, text or '[Image]')
+        from app.utils.push import queue_chat_push
+        queue_chat_push(convo, user, text or '[Image]')
     except Exception:
         pass
 
