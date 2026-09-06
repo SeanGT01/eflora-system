@@ -10,6 +10,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_req
 from datetime import datetime, timedelta
 from functools import wraps
 import json
+import re
 import pytz
 
 from sqlalchemy import case, func, or_
@@ -306,12 +307,94 @@ def _parse_order_card_id(msg):
             payload = json.loads(raw)
         except (TypeError, ValueError, json.JSONDecodeError):
             payload = None
-    if not isinstance(payload, dict):
+    if isinstance(payload, dict):
+        try:
+            oid = int(payload.get('order_id') or payload.get('orderId') or 0) or None
+            if oid:
+                return oid
+        except (TypeError, ValueError):
+            pass
+    if (msg.message_type or '') == 'order_card':
+        match = re.search(r'ORD-(\d+)', raw, re.I)
+        if match:
+            try:
+                return int(match.group(1)) or None
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _complete_order_card_payload(msg, persist=False):
+    """Return the stored snapshot, or rebuild it from that message's order_id."""
+    if not msg or msg.is_deleted:
         return None
-    try:
-        return int(payload.get('order_id') or payload.get('orderId') or 0) or None
-    except (TypeError, ValueError):
-        return None
+    raw = (msg.text or '').strip()
+    payload = None
+    if raw.startswith('{'):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = None
+
+    items = []
+    if payload:
+        items = payload.get('items') if isinstance(payload.get('items'), list) else []
+    oid = _parse_order_card_id(msg)
+    is_card = (msg.message_type or '') == 'order_card'
+
+    if payload and items:
+        if oid and not payload.get('order_id'):
+            payload = dict(payload)
+            payload['order_id'] = oid
+        return _json_safe(payload)
+
+    if not is_card and not oid:
+        return _json_safe(payload) if payload else None
+    if not oid:
+        return _json_safe(payload) if payload else None
+
+    order = Order.query.get(oid)
+    ctx = _build_order_chat_context(order) if order else None
+    if not ctx:
+        ctx = {
+            'order_id': oid,
+            'order_number': 'ORD-%05d' % oid,
+            'status': '',
+            'store_name': None,
+            'total_amount': 0,
+            'subtotal_amount': 0,
+            'delivery_fee': 0,
+            'item_count': 0,
+            'items': items,
+        }
+        if payload:
+            ctx.update({k: payload[k] for k in payload if k not in ctx or ctx[k] in (None, '', 0, [])})
+        ctx = _json_safe(ctx)
+
+    if persist and is_card and ctx:
+        snap = json.dumps(ctx)
+        if msg.text != snap:
+            msg.text = snap
+            msg.message_type = 'order_card'
+
+    return ctx
+
+
+def _message_to_dict(msg, persist_card=False):
+    data = msg.to_dict()
+    if msg.is_deleted:
+        return data
+    is_card = (msg.message_type == 'order_card') or (data.get('message_type') == 'order_card')
+    if not is_card:
+        return data
+    card = _complete_order_card_payload(msg, persist=persist_card)
+    if card:
+        data['message_type'] = 'order_card'
+        data['order_card'] = card
+        data['text'] = json.dumps(card)
+    return data
 
 
 def _existing_order_card(convo_id, order_id):
@@ -836,8 +919,14 @@ def get_messages(convo_id):
         .order_by(ChatMessage.created_at.desc()) \
         .paginate(page=page, per_page=per_page, error_out=False)
 
+    messages = []
+    for m in reversed(pagination.items):
+        messages.append(_message_to_dict(m, persist_card=True))
+    if db.session.dirty:
+        db.session.commit()
+
     return jsonify({
-        'messages': [m.to_dict() for m in reversed(pagination.items)],  # chronological
+        'messages': messages,  # chronological
         'page': pagination.page,
         'per_page': per_page,
         'total': pagination.total,
@@ -877,7 +966,7 @@ def send_message(convo_id):
             return jsonify({'error': err}), 400
         existing = _existing_order_card(convo.id, order_id)
         if existing:
-            return jsonify({'message': existing.to_dict(), 'already_sent': True}), 200
+            return jsonify({'message': _message_to_dict(existing), 'already_sent': True}), 200
         ctx = _build_order_chat_context(order)
         text = json.dumps(ctx)
         preview_text = _order_card_preview(ctx)
@@ -919,7 +1008,7 @@ def send_message(convo_id):
 
     db.session.commit()
 
-    return jsonify({'message': msg.to_dict()}), 201
+    return jsonify({'message': _message_to_dict(msg)}), 201
 
 
 @chat_bp.route('/conversations/<int:convo_id>/messages/image', methods=['POST'])

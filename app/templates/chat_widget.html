@@ -1696,18 +1696,14 @@ const chatWidget = (() => {
         try { return JSON.parse(s); } catch (e) { return null; }
     }
 
-    function _normalizeOrderCard(raw, useFallback) {
+    function _normalizeOrderCard(raw) {
         const src = _parseJsonObject(raw);
         if (!src || typeof src !== 'object' || Array.isArray(src)) return null;
-        const fallback = useFallback ? (_threadOrderContext || {}) : {};
-        const orderId = Number(src.order_id || src.orderId || src.id || fallback.order_id || 0) || 0;
-        const srcItems = Array.isArray(src.items) ? src.items : [];
-        const fbItems = Array.isArray(fallback.items) ? fallback.items : [];
-        const items = srcItems.length ? srcItems : fbItems;
+        const orderId = Number(src.order_id || src.orderId || 0) || 0;
+        const items = Array.isArray(src.items) ? src.items : [];
         const rawTotal = src.total_amount != null ? src.total_amount
             : (src.totalAmount != null ? src.totalAmount : src.total);
-        const total = (rawTotal != null && rawTotal !== '') ? rawTotal : fallback.total_amount;
-        let number = src.order_number || src.orderNumber || fallback.order_number || '';
+        let number = src.order_number || src.orderNumber || '';
         if (!number || String(number).indexOf('undefined') !== -1) {
             number = orderId ? ('ORD-' + String(orderId).padStart(5, '0')) : '';
         }
@@ -1715,27 +1711,45 @@ const chatWidget = (() => {
         return {
             order_id: orderId,
             order_number: number,
-            status: src.status || fallback.status || '',
-            store_name: src.store_name || src.storeName || fallback.store_name || '',
-            total_amount: Number(total || 0),
+            status: src.status || '',
+            store_name: src.store_name || src.storeName || '',
+            total_amount: Number(rawTotal || 0),
             item_count: src.item_count || src.itemCount || items.length,
             items: items,
         };
     }
 
+    function _orderCardFromPreviewText(text) {
+        const s = String(text || '');
+        const m = s.match(/ORD-(\d+)/i);
+        if (!m) return null;
+        const orderId = parseInt(m[1], 10);
+        if (!orderId) return null;
+        const number = 'ORD-' + String(orderId).padStart(5, '0');
+        return {
+            order_id: orderId,
+            order_number: number,
+            status: '',
+            store_name: '',
+            total_amount: 0,
+            item_count: 0,
+            items: [],
+        };
+    }
+
     function _orderCardFromMessage(m) {
         if (!m || m.is_deleted || m.message_type === 'deleted') return null;
-        return _normalizeOrderCard(m.order_card, true)
-            || _normalizeOrderCard(m.text, true)
-            || ((m.message_type === 'order_card') ? _normalizeOrderCard(_threadOrderContext, false) : null);
+        return _normalizeOrderCard(m.order_card)
+            || _normalizeOrderCard(m.text)
+            || ((m.message_type === 'order_card') ? _orderCardFromPreviewText(m.text) : null);
     }
 
     function _threadHasOrderCard(orderId) {
         return _messages.some(function (m) {
             if (!m || m.is_deleted) return false;
-            const stored = _normalizeOrderCard(m.order_card, false) || _normalizeOrderCard(m.text, false);
-            if (stored && Number(stored.order_id) === Number(orderId)) return true;
-            return false;
+            const stored = _normalizeOrderCard(m.order_card) || _normalizeOrderCard(m.text)
+                || ((m.message_type === 'order_card') ? _orderCardFromPreviewText(m.text) : null);
+            return stored && Number(stored.order_id) === Number(orderId);
         });
     }
 
