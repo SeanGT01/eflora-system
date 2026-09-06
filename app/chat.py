@@ -4,10 +4,12 @@ Real-time-ready REST endpoints for the e-Flora chat feature.
 Supports both Flask session auth (website) and JWT auth (mobile app).
 """
 
+from decimal import Decimal
 from flask import Blueprint, request, jsonify, session, g
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from datetime import datetime, timedelta
 from functools import wraps
+import json
 import pytz
 
 from sqlalchemy import case, func, or_
@@ -136,32 +138,76 @@ _ACTIVE_RIDER_ORDER_STATUSES = (
 )
 
 
+def _json_safe(obj):
+    """Ensure chat payloads are JSON-serializable (Decimal, nested add-ons, etc.)."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
+def _addon_chat_dict(addon):
+    try:
+        qty = int(getattr(addon, 'quantity', None) or 1)
+        price = float(getattr(addon, 'price', None) or 0)
+        image = (getattr(addon, 'image_url', None) or '').strip() or None
+        return {
+            'id': getattr(addon, 'id', None),
+            'name': getattr(addon, 'name', None) or 'Add-on',
+            'price': price,
+            'quantity': qty,
+            'image_url': image,
+            'total': price * qty,
+        }
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 def _build_order_chat_context(order):
     """Compact order summary for rider↔customer chat headers."""
     if not order:
         return None
 
     items = []
-    for item in (order.items or []):
-        addons_list = [a.to_dict() for a in (item.addons or [])]
-        addons_sum = float(item.addons_total or 0)
-        unit = float(item.price or 0)
-        qty = item.quantity or 1
-        items.append({
-            'id': item.id,
-            'name': item.product.name if item.product else 'Product',
-            'variant_name': item.variant.name if item.variant else None,
-            'quantity': qty,
-            'price': unit,
-            'total': float(qty * unit) + addons_sum,
-            'image_url': item.product_image,
-            'addons': addons_list,
-            'addons_total': addons_sum,
-        })
+    try:
+        for item in (order.items or []):
+            addons_list = []
+            try:
+                for addon in (item.addons or []):
+                    row = _addon_chat_dict(addon)
+                    if row:
+                        addons_list.append(row)
+            except Exception:
+                addons_list = []
+            addons_sum = sum(float(a.get('total') or 0) for a in addons_list)
+            unit = float(item.price or 0)
+            qty = int(item.quantity or 1)
+            product = getattr(item, 'product', None)
+            variant = getattr(item, 'variant', None)
+            try:
+                image_url = item.product_image
+            except Exception:
+                image_url = None
+            items.append({
+                'id': item.id,
+                'name': product.name if product else 'Product',
+                'variant_name': variant.name if variant else None,
+                'quantity': qty,
+                'price': unit,
+                'total': (qty * unit) + addons_sum,
+                'image_url': image_url,
+                'addons': addons_list,
+                'addons_total': addons_sum,
+            })
+    except Exception:
+        items = []
 
-    return {
+    return _json_safe({
         'order_id': order.id,
-        'order_number': f'ORD-{order.id:05d}',
+        'order_number': 'ORD-%05d' % int(order.id),
         'status': order.status,
         'store_name': order.store.name if order.store else None,
         'total_amount': float(order.total_amount or 0),
@@ -169,7 +215,7 @@ def _build_order_chat_context(order):
         'delivery_fee': float(order.delivery_fee or 0),
         'item_count': len(items),
         'items': items,
-    }
+    })
 
 
 def _resolve_order_for_rider_conversation(convo, preferred_order_id=None):
@@ -187,6 +233,7 @@ def _resolve_order_for_rider_conversation(convo, preferred_order_id=None):
         Order.query.options(
             joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
             joinedload(Order.items).joinedload(OrderItem.variant),
+            joinedload(Order.items).joinedload(OrderItem.addons),
             joinedload(Order.store),
         )
         .filter_by(
@@ -215,14 +262,96 @@ def _resolve_order_for_rider_conversation(convo, preferred_order_id=None):
 def _conversation_payload(convo, user, preferred_order_id=None):
     """Serialize conversation and attach rider order context when applicable."""
     data = convo.to_dict(current_user_id=user.id if user else None)
-    order = _resolve_order_for_rider_conversation(convo, preferred_order_id)
-    if order:
-        data['is_rider_thread'] = True
-        data['order_context'] = _build_order_chat_context(order)
-    else:
-        data['is_rider_thread'] = False
-        data['order_context'] = None
+    try:
+        order = _resolve_order_for_rider_conversation(convo, preferred_order_id)
+        if order:
+            data['is_rider_thread'] = True
+            data['order_context'] = _build_order_chat_context(order)
+        else:
+            data['is_rider_thread'] = False
+            data['order_context'] = None
+    except Exception:
+        data['is_rider_thread'] = True if preferred_order_id else data.get('is_rider_thread', False)
+        if preferred_order_id and not data.get('order_context'):
+            data['order_context'] = _json_safe({
+                'order_id': int(preferred_order_id),
+                'order_number': 'ORD-%05d' % int(preferred_order_id),
+                'status': '',
+                'store_name': None,
+                'total_amount': 0,
+                'subtotal_amount': 0,
+                'delivery_fee': 0,
+                'item_count': 0,
+                'items': [],
+            })
     return data
+
+
+def _order_card_preview(ctx):
+    if not ctx:
+        return 'Order details'
+    num = ctx.get('order_number') or ('ORD-%05d' % int(ctx.get('order_id') or 0))
+    return 'Order %s' % num
+
+
+def _parse_order_card_id(msg):
+    if not msg or msg.is_deleted or not msg.text:
+        return None
+    if msg.message_type not in ('order_card', 'text'):
+        return None
+    raw = (msg.text or '').strip()
+    if not raw.startswith('{'):
+        return None
+    try:
+        payload = json.loads(raw)
+        return int(payload.get('order_id') or 0) or None
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _existing_order_card(convo_id, order_id):
+    msgs = ChatMessage.query.filter(
+        ChatMessage.conversation_id == convo_id,
+        ChatMessage.is_deleted.isnot(True),
+    ).all()
+    want = int(order_id)
+    for msg in msgs:
+        parsed = _parse_order_card_id(msg)
+        if parsed == want:
+            return msg
+        if (msg.message_type or '') == 'order_card' and parsed is None:
+            return msg
+    return None
+
+
+def _order_for_rider_card(user, convo, order_id):
+    """Validate that this thread can share a one-time card for the given order."""
+    order = Order.query.options(
+        joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
+        joinedload(Order.items).joinedload(OrderItem.variant),
+        joinedload(Order.items).joinedload(OrderItem.addons),
+        joinedload(Order.store),
+    ).get(order_id)
+    if not order:
+        return None, 'Order not found'
+    if not order.rider_id:
+        return None, 'No rider assigned to this order yet'
+    rider = Rider.query.get(order.rider_id)
+    if not rider or not rider.user_id:
+        return None, 'Rider profile not found'
+    if convo.customer_id != order.customer_id or convo.store_id != order.store_id:
+        return None, 'This chat is not for that order'
+    if convo.seller_id != rider.user_id:
+        return None, 'This chat is not for that order'
+    if user.id not in (convo.customer_id, convo.seller_id):
+        return None, 'Access denied'
+    if user.role == 'customer' and order.customer_id != user.id:
+        return None, 'Access denied'
+    if user.role == 'rider':
+        mine = Rider.query.filter_by(user_id=user.id, is_archived=False).first()
+        if not mine or order.rider_id != mine.id:
+            return None, 'Access denied'
+    return order, None
 
 
 def _maybe_notify_seller_new_chat(convo, user, preview_text):
@@ -360,6 +489,11 @@ def _refresh_conversation_preview(convo):
         return
     if latest.message_type == 'image':
         preview = (latest.text[:200] if latest.text else '[Image]')
+    elif latest.message_type == 'order_card':
+        try:
+            preview = _order_card_preview(json.loads(latest.text or '{}'))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preview = 'Order details'
     else:
         preview = (latest.text[:200] if latest.text else None)
     convo.last_message_text = preview
@@ -478,19 +612,33 @@ def create_or_get_rider_conversation():
         store_id=order.store_id,
         seller_id=rider_user_id,
     ).first()
-    if convo:
+    created = False
+    if not convo:
+        convo = Conversation(
+            customer_id=order.customer_id,
+            seller_id=rider_user_id,  # private rider-customer thread
+            store_id=order.store_id,
+        )
+        db.session.add(convo)
+        db.session.commit()
+        created = True
+    try:
         payload = _conversation_payload(convo, user, preferred_order_id=order.id)
-        return jsonify({'conversation': payload, 'order_context': payload.get('order_context')}), 200
-
-    convo = Conversation(
-        customer_id=order.customer_id,
-        seller_id=rider_user_id,  # private rider-customer thread
-        store_id=order.store_id,
-    )
-    db.session.add(convo)
-    db.session.commit()
-    payload = _conversation_payload(convo, user, preferred_order_id=order.id)
-    return jsonify({'conversation': payload, 'order_context': payload.get('order_context')}), 201
+    except Exception:
+        payload = convo.to_dict(current_user_id=user.id)
+        payload['is_rider_thread'] = True
+        payload['order_context'] = _json_safe({
+            'order_id': order.id,
+            'order_number': 'ORD-%05d' % int(order.id),
+            'status': order.status,
+            'store_name': order.store.name if order.store else None,
+            'total_amount': float(order.total_amount or 0),
+            'subtotal_amount': float(order.subtotal_amount or 0),
+            'delivery_fee': float(order.delivery_fee or 0),
+            'item_count': 0,
+            'items': [],
+        })
+    return jsonify({'conversation': payload, 'order_context': payload.get('order_context')}), (201 if created else 200)
 
 
 @chat_bp.route('/conversations', methods=['POST'])
@@ -701,7 +849,8 @@ def send_message(convo_id):
     """
     POST /api/v1/chat/conversations/<id>/messages
     Body: { "text": "Hello!", "message_type": "text" }
-    Sends a text message.
+         or { "message_type": "order_card", "order_id": <int> }
+    Sends a text message, or a one-time order-details card.
     """
     user = _current_user()
     convo = Conversation.query.get_or_404(convo_id)
@@ -712,6 +861,25 @@ def send_message(convo_id):
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()
     msg_type = data.get('message_type', 'text')
+    preview_text = text
+
+    if msg_type == 'order_card':
+        order_id = data.get('order_id')
+        try:
+            order_id = int(order_id)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'order_id is required'}), 400
+        order, err = _order_for_rider_card(user, convo, order_id)
+        if err:
+            return jsonify({'error': err}), 400
+        existing = _existing_order_card(convo.id, order_id)
+        if existing:
+            return jsonify({'message': existing.to_dict(), 'already_sent': True}), 200
+        ctx = _build_order_chat_context(order)
+        text = json.dumps(ctx)
+        preview_text = _order_card_preview(ctx)
+    elif msg_type != 'text':
+        return jsonify({'error': 'Unsupported message type'}), 400
 
     if msg_type == 'text' and not text:
         return jsonify({'error': 'Message text is required'}), 400
@@ -735,7 +903,7 @@ def send_message(convo_id):
 
     # Update conversation denormalized fields
     now = pht_now()
-    convo.last_message_text = text[:200] if text else '[Image]'
+    convo.last_message_text = (preview_text or text or '[Image]')[:200]
     convo.last_message_at = now
     convo.last_sender_id = user.id
     convo.updated_at = now
@@ -743,8 +911,8 @@ def send_message(convo_id):
     # Increment unread for the OTHER participant (atomic)
     _bump_other_unread(convo, user.id)
 
-    _maybe_notify_seller_new_chat(convo, user, text or '[Image]')
-    _maybe_notify_admin_new_chat(convo, user, text or '[Image]')
+    _maybe_notify_seller_new_chat(convo, user, preview_text or '[Image]')
+    _maybe_notify_admin_new_chat(convo, user, preview_text or '[Image]')
 
     db.session.commit()
 

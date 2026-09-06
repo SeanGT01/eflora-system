@@ -68,6 +68,7 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jwt-secret-key")
     JWT_IDENTITY_CLAIM = "sub"
     MAPBOX_PUBLIC_TOKEN = os.getenv('MAPBOX_PUBLIC_TOKEN', '')
+    GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
     APP_BASE_URL = os.getenv('APP_BASE_URL', '')
 
     # =============================

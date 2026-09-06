@@ -3,6 +3,7 @@ from geoalchemy2 import Geometry
 from sqlalchemy import event
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+import json
 import os
 import re
 from decimal import Decimal
@@ -3087,7 +3088,7 @@ class ChatMessage(db.Model):
     sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     # Content
-    message_type = db.Column(db.String(20), default='text')  # text, image
+    message_type = db.Column(db.String(20), default='text')  # text, image, order_card
     text = db.Column(db.Text, nullable=True)
 
     # Image attachment (Cloudinary)
@@ -3129,6 +3130,7 @@ class ChatMessage(db.Model):
             'reply_to_sender_name': None,
             'reply_to_sender_role': None,
             'reply_to_message_type': None,
+            'order_card': None,
         }
         if self.is_deleted:
             d['text'] = None
@@ -3138,10 +3140,26 @@ class ChatMessage(db.Model):
             d['text'] = self.text
             d['image_url'] = self.image_url
             d['image_public_id'] = self.image_public_id
+            if self.message_type == 'order_card' and self.text:
+                try:
+                    d['order_card'] = json.loads(self.text)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    d['order_card'] = None
+            elif self.text and str(self.text).strip().startswith('{'):
+                try:
+                    payload = json.loads(self.text)
+                    if payload.get('order_id') and payload.get('items') is not None:
+                        d['order_card'] = payload
+                        d['message_type'] = 'order_card'
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    pass
         if self.reply_to_id and self.reply_to:
             if self.reply_to.is_deleted:
                 d['reply_to_text'] = None
                 d['reply_to_message_type'] = 'deleted'
+            elif self.reply_to.message_type == 'order_card':
+                d['reply_to_text'] = 'Order details'
+                d['reply_to_message_type'] = 'order_card'
             elif self.reply_to.text:
                 d['reply_to_text'] = self.reply_to.text
                 d['reply_to_message_type'] = self.reply_to.message_type or 'text'

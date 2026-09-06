@@ -906,6 +906,34 @@ def mapbox_public_config():
     return jsonify({'success': True, 'public_token': token or ''})
 
 
+@customer_bp.route('/maps/geocode/reverse', methods=['GET'])
+@customer_only
+def google_reverse_geocode():
+    from app.utils.google_maps import reverse_geocode
+    try:
+        lat = float(request.args.get('lat'))
+        lng = float(request.args.get('lng'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'lat and lng are required.'}), 400
+    parsed, err = reverse_geocode(lat, lng)
+    if err:
+        code = 503 if 'not configured' in err.lower() else 400
+        return jsonify({'success': False, 'error': err}), code
+    return jsonify({'success': True, **parsed})
+
+
+@customer_bp.route('/maps/places/search', methods=['GET'])
+@customer_only
+def google_place_search():
+    from app.utils.google_maps import search_places
+    query = (request.args.get('q') or '').strip()
+    results, err = search_places(query)
+    if err:
+        code = 503 if 'not configured' in err.lower() else 400
+        return jsonify({'success': False, 'error': err}), code
+    return jsonify({'success': True, 'results': results})
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # ORDERS — JWT protected
 # ══════════════════════════════════════════════════════════════════════════

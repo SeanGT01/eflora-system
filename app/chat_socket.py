@@ -191,7 +191,9 @@ def handle_send_message(data):
     text = (data.get('text') or '').strip()
     msg_type = data.get('message_type', 'text')
 
-    if msg_type == 'text' and not text:
+    if msg_type != 'text':
+        emit('error', {'message': 'Unsupported message type'})
+        return
         emit('error', {'message': 'Empty message'})
         return
 
