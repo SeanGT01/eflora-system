@@ -646,8 +646,23 @@
 #chat-overlay .chat-oc-card .oc-item {
     display: flex;
     gap: 10px;
-    align-items: center;
+    align-items: flex-start;
     margin: 0 0 8px;
+}
+#chat-overlay .chat-oc-card .oc-item-body {
+    flex: 1;
+    min-width: 0;
+}
+#chat-overlay .chat-oc-card .oc-addons {
+    margin-top: 3px;
+}
+#chat-overlay .chat-oc-card .oc-addon {
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 #chat-overlay .chat-oc-card .oc-item img,
 #chat-overlay .chat-oc-card .oc-ph {
@@ -1776,9 +1791,15 @@ const chatWidget = (() => {
             const thumb = item.image_url
                 ? `<img src="${_esc(item.image_url)}" alt="">`
                 : '<div class="oc-ph"><i class="ri-flower-line"></i></div>';
-            return `<div class="oc-item">${thumb}<div class="oc-item-name">${_esc(title || 'Product')}</div><span class="oc-qty">×${item.quantity || 1}</span></div>`;
+            const addons = Array.isArray(item.addons) ? item.addons : [];
+            const addonHtml = addons.map(function (a) {
+                const qty = Number(a.quantity || 1);
+                const label = '+ ' + (a.name || 'Add-on') + (qty > 1 ? (' ×' + qty) : '');
+                return `<div class="oc-addon">${_esc(label)}</div>`;
+            }).join('');
+            return `<div class="oc-item">${thumb}<div class="oc-item-body"><div class="oc-item-name">${_esc(title || 'Product')}</div>${addonHtml ? `<div class="oc-addons">${addonHtml}</div>` : ''}</div><span class="oc-qty">×${item.quantity || 1}</span></div>`;
         }).join('');
-        return `<div class="chat-oc-card">
+        return `<div class="chat-oc-card" data-order-id="${_esc(String(ctx.order_id || ''))}">
             <div class="oc-num">${_esc(orderNo)}</div>
             ${rows}
             ${extra > 0 ? `<div class="oc-more">+${extra} more</div>` : ''}
@@ -2004,7 +2025,8 @@ const chatWidget = (() => {
             if (_activeConvoId !== convoId) return;
             const next = data.messages || [];
             const fingerprint = next.map(function (m) {
-                return [m.id, m.is_deleted ? 1 : 0, m.is_read ? 1 : 0, m.message_type || '', m.text || '', m.image_url || ''].join(':');
+                const oc = m.order_card || {};
+                return [m.id, m.is_deleted ? 1 : 0, m.is_read ? 1 : 0, m.message_type || '', oc.order_id || '', oc.order_number || '', (oc.items || []).length, m.text || '', m.image_url || ''].join(':');
             }).join('|');
             const unchanged = fingerprint === _lastMessagesFingerprint && !forceScroll;
             const nextLastId = next.length ? next[next.length - 1].id : null;

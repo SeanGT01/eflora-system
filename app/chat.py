@@ -167,14 +167,25 @@ def _addon_chat_dict(addon):
         return None
 
 
+def _load_order_for_card(order_id):
+    if not order_id:
+        return None
+    return Order.query.options(
+        joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
+        joinedload(Order.items).joinedload(OrderItem.variant),
+        joinedload(Order.items).joinedload(OrderItem.addons),
+        joinedload(Order.store),
+    ).get(int(order_id))
+
+
 def _build_order_chat_context(order):
     """Compact order summary for rider↔customer chat headers."""
     if not order:
         return None
 
     items = []
-    try:
-        for item in (order.items or []):
+    for item in (order.items or []):
+        try:
             addons_list = []
             try:
                 for addon in (item.addons or []):
@@ -203,14 +214,15 @@ def _build_order_chat_context(order):
                 'addons': addons_list,
                 'addons_total': addons_sum,
             })
-    except Exception:
-        items = []
+        except Exception:
+            continue
 
+    store = getattr(order, 'store', None)
     return _json_safe({
         'order_id': order.id,
         'order_number': 'ORD-%05d' % int(order.id),
         'status': order.status,
-        'store_name': order.store.name if order.store else None,
+        'store_name': store.name if store else None,
         'total_amount': float(order.total_amount or 0),
         'subtotal_amount': float(order.subtotal_amount or 0),
         'delivery_fee': float(order.delivery_fee or 0),
@@ -295,13 +307,25 @@ def _order_card_preview(ctx):
     return 'Order %s' % num
 
 
+def _id_from_order_number(value):
+    if not value:
+        return None
+    match = re.search(r'ORD-(\d+)', str(value), re.I)
+    if not match:
+        return None
+    try:
+        return int(match.group(1)) or None
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_order_card_id(msg):
     if not msg or msg.is_deleted:
         return None
     if (msg.message_type or '') not in ('order_card', 'text'):
         return None
-    payload = None
     raw = (msg.text or '').strip()
+    payload = None
     if raw.startswith('{'):
         try:
             payload = json.loads(raw)
@@ -310,22 +334,72 @@ def _parse_order_card_id(msg):
     if isinstance(payload, dict):
         try:
             oid = int(payload.get('order_id') or payload.get('orderId') or 0) or None
-            if oid:
-                return oid
         except (TypeError, ValueError):
-            pass
+            oid = None
+        if oid:
+            return oid
+        return _id_from_order_number(
+            payload.get('order_number') or payload.get('orderNumber')
+        )
     if (msg.message_type or '') == 'order_card':
-        match = re.search(r'ORD-(\d+)', raw, re.I)
-        if match:
-            try:
-                return int(match.group(1)) or None
-            except (TypeError, ValueError):
-                return None
+        return _id_from_order_number(raw)
     return None
 
 
-def _complete_order_card_payload(msg, persist=False):
-    """Return the stored snapshot, or rebuild it from that message's order_id."""
+def _orders_for_rider_thread(convo):
+    if not convo:
+        return []
+    rider = Rider.query.filter_by(user_id=convo.seller_id, is_archived=False).first()
+    if not rider:
+        rider = Rider.query.filter_by(user_id=convo.seller_id).first()
+    if not rider:
+        return []
+    return (
+        Order.query.options(
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
+            joinedload(Order.items).joinedload(OrderItem.variant),
+            joinedload(Order.items).joinedload(OrderItem.addons),
+            joinedload(Order.store),
+        )
+        .filter_by(
+            customer_id=convo.customer_id,
+            store_id=convo.store_id,
+            rider_id=rider.id,
+        )
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+
+
+def _assign_card_order_ids(card_msgs, orders):
+    """Give each order-card message its own order when snapshots were overwritten."""
+    assigned = {}
+    if not card_msgs:
+        return assigned
+    ordered_cards = sorted(card_msgs, key=lambda m: (str(m.created_at or ''), m.id or 0))
+    parsed = [_parse_order_card_id(m) for m in ordered_cards]
+    unique_ok = (
+        all(parsed) and len(set(parsed)) == len(parsed)
+    )
+    if unique_ok:
+        for msg, oid in zip(ordered_cards, parsed):
+            assigned[msg.id] = oid
+        return assigned
+
+    unused = [o.id for o in orders]
+    for msg, oid in zip(ordered_cards, parsed):
+        if oid and oid in unused:
+            assigned[msg.id] = oid
+            unused.remove(oid)
+        elif unused:
+            assigned[msg.id] = unused.pop(0)
+        elif oid:
+            assigned[msg.id] = oid
+    return assigned
+
+
+def _complete_order_card_payload(msg, persist=False, forced_order_id=None):
+    """Return this message's own order snapshot. Never use another order in the thread."""
     if not msg or msg.is_deleted:
         return None
     raw = (msg.text or '').strip()
@@ -341,60 +415,94 @@ def _complete_order_card_payload(msg, persist=False):
     items = []
     if payload:
         items = payload.get('items') if isinstance(payload.get('items'), list) else []
-    oid = _parse_order_card_id(msg)
+    oid = forced_order_id or _parse_order_card_id(msg)
     is_card = (msg.message_type or '') == 'order_card'
+    snapshot_oid = None
+    if isinstance(payload, dict):
+        try:
+            snapshot_oid = int(payload.get('order_id') or payload.get('orderId') or 0) or None
+        except (TypeError, ValueError):
+            snapshot_oid = None
 
-    if payload and items:
-        if oid and not payload.get('order_id'):
-            payload = dict(payload)
-            payload['order_id'] = oid
+    # Keep a complete snapshot if it already belongs to this card's order.
+    if payload and items and snapshot_oid and (not oid or snapshot_oid == oid):
+        live_oid = oid or snapshot_oid
+        live = _build_order_chat_context(_load_order_for_card(live_oid)) if live_oid else None
+        live_items = (live or {}).get('items') or []
+        live_has_addons = any((i.get('addons') or []) for i in live_items)
+        stored_has_addons = any((i.get('addons') or []) for i in items)
+        if live and live_has_addons and not stored_has_addons:
+            if persist and is_card:
+                snap = json.dumps(live)
+                if msg.text != snap:
+                    msg.text = snap
+                    msg.message_type = 'order_card'
+            return live
         return _json_safe(payload)
 
-    if not is_card and not oid:
-        return _json_safe(payload) if payload else None
-    if not oid:
-        return _json_safe(payload) if payload else None
+    if oid:
+        order = _load_order_for_card(oid)
+        ctx = _build_order_chat_context(order) if order else None
+        if ctx and ctx.get('items'):
+            if persist and is_card:
+                snap = json.dumps(ctx)
+                if msg.text != snap:
+                    msg.text = snap
+                    msg.message_type = 'order_card'
+            return ctx
 
-    order = Order.query.get(oid)
-    ctx = _build_order_chat_context(order) if order else None
-    if not ctx:
-        ctx = {
+    if payload and items:
+        return _json_safe(payload)
+    if not is_card:
+        return None
+    if oid:
+        return _json_safe({
             'order_id': oid,
-            'order_number': 'ORD-%05d' % oid,
-            'status': '',
-            'store_name': None,
-            'total_amount': 0,
-            'subtotal_amount': 0,
-            'delivery_fee': 0,
-            'item_count': 0,
+            'order_number': 'ORD-%05d' % int(oid),
+            'status': (payload or {}).get('status') or '',
+            'store_name': (payload or {}).get('store_name'),
+            'total_amount': float((payload or {}).get('total_amount') or 0),
+            'subtotal_amount': float((payload or {}).get('subtotal_amount') or 0),
+            'delivery_fee': float((payload or {}).get('delivery_fee') or 0),
+            'item_count': len(items),
             'items': items,
-        }
-        if payload:
-            ctx.update({k: payload[k] for k in payload if k not in ctx or ctx[k] in (None, '', 0, [])})
-        ctx = _json_safe(ctx)
-
-    if persist and is_card and ctx:
-        snap = json.dumps(ctx)
-        if msg.text != snap:
-            msg.text = snap
-            msg.message_type = 'order_card'
-
-    return ctx
+        })
+    return _json_safe(payload) if payload else None
 
 
-def _message_to_dict(msg, persist_card=False):
+def _message_to_dict(msg, persist_card=False, forced_order_id=None):
     data = msg.to_dict()
     if msg.is_deleted:
         return data
     is_card = (msg.message_type == 'order_card') or (data.get('message_type') == 'order_card')
     if not is_card:
         return data
-    card = _complete_order_card_payload(msg, persist=persist_card)
+    card = _complete_order_card_payload(
+        msg, persist=persist_card, forced_order_id=forced_order_id
+    )
     if card:
         data['message_type'] = 'order_card'
         data['order_card'] = card
         data['text'] = json.dumps(card)
     return data
+
+
+def _hydrate_message_list(convo, msgs, persist=False):
+    cards = [
+        m for m in msgs
+        if not m.is_deleted and (m.message_type or '') == 'order_card'
+    ]
+    assigned = {}
+    if cards:
+        assigned = _assign_card_order_ids(cards, _orders_for_rider_thread(convo))
+    out = []
+    for m in msgs:
+        out.append(_message_to_dict(
+            m,
+            persist_card=persist,
+            forced_order_id=assigned.get(m.id),
+        ))
+    return out
 
 
 def _existing_order_card(convo_id, order_id):
@@ -412,12 +520,7 @@ def _existing_order_card(convo_id, order_id):
 
 def _order_for_rider_card(user, convo, order_id):
     """Validate that this thread can share a one-time card for the given order."""
-    order = Order.query.options(
-        joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.images),
-        joinedload(Order.items).joinedload(OrderItem.variant),
-        joinedload(Order.items).joinedload(OrderItem.addons),
-        joinedload(Order.store),
-    ).get(order_id)
+    order = _load_order_for_card(order_id)
     if not order:
         return None, 'Order not found'
     if not order.rider_id:
@@ -919,9 +1022,8 @@ def get_messages(convo_id):
         .order_by(ChatMessage.created_at.desc()) \
         .paginate(page=page, per_page=per_page, error_out=False)
 
-    messages = []
-    for m in reversed(pagination.items):
-        messages.append(_message_to_dict(m, persist_card=True))
+    chrono = list(reversed(pagination.items))
+    messages = _hydrate_message_list(convo, chrono, persist=True)
     if db.session.dirty:
         db.session.commit()
 
