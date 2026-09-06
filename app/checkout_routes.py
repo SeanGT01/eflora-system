@@ -151,22 +151,25 @@ def _free_delivery_fields(store, subtotal, delivery_fee):
     """Checkout payload fields for free-delivery min / applied state."""
     enabled = bool(getattr(store, 'free_delivery_enabled', True))
     try:
-        minimum = float(store.free_delivery_minimum or 0)
+        minimum = float(store.free_delivery_minimum if store.free_delivery_minimum is not None else 0)
     except Exception:
         minimum = 0.0
     try:
         sub = float(subtotal or 0)
     except Exception:
         sub = 0.0
+    try:
+        fee_val = float(delivery_fee if delivery_fee is not None else 0)
+    except Exception:
+        fee_val = 0.0
     applied = False
     remaining = None
     if enabled:
-        try:
-            fee_val = Decimal(str(delivery_fee if delivery_fee is not None else 0))
-        except Exception:
-            fee_val = Decimal('0')
-        applied = fee_val <= 0
-        remaining = 0.0 if applied else max(0.0, round(minimum - sub, 2))
+        applied = sub >= minimum
+        if applied or fee_val <= 0:
+            remaining = 0.0
+        else:
+            remaining = max(0.0, round(minimum - sub, 2))
     return {
         "free_delivery_enabled": enabled,
         "free_delivery_minimum": minimum,

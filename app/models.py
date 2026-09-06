@@ -380,13 +380,10 @@ class Store(db.Model):
             if subtotal_dec >= threshold:
                 return Decimal('0')
         
-        fee = Decimal(str(self.base_delivery_fee or 0)) + \
-              (Decimal(str(self.delivery_rate_per_km or 0)) * Decimal(str(distance_km or 0)))
-        
-        min_fee = Decimal('30.00')
-        if fee < min_fee:
-            fee = min_fee
-        
+        fee = Decimal(str(self.base_delivery_fee if self.base_delivery_fee is not None else 0)) + \
+              (Decimal(str(self.delivery_rate_per_km if self.delivery_rate_per_km is not None else 0)) * Decimal(str(distance_km or 0)))
+        if fee < 0:
+            fee = Decimal('0')
         return fee
     
     def generate_radius_polygon(self):
