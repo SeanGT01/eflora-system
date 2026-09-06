@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import threading
+import base64
 
 import requests
 from flask import current_app
@@ -54,8 +55,18 @@ def _parse_service_account(raw):
 
 def fcm_config_hint():
     """Safe diagnostic for why FCM credentials are missing. Never includes secrets."""
+    b64 = os.environ.get('FCM_SERVICE_ACCOUNT_B64')
     raw = os.environ.get('FCM_SERVICE_ACCOUNT_JSON')
     alt = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    if b64 and str(b64).strip():
+        try:
+            decoded = base64.b64decode(str(b64).strip()).decode('utf-8')
+            info = _parse_service_account(decoded)
+            if info and info.get('private_key'):
+                return 'ok'
+            return 'b64_not_json'
+        except Exception as exc:
+            return 'b64_invalid:%s' % type(exc).__name__
     if raw is None or not str(raw).strip():
         if alt and str(alt).strip():
             try:
@@ -77,6 +88,16 @@ def fcm_config_hint():
 
 
 def _service_account_info():
+    b64 = (os.environ.get('FCM_SERVICE_ACCOUNT_B64') or '').strip()
+    if b64:
+        try:
+            decoded = base64.b64decode(b64).decode('utf-8')
+            info = _parse_service_account(decoded)
+            if info:
+                return info
+        except Exception as exc:
+            logger.warning('[FCM] FCM_SERVICE_ACCOUNT_B64 parse failed: %s', exc)
+            print('[FCM] B64 parse failed:', exc, flush=True)
     for key in ('FCM_SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS'):
         raw = os.environ.get(key)
         if not raw or not str(raw).strip():
