@@ -5,37 +5,89 @@
 
 {% block extra_css %}
 <style>
+.admin-support-page {
+    min-width: 0;
+    max-width: 100%;
+    font-family: var(--font-sans);
+    color: var(--charcoal);
+}
+.sup-header { margin: 0 0 1.25rem; }
+.sup-title {
+    margin: 0 0 0.4rem;
+    font-family: var(--font-display);
+    font-size: clamp(1.7rem, 3vw, 2.4rem);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
+}
+.sup-title em { font-style: italic; color: var(--deep-rose); font-weight: 400; }
+.sup-lede { margin: 0; font-size: 0.95rem; color: var(--muted); max-width: 40rem; line-height: 1.55; }
+.sup-card {
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(255,255,255,0.75);
+    border-radius: var(--radius-lg);
+    padding: 1.35rem 1.4rem;
+    margin-bottom: 1.15rem;
+    box-shadow: 0 8px 24px rgba(80,40,70,0.06), inset 0 1px 0 rgba(255,255,255,0.75);
+    backdrop-filter: blur(14px) saturate(1.2);
+}
+.sup-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.35rem;
+}
+.sup-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dusty-rose);
+    margin-bottom: 0.3rem;
+}
+.sup-card h2, .sup-card h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    margin: 0;
+    color: var(--charcoal);
+}
+.sup-card h2 { font-size: 1.55rem; }
+.sup-card h3 { font-size: 1.4rem; }
+.sup-card p { color: var(--muted); margin: 0.45rem 0 0; font-size: 0.92rem; line-height: 1.55; }
 .admin-support-page .faq-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
 }
-.admin-support-page .faq-actions .btn {
-    width: auto;
+.admin-support-page .faq-actions .btn { width: auto; }
+.admin-support-page .admin-table-scroll {
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(255,255,255,0.75);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(80,40,70,0.06);
 }
-.admin-support-page .admin-table-scroll table {
-    min-width: 0;
-}
+.admin-support-page .admin-table-scroll table { min-width: 0; }
+.sup-faq-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
 @media (min-width: 901px) {
-    .admin-support-page .admin-table-scroll table {
-        min-width: 680px;
-    }
+    .admin-support-page .admin-table-scroll table { min-width: 680px; }
 }
-@media (max-width: 760px) {
-    .admin-support-page .card {
-        padding: 1.1rem !important;
-    }
-    .admin-support-page .section-title {
-        font-size: 1.35rem !important;
-    }
-    .admin-support-page .btn.btn-rose {
+@media (max-width: 767px) {
+    .sup-card { padding: 1.1rem; }
+    .sup-card-head { flex-direction: column; align-items: stretch; }
+    .admin-support-page .btn.btn-rose,
+    .sup-faq-actions .btn {
         width: 100%;
         justify-content: center;
+        min-height: 44px;
     }
     .admin-support-page #faqSaveBtn,
     .admin-support-page #faqCancelBtn {
         flex: 1 1 auto;
         justify-content: center;
+        min-height: 44px;
     }
 }
 </style>
@@ -43,14 +95,17 @@
 
 {% block content %}
 <div class="admin-support-page">
-<div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap: wrap;">
+<header class="sup-header">
+    <h1 class="sup-title">Help &amp; <em>support</em></h1>
+    <p class="sup-lede">Reply to customer chats and keep the public FAQ up to date.</p>
+</header>
+
+<div class="sup-card">
+    <div class="sup-card-head">
         <div>
-            <div class="section-eyebrow">Admin Console</div>
-            <h2 class="section-title" style="margin-top: 0.15rem;">User Contact Support</h2>
-            <p style="color: var(--muted); margin-top: 0.45rem;">
-                Support chats from users appear in the floating chat widget. Open the widget at the bottom-right to reply.
-            </p>
+            <div class="sup-eyebrow">Inbox</div>
+            <h2>User contact support</h2>
+            <p>Support chats appear in the floating widget. Open it to reply to customers.</p>
         </div>
         <button class="btn btn-rose" type="button" onclick="openSupportInboxFromPage()">
             <i class="ri-chat-3-line"></i>
@@ -59,15 +114,16 @@
     </div>
 </div>
 
-<div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+<div class="sup-card">
+    <div class="sup-card-head">
         <div>
-            <div class="section-eyebrow">Knowledge Base</div>
-            <h3 class="section-title" style="font-size: 1.35rem; margin-top: 0.2rem;">Frequently Asked Questions</h3>
+            <div class="sup-eyebrow">Knowledge base</div>
+            <h3>Frequently asked questions</h3>
+            <p>These answers show on the public FAQ page.</p>
         </div>
     </div>
 
-    <div style="display:grid; grid-template-columns: 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+    <div style="display:grid; grid-template-columns: 1fr; gap: 0.75rem; margin: 1rem 0;">
         <div>
             <label class="form-label" for="faqQuestion">Question</label>
             <input id="faqQuestion" class="form-control" type="text" maxlength="255" placeholder="Example: How do I track my order?">
@@ -78,7 +134,7 @@
         </div>
     </div>
 
-    <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
+    <div class="sup-faq-actions">
         <button class="btn btn-rose" type="button" id="faqSaveBtn" onclick="saveFaq()">
             <i class="ri-add-line"></i>
             Add FAQ
@@ -164,6 +220,9 @@ async function loadFaqs() {
                 </td>
             </tr>`;
         }).join('');
+        if (typeof window.labelAdminResponsiveTables === 'function') {
+            window.labelAdminResponsiveTables(document.querySelector('.admin-support-page table'));
+        }
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: #9b1c1c; padding: 2rem;">Could not load FAQs.</td></tr>';
     }
@@ -177,7 +236,7 @@ function startEditFaq(id) {
     document.getElementById('faqAnswer').value = f.answer || '';
     document.getElementById('faqSaveBtn').innerHTML = '<i class="ri-save-3-line"></i> Update FAQ';
     document.getElementById('faqCancelBtn').style.display = '';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('faqQuestion').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function cancelFaqEdit() {

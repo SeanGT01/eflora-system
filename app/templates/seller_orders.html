@@ -1188,19 +1188,16 @@
         </div>
 
         <div class="orders-table-wrap">
-            {% set has_checkable_orders = orders|selectattr('status', 'equalto', 'preparing')|list|length > 0 %}
             <table class="orders-table">
                 <thead>
                     <tr>
                         <th style="width: 36px; text-align: center;">
-                            {% if has_checkable_orders %}
                             <input 
                                 type="checkbox" 
                                 id="selectAllOrders" 
                                 class="order-checkbox batch-select-all" 
                                 title="Select all visible preparing orders"
                             >
-                            {% endif %}
                         </th>
                         <th>Order</th>
                         <th>Customer</th>
@@ -1358,16 +1355,13 @@
             </table>
         </div>
 
-        {% if not orders %}
-        <div class="orders-empty">
+        <div class="orders-empty" id="sellerOrdersEmpty" {% if orders %}style="display:none;"{% endif %}>
             <i class="ri-inbox-line"></i>
             No orders yet.
         </div>
-        {% endif %}
     </div>
 
-    {% if orders %}
-    <div class="orders-pagination" id="sellerOrdersPagination">
+    <div class="orders-pagination" id="sellerOrdersPagination" {% if not orders %}style="display:none;"{% endif %}>
         <button type="button" class="orders-page-btn" id="sellerOrdersPrevBtn">
             <i class="ri-arrow-left-line"></i>
         </button>
@@ -1376,7 +1370,6 @@
             <i class="ri-arrow-right-line"></i>
         </button>
     </div>
-    {% endif %}
 </div>
 
 <div class="custom-modal order-details-modal" id="sellerOrderDetailsModal" aria-hidden="true">
@@ -1444,7 +1437,11 @@
 
 {% block extra_js %}
 <script>
-    const sellerRows = Array.from(document.querySelectorAll('.seller-order-row'));
+    const SELLER_STORE_NAME = {{ (store.name or 'Store')|tojson }};
+    let SELLER_TODAY_STR = {{ (today_str or '')|tojson }};
+    let sellerSyncToken = {{ (sync_token or '')|tojson }};
+    let sellerRows = Array.from(document.querySelectorAll('.seller-order-row'));
+    const sellerOrdersTbody = document.getElementById('sellerOrdersTableBody');
     const sellerOrderDetailsModal = document.getElementById('sellerOrderDetailsModal');
     const sellerPaymentProofModal = document.getElementById('sellerPaymentProofModal');
     const sellerPaginationInfo = document.getElementById('sellerOrdersPaginationInfo');
@@ -1453,11 +1450,13 @@
     const sellerOrdersNextBtn = document.getElementById('sellerOrdersNextBtn');
     const sellerPanelSub = document.getElementById('sellerOrdersPanelSub');
     const sellerStatCards = Array.from(document.querySelectorAll('.kpi-card[data-filter-type]'));
-    const sellerNoRecordsRow = document.getElementById('sellerNoRecordsRow');
+    let sellerNoRecordsRow = document.getElementById('sellerNoRecordsRow');
     let activePaymentOrderId = null;
     let sellerCurrentPage = 1;
     const sellerRowsPerPage = 10;
     let sellerCardFilter = null;
+    let sellerLiveBusy = false;
+    let selectedOrderIds = new Set();
 
     function openModal(modal) {
         if (!modal) return;
@@ -1689,7 +1688,7 @@
         if (!sellerPanelSub) return;
 
         const dateFilteredCount = getSellerDateFilteredRows().length;
-        const baseText = `{{ store.name }} • ${dateFilteredCount} total orders`;
+        const baseText = `${SELLER_STORE_NAME} • ${dateFilteredCount} total orders`;
         if (!sellerCardFilter) {
             sellerPanelSub.innerHTML = baseText;
             return;
@@ -1751,6 +1750,178 @@
         updateActiveSellerCard();
     }
 
+    function productNamesFromOrder(order) {
+        return (order.items || []).map(function (item) { return item.product_name || ''; }).join(' ');
+    }
+
+    function buildSellerOrderRow(order, todayStr) {
+        const id = order.id;
+        const status = order.status || '';
+        const payStatus = String(order.payment_status || '').toLowerCase();
+        const payMethod = String(order.payment_method || '').toLowerCase();
+        const total = Number(order.display_total != null ? order.display_total : (order.total_amount || 0));
+        const dateFormatted = order.date_formatted || '';
+        const customerName = order.customer_name || 'Customer';
+        const contact = order.customer_contact || order.customer_phone || 'No contact';
+        const items = order.items || [];
+        const itemsCount = Number(order.items_count != null ? order.items_count : items.reduce(function (s, i) { return s + Number(i.quantity || 0); }, 0));
+        const search = (
+            '#' + id + ' ' + customerName + ' ' + (order.customer_contact || order.customer_phone || '') + ' ' +
+            (order.delivery_address || '') + ' ' + productNamesFromOrder(order)
+        ).toLowerCase();
+        const preview = items.slice(0, 2).map(function (item) {
+            const addons = (item.addons || []).map(function (a) {
+                const qty = Number(a.quantity || 1);
+                return `<div style="font-size:11px;color:var(--muted);margin-top:2px;">+ ${escapeHtml(a.name || '')}${qty > 1 ? ' ×' + qty : ''}</div>`;
+            }).join('');
+            return `<div class="order-item-mini">${escapeHtml(item.product_name || 'Item')} x${item.quantity || 0}${addons}</div>`;
+        }).join('');
+        const more = items.length > 2 ? `<div class="order-item-more">+${items.length - 2} more items</div>` : '';
+        const needsReview = payStatus === 'pending_verification';
+        const proofUrl = order.payment_proof_url || '';
+        const canApproveCod = payStatus === 'cod_pending' && (status === 'pending' || status === 'accepted');
+        const checkbox = status === 'preparing'
+            ? `<input type="checkbox" class="order-checkbox batch-order-checkbox" data-order-id="${id}" value="${id}"${selectedOrderIds.has(Number(id)) ? ' checked' : ''}>`
+            : '';
+        let receiptBtn = '';
+        if (proofUrl) {
+            receiptBtn = `<button type="button"
+                class="orders-action-btn seller-view-payment ${needsReview ? 'warning' : 'receipt-ok'}"
+                data-order-id="${id}"
+                data-proof-url="${escapeAttr(proofUrl)}"
+                data-customer-name="${escapeAttr(customerName)}"
+                data-customer-contact="${escapeAttr(order.customer_contact || '')}"
+                data-customer-contact-label="${escapeAttr(order.customer_contact_label || 'Contact')}"
+                data-order-total="${total.toFixed(2)}"
+                data-payment-method="${escapeAttr(order.payment_method || '')}"
+                title="${needsReview ? 'Review receipt' : 'View receipt'}"
+                aria-label="${needsReview ? 'Review unverified payment receipt' : 'View verified payment receipt'}">
+                <i class="${needsReview ? 'ri-error-warning-line' : 'ri-checkbox-circle-line'}" aria-hidden="true"></i>
+                <span class="btn-label">${needsReview ? 'Review' : 'Receipt'}</span>
+            </button>`;
+        }
+        const doneBtn = status === 'preparing'
+            ? `<button type="button" class="orders-action-btn success seller-mark-done" data-order-id="${id}" title="Done" aria-label="Mark as done">
+                    <i class="ri-checkbox-line"></i><span class="btn-label">Done</span>
+               </button>`
+            : '';
+        const approveBtn = canApproveCod
+            ? `<button type="button" class="orders-action-btn success seller-approve-cod" data-order-id="${id}" title="Approve COD" aria-label="Approve cash on delivery">
+                    <i class="ri-check-double-line"></i><span class="btn-label">Approve COD</span>
+               </button>`
+            : '';
+        return `<tr class="seller-order-row"
+            data-order-id="${id}"
+            data-status="${escapeAttr(status)}"
+            data-payment-status="${escapeAttr(payStatus)}"
+            data-payment-method="${escapeAttr(payMethod)}"
+            data-order-date="${escapeAttr(dateFormatted)}"
+            data-is-today="${dateFormatted === todayStr ? 'true' : 'false'}"
+            data-total-amount="${total}"
+            data-search="${escapeAttr(search)}">
+            <td style="width: 36px; text-align: center;">${checkbox}</td>
+            <td data-label="Order">
+                <div class="order-code">#${id}</div>
+                <div class="order-subline">${escapeHtml(titleCaseStatus(order.order_type || ''))}</div>
+                <div class="order-subline">${escapeHtml(order.datetime_formatted || order.created_at || '')}</div>
+            </td>
+            <td data-label="Customer">
+                <div class="order-code" style="font-size:14px;">${escapeHtml(customerName)}</div>
+                <div class="order-subline">${escapeHtml(contact)}</div>
+            </td>
+            <td data-label="Payment Status">
+                <span class="payment-pill payment-combined payment-${escapeAttr(payStatus)}">${escapeHtml(formatPaymentCombined(payMethod, payStatus))}</span>
+            </td>
+            <td data-label="Status">
+                <span class="status-pill status-${escapeAttr(status)}">${escapeHtml(titleCaseStatus(status))}</span>
+            </td>
+            <td data-label="Summary">
+                <div class="order-code" style="font-size:15px;">Php ${formatAmount(total)}</div>
+                <div class="order-subline">${itemsCount} item${itemsCount !== 1 ? 's' : ''}</div>
+                <div class="order-items-preview" style="margin-top:0.45rem;">${preview}${more}</div>
+            </td>
+            <td class="actions-cell" data-label="Actions">
+                <div class="action-row">
+                    <button type="button" class="orders-action-btn seller-view-order" data-order-id="${id}" title="View" aria-label="View order details">
+                        <i class="ri-eye-line"></i><span class="btn-label">View</span>
+                    </button>
+                    ${receiptBtn}${doneBtn}${approveBtn}
+                </div>
+            </td>
+        </tr>`;
+    }
+
+    function applySellerOrdersPayload(data, opts) {
+        const options = opts || {};
+        const prevIds = new Set(sellerRows.map(function (row) { return String(row.dataset.orderId); }));
+        if (data.today_str) SELLER_TODAY_STR = data.today_str;
+        if (data.sync_token) sellerSyncToken = data.sync_token;
+        const orders = data.orders || [];
+        const emptyEl = document.getElementById('sellerOrdersEmpty');
+        let noRow = document.getElementById('sellerNoRecordsRow');
+        if (!noRow) {
+            noRow = document.createElement('tr');
+            noRow.id = 'sellerNoRecordsRow';
+            noRow.style.display = 'none';
+            noRow.innerHTML = '<td colspan="7" style="text-align:center;color:var(--muted);padding:1.2rem 0.9rem;font-size:13px;">No records available</td>';
+        }
+        sellerOrdersTbody.innerHTML = orders.map(function (order) {
+            return buildSellerOrderRow(order, SELLER_TODAY_STR);
+        }).join('');
+        sellerOrdersTbody.appendChild(noRow);
+        sellerNoRecordsRow = noRow;
+        sellerRows = Array.from(sellerOrdersTbody.querySelectorAll('.seller-order-row'));
+        if (emptyEl) emptyEl.style.display = orders.length ? 'none' : '';
+        if (options.highlightNew && prevIds.size) {
+            sellerRows.forEach(function (row) {
+                if (!prevIds.has(String(row.dataset.orderId))) {
+                    row.classList.add('is-highlighted');
+                    setTimeout(function () { row.classList.remove('is-highlighted'); }, 2800);
+                }
+            });
+        }
+        applySellerFilters(false);
+        if (typeof window.refreshSellerSidebarBadges === 'function') window.refreshSellerSidebarBadges();
+    }
+
+    async function reloadSellerOrdersTable(opts) {
+        if (sellerLiveBusy) return;
+        sellerLiveBusy = true;
+        try {
+            const res = await fetch('/api/seller/orders?t=' + Date.now(), {
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+            if (!res.ok) return;
+            const payload = await res.json();
+            applySellerOrdersPayload(payload, opts || { highlightNew: true });
+        } catch (e) {
+        } finally {
+            sellerLiveBusy = false;
+        }
+    }
+
+    async function pollSellerOrdersLive() {
+        if (document.hidden || sellerLiveBusy) return;
+        if (document.querySelector('.app-confirm-overlay.show')) return;
+        try {
+            const res = await fetch('/api/seller/orders/sync?t=' + Date.now(), {
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data.sync_token || data.sync_token === sellerSyncToken) return;
+            await reloadSellerOrdersTable({ highlightNew: true });
+        } catch (e) {}
+    }
+
+    setInterval(pollSellerOrdersLive, 2000);
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) pollSellerOrdersLive();
+    });
+    window.addEventListener('focus', pollSellerOrdersLive);
+
     document.getElementById('sellerOrderSearch').addEventListener('input', () => applySellerFilters(true));
     document.getElementById('sellerStatusSelect').addEventListener('change', () => applySellerFilters(true));
     document.getElementById('sellerPaymentSelect').addEventListener('change', () => applySellerFilters(true));
@@ -1787,7 +1958,9 @@
             applySellerFilters();
         }
     });
-    document.getElementById('refreshOrdersBtn').addEventListener('click', () => window.location.reload());
+    document.getElementById('refreshOrdersBtn').addEventListener('click', () => {
+        reloadSellerOrdersTable({ highlightNew: false });
+    });
 
     sellerStatCards.forEach(card => {
         card.addEventListener('click', () => {
@@ -1813,11 +1986,34 @@
         });
     });
 
-    document.querySelectorAll('.seller-view-order').forEach(button => {
-        button.addEventListener('click', () => {
-            openSellerOrderDetails(button.dataset.orderId);
-        });
+    if (sellerOrdersTbody) {
+    sellerOrdersTbody.addEventListener('click', function (e) {
+        const viewBtn = e.target.closest('.seller-view-order');
+        if (viewBtn) {
+            openSellerOrderDetails(viewBtn.dataset.orderId);
+            return;
+        }
+        const payBtn = e.target.closest('.seller-view-payment');
+        if (payBtn) {
+            openSellerPaymentProof(payBtn);
+            return;
+        }
+        const doneBtn = e.target.closest('.seller-mark-done');
+        if (doneBtn) {
+            markTableOrderDonePreparing(doneBtn);
+            return;
+        }
+        const approveBtn = e.target.closest('.seller-approve-cod');
+        if (approveBtn) {
+            (async function () {
+                const orderId = approveBtn.dataset.orderId;
+                if (!orderId) return;
+                if (!await window.openConfirmModal('Approve this COD order and move it to Preparing?')) return;
+                await verifyPayment(orderId);
+            })();
+        }
     });
+    }
 
     async function openSellerOrderDetails(orderId) {
         if (!orderId) return;
@@ -2058,7 +2254,7 @@
             if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update status');
             closeModal(sellerOrderDetailsModal);
             showSellerAlert('success', 'Order marked as Done Preparing.');
-            window.location.reload();
+            await reloadSellerOrdersTable({ highlightNew: false });
         } catch (error) {
             btn.disabled = false;
             btn.innerHTML = '<i class="ri-checkbox-line"></i> Mark as Done Preparing';
@@ -2066,36 +2262,34 @@
         }
     }
 
-    document.querySelectorAll('.seller-mark-done').forEach(button => {
-        button.addEventListener('click', async () => {
-            let formData;
-            try {
-                formData = await markDonePreparingWithProof(button.dataset.orderId);
-                if (!formData) return;
-            } catch (error) {
-                showSellerAlert('danger', error.message || 'Please upload the finished product image first.');
-                return;
-            }
+    async function markTableOrderDonePreparing(button) {
+        let formData;
+        try {
+            formData = await markDonePreparingWithProof(button.dataset.orderId);
+            if (!formData) return;
+        } catch (error) {
+            showSellerAlert('danger', error.message || 'Please upload the finished product image first.');
+            return;
+        }
 
-            const orderId = button.dataset.orderId;
-            button.disabled = true;
-            button.innerHTML = '<span class="btn-loading-ui"><span class="loading-spin"></span><span class="loading-text">Updating…</span></span>';
-            try {
-                const response = await sellerFetch(`/api/seller/orders/${orderId}/status`, {
-                    method: 'PUT',
-                    body: formData
-                });
-                const data = await response.json();
-                if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update status');
-                showSellerAlert('success', 'Order marked as Done Preparing.');
-                window.location.reload();
-            } catch (error) {
-                button.disabled = false;
-                button.innerHTML = '<i class="ri-checkbox-line"></i> Done';
-                showSellerAlert('danger', error.message || 'Could not update order status.');
-            }
-        });
-    });
+        const orderId = button.dataset.orderId;
+        button.disabled = true;
+        button.innerHTML = '<span class="btn-loading-ui"><span class="loading-spin"></span><span class="loading-text">Updating…</span></span>';
+        try {
+            const response = await sellerFetch(`/api/seller/orders/${orderId}/status`, {
+                method: 'PUT',
+                body: formData
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update status');
+            showSellerAlert('success', 'Order marked as Done Preparing.');
+            await reloadSellerOrdersTable({ highlightNew: false });
+        } catch (error) {
+            button.disabled = false;
+            button.innerHTML = '<i class="ri-checkbox-line"></i> Done';
+            showSellerAlert('danger', error.message || 'Could not update order status.');
+        }
+    }
 
     async function pickFinishedProductImage() {
         return new Promise(resolve => {
@@ -2169,39 +2363,37 @@
         });
     }
 
-    document.querySelectorAll('.seller-view-payment').forEach(button => {
-        button.addEventListener('click', () => {
-            activePaymentOrderId = button.dataset.orderId;
-            const proofImage = document.getElementById('sellerPaymentProofImage');
-            const proofEmpty = document.getElementById('sellerPaymentProofEmpty');
-            const contactLabel = button.dataset.customerContactLabel || 'Contact';
-            const contactValue = button.dataset.customerContact || '';
-            const combinedLabel = formatPaymentCombined(
-                button.dataset.paymentMethod,
-                button.closest('tr')?.dataset.paymentStatus
-            );
-            const methodPill = document.getElementById('sellerPaymentProofMethodPill');
+    function openSellerPaymentProof(button) {
+        activePaymentOrderId = button.dataset.orderId;
+        const proofImage = document.getElementById('sellerPaymentProofImage');
+        const proofEmpty = document.getElementById('sellerPaymentProofEmpty');
+        const contactLabel = button.dataset.customerContactLabel || 'Contact';
+        const contactValue = button.dataset.customerContact || '';
+        const combinedLabel = formatPaymentCombined(
+            button.dataset.paymentMethod,
+            button.closest('tr')?.dataset.paymentStatus
+        );
+        const methodPill = document.getElementById('sellerPaymentProofMethodPill');
 
-            document.getElementById('sellerPaymentProofOrder').textContent = `#${button.dataset.orderId || '—'}`;
-            document.getElementById('sellerPaymentProofCustomer').textContent = button.dataset.customerName || '—';
-            document.getElementById('sellerPaymentProofContactLabel').textContent = contactLabel;
-            document.getElementById('sellerPaymentProofContact').textContent = contactValue || '—';
-            document.getElementById('sellerPaymentProofAmount').textContent = `₱${formatAmount(button.dataset.orderTotal || 0)}`;
-            if (methodPill) {
-                methodPill.textContent = combinedLabel;
-                methodPill.className = 'payment-pill payment-combined';
-                const statusKey = String(button.closest('tr')?.dataset.paymentStatus || '').toLowerCase().replace(/\s+/g, '_');
-                if (statusKey) methodPill.classList.add(`payment-${statusKey}`);
-            }
+        document.getElementById('sellerPaymentProofOrder').textContent = `#${button.dataset.orderId || '—'}`;
+        document.getElementById('sellerPaymentProofCustomer').textContent = button.dataset.customerName || '—';
+        document.getElementById('sellerPaymentProofContactLabel').textContent = contactLabel;
+        document.getElementById('sellerPaymentProofContact').textContent = contactValue || '—';
+        document.getElementById('sellerPaymentProofAmount').textContent = `₱${formatAmount(button.dataset.orderTotal || 0)}`;
+        if (methodPill) {
+            methodPill.textContent = combinedLabel;
+            methodPill.className = 'payment-pill payment-combined';
+            const statusKey = String(button.closest('tr')?.dataset.paymentStatus || '').toLowerCase().replace(/\s+/g, '_');
+            if (statusKey) methodPill.classList.add(`payment-${statusKey}`);
+        }
 
-            proofEmpty.style.display = 'none';
-            proofImage.style.display = 'block';
-            proofImage.src = button.dataset.proofUrl;
-            document.getElementById('sellerVerifyPaymentBtn').style.display =
-                button.closest('tr')?.dataset.paymentStatus === 'pending_verification' ? 'inline-flex' : 'none';
-            openModal(sellerPaymentProofModal);
-        });
-    });
+        proofEmpty.style.display = 'none';
+        proofImage.style.display = 'block';
+        proofImage.src = button.dataset.proofUrl;
+        document.getElementById('sellerVerifyPaymentBtn').style.display =
+            button.closest('tr')?.dataset.paymentStatus === 'pending_verification' ? 'inline-flex' : 'none';
+        openModal(sellerPaymentProofModal);
+    }
 
     async function verifyPayment(orderId) {
         try {
@@ -2210,7 +2402,7 @@
             if (!response.ok || !data.success) throw new Error(data.error || 'Could not verify payment');
             closeModal(sellerPaymentProofModal);
             showSellerAlert('success', 'Payment verified. Order status changed to Preparing.');
-            window.location.reload();
+            await reloadSellerOrdersTable({ highlightNew: false });
         } catch (error) {
             showSellerAlert('danger', error.message || 'Could not verify payment.');
         }
@@ -2218,15 +2410,6 @@
 
     document.getElementById('sellerVerifyPaymentBtn').addEventListener('click', () => {
         if (activePaymentOrderId) verifyPayment(activePaymentOrderId);
-    });
-
-    document.querySelectorAll('.seller-approve-cod').forEach(button => {
-        button.addEventListener('click', async () => {
-            const orderId = button.dataset.orderId;
-            if (!orderId) return;
-            if (!await window.openConfirmModal('Approve this COD order and move it to Preparing?')) return;
-            await verifyPayment(orderId);
-        });
     });
 
     const proofImage = document.getElementById('sellerPaymentProofImage');
@@ -2265,8 +2448,6 @@
     const batchMarkDoneBtn = document.getElementById('batchMarkDoneBtn');
     const batchCancelBtn = document.getElementById('batchCancelBtn');
     const selectAllCheckbox = document.getElementById('selectAllOrders');
-
-    let selectedOrderIds = new Set();
 
     function updateBatchUI() {
         const visiblePreparing = Array.from(document.querySelectorAll('.batch-order-checkbox')).filter(cb => {

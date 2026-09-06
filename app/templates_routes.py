@@ -26,6 +26,7 @@ from app.utils.cloudinary_helper import upload_to_cloudinary, delete_from_cloudi
 # app/templates_routes.py - Add these imports at the top
 from flask_wtf.csrf import generate_csrf
 from sqlalchemy.orm import joinedload, selectinload
+import hashlib
 
 # Import the extensions from app (they're initialized in __init__.py)
 from app import limiter
@@ -6041,19 +6042,24 @@ def admin_stores():
         # Normalize legacy "inactive" to suspended for the admin UI.
         status_key = 'suspended' if raw_status == 'inactive' else raw_status
 
+        loc = (s.public_location_label or s.formatted_address or s.address or '').strip()
         rows.append({
             'id': s.id,
             'name': s.name,
             'description': s.description or '',
             'logo_url': s.logo_url,
+            'banner_url': s.banner_url,
             'status': status_key,
             'owner_name': owner_name,
             'owner_email': owner_email,
+            'location': loc,
+            'delivery_radius_km': float(s.delivery_radius_km or 0),
             'product_count': int(product_count),
             'order_count': int(order_count),
             'revenue': revenue,
             'revenue_display': f"₱{revenue:,.2f}",
             'created_at': _fmt_pht(s.created_at, '%b %d, %Y') if s.created_at else '—',
+            'created_at_sort': s.created_at.isoformat() if s.created_at else '',
         })
 
         total_revenue += revenue
@@ -6092,7 +6098,7 @@ def admin_controls():
 def admin_account():
     if session.get('role') != 'admin':
         return redirect(url_for('templates.dashboard'))
-    return render_template('admin_account.html')
+    return redirect(url_for('templates.dashboard', account='1'))
 
 
 @templates_bp.route('/api/admin/feature-controls', methods=['GET', 'PUT'])
@@ -6157,6 +6163,9 @@ def _store_summary_dict(store: 'Store') -> dict:
         'address': store.address or '',
         'contact_number': store.contact_number or '',
         'logo_url': store.logo_url,
+        'banner_url': store.banner_url,
+        'location': (store.public_location_label or store.formatted_address or store.address or '').strip(),
+        'delivery_radius_km': float(store.delivery_radius_km or 0),
         'status': (
             'suspended'
             if (store.status or '').lower() == 'inactive'
@@ -8013,34 +8022,84 @@ def date_format(value):
     
     return value.strftime('%b %d, %Y')  # Feb 07, 2026
 
-@templates_bp.route('/seller/orders')
-def seller_orders():
-    if session.get('role') not in ('seller', 'store_admin'):
-        return redirect(url_for('templates.dashboard'))
-    _ensure_order_fulfillment_columns()
-
-    def _load_page():
-        # Get seller's store
-        store = _seller_portal_manageable_store(session['user_id'])
-        if not store:
-            return None
-
-        # Eager-load related rows — avoids N+1 lazy loads that often hit a
-        # stale Railway connection mid-page render.
-        orders = (
-            Order.query
-            .options(
-                selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
-                selectinload(Order.items).joinedload(OrderItem.variant),
-                selectinload(Order.items).selectinload(OrderItem.addons),
-                joinedload(Order.customer),
-                joinedload(Order.assigned_rider).joinedload(Rider.user),
-            )
-            .filter_by(store_id=store.id)
-            .order_by(Order.created_at.desc())
-            .all()
+def _seller_orders_sync_token(store_id):
+    """Cheap snapshot so the orders table can poll without reloading the page."""
+    rows = (
+        db.session.query(
+            Order.id,
+            Order.status,
+            Order.payment_status,
+            Order.rider_id,
+            Order.updated_at,
+            Order.payment_proof_url,
         )
+        .filter(Order.store_id == store_id)
+        .order_by(Order.id.asc())
+        .all()
+    )
+    parts = [
+        '%s:%s:%s:%s:%s:%s'
+        % (
+            r.id,
+            r.status or '',
+            r.payment_status or '',
+            r.rider_id or 0,
+            r.updated_at.isoformat() if r.updated_at else '',
+            '1' if r.payment_proof_url else '0',
+        )
+        for r in rows
+    ]
+    digest = hashlib.sha256('|'.join(parts).encode('utf-8')).hexdigest()
+    return '%s:%s' % (digest, len(rows))
 
+
+def _load_seller_orders_page_data(store, include_riders=True):
+    orders = (
+        Order.query
+        .options(
+            selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
+            selectinload(Order.items).joinedload(OrderItem.variant),
+            selectinload(Order.items).selectinload(OrderItem.addons),
+            joinedload(Order.customer),
+            joinedload(Order.assigned_rider).joinedload(Rider.user),
+        )
+        .filter_by(store_id=store.id)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    orders_data = [_serialize_seller_order_for_template(order) for order in orders]
+    today = datetime.now(PHT).date()
+    today_str = today.strftime('%Y-%m-%d')
+    order_stats = {
+        'total': len(orders_data),
+        'today': sum(
+            1
+            for order in orders
+            if order.created_at and _fmt_pht(order.created_at, '%Y-%m-%d') == today_str
+        ),
+        'pending': sum(1 for order in orders if order.status == 'pending'),
+        'payment_review': sum(1 for order in orders if order.payment_status == 'pending_verification'),
+        'preparing': sum(1 for order in orders if order.status in ['accepted', 'preparing']),
+        'on_delivery': sum(1 for order in orders if order.status == 'on_delivery'),
+        'delivered': sum(1 for order in orders if order.status == 'delivered'),
+        'completed': sum(1 for order in orders if order.status == 'completed'),
+        'cancelled': sum(1 for order in orders if order.status == 'cancelled'),
+        'revenue': float(sum(
+            float(od.get('display_total') or od.get('total_amount') or 0)
+            for od in orders_data
+            if od.get('status') in ['delivered', 'completed']
+        )),
+    }
+
+    payload = {
+        'orders': orders_data,
+        'store': store.to_dict(),
+        'order_stats': order_stats,
+        'today_str': today_str,
+        'sync_token': _seller_orders_sync_token(store.id),
+    }
+    if include_riders:
         available_riders = (
             Rider.query
             .options(joinedload(Rider.user))
@@ -8048,66 +8107,29 @@ def seller_orders():
             .order_by(Rider.created_at.desc())
             .all()
         )
-
-        orders_data = []
-        for order in orders:
-            order_dict = order.to_dict()
-            order_dict['items'] = [item.to_dict() for item in order.items]
-            order_dict['items_count'] = sum(item.quantity for item in order.items)
-            _attach_seller_order_customer_contact(order_dict, order.customer)
-            _apply_order_display_totals(order, order_dict)
-            order_dict['payment_proof'] = order.payment_proof
-            order_dict['rider_vehicle'] = order.assigned_rider.vehicle_type if order.assigned_rider else None
-
-            if order.created_at:
-                order_dict['date_formatted'] = _fmt_pht(order.created_at, '%Y-%m-%d')
-                order_dict['time_formatted'] = _fmt_pht(order.created_at, '%I:%M %p').lstrip('0')
-                order_dict['datetime_formatted'] = _fmt_pht(order.created_at, '%b %d, %Y %I:%M %p')
-            else:
-                order_dict['date_formatted'] = ''
-                order_dict['time_formatted'] = ''
-                order_dict['datetime_formatted'] = ''
-
-            orders_data.append(order_dict)
-
-        today = datetime.now(PHT).date()
-        order_stats = {
-            'total': len(orders_data),
-            'today': sum(
-                1
-                for order in orders
-                if order.created_at and _fmt_pht(order.created_at, '%Y-%m-%d') == today.strftime('%Y-%m-%d')
-            ),
-            'pending': sum(1 for order in orders if order.status == 'pending'),
-            'payment_review': sum(1 for order in orders if order.payment_status == 'pending_verification'),
-            'preparing': sum(1 for order in orders if order.status in ['accepted', 'preparing']),
-            'on_delivery': sum(1 for order in orders if order.status == 'on_delivery'),
-            'delivered': sum(1 for order in orders if order.status == 'delivered'),
-            'completed': sum(1 for order in orders if order.status == 'completed'),
-            'cancelled': sum(1 for order in orders if order.status == 'cancelled'),
-            'revenue': float(sum(
-                float(od.get('display_total') or od.get('total_amount') or 0)
-                for od in orders_data
-                if od.get('status') in ['delivered', 'completed']
-            ))
-        }
-
-        riders_data = []
-        for rider in available_riders:
-            riders_data.append({
+        payload['available_riders'] = [
+            {
                 'id': rider.id,
                 'name': rider.user.full_name if rider.user else 'Rider',
                 'vehicle': rider.vehicle_type,
-                'is_active': rider.is_active
-            })
+                'is_active': rider.is_active,
+            }
+            for rider in available_riders
+        ]
+    return payload
 
-        return {
-            'orders': orders_data,
-            'store': store.to_dict(),
-            'order_stats': order_stats,
-            'today_str': today.strftime('%Y-%m-%d'),
-            'available_riders': riders_data,
-        }
+
+@templates_bp.route('/seller/orders')
+def seller_orders():
+    if session.get('role') not in ('seller', 'store_admin'):
+        return redirect(url_for('templates.dashboard'))
+    _ensure_order_fulfillment_columns()
+
+    def _load_page():
+        store = _seller_portal_manageable_store(session['user_id'])
+        if not store:
+            return None
+        return _load_seller_orders_page_data(store, include_riders=True)
 
     try:
         page_data = _with_db_retry(_load_page)
@@ -8199,6 +8221,34 @@ def seller_sidebar_badges_api():
     resp = jsonify({'orders': orders, 'pos_orders': pos})
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
+    return resp, 200
+
+
+@templates_bp.route('/api/seller/orders/sync', methods=['GET'])
+def seller_orders_sync_api():
+    """Lightweight fingerprint for live orders table updates."""
+    if session.get('role') not in ('seller', 'store_admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    store = _seller_portal_manageable_store(session.get('user_id'))
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+    resp = jsonify({'sync_token': _seller_orders_sync_token(store.id)})
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp, 200
+
+
+@templates_bp.route('/api/seller/orders', methods=['GET'])
+def seller_orders_list_api():
+    """Full store orders payload for live table refresh."""
+    if session.get('role') not in ('seller', 'store_admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    _ensure_order_fulfillment_columns()
+    store = _seller_portal_manageable_store(session.get('user_id'))
+    if not store:
+        return jsonify({'error': 'No active store found'}), 404
+    data = _load_seller_orders_page_data(store, include_riders=False)
+    resp = jsonify(data)
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     return resp, 200
 
 
@@ -11230,6 +11280,13 @@ def delete_product_image(product_id, image_id):
 '''
 
 
+@templates_bp.route('/store')
+@templates_bp.route('/store/')
+def store_directory_alias():
+    """Alias for the public store directory."""
+    return redirect(url_for('templates.stores', **request.args))
+
+
 @templates_bp.route('/stores')
 def stores():
     """Public store directory — all active partner stores."""
@@ -11701,7 +11758,7 @@ def update_store_settings():
         
         # ===== STORE SCHEDULE =====
         if 'store_schedule' in data:
-            from app.utils.store_schedule import sanitize_store_schedule
+            from app.utils.store_schedule import sanitize_store_schedule, schedule_constraint_error
             schedule_value = data['store_schedule']
             if isinstance(schedule_value, str):
                 try:
@@ -11711,6 +11768,9 @@ def update_store_settings():
             if isinstance(schedule_value, dict):
                 cleaned = sanitize_store_schedule(schedule_value)
                 if cleaned is not None:
+                    hours_error = schedule_constraint_error(cleaned)
+                    if hours_error:
+                        return jsonify({'error': hours_error}), 400
                     store.store_schedule = cleaned
                     print(f"✅ Updated store_schedule: {store.store_schedule}")
         

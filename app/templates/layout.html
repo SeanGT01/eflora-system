@@ -661,7 +661,9 @@
         body.role-admin .page-content > .adm,
         body.role-admin .page-content > .admin-users-page,
         body.role-admin .page-content > .admin-support-page,
-        body.role-admin .page-content > .admin-testimonials-page {
+        body.role-admin .page-content > .admin-testimonials-page,
+        body.role-admin .page-content > .admin-controls-page,
+        body.role-admin .page-content > .admin-account-page {
             width: 100%;
             max-width: none;
             margin-left: 0;
@@ -1799,6 +1801,136 @@
                 width: auto;
             }
         }
+
+        /* Admin pages: match seller dashboard wrapping on tablet/phone */
+        body.role-admin .main-area,
+        body.role-admin .page-content,
+        body.role-admin .page-content > * {
+            min-width: 0;
+            max-width: 100%;
+        }
+        body.role-admin .page-content {
+            overflow-x: clip;
+        }
+        body.role-admin img,
+        body.role-admin canvas,
+        body.role-admin svg,
+        body.role-admin table {
+            max-width: 100%;
+        }
+        body.role-admin .kpi-row,
+        body.role-admin .adm-store-grid,
+        body.role-admin .modal-card {
+            min-width: 0;
+        }
+
+        @media (max-width: 991px) {
+            body.role-admin .dash-header,
+            body.role-admin .adm-header,
+            body.role-admin .ana-header,
+            body.role-admin .rpt-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            body.role-admin .dash-header-actions,
+            body.role-admin .period-bar {
+                width: 100%;
+                max-width: 100%;
+            }
+            body.role-admin .kpi-row,
+            body.role-admin .admin-stat-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            body.role-admin .admin-toolbar-row,
+            body.role-admin .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            body.role-admin .search-box,
+            body.role-admin .filter-select,
+            body.role-admin .admin-search-grow,
+            body.role-admin .form-control,
+            body.role-admin .form-select {
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+                box-sizing: border-box;
+            }
+            body.role-admin .admin-controls-page .control-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            body.role-admin .admin-account-page .account-card {
+                max-width: none;
+            }
+            body.role-admin .btn,
+            body.role-admin .apply-btn {
+                min-height: 40px;
+            }
+        }
+
+        @media (max-width: 767px) {
+            body.role-admin .kpi-row,
+            body.role-admin .admin-stat-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.65rem;
+            }
+            body.role-admin .panel-head {
+                flex-wrap: wrap;
+            }
+            body.role-admin .modal-mask {
+                padding: 0.75rem;
+                align-items: flex-end;
+            }
+            body.role-admin .modal-card,
+            body.role-admin .modal {
+                width: 100%;
+                max-width: 100%;
+                max-height: min(92dvh, 900px);
+            }
+            body.role-admin .modal-actions,
+            body.role-admin .modal-footer {
+                flex-wrap: wrap;
+            }
+            body.role-admin .modal-actions .btn,
+            body.role-admin .modal-footer .btn {
+                flex: 1 1 calc(50% - 0.5rem);
+                justify-content: center;
+                min-height: 44px;
+            }
+            body.role-admin .adm-store-actions {
+                width: 100%;
+                margin-left: 0;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
+            body.role-admin .stores-pager {
+                justify-content: center;
+            }
+            body.role-admin .stores-pager-info {
+                width: 100%;
+                text-align: center;
+            }
+            body.role-admin h1,
+            body.role-admin .dash-title,
+            body.role-admin .adm-title,
+            body.role-admin .section-title {
+                overflow-wrap: anywhere;
+            }
+        }
+
+        @media (max-width: 540px) {
+            body.role-admin .kpi-row,
+            body.role-admin .admin-stat-grid {
+                grid-template-columns: 1fr;
+            }
+            body.role-admin .admin-toolbar-row > .btn,
+            body.role-admin .admin-support-page .btn.btn-rose,
+            body.role-admin .admin-account-page .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
     </style>
 
     <!-- ===== Global sale-price display styles ===== -->
@@ -1929,11 +2061,6 @@
                 <li class="nav-item">
                     <a href="{{ url_for('templates.admin_controls') }}" class="nav-link {% if request.endpoint == 'templates.admin_controls' %}active{% endif %}">
                         <i class="ri-toggle-line nav-icon"></i> Controls
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ url_for('templates.admin_account') }}" class="nav-link {% if request.endpoint == 'templates.admin_account' %}active{% endif %}">
-                        <i class="ri-lock-password-line nav-icon"></i> Account
                     </a>
                 </li>
                 {% elif session.role in ['seller', 'store_admin'] %}
@@ -2094,7 +2221,7 @@
                     </button>
                     <div class="user-dropdown" id="userDropdown">
                         {% if session.get('role') == 'admin' %}
-                        <a href="{{ url_for('templates.admin_account') }}" class="dropdown-item">
+                        <a href="#" class="dropdown-item" id="adminChangePasswordLink">
                             <i class="ri-lock-password-line"></i> Change password
                         </a>
                         {% else %}
@@ -2121,6 +2248,49 @@
         </footer>
     </div>
 </div>
+
+{% if session.get('role') == 'admin' %}
+<div class="modal-overlay" id="adminAccountModal" onclick="if(event.target===this) closeAdminAccountModal()">
+    <div class="modal" style="max-width: 28rem;" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 class="modal-title">Change password</h3>
+            <button type="button" class="modal-close" onclick="closeAdminAccountModal()" aria-label="Close"><i class="ri-close-line"></i></button>
+        </div>
+        <form id="adminPasswordForm">
+            <div class="modal-body">
+                <p style="color: var(--muted); margin: 0 0 1rem; font-size: 13px; line-height: 1.5;">
+                    Signed in as <strong>{{ session.get('user_name', 'Admin') }}</strong>
+                    ({{ session.get('email', '') }}).
+                </p>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group" style="margin-bottom: 0.9rem;">
+                    <label class="form-label" for="adminCurrentPassword">Current password</label>
+                    <input type="password" class="form-control" id="adminCurrentPassword" name="current_password"
+                           required autocomplete="current-password" placeholder="Enter current password">
+                </div>
+                <div class="form-group" style="margin-bottom: 0.9rem;">
+                    <label class="form-label" for="adminNewPassword">New password</label>
+                    <input type="password" class="form-control" id="adminNewPassword" name="new_password"
+                           required minlength="8" autocomplete="new-password"
+                           placeholder="Min. 8 chars, Aa + special">
+                    <div style="font-size:12px;color:var(--muted);margin-top:0.35rem;">At least 8 characters with uppercase, lowercase, and a special character.</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="adminConfirmPassword">Confirm new password</label>
+                    <input type="password" class="form-control" id="adminConfirmPassword" name="confirm_password"
+                           required minlength="8" autocomplete="new-password" placeholder="Repeat new password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeAdminAccountModal()">Cancel</button>
+                <button type="submit" class="btn btn-rose" id="adminPasswordSubmit" disabled>
+                    <i class="ri-shield-check-line"></i> Update password
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <script>
     const CURRENT_ROLE = {{ (session.get('role') or '')|tojson }};
@@ -2644,6 +2814,110 @@
     }
 
     window.showToast = showToast;
+
+    (function setupAdminAccountModal() {
+        const overlay = document.getElementById('adminAccountModal');
+        if (!overlay) return;
+        const form = document.getElementById('adminPasswordForm');
+        const submitBtn = document.getElementById('adminPasswordSubmit');
+        const inputs = form.querySelectorAll('input[type="password"]');
+        const link = document.getElementById('adminChangePasswordLink');
+
+        function passwordStrengthError(password) {
+            const pw = (password || '').trim();
+            if (pw.length < 8) return 'Password must be at least 8 characters';
+            if (!/[a-z]/.test(pw)) return 'Password must include at least one lowercase letter';
+            if (!/[A-Z]/.test(pw)) return 'Password must include at least one uppercase letter';
+            if (!/[^A-Za-z0-9]/.test(pw)) return 'Password must include at least one special character';
+            return null;
+        }
+
+        window.openAdminAccountModal = function () {
+            overlay.classList.add('active');
+            const dd = document.getElementById('userDropdown');
+            if (dd) dd.classList.remove('show');
+            if (typeof closeSidebar === 'function') closeSidebar();
+            const first = document.getElementById('adminCurrentPassword');
+            if (first) setTimeout(function () { first.focus(); }, 50);
+        };
+        window.closeAdminAccountModal = function () {
+            overlay.classList.remove('active');
+            form.reset();
+            submitBtn.disabled = true;
+        };
+
+        if (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                window.openAdminAccountModal();
+            });
+        }
+
+        function syncSubmit() {
+            const hasAny = Array.from(inputs).some(function (el) { return (el.value || '').trim().length > 0; });
+            submitBtn.disabled = !hasAny;
+        }
+        inputs.forEach(function (el) { el.addEventListener('input', syncSubmit); });
+        syncSubmit();
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && overlay.classList.contains('active')) {
+                window.closeAdminAccountModal();
+            }
+        });
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const fd = new FormData(form);
+            const currentPassword = (fd.get('current_password') || '').trim();
+            const newPassword = (fd.get('new_password') || '').trim();
+            const confirmPassword = (fd.get('confirm_password') || '').trim();
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                showToast('All password fields are required', 'error');
+                return;
+            }
+            if (newPassword !== confirmPassword) {
+                showToast('Passwords do not match', 'error');
+                return;
+            }
+            const strengthError = passwordStrengthError(newPassword);
+            if (strengthError) {
+                showToast(strengthError, 'error');
+                return;
+            }
+            if (newPassword === currentPassword) {
+                showToast('New password must be different from current password', 'error');
+                return;
+            }
+            const orig = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Updating…';
+            try {
+                const r = await fetch('/api/account/password/change', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (d.success) {
+                    showToast('Password changed', 'success');
+                    window.closeAdminAccountModal();
+                } else {
+                    showToast(d.error || 'Could not update password', 'error');
+                }
+            } catch (err) {
+                showToast('Network error. Please try again.', 'error');
+            } finally {
+                submitBtn.innerHTML = orig;
+                syncSubmit();
+            }
+        });
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('account') === '1') {
+            window.openAdminAccountModal();
+            params.delete('account');
+            const next = params.toString();
+            const clean = window.location.pathname + (next ? '?' + next : '') + window.location.hash;
+            window.history.replaceState({}, '', clean);
+        }
+    })();
 
     // Spin util
     const spinStyle = document.createElement('style');

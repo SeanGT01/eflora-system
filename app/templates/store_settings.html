@@ -2821,14 +2821,14 @@
                                             <span style="color: var(--muted); font-weight: 600;">to</span>
                                             <input type="time" class="form-control" id="delivery-cutoff-time" style="width: auto; min-width: 140px;" placeholder="Cutoff">
                                         </div>
-                                        <div class="form-hint">When riders can deliver. Example: store hours 07:00–19:00, delivery window 09:00–17:00.</div>
+                                        <div class="form-hint" id="delivery-window-hint">Must fall within store operating hours. Example: store 7:00 AM–7:00 PM, delivery 9:00 AM–5:00 PM.</div>
                                     </div>
 
                                     <div style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 1rem;">
                                         <div>
                                             <label class="form-label" style="margin-bottom: 0.35rem;">Same-day order cutoff (Optional)</label>
                                             <input type="time" class="form-control" id="order-cutoff-time" style="width: auto; min-width: 140px;">
-                                            <div class="form-hint">After this time, customers cannot book today. They must pick another open day.</div>
+                                            <div class="form-hint" id="order-cutoff-hint">Must be within store hours. After this time, customers cannot book same-day delivery.</div>
                                         </div>
                                         <div>
                                             <label class="form-label" style="margin-bottom: 0.35rem;">Prep / lead time</label>
@@ -5120,6 +5120,7 @@
         
         if (scheduleEntries.length === 0) {
             container.innerHTML = '<div style="color: var(--muted); font-size: 13px; padding: 0.75rem; background: var(--cream); border-radius: var(--radius-md); text-align: center;">No operating hours set. Click "Add Time Block" to configure your store schedule.</div>';
+            applyDeliveryPickerBounds();
             return;
         }
         
@@ -5202,6 +5203,7 @@
             
             container.appendChild(div);
         });
+        applyDeliveryPickerBounds();
         
         // Attach event listeners
         container.querySelectorAll('.schedule-day-chip').forEach(chip => {
@@ -5293,6 +5295,77 @@
         renderScheduleEntries();
     });
     
+    function formatScheduleTime12(hhmm) {
+        if (!hhmm || String(hhmm).indexOf(':') < 0) return hhmm || '';
+        const parts = String(hhmm).split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) || 0;
+        if (!Number.isFinite(h)) return hhmm;
+        const period = h < 12 ? 'AM' : 'PM';
+        const display = (h % 12) || 12;
+        return m ? (display + ':' + String(m).padStart(2, '0') + ' ' + period) : (display + ':00 ' + period);
+    }
+
+    function getStoreHoursSpan() {
+        let minOpen = null;
+        let maxClose = null;
+        scheduleEntries.forEach(function (e) {
+            if (!e.open || !e.close || e.open >= e.close) return;
+            if (!minOpen || e.open < minOpen) minOpen = e.open;
+            if (!maxClose || e.close > maxClose) maxClose = e.close;
+        });
+        return { minOpen: minOpen, maxClose: maxClose };
+    }
+
+    function applyDeliveryPickerBounds() {
+        const span = getStoreHoursSpan();
+        ['delivery-start-time', 'delivery-cutoff-time', 'order-cutoff-time'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (span.minOpen) el.min = span.minOpen;
+            else el.removeAttribute('min');
+            if (span.maxClose) el.max = span.maxClose;
+            else el.removeAttribute('max');
+        });
+        const hintWin = document.getElementById('delivery-window-hint');
+        const hintCut = document.getElementById('order-cutoff-hint');
+        if (span.minOpen && span.maxClose) {
+            const range = formatScheduleTime12(span.minOpen) + ' – ' + formatScheduleTime12(span.maxClose);
+            if (hintWin) hintWin.textContent = 'Must fall within store hours (' + range + '). Example: store 7:00 AM–7:00 PM, delivery 9:00 AM–5:00 PM.';
+            if (hintCut) hintCut.textContent = 'Must be within store hours (' + range + '). After this time, customers cannot book same-day delivery.';
+        } else {
+            if (hintWin) hintWin.textContent = 'Must fall within store operating hours. Set hours first, then choose a delivery window.';
+            if (hintCut) hintCut.textContent = 'Must be within store hours. Set operating hours first.';
+        }
+    }
+
+    function validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff) {
+        const span = getStoreHoursSpan();
+        if (!span.minOpen || !span.maxClose) {
+            if (deliveryStart || deliveryCutoff || orderCutoff) {
+                return 'Set store operating hours before setting a delivery window or same-day cutoff.';
+            }
+            return null;
+        }
+        const openLabel = formatScheduleTime12(span.minOpen);
+        const closeLabel = formatScheduleTime12(span.maxClose);
+        if (deliveryStart && deliveryStart < span.minOpen) {
+            return 'Delivery start must be at or after store opening (' + openLabel + ').';
+        }
+        if (deliveryCutoff && deliveryCutoff > span.maxClose) {
+            return 'Delivery end must be at or before store closing (' + closeLabel + ').';
+        }
+        if (orderCutoff) {
+            if (orderCutoff < span.minOpen || orderCutoff > span.maxClose) {
+                return 'Same-day cutoff must be within store hours (' + openLabel + ' – ' + closeLabel + ').';
+            }
+            if (deliveryCutoff && orderCutoff > deliveryCutoff) {
+                return 'Same-day cutoff must be at or before the delivery window end.';
+            }
+        }
+        return null;
+    }
+
     function getScheduleJSON() {
         const validEntries = scheduleEntries.filter(e => e.days.length > 0 && e.open && e.close);
         
@@ -5330,6 +5403,11 @@
         }
 
         const orderCutoff = (document.getElementById('order-cutoff-time')?.value || '').trim();
+        const hoursErr = validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff);
+        if (hoursErr) {
+            showToast(hoursErr, 'error');
+            return 'INVALID';
+        }
         let leadTimeHours = parseInt(document.getElementById('lead-time-hours')?.value, 10);
         if (!Number.isFinite(leadTimeHours) || leadTimeHours < 0) leadTimeHours = 1;
 
@@ -5345,6 +5423,20 @@
     
     // Initialize schedule UI
     renderScheduleEntries();
+    ['delivery-start-time', 'delivery-cutoff-time', 'order-cutoff-time'].forEach(function (id) {
+        document.getElementById(id)?.addEventListener('change', function () {
+            const deliveryStart = (document.getElementById('delivery-start-time')?.value || '').trim();
+            const deliveryCutoff = (document.getElementById('delivery-cutoff-time')?.value || '').trim();
+            const orderCutoff = (document.getElementById('order-cutoff-time')?.value || '').trim();
+            if ((deliveryStart && !deliveryCutoff) || (!deliveryStart && deliveryCutoff)) return;
+            if (deliveryStart && deliveryCutoff && deliveryStart >= deliveryCutoff) {
+                showToast('Delivery cutoff must be after delivery start.', 'error');
+                return;
+            }
+            const hoursErr = validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff);
+            if (hoursErr) showToast(hoursErr, 'error');
+        });
+    });
     
     // Edit button
     document.getElementById('edit-basic-info')?.addEventListener('click', async () => {

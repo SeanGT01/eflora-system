@@ -174,6 +174,60 @@ def sanitize_store_schedule(payload):
     }
 
 
+def store_hours_span(schedules):
+    """Earliest open and latest close across configured time blocks."""
+    opens = []
+    closes = []
+    for entry in schedules or []:
+        open_t = parse_hhmm(entry.get('open'))
+        close_t = parse_hhmm(entry.get('close'))
+        if not open_t or not close_t or open_t >= close_t:
+            continue
+        opens.append(open_t)
+        closes.append(close_t)
+    if not opens:
+        return None, None
+    return min(opens), max(closes)
+
+
+def schedule_constraint_error(cleaned):
+    """Return a user-facing error if delivery/cutoff times fall outside store hours."""
+    if not isinstance(cleaned, dict):
+        return None
+    schedules = cleaned.get('schedules') or []
+    delivery_start = parse_hhmm(cleaned.get('delivery_start'))
+    delivery_cutoff = parse_hhmm(cleaned.get('delivery_cutoff'))
+    order_cutoff = parse_hhmm(cleaned.get('order_cutoff'))
+    earliest, latest = store_hours_span(schedules)
+
+    if not earliest:
+        if delivery_start or delivery_cutoff or order_cutoff:
+            return 'Set store operating hours before setting a delivery window or same-day cutoff.'
+        return None
+
+    open_label = format_hhmm_label(*earliest)
+    close_label = format_hhmm_label(*latest)
+
+    if delivery_start or delivery_cutoff:
+        if not delivery_start or not delivery_cutoff:
+            return 'Please set both delivery start and cutoff time, or leave both blank.'
+        if delivery_start >= delivery_cutoff:
+            return 'Delivery cutoff must be after delivery start.'
+        if delivery_start < earliest:
+            return 'Delivery start must be at or after store opening (%s).' % open_label
+        if delivery_cutoff > latest:
+            return 'Delivery end must be at or before store closing (%s).' % close_label
+
+    if order_cutoff:
+        if order_cutoff < earliest or order_cutoff > latest:
+            return 'Same-day cutoff must be within store hours (%s – %s).' % (
+                open_label, close_label,
+            )
+        if delivery_cutoff and order_cutoff > delivery_cutoff:
+            return 'Same-day cutoff must be at or before the delivery window end.'
+    return None
+
+
 def has_configured_schedule(store):
     schedule = (getattr(store, 'store_schedule', None) or {}) if store else {}
     return bool(schedule.get('schedules'))

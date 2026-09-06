@@ -6,6 +6,94 @@
 
 {% block extra_css %}
 <style>
+    .admin-testimonials-page {
+        min-width: 0;
+        max-width: 100%;
+        font-family: var(--font-sans);
+        color: var(--charcoal);
+    }
+    .tt-header { margin: 0 0 1.25rem; }
+    .tt-title {
+        margin: 0 0 0.4rem;
+        font-family: var(--font-display);
+        font-size: clamp(1.7rem, 3vw, 2.4rem);
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        line-height: 1.12;
+        color: var(--charcoal);
+    }
+    .tt-title em { font-style: italic; color: var(--deep-rose); font-weight: 400; }
+    .tt-lede { margin: 0; font-size: 0.95rem; color: var(--muted); max-width: 38rem; line-height: 1.55; }
+    .tt-kpi {
+        display: grid;
+        grid-template-columns: minmax(0, 280px);
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+    .tt-kpi .stat-card {
+        background: rgba(255,255,255,0.72);
+        border: 1px solid rgba(255,255,255,0.75);
+        box-shadow: 0 8px 24px rgba(80,40,70,0.06), inset 0 1px 0 rgba(255,255,255,0.75);
+    }
+    .tt-toolbar {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 0.85rem;
+        margin-bottom: 1.25rem;
+        background: rgba(255,255,255,0.7);
+        border: 1px solid rgba(255,255,255,0.8);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 8px 24px rgba(80,40,70,0.06), inset 0 1px 0 rgba(255,255,255,0.75);
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+    }
+    .tt-search {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .tt-search i {
+        position: absolute;
+        left: 0.9rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted);
+        pointer-events: none;
+        font-size: 16px;
+        line-height: 1;
+    }
+    .tt-search input.form-control {
+        display: block;
+        width: 100%;
+        height: 44px;
+        min-height: 44px;
+        max-height: 44px;
+        padding: 0 1rem 0 2.55rem !important;
+        line-height: 44px;
+        margin: 0;
+        box-sizing: border-box;
+        background: var(--warm-white);
+    }
+    .tt-toolbar > .btn {
+        flex: 0 0 auto;
+        height: 44px;
+        min-height: 44px !important;
+        max-height: 44px;
+        padding: 0 1.1rem;
+        white-space: nowrap;
+        align-self: center;
+    }
+    .admin-testimonials-page .admin-testimonials-wrap {
+        background: rgba(255,255,255,0.72);
+        border: 1px solid rgba(255,255,255,0.75);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(80,40,70,0.06);
+    }
     .admin-testimonials-page .admin-testimonials-wrap .table {
         table-layout: fixed;
         width: 100%;
@@ -44,15 +132,6 @@
         line-height: 1.2;
         width: auto;
     }
-    .admin-testimonials-page .tt-filter-row {
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-        align-items: center;
-    }
-    .admin-testimonials-page .tt-filter-row .admin-search-grow {
-        flex: 1 1 240px;
-    }
     @media (max-width: 900px) {
         .admin-testimonials-page .admin-testimonials-wrap .table {
             table-layout: auto;
@@ -72,21 +151,52 @@
             -webkit-box-orient: vertical;
         }
     }
-    @media (max-width: 640px) {
-        .admin-testimonials-page .tt-filter-row {
+    .tt-view-mask {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 500;
+        align-items: center;
+        justify-content: center;
+        background: rgba(42, 35, 30, 0.5);
+        backdrop-filter: blur(6px);
+        padding: 1rem;
+    }
+    .tt-view-mask.show { display: flex; }
+    .tt-view-card {
+        max-width: 560px;
+        width: 100%;
+        max-height: 85vh;
+        overflow: auto;
+        padding: 1.5rem;
+        position: relative;
+        background: rgba(255,255,255,0.94);
+        border: 1px solid rgba(255,255,255,0.7);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 20px 60px rgba(90,40,80,0.18);
+    }
+    @media (max-width: 767px) {
+        .admin-testimonials-page .tt-toolbar {
             flex-direction: column;
             align-items: stretch;
         }
-        .admin-testimonials-page .tt-filter-row .btn {
-            width: 100%;
-        }
+        .admin-testimonials-page .tt-toolbar > .btn { width: 100%; }
+        .tt-kpi { grid-template-columns: 1fr; }
+        .tt-view-mask { align-items: flex-end; padding: 0.75rem; }
+        .tt-view-card { max-height: 92dvh; }
+        .tt-view-actions { flex-direction: column; align-items: stretch !important; }
+        .tt-view-actions .btn { width: 100%; min-height: 44px; justify-content: center; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="admin-testimonials-page">
-<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+<header class="tt-header">
+    <h1 class="tt-title">Customer <em>testimonials</em></h1>
+    <p class="tt-lede">Moderate home-page reviews. Hide, show, or remove submissions before they appear on the storefront.</p>
+</header>
+<div class="tt-kpi">
     <div class="stat-card">
         <div class="stat-card-stripe stripe-primary" style="background: linear-gradient(90deg, var(--deep-rose), var(--dusty-rose));"></div>
         <div class="stat-card-header">
@@ -98,12 +208,12 @@
     </div>
 </div>
 
-<div class="card tt-filter-row" style="padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;">
-    <div class="admin-search-grow" style="position: relative;">
-        <i class="ri-search-line" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--muted);"></i>
-        <input type="text" id="filterInput" class="form-control" style="padding-left: 2.5rem;" placeholder="Filter by name or comment…" oninput="filterRows()">
+<div class="tt-toolbar">
+    <div class="tt-search">
+        <i class="ri-search-line" aria-hidden="true"></i>
+        <input type="text" id="filterInput" class="form-control" placeholder="Filter by name or comment…" oninput="filterRows()" autocomplete="off">
     </div>
-    <button type="button" class="btn btn-outline btn-sm" onclick="loadTestimonials()" style="padding: 0.65rem 1.25rem;">
+    <button type="button" class="btn btn-outline btn-sm" onclick="loadTestimonials()">
         <i class="ri-refresh-line"></i> Refresh
     </button>
 </div>
@@ -140,19 +250,16 @@
     </table>
 </div>
 
-<!-- View modal -->
-<div id="viewModal" style="display:none; position:fixed; inset:0; z-index:400; align-items:center; justify-content:center; background: rgba(44,37,32,0.45); padding: 1rem;" onclick="if(event.target===this) closeViewModal()">
-    <div class="card" style="max-width: 560px; width: 100%; max-height: 85vh; overflow: auto; padding: 1.5rem; position: relative;" onclick="event.stopPropagation()">
+<div class="tt-view-mask" id="viewModal" onclick="if(event.target===this) closeViewModal()">
+    <div class="tt-view-card" onclick="event.stopPropagation()">
         <button type="button" onclick="closeViewModal()" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:22px; cursor:pointer; color:var(--muted); line-height:1;" aria-label="Close">&times;</button>
-        <h3 style="margin: 0 0 0.75rem; font-family: var(--font-display); font-size: 1.35rem;">Testimonial #<span id="viewId"></span></h3>
+        <h3 style="margin: 0 0 0.75rem; font-family: var(--font-display); font-size: 1.45rem; font-weight: 500;">Testimonial #<span id="viewId"></span></h3>
         <p style="margin: 0 0 0.5rem; font-size: 14px; color: var(--muted);"><strong id="viewName"></strong></p>
         <p style="margin: 0 0 0.75rem; font-size: 13px; color: var(--muted);">Submitted <span id="viewDate"></span> · Rating <span id="viewRating"></span>/5 · <span id="viewApproved"></span></p>
         <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; background: var(--cream); font-size: 14px; line-height: 1.65; white-space: pre-wrap;" id="viewComment"></div>
-        <div style="margin-top: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <div class="tt-view-actions" style="margin-top: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
             <button type="button" class="btn btn-outline btn-sm" id="viewToggleVisibilityBtn">Hide from home page</button>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                <button type="button" class="btn btn-sm" style="background:#c0392b;color:#fff;border:none;" id="viewDeleteBtn">Delete</button>
-            </div>
+            <button type="button" class="btn btn-sm" style="background:#c0392b;color:#fff;border:none;" id="viewDeleteBtn">Delete</button>
         </div>
     </div>
 </div>
@@ -276,6 +383,9 @@ function filterRows() {
         html += '</tr>';
     });
     tbody.innerHTML = html;
+    if (typeof window.labelAdminResponsiveTables === 'function') {
+        window.labelAdminResponsiveTables(document.getElementById('testimonialsBody'));
+    }
 }
 
 function openViewModal(id) {
@@ -296,8 +406,7 @@ function openViewModal(id) {
         toggleBtn.textContent = 'Show on home page';
         toggleBtn.onclick = function () { setTestimonialVisibility(id, true, true); };
     }
-    const m = document.getElementById('viewModal');
-    m.style.display = 'flex';
+    document.getElementById('viewModal').classList.add('show');
     document.getElementById('viewDeleteBtn').onclick = function () {
         closeViewModal();
         deleteTestimonial(id);
@@ -305,7 +414,7 @@ function openViewModal(id) {
 }
 
 function closeViewModal() {
-    document.getElementById('viewModal').style.display = 'none';
+    document.getElementById('viewModal').classList.remove('show');
     viewCurrentId = null;
 }
 
