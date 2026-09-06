@@ -238,14 +238,14 @@ def queue_push(session, job: dict):
 
 
 def queue_order_status_push(order, new_status: str, previous_status: Optional[str] = None):
+    if not order:
+        return
     statuses = []
     if new_status == 'preparing' and previous_status not in ('accepted', 'preparing'):
         statuses.append('accepted')
         statuses.append('preparing')
     elif new_status in _ORDER_COPY:
         statuses.append(new_status)
-    if not order or not statuses:
-        return
     try:
         sess = object_session(order)
         for status in statuses:
@@ -254,6 +254,12 @@ def queue_order_status_push(order, new_status: str, previous_status: Optional[st
                 'order_id': order.id,
                 'customer_id': order.customer_id,
                 'status': status,
+            })
+        if new_status == 'done_preparing' and not order.rider_id and order.store_id:
+            queue_push(sess, {
+                'kind': 'rider_ready',
+                'order_id': order.id,
+                'store_id': order.store_id,
             })
     except Exception:
         logger.debug('queue_order_status_push failed', exc_info=True)
@@ -303,6 +309,34 @@ def _deliver_jobs(app, jobs):
                             'status': status,
                         },
                     )
+                elif kind == 'rider_ready':
+                    from app.models import Rider
+                    store_id = job.get('store_id')
+                    order_id = job.get('order_id')
+                    if not store_id:
+                        continue
+                    riders = Rider.query.filter_by(
+                        store_id=store_id,
+                        is_active=True,
+                        is_archived=False,
+                    ).all()
+                    title = 'New delivery ready'
+                    body = (
+                        f'Order #{order_id} is ready for delivery.'
+                        if order_id
+                        else 'A new order is ready for delivery.'
+                    )
+                    for rider in riders:
+                        send_to_user_id(
+                            rider.user_id,
+                            title,
+                            body,
+                            {
+                                'type': 'rider_order_ready',
+                                'order_id': order_id,
+                                'store_id': store_id,
+                            },
+                        )
                 elif kind == 'chat':
                     send_to_user_id(
                         job.get('user_id'),
