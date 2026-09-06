@@ -2817,6 +2817,58 @@
 </script>
 
 <script>
+(function pollSellerSidebarBadges() {
+    var role = typeof CURRENT_ROLE !== 'undefined' ? CURRENT_ROLE : '';
+    if (role !== 'seller' && role !== 'store_admin') return;
+
+    var ordersEl = document.getElementById('sellerOrdersBadge');
+    var posEl = document.getElementById('posOrderCount');
+    if (!ordersEl && !posEl) return;
+
+    function paint(el, n) {
+        if (!el) return;
+        n = Number(n) || 0;
+        if (n <= 0) {
+            el.textContent = '0';
+            el.style.display = 'none';
+            el.hidden = true;
+            return;
+        }
+        el.hidden = false;
+        el.style.display = '';
+        el.textContent = n > 99 ? '99+' : String(n);
+    }
+
+    function refresh() {
+        if (document.hidden) return;
+        fetch('/api/seller/sidebar-badges?t=' + Date.now(), {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+        })
+            .then(function (res) {
+                if (!res.ok) return null;
+                return res.json();
+            })
+            .then(function (data) {
+                if (!data) return;
+                paint(ordersEl, data.orders);
+                paint(posEl, data.pos_orders);
+            })
+            .catch(function () {});
+    }
+
+    window.refreshSellerSidebarBadges = refresh;
+    refresh();
+    setInterval(refresh, 2000);
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) refresh();
+    });
+    window.addEventListener('focus', refresh);
+})();
+</script>
+
+<script>
 (function setupAdminResponsiveTables() {
     function labelAdminResponsiveTables(root) {
         const scope = root && root.querySelectorAll ? root : document;

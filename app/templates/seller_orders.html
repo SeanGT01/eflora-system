@@ -1440,24 +1440,6 @@
         </div>
     </div>
 </div>
-
-<div class="custom-modal" id="sellerConfirmModal" aria-hidden="true">
-    <div class="custom-modal-dialog narrow">
-        <div class="custom-modal-head">
-            <h5 class="modal-title" style="margin:0;">Confirm Action</h5>
-            <button type="button" class="custom-close" data-close-modal="sellerConfirmModal">
-                <i class="ri-close-line"></i>
-            </button>
-        </div>
-        <div class="custom-modal-body">
-            <p id="sellerConfirmMessage" style="margin:0;color:var(--charcoal);font-size:14px;line-height:1.6;"></p>
-        </div>
-        <div class="custom-modal-foot">
-            <button type="button" class="btn btn-outline-secondary" id="sellerConfirmCancelBtn">Cancel</button>
-            <button type="button" class="btn btn-rose" id="sellerConfirmOkBtn">Confirm</button>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -1465,10 +1447,6 @@
     const sellerRows = Array.from(document.querySelectorAll('.seller-order-row'));
     const sellerOrderDetailsModal = document.getElementById('sellerOrderDetailsModal');
     const sellerPaymentProofModal = document.getElementById('sellerPaymentProofModal');
-    const sellerConfirmModal = document.getElementById('sellerConfirmModal');
-    const sellerConfirmMessage = document.getElementById('sellerConfirmMessage');
-    const sellerConfirmCancelBtn = document.getElementById('sellerConfirmCancelBtn');
-    const sellerConfirmOkBtn = document.getElementById('sellerConfirmOkBtn');
     const sellerPaginationInfo = document.getElementById('sellerOrdersPaginationInfo');
     const sellerPaginationWrap = document.getElementById('sellerOrdersPagination');
     const sellerOrdersPrevBtn = document.getElementById('sellerOrdersPrevBtn');
@@ -1480,7 +1458,6 @@
     let sellerCurrentPage = 1;
     const sellerRowsPerPage = 10;
     let sellerCardFilter = null;
-    let sellerConfirmResolver = null;
 
     function openModal(modal) {
         if (!modal) return;
@@ -1492,22 +1469,6 @@
         if (!modal) return;
         modal.classList.remove('active');
         modal.setAttribute('aria-hidden', 'true');
-    }
-
-    function openConfirmModal(message) {
-        return new Promise(resolve => {
-            sellerConfirmResolver = resolve;
-            sellerConfirmMessage.textContent = message || 'Are you sure?';
-            openModal(sellerConfirmModal);
-        });
-    }
-
-    function resolveConfirmModal(confirmed) {
-        if (sellerConfirmResolver) {
-            sellerConfirmResolver(!!confirmed);
-            sellerConfirmResolver = null;
-        }
-        closeModal(sellerConfirmModal);
     }
 
     function getSellerToken() {
@@ -2066,7 +2027,7 @@
             throw new Error('Finished product image is required.');
         }
         const uploadFile = await prepareFinishedProductImage(selectedFile);
-        const confirmed = await openConfirmModal('Mark this order as Done Preparing?');
+        const confirmed = await window.openConfirmModal('Mark this order as Done Preparing?');
         if (!confirmed) return null;
 
         const formData = new FormData();
@@ -2292,14 +2253,11 @@
         }
     });
 
-    [sellerOrderDetailsModal, sellerPaymentProofModal, sellerConfirmModal].forEach(modal => {
+    [sellerOrderDetailsModal, sellerPaymentProofModal].forEach(modal => {
         modal.addEventListener('click', event => {
             if (event.target === modal) closeModal(modal);
         });
     });
-
-    sellerConfirmCancelBtn?.addEventListener('click', () => resolveConfirmModal(false));
-    sellerConfirmOkBtn?.addEventListener('click', () => resolveConfirmModal(true));
 
     // ===== Batch Selection Feature =====
     const batchActionsToolbar = document.getElementById('batchActionsToolbar');
@@ -2386,7 +2344,7 @@
 
         const orderIds = Array.from(selectedOrderIds);
         const confirmMsg = `Mark ${orderIds.length} order(s) as Done Preparing?`;
-        const confirmed = await openConfirmModal(confirmMsg);
+        const confirmed = await window.openConfirmModal(confirmMsg);
         if (!confirmed) return;
 
         batchMarkDoneBtn.disabled = true;

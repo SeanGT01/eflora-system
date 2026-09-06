@@ -1723,6 +1723,24 @@ def _attach_listing_thumbs(items, size=80):
 
 
 
+def _seller_sidebar_badge_counts(store):
+    """Sidebar badges: active online orders + unseen POS orders."""
+    if not store:
+        return 0, 0
+    orders = Order.query.filter(
+        Order.store_id == store.id,
+        or_(
+            Order.payment_status == 'pending_verification',
+            Order.status.in_(['pending', 'accepted', 'preparing']),
+        ),
+    ).count()
+    pos = POSOrder.query.filter(
+        POSOrder.store_id == store.id,
+        POSOrder.is_seen_by_seller.is_(False),
+    ).count()
+    return int(orders or 0), int(pos or 0)
+
+
 # Add context processor to make user available to all templates
 @templates_bp.context_processor
 def inject_user():
@@ -1737,19 +1755,10 @@ def inject_user():
             user = user_obj.to_dict()
             if session.get('role') in ('seller', 'store_admin'):
                 portal_store = _seller_portal_manageable_store(session['user_id'])
-                active_store_ids = [portal_store.id] if portal_store else []
-                if active_store_ids:
-                    seller_orders_badge_count = Order.query.filter(
-                        Order.store_id.in_(active_store_ids),
-                        or_(
-                            Order.payment_status == 'pending_verification',
-                            Order.status.in_(['pending', 'accepted', 'preparing']),
-                        )
-                    ).count()
-                    pos_orders_badge_count = POSOrder.query.filter(
-                        POSOrder.store_id.in_(active_store_ids),
-                        POSOrder.is_seen_by_seller.is_(False)
-                    ).count()
+                if portal_store:
+                    seller_orders_badge_count, pos_orders_badge_count = (
+                        _seller_sidebar_badge_counts(portal_store)
+                    )
 
             # Seed chat FAB badge on every page render (seller/admin/customer)
             try:
@@ -8178,6 +8187,19 @@ def _session_notification_inbox_user_id():
         if store and store.seller_id:
             return store.seller_id
     return user_id
+
+
+@templates_bp.route('/api/seller/sidebar-badges', methods=['GET'])
+def seller_sidebar_badges_api():
+    """Live counts for seller sidebar Orders / POS Orders badges."""
+    if session.get('role') not in ('seller', 'store_admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    store = _seller_portal_manageable_store(session.get('user_id'))
+    orders, pos = _seller_sidebar_badge_counts(store)
+    resp = jsonify({'orders': orders, 'pos_orders': pos})
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp, 200
 
 
 @templates_bp.route('/api/seller/notifications', methods=['GET'])

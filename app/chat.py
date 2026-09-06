@@ -754,7 +754,7 @@ def create_or_get_rider_conversation():
     POST /api/v1/chat/conversations/rider-order
     Body: { "order_id": <int> }
 
-    Opens (or creates) the private rider↔customer thread for an assigned order.
+    Opens (or creates) the private rider↔customer thread for an order.
     Allowed for:
       - the assigned rider
       - the customer who placed the order (once a rider is assigned)
@@ -771,26 +771,28 @@ def create_or_get_rider_conversation():
     order = Order.query.get(order_id)
     if not order:
         return jsonify({'error': 'Order not found'}), 404
-    if not order.rider_id:
-        return jsonify({'error': 'No rider assigned to this order yet'}), 400
 
-    assigned_rider = Rider.query.get(order.rider_id)
-    if not assigned_rider or not assigned_rider.user_id:
-        return jsonify({'error': 'Rider profile not found'}), 404
-
-    rider_user_id = assigned_rider.user_id
-
+    rider_user_id = None
     if user.role == 'rider':
         my_rider = Rider.query.filter_by(user_id=user.id, is_archived=False).first()
         if not my_rider:
             return jsonify({'error': 'Rider profile not found'}), 404
-        if order.rider_id != my_rider.id:
+        if my_rider.store_id != order.store_id:
+            return jsonify({'error': 'Order is not from your store'}), 403
+        if not order.rider_id or order.rider_id != my_rider.id:
             return jsonify({'error': 'Order is not assigned to this rider'}), 403
+        rider_user_id = my_rider.user_id
     elif user.role == 'customer':
         if order.customer_id != user.id:
             return jsonify({'error': 'Access denied'}), 403
+        if not order.rider_id:
+            return jsonify({'error': 'No rider assigned to this order yet'}), 400
+        assigned_rider = Rider.query.get(order.rider_id)
+        if not assigned_rider or not assigned_rider.user_id:
+            return jsonify({'error': 'Rider profile not found'}), 404
+        rider_user_id = assigned_rider.user_id
     else:
-        return jsonify({'error': 'Only the customer or assigned rider can open this chat'}), 403
+        return jsonify({'error': 'Only the customer or rider can open this chat'}), 403
 
     store = Store.query.get(order.store_id)
     if not store:

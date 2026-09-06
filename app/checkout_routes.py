@@ -45,7 +45,7 @@ def _customer_active_order_count(customer_id):
     return (
         Order.query.filter(
             Order.customer_id == customer_id,
-            Order.status != 'completed',
+            Order.status.notin_(('completed', 'cancelled')),
         ).count()
     )
 
