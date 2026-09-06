@@ -295,31 +295,34 @@ def _order_card_preview(ctx):
 
 
 def _parse_order_card_id(msg):
-    if not msg or msg.is_deleted or not msg.text:
+    if not msg or msg.is_deleted:
         return None
-    if msg.message_type not in ('order_card', 'text'):
+    if (msg.message_type or '') not in ('order_card', 'text'):
         return None
+    payload = None
     raw = (msg.text or '').strip()
-    if not raw.startswith('{'):
+    if raw.startswith('{'):
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = None
+    if not isinstance(payload, dict):
         return None
     try:
-        payload = json.loads(raw)
-        return int(payload.get('order_id') or 0) or None
-    except (TypeError, ValueError, json.JSONDecodeError):
+        return int(payload.get('order_id') or payload.get('orderId') or 0) or None
+    except (TypeError, ValueError):
         return None
 
 
 def _existing_order_card(convo_id, order_id):
+    """True only if this exact order was already shared in the thread."""
     msgs = ChatMessage.query.filter(
         ChatMessage.conversation_id == convo_id,
         ChatMessage.is_deleted.isnot(True),
     ).all()
     want = int(order_id)
     for msg in msgs:
-        parsed = _parse_order_card_id(msg)
-        if parsed == want:
-            return msg
-        if (msg.message_type or '') == 'order_card' and parsed is None:
+        if _parse_order_card_id(msg) == want:
             return msg
     return None
 

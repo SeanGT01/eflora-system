@@ -1733,13 +1733,9 @@ const chatWidget = (() => {
     function _threadHasOrderCard(orderId) {
         return _messages.some(function (m) {
             if (!m || m.is_deleted) return false;
-            if (m.message_type === 'order_card') {
-                const stored = _normalizeOrderCard(m.order_card, false) || _normalizeOrderCard(m.text, false);
-                if (!stored || !stored.order_id) return true;
-                return Number(stored.order_id) === Number(orderId);
-            }
-            const card = _normalizeOrderCard(m.order_card, false) || _normalizeOrderCard(m.text, false);
-            return card && Number(card.order_id) === Number(orderId);
+            const stored = _normalizeOrderCard(m.order_card, false) || _normalizeOrderCard(m.text, false);
+            if (stored && Number(stored.order_id) === Number(orderId)) return true;
+            return false;
         });
     }
 
