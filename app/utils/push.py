@@ -26,6 +26,10 @@ _ORDER_COPY = {
         'Order preparing',
         'Your order is preparing.',
     ),
+    'done_preparing': (
+        'Order ready',
+        'Your order is done being prepared.',
+    ),
     'on_delivery': (
         'Order in transit',
         'Your order is in transit.',
