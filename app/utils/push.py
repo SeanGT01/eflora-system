@@ -38,6 +38,8 @@ _ORDER_COPY = {
 
 def _service_account_info():
     raw = (os.environ.get('FCM_SERVICE_ACCOUNT_JSON') or '').strip()
+    if raw.startswith("'") and raw.endswith("'"):
+        raw = raw[1:-1].strip()
     if not raw:
         path = (os.environ.get('GOOGLE_APPLICATION_CREDENTIALS') or '').strip()
         if path and os.path.isfile(path):
@@ -63,18 +65,29 @@ def _access_token_and_project():
     return creds.token, info.get('project_id')
 
 
+def fcm_is_configured():
+    try:
+        return _service_account_info() is not None
+    except Exception as exc:
+        logger.warning('[FCM] service account JSON is invalid: %s', exc)
+        return False
+
+
 def send_fcm(token, title, body, data=None):
     """Send one FCM notification. Returns True on success."""
     token = (token or '').strip()
     if not token:
+        logger.warning('[FCM] skip: empty device token')
         return False
     try:
         access, project_id = _access_token_and_project()
     except Exception as exc:
-        logger.warning('FCM credentials error: %s', exc)
+        logger.warning('[FCM] credentials error: %s', exc)
+        print('[FCM] credentials error:', exc, flush=True)
         return False
     if not access or not project_id:
-        logger.debug('FCM skipped: no service account configured')
+        logger.warning('[FCM] skip: FCM_SERVICE_ACCOUNT_JSON is missing or invalid')
+        print('[FCM] skip: no service account configured', flush=True)
         return False
 
     payload_data = {str(k): str(v) for k, v in (data or {}).items() if v is not None}
@@ -109,20 +122,24 @@ def send_fcm(token, title, body, data=None):
             f'https://fcm.googleapis.com/v1/projects/{project_id}/messages:send',
             headers={
                 'Authorization': f'Bearer {access}',
-                'Content-Type': 'application/json; charset=UTF-8',
+                'Content-Type': 'application/json; charset=utf-8',
             },
             json=body_json,
             timeout=12,
         )
         if res.status_code >= 400:
-            logger.warning('FCM send failed %s: %s', res.status_code, res.text[:400])
+            logger.warning('[FCM] send failed %s: %s', res.status_code, res.text[:400])
+            print('[FCM] send failed', res.status_code, res.text[:400], flush=True)
             err = (res.text or '').upper()
             if any(x in err for x in ('UNREGISTERED', 'NOT_FOUND', 'INVALID_ARGUMENT')):
                 return 'invalid_token'
             return False
+        logger.info('[FCM] sent project=%s title=%s', project_id, title)
+        print('[FCM] sent ok title=', title, flush=True)
         return True
     except Exception as exc:
-        logger.warning('FCM request error: %s', exc)
+        logger.warning('[FCM] request error: %s', exc)
+        print('[FCM] request error:', exc, flush=True)
         return False
 
 
@@ -131,17 +148,28 @@ def send_to_user_id(user_id, title, body, data=None):
     from app.models import User
 
     if not user_id:
-        return
+        logger.warning('[FCM] skip: no user_id')
+        return False
     user = User.query.get(user_id)
-    if not user or not (user.fcm_token or '').strip():
-        return
+    if not user:
+        logger.warning('[FCM] skip: user %s not found', user_id)
+        return False
+    if not (user.fcm_token or '').strip():
+        logger.warning('[FCM] skip: user %s has no device token', user_id)
+        print('[FCM] skip: user', user_id, 'has no device token', flush=True)
+        return False
     result = send_fcm(user.fcm_token, title, body, data)
     if result == 'invalid_token':
+        logger.warning('[FCM] clearing invalid token for user %s', user_id)
         user.fcm_token = None
         try:
             db.session.commit()
         except Exception:
             db.session.rollback()
+        return False
+    if result is True:
+        print('[FCM] delivered to user', user_id, 'title=', title, flush=True)
+    return result is True
 
 
 def queue_push(session, job: dict):
@@ -248,6 +276,7 @@ def register_push_listeners():
             app = current_app._get_current_object()
         except RuntimeError:
             return
+        print('[FCM] queued', len(jobs), 'job(s)', flush=True)
         threading.Thread(
             target=_deliver_jobs,
             args=(app, list(jobs)),

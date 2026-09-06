@@ -1162,7 +1162,58 @@ def device_token():
         return jsonify({'error': 'token is required'}), 400
     user.fcm_token = token[:4096]
     db.session.commit()
-    return jsonify({'success': True})
+    print('[FCM] saved device token for user', user_id, 'len=', len(user.fcm_token), flush=True)
+    return jsonify({'success': True, 'has_token': True})
+
+
+@auth_bp.route('/push-status', methods=['GET'])
+@jwt_required()
+def push_status():
+    """Whether this account has a phone token and whether the server can send FCM."""
+    from app.utils.push import fcm_is_configured
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    token = (user.fcm_token or '').strip()
+    return jsonify({
+        'success': True,
+        'user_id': user.id,
+        'has_token': bool(token),
+        'token_length': len(token),
+        'server_fcm_configured': fcm_is_configured(),
+    })
+
+
+@auth_bp.route('/push-test', methods=['POST'])
+@jwt_required()
+def push_test():
+    """Send a test notification to the logged-in user's phone."""
+    from app.utils.push import fcm_is_configured, send_to_user_id
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    if not fcm_is_configured():
+        return jsonify({
+            'success': False,
+            'error': 'Server is missing FCM_SERVICE_ACCOUNT_JSON',
+            'has_token': bool((user.fcm_token or '').strip()),
+        }), 503
+    if not (user.fcm_token or '').strip():
+        return jsonify({
+            'success': False,
+            'error': 'No device token saved for this account. Open the app while logged in.',
+            'has_token': False,
+        }), 400
+    ok = send_to_user_id(
+        user.id,
+        'E-FLORA test',
+        'If you see this, push notifications are working.',
+        {'type': 'test'},
+    )
+    print('[FCM] push-test user', user.id, 'ok=', ok, flush=True)
+    return jsonify({'success': bool(ok), 'sent': bool(ok)})
 
 
 
