@@ -2160,12 +2160,38 @@ const chatWidget = (() => {
             bare = _avatarHtml(displayAvatar, displayName, 38, !isSeller);
         }
         _activeOtherUid = other.id || convo.seller_id || null;
+        const storeId = convo.store_id || (other.store_id || null);
         if (avatarEl) {
             avatarEl.setAttribute('data-bare-avatar', bare);
             // Header uses Online/Offline text — skip avatar presence dot
             avatarEl.innerHTML = bare;
+            if (isSeller && storeId) {
+                avatarEl.style.cursor = 'pointer';
+                avatarEl.title = `View ${displayName}'s store`;
+                avatarEl.onclick = function() {
+                    window.location.href = `/store/${storeId}`;
+                };
+            } else {
+                avatarEl.style.cursor = 'default';
+                avatarEl.removeAttribute('title');
+                avatarEl.onclick = null;
+            }
         }
-        document.getElementById('chat-detail-name').textContent = displayName;
+        const nameEl = document.getElementById('chat-detail-name');
+        if (nameEl) {
+            nameEl.textContent = displayName;
+            if (isSeller && storeId) {
+                nameEl.style.cursor = 'pointer';
+                nameEl.title = `View ${displayName}'s store`;
+                nameEl.onclick = function() {
+                    window.location.href = `/store/${storeId}`;
+                };
+            } else {
+                nameEl.style.cursor = 'default';
+                nameEl.removeAttribute('title');
+                nameEl.onclick = null;
+            }
+        }
         // Paint cached presence immediately, then confirm with the server
         _setDetailStatus(_isUserOnlineCached(_activeOtherUid));
         _checkOnline(_activeOtherUid);

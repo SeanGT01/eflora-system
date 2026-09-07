@@ -23,12 +23,12 @@ _ORDER_COPY = {
         'Your order has been confirmed.',
     ),
     'preparing': (
-        'Order preparing',
-        'Your order is preparing.',
+        'Order being prepared',
+        'Your order is being prepared.',
     ),
     'done_preparing': (
         'Order ready',
-        'Your order is done being prepared.',
+        'Your order is ready for delivery.',
     ),
     'on_delivery': (
         'Order in transit',
@@ -276,9 +276,14 @@ def queue_chat_push(convo, sender, preview_text: str):
     if not other_id or other_id == sender.id:
         return
     name = (sender.full_name or 'Someone').strip() or 'Someone'
-    snippet = (preview_text or '').strip() or 'sent a message'
+    snippet = (preview_text or '').strip()
     if len(snippet) > 80:
         snippet = snippet[:77] + '…'
+    body = (
+        f'You received a new message from {name}: {snippet}'
+        if snippet
+        else f'You have a new message from {name}.'
+    )
     try:
         sess = object_session(convo)
         queue_push(sess, {
@@ -286,7 +291,7 @@ def queue_chat_push(convo, sender, preview_text: str):
             'user_id': other_id,
             'conversation_id': convo.id,
             'title': 'New message',
-            'body': f'You received a new message from {name}: {snippet}',
+            'body': body,
         })
     except Exception:
         logger.debug('queue_chat_push failed', exc_info=True)
@@ -324,7 +329,7 @@ def _deliver_jobs(app, jobs):
                         is_active=True,
                         is_archived=False,
                     ).all()
-                    title = 'New delivery ready'
+                    title = 'New delivery'
                     body = (
                         f'Order #{order_id} is ready for delivery.'
                         if order_id
