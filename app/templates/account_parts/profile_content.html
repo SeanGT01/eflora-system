@@ -4571,24 +4571,28 @@ function bestAddressMatch(haystack, options) {
     const h = normalizeAddressMatchText(haystack);
     if (!h || !options?.length) return '';
 
-    let exact = '';
-    let contains = '';
+    let best = '';
+    let bestLen = -1;
     for (const option of options) {
         const n = normalizeAddressMatchText(option);
         if (!n) continue;
-        if (h === n || h.includes(` ${n} `) || h.startsWith(`${n} `) || h.endsWith(` ${n}`) || h.includes(n)) {
-            try {
-                if (h === n || new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(h)) {
-                    exact = option;
-                    break;
+        try {
+            if (h === n || new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(h)) {
+                if (n.length > bestLen) {
+                    best = option;
+                    bestLen = n.length;
                 }
-            } catch (_) {
-                // ignore invalid regex edge cases
             }
-            if (!contains) contains = option;
-        }
+        } catch (_) {}
     }
-    return exact || contains;
+    return best;
+}
+
+function municipalityHaystackFromMapFeature(feature) {
+    const ctx = (feature.context || []).map(c => c.text || '').filter(Boolean).join(', ');
+    const placeName = String(feature.place_name || '');
+    const withoutStreet = placeName.split(',').slice(1).join(',');
+    return [ctx, withoutStreet].filter(Boolean).join(', ');
 }
 
 /**
@@ -4606,11 +4610,12 @@ async function fillAddressFieldsFromMapFeature(feature, lng, lat) {
     }
 
     const contextText = normalizeAddressMatchText(
-        [feature.text, feature.place_name, ...(feature.context || []).map(c => c.text || '')].join(', ')
+        [feature.place_name, ...(feature.context || []).map(c => c.text || '')].join(', ')
     );
+    const muniHaystack = municipalityHaystackFromMapFeature(feature);
 
     const muniOptions = Array.from(municipalitySelect.options || []).map(o => o.value).filter(Boolean);
-    const matchedMunicipality = bestAddressMatch(contextText, muniOptions);
+    const matchedMunicipality = bestAddressMatch(muniHaystack, muniOptions);
 
     if (matchedMunicipality) {
         const municipalityChanged = municipalitySelect.value !== matchedMunicipality;

@@ -1,5 +1,5 @@
 # app/customer.py
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, session
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from collections import defaultdict
 
@@ -66,23 +66,33 @@ def _get_default_address(user_id):
 
 
 def _resolve_optional_customer_address():
-    """Resolve customer + default address if a valid customer JWT is present."""
+    """Resolve customer + default address if a valid customer JWT or Flask session is present."""
+    # 1) Try JWT token first
     try:
         verify_jwt_in_request(optional=True)
         user_id = get_jwt_identity()
-        if user_id is None or user_id == '':
-            return None, None
-        uid = int(str(user_id).strip())
-        claims = get_jwt() or {}
-        # Prefer JWT role; fall back to DB (login tokens may not surface all claims in get_jwt()).
-        if claims.get('role') == 'customer':
-            return uid, _get_default_address(uid)
-        user = User.query.get(uid)
-        if user and user.role == 'customer':
-            return uid, _get_default_address(uid)
-        return None, None
+        if user_id is not None and user_id != '':
+            uid = int(str(user_id).strip())
+            claims = get_jwt() or {}
+            if claims.get('role') == 'customer':
+                return uid, _get_default_address(uid)
+            user = User.query.get(uid)
+            if user and user.role == 'customer':
+                return uid, _get_default_address(uid)
     except Exception:
-        return None, None
+        pass
+
+    # 2) Fallback to Flask session (web browser)
+    try:
+        session_uid = session.get('user_id')
+        if session_uid:
+            user = User.query.get(int(session_uid))
+            if user and user.role == 'customer':
+                return user.id, _get_default_address(user.id)
+    except Exception:
+        pass
+
+    return None, None
 
 
 def _normalize_place_name(value):
@@ -441,13 +451,17 @@ def get_categories():
 
 @customer_bp.route('/stores', methods=['GET'])
 def get_stores():
-    """Public store listing."""
+    """Public store listing with customer delivery coverage calculation."""
     _, address = _resolve_optional_customer_address()
+    deliverable_only = request.args.get('deliverable_only', '').strip().lower() in ('1', 'true', 'yes')
     include_outside_arg = request.args.get('include_outside_location')
-    if include_outside_arg is None:
+    if deliverable_only:
+        include_outside = False
+    elif include_outside_arg is None:
         include_outside = address is None
     else:
         include_outside = include_outside_arg in ('1', 'true', 'True', 'yes')
+
     stores = Store.query.filter_by(status='active').all()
     result = []
     for s in stores:
@@ -456,9 +470,11 @@ def get_stores():
             delivery_check = _listing_delivery_match(s, address)
             sd['can_deliver_to_customer'] = bool(delivery_check.get('can_deliver'))
             sd['delivery_reason'] = delivery_check.get('reason')
+            sd['customer_address_found'] = True
         else:
             sd['can_deliver_to_customer'] = True
             sd['delivery_reason'] = None
+            sd['customer_address_found'] = False
         if include_outside or sd['can_deliver_to_customer']:
             result.append(sd)
     return jsonify(result)

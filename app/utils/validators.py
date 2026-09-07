@@ -74,19 +74,14 @@ def compose_full_name(first_name, last_name):
 
 
 def normalize_full_name(raw):
-    """Validate a single full-name field (registration)."""
+    """Validate a single full-name field (registration) as first + last."""
     text = _clean_name_whitespace(raw)
     if not text:
         return None, 'Full name is required.'
-    if len(text) < 3:
-        return None, 'Enter your first and last name.'
-    if len(text) > FULL_NAME_MAX:
-        return None, f'Full name must be at most {FULL_NAME_MAX} characters.'
-    if not _PERSON_NAME_RE.match(text):
-        return None, 'Full name can only contain letters, spaces, hyphens, and apostrophes.'
     if ' ' not in text:
         return None, 'Enter your first and last name.'
-    return text, None
+    first, last = text.rsplit(' ', 1)
+    return compose_full_name(first, last)
 
 
 # LTO private plates: ABC 1234 / ABC 123 (3 letters + 3–4 digits)
