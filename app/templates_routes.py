@@ -4038,6 +4038,11 @@ def cancel_order(order_id):
             type='order_cancelled',
             reference_id=order.id,
         )
+        try:
+            from app.utils.push import queue_order_status_push
+            queue_order_status_push(order, 'cancelled', 'pending')
+        except Exception:
+            pass
         db.session.commit()
     except Exception as e:
         db.session.rollback()

@@ -32,11 +32,27 @@ _ORDER_COPY = {
     ),
     'on_delivery': (
         'Order in transit',
-        'Your order is in transit.',
+        'Your order is on the way.',
     ),
     'delivered': (
         'Order delivered',
         'Your order has been delivered.',
+    ),
+    'completed': (
+        'Order completed',
+        'Your order has been completed. Thank you!',
+    ),
+    'cancelled': (
+        'Order cancelled',
+        'Your order has been cancelled.',
+    ),
+    'rejected': (
+        'Order rejected',
+        'Your order has been rejected.',
+    ),
+    'refunded': (
+        'Order refunded',
+        'Your order has been refunded.',
     ),
 }
 
@@ -253,6 +269,22 @@ def queue_order_status_push(order, new_status: str, previous_status: Optional[st
     try:
         sess = object_session(order)
         for status in statuses:
+            copy = _ORDER_COPY.get(status)
+            if copy and order.customer_id and sess is not None:
+                title, body = copy
+                try:
+                    from app.models import Notification
+                    notif = Notification(
+                        user_id=order.customer_id,
+                        title=f"{title} (#{order.id})" if order.id else title,
+                        message=f"{body} Order #{order.id}." if order.id else body,
+                        type='order_status',
+                        reference_id=order.id,
+                        is_read=False,
+                    )
+                    sess.add(notif)
+                except Exception:
+                    logger.debug('Failed to create in-app notification', exc_info=True)
             queue_push(sess, {
                 'kind': 'order',
                 'order_id': order.id,

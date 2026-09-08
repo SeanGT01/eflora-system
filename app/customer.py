@@ -1211,6 +1211,11 @@ def cancel_order(order_id):
             type='order_cancelled',
             reference_id=order.id,
         )
+        try:
+            from app.utils.push import queue_order_status_push
+            queue_order_status_push(order, 'cancelled', 'pending')
+        except Exception:
+            pass
         db.session.commit()
         return jsonify({
             'success': True,
@@ -1691,6 +1696,37 @@ def mark_all_notifications_read():
     """Mark all notifications as read (JWT)"""
     user_id = get_jwt_identity()
     Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
+    db.session.commit()
+    return jsonify({'success': True}), 200
+
+
+@customer_bp.route('/notifications/<int:notif_id>', methods=['DELETE'])
+@customer_only
+def delete_notification(notif_id):
+    """Delete a single notification (JWT)"""
+    user_id = get_jwt_identity()
+    notification = Notification.query.filter_by(id=notif_id, user_id=user_id).first()
+    if not notification:
+        return jsonify({'error': 'Notification not found'}), 404
+    db.session.delete(notification)
+    db.session.commit()
+    return jsonify({'success': True}), 200
+
+
+@customer_bp.route('/notifications/delete', methods=['POST'])
+@customer_only
+def delete_notifications():
+    """Delete multiple or all notifications (JWT)"""
+    user_id = get_jwt_identity()
+    data = request.get_json(silent=True) or {}
+    ids = data.get('ids')
+    delete_all = bool(data.get('all', False))
+    if delete_all:
+        Notification.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    elif isinstance(ids, list) and ids:
+        Notification.query.filter(Notification.user_id == user_id, Notification.id.in_(ids)).delete(synchronize_session=False)
+    else:
+        return jsonify({'error': 'No notifications specified'}), 400
     db.session.commit()
     return jsonify({'success': True}), 200
 
