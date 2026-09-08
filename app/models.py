@@ -697,7 +697,7 @@ class Notification(db.Model):
             'type': self.type,
             'reference_id': self.reference_id,
             'is_read': self.is_read,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_at': to_pht_iso(self.created_at) if self.created_at else None,
         }
 
 
