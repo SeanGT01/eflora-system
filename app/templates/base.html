@@ -4792,6 +4792,24 @@ function addToCart(product) {
     }
 
     const displayName = product.name || 'Product';
+
+    if (Array.isArray(product.addons)) {
+        for (let i = 0; i < product.addons.length; i++) {
+            const a = product.addons[i];
+            if (a && a.stock !== undefined && a.stock !== null) {
+                const s = Number(a.stock);
+                if (s <= 0) {
+                    const msg = `Add-on "${a.name || 'item'}" is out of stock.`;
+                    if (typeof showCartActionError === 'function') {
+                        showCartActionError(msg);
+                    } else {
+                        showToast(msg, 'error');
+                    }
+                    return Promise.resolve(false);
+                }
+            }
+        }
+    }
     
     {% if session.get('user_id') %}
     const cartPayload = {

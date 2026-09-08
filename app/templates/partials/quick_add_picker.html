@@ -188,7 +188,10 @@
     }
     .qa-option-card.is-disabled {
         opacity: 0.48;
-        pointer-events: none;
+        cursor: not-allowed;
+    }
+    .qa-option-card.is-disabled .qa-option-row {
+        cursor: not-allowed;
     }
 
     .qa-option-row {
@@ -858,8 +861,7 @@
             return (
                 '<div class="qa-option-card' + selected + disabled + '" data-key="' + qaEscape(opt.key) + '">' +
                 '<div class="qa-option-row">' +
-                '<button type="button" class="qa-option-hit"' +
-                (opt.in_stock ? '' : ' disabled') +
+                '<button type="button" class="qa-option-hit' + (opt.in_stock ? '' : ' is-disabled') + '"' +
                 ' onclick="toggleQuickAddOption(\'' + qaEscape(opt.key) + '\')">' +
                 qaThumbHtml(opt.image_url) +
                 '<div class="qa-option-info">' +
@@ -901,8 +903,7 @@
             const disabled = ok ? '' : ' is-disabled';
             return (
                 '<div class="qa-option-card' + selected + disabled + '" data-addon-id="' + qaEscape(id) + '">' +
-                '<button type="button" class="qa-option-row"' +
-                (ok ? '' : ' disabled') +
+                '<button type="button" class="qa-option-row' + (ok ? '' : ' is-disabled') + '"' +
                 ' onclick="toggleQuickAddAddon(' + o.id + ',' + stock + ')">' +
                 qaThumbHtml(o.image_url) +
                 '<div class="qa-option-info">' +
@@ -981,7 +982,15 @@
         const opt = buildOptions(qaCurrentProduct).find(function (o) {
             return o.key === key;
         });
-        if (!opt || !opt.in_stock) return;
+        if (!opt) return;
+        if (!opt.in_stock) {
+            if (typeof showToast === 'function') {
+                showToast(`"${opt.name}" is out of stock.`, 'error');
+            } else if (typeof showCartActionError === 'function') {
+                showCartActionError(`"${opt.name}" is out of stock.`);
+            }
+            return;
+        }
         qaFocusKey = key;
         const cur = Number(qaOptionQty[key]) || 0;
         if (cur > 0) delete qaOptionQty[key];
@@ -993,7 +1002,16 @@
         if (qaAdding) return;
         const id = String(optionId);
         const stock = Math.max(0, Number(maxStock) || 0);
-        if (stock <= 0) return;
+        if (stock <= 0) {
+            const meta = qaCurrentProduct ? findAddonMeta(qaCurrentProduct, id) : null;
+            const name = meta ? meta.name : 'This add-on';
+            if (typeof showToast === 'function') {
+                showToast(`"${name}" is out of stock.`, 'error');
+            } else if (typeof showCartActionError === 'function') {
+                showCartActionError(`"${name}" is out of stock.`);
+            }
+            return;
+        }
         if (qaAddonQty[id]) delete qaAddonQty[id];
         else qaAddonQty[id] = 1;
         refreshQuickAddLists();
@@ -1235,6 +1253,29 @@
                 showToast('Select a Standard or variant to attach add-ons');
             }
             return;
+        }
+
+        for (let j = 0; j < addonIds.length; j++) {
+            const row = addonIds[j];
+            const meta = findAddonMeta(qaCurrentProduct, row.addon_option_id);
+            const stock = meta ? Math.max(0, Number(meta.stock != null ? meta.stock : meta.stock_quantity) || 0) : 0;
+            const name = meta ? meta.name : 'Add-on';
+            if (stock <= 0) {
+                if (typeof showToast === 'function') {
+                    showToast(`"${name}" is out of stock.`, 'error');
+                } else if (typeof showCartActionError === 'function') {
+                    showCartActionError(`"${name}" is out of stock.`);
+                }
+                return;
+            }
+            if (row.quantity > stock) {
+                if (typeof showToast === 'function') {
+                    showToast(`Only ${stock} available for "${name}".`, 'error');
+                } else if (typeof showCartActionError === 'function') {
+                    showCartActionError(`Only ${stock} available for "${name}".`);
+                }
+                return;
+            }
         }
 
         const totals = calcQuickAddTotals();

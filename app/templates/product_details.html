@@ -1323,11 +1323,12 @@
         cursor: pointer;
         text-align: left;
     }
-    .addon-dd-option:hover:not(:disabled),
+    .addon-dd-option:hover:not(:disabled):not(.is-oos),
     .addon-dd-option.is-selected {
         background: rgba(255, 240, 245, 0.95);
     }
-    .addon-dd-option:disabled {
+    .addon-dd-option:disabled,
+    .addon-dd-option.is-oos {
         opacity: 0.55;
         cursor: not-allowed;
     }
@@ -1696,7 +1697,6 @@
         opacity: 0.55;
         filter: grayscale(0.45);
         cursor: not-allowed;
-        pointer-events: none;
         background: rgba(245, 245, 245, 0.7);
         border-color: rgba(107, 76, 59, 0.12);
         box-shadow: none;
@@ -2919,15 +2919,14 @@
                                 {% for opt in group.options or [] %}
                                 {% set opt_oos = (opt.stock_quantity|default(0)|int) <= 0 %}
                                 <button type="button"
-                                        class="addon-dd-option"
+                                        class="addon-dd-option{% if opt_oos %} is-oos{% endif %}"
                                         role="option"
                                         data-value="{{ opt.id }}"
                                         data-price="{{ opt.price }}"
                                         data-name="{{ opt.name }}"
                                         data-stock="{{ opt.stock_quantity|default(0) }}"
                                         data-image="{{ opt.image_url or '' }}"
-                                        aria-selected="false"
-                                        {% if opt_oos %}disabled{% endif %}>
+                                        aria-selected="false">
                                     {% if opt.image_url %}
                                     <img class="addon-dd-opt-thumb is-zoomable"
                                          src="{{ opt.image_url }}"
@@ -3053,7 +3052,7 @@
                              data-price="{{ opt.price }}"
                              data-name="{{ opt.name }}"
                              data-stock="{{ opt_stock }}"
-                             {% if not opt_oos %}onclick="selectYmalAddonOption(this)"{% endif %}>
+                             onclick="selectYmalAddonOption(this)">
                             {% if opt.image_url %}
                             <img class="addon-card-img" src="{{ opt.image_url }}" alt="{{ opt.name }}" loading="lazy" decoding="async"
                                  onerror="this.style.display='none'">
@@ -3106,7 +3105,7 @@
                              data-price="{{ ap.special_price if ap.special_price and ap.special_price < ap.price else ap.price }}"
                              data-name="{{ ap.name }}" data-cat="{{ ap.main_category.name if ap.main_category else 'other' }}"
                              data-stock="{{ ap_stock }}"
-                             {% if not ap_oos %}onclick="toggleAddon(this)"{% endif %}>
+                             onclick="toggleAddon(this)">
                             {% if ap.images and ap.images[0] %}
                             <img class="addon-card-img"
                                  src="{{ ap.images[0].image_url }}"
@@ -3865,17 +3864,17 @@ function getAddonStock(cardOrId) {
 }
 
 function toggleAddon(card) {
-    if (!card || card.classList.contains('is-oos')) return;
+    if (!card) return;
 
     const id = parseInt(card.dataset.id, 10);
     const price = parseFloat(card.dataset.price);
-    const name = card.dataset.name;
+    const name = card.dataset.name || 'This item';
     const stock = getAddonStock(card);
     const imageEl = card.querySelector('img');
     const imageUrl = imageEl ? imageEl.src : '';
     const slide = card.closest('.addon-slide');
 
-    if (stock <= 0) {
+    if (card.classList.contains('is-oos') || stock <= 0) {
         showToast(`"${name}" is out of stock.`, 'error');
         return;
     }
@@ -4440,11 +4439,13 @@ function getStructuredAddonSelectionMap() {
         const oid = parseInt(opt.value, 10);
         if (isNaN(oid)) return;
         const price = parseFloat(opt.dataset.price || '0');
+        const stock = parseInt(opt.dataset.stock, 10);
         const existing = map.get(oid);
         map.set(oid, {
             id: oid,
             name: opt.dataset.name || (existing && existing.name) || '',
             price: isNaN(price) ? ((existing && existing.price) || 0) : price,
+            stock: Number.isFinite(stock) ? stock : (existing ? existing.stock : 0),
             quantity: (existing ? existing.quantity : 0) + 1,
             image_url: opt.dataset.image || (existing && existing.image_url) || '',
             group_name: opt.dataset.groupName || (existing && existing.group_name) || '',
@@ -4457,6 +4458,7 @@ function getStructuredAddonSelectionMap() {
             id: oid,
             name: item.name || (existing && existing.name) || '',
             price: existing ? existing.price : (parseFloat(item.price) || 0),
+            stock: item.stock != null ? item.stock : (existing ? existing.stock : 0),
             quantity: (existing ? existing.quantity : 0) + qty,
             image_url: item.image_url || (existing && existing.image_url) || '',
             group_name: item.group_name || (existing && existing.group_name) || '',
@@ -4478,6 +4480,7 @@ function getStructuredAddonsForCart() {
         addon_option_id: item.id,
         name: item.name,
         price: item.price,
+        stock: item.stock != null ? item.stock : 0,
         quantity: item.quantity,
         image_url: item.image_url || '',
         group_name: item.group_name || '',
@@ -4544,10 +4547,18 @@ function syncAddonDropdownTrigger(dd, selectEl) {
 }
 
 function selectAddonDropdownOption(dd, optionBtn) {
-    if (!dd || !optionBtn || optionBtn.disabled) return;
+    if (!dd || !optionBtn) return;
+    const val = optionBtn.dataset.value || '';
+    const stock = parseInt(optionBtn.dataset.stock, 10);
+    const safeStock = Number.isFinite(stock) ? Math.max(0, stock) : 0;
+    if (val && (optionBtn.disabled || optionBtn.classList.contains('is-oos') || safeStock <= 0)) {
+        const name = optionBtn.dataset.name || 'Add-on';
+        showToast(`"${name}" is out of stock.`, 'error');
+        return;
+    }
     const selectEl = dd.querySelector('.structured-addon-select');
     if (!selectEl) return;
-    selectEl.value = optionBtn.dataset.value || '';
+    selectEl.value = val;
     syncAddonDropdownTrigger(dd, selectEl);
     closeAllAddonDropdowns();
     onStructuredAddonChange(selectEl);
@@ -4650,15 +4661,20 @@ function syncYmalAddonQtyDisplay(optionId, quantity) {
 }
 
 function selectYmalAddonOption(card) {
-    if (!card || card.classList.contains('is-oos')) return;
+    if (!card) return;
     const optionId = parseInt(card.dataset.optionId, 10);
     if (isNaN(optionId)) return;
 
-    const name = card.dataset.name || '';
+    const name = card.dataset.name || 'Add-on';
     const price = parseFloat(card.dataset.price || '0');
     const stock = parseInt(card.dataset.stock, 10);
     const slide = card.closest('.addon-slide');
     const safeStock = Number.isFinite(stock) ? Math.max(0, stock) : 0;
+
+    if (card.classList.contains('is-oos') || safeStock <= 0) {
+        showToast(`"${name}" is out of stock.`, 'error');
+        return;
+    }
 
     if (selectedYmalAddonOptions.has(optionId)) {
         selectedYmalAddonOptions.delete(optionId);
@@ -4666,10 +4682,6 @@ function selectYmalAddonOption(card) {
         if (slide) slide.classList.remove('is-selected');
         syncYmalAddonQtyDisplay(optionId, 1);
     } else {
-        if (safeStock <= 0) {
-            showToast(`"${name}" is out of stock.`, 'error');
-            return;
-        }
         const dropdownTaken = getDropdownAddonOptionIds().includes(optionId) ? 1 : 0;
         if (dropdownTaken >= safeStock) {
             showToast(`Only ${safeStock} available for "${name}".`, 'error');
@@ -4693,7 +4705,14 @@ function selectYmalAddonOption(card) {
 
 function changeYmalAddonQty(optionId, delta) {
     const card = getYmalAddonCard(optionId);
-    if (!card || card.classList.contains('is-oos')) return;
+    if (!card) return;
+    const name = card.dataset.name || 'Add-on';
+    const stock = parseInt(card.dataset.stock, 10);
+    const safeStock = Number.isFinite(stock) ? Math.max(0, stock) : 0;
+    if (card.classList.contains('is-oos') || safeStock <= 0) {
+        showToast(`"${name}" is out of stock.`, 'error');
+        return;
+    }
 
     let item = selectedYmalAddonOptions.get(optionId);
     if (!item) {
@@ -4821,6 +4840,19 @@ async function addToCartWithVariant() {
     button.disabled = true;
     
     try {
+        const structuredAddons = getStructuredAddonsForCart();
+        for (const sa of structuredAddons) {
+            const safeStock = Number.isFinite(sa.stock) ? sa.stock : 0;
+            if (safeStock <= 0) {
+                showToast(`Add-on "${sa.name}" is out of stock.`, 'error');
+                return;
+            }
+            if ((sa.quantity || 1) > safeStock) {
+                showToast(`Only ${safeStock} available for add-on "${sa.name}".`, 'error');
+                return;
+            }
+        }
+
         let product;
         
         if (selectedVariant) {
@@ -4906,6 +4938,19 @@ async function addToCartWithVariant() {
     if (currentStock <= 0) {
         showToast('Please select an in-stock option first.', 'error');
         return;
+    }
+
+    const structuredAddons = getStructuredAddonsForCart();
+    for (const sa of structuredAddons) {
+        const safeStock = Number.isFinite(sa.stock) ? sa.stock : 0;
+        if (safeStock <= 0) {
+            showToast(`Add-on "${sa.name}" is out of stock.`, 'error');
+            return;
+        }
+        if ((sa.quantity || 1) > safeStock) {
+            showToast(`Only ${safeStock} available for add-on "${sa.name}".`, 'error');
+            return;
+        }
     }
 
     // Build item data from current selection + You might also like add-ons

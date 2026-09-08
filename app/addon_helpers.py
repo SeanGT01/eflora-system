@@ -110,11 +110,16 @@ def resolve_structured_addon_selections(product, option_ids, quantity_per_option
 
         # Add-on qty is independent of flower/variant qty
         need = units
-        if int(opt.stock_quantity or 0) < need:
+        curr_stock = int(opt.stock_quantity or 0)
+        if curr_stock <= 0:
+            return None, (jsonify({
+                'error': f'Add-on "{opt.name}" is out of stock'
+            }), 400)
+        if curr_stock < need:
             return None, (jsonify({
                 'error': (
                     f'Insufficient stock for "{opt.name}". '
-                    f'Available: {opt.stock_quantity}'
+                    f'Available: {curr_stock}'
                 )
             }), 400)
 
