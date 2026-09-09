@@ -1718,9 +1718,13 @@ const chatWidget = (() => {
         parts.push(...normalConvos.map(c => {
             const other = c.other_user || {};
             const unread = c.unread_count || 0;
-            // Customers see the store name; sellers see the customer name
+            // Customers see the store name; sellers see customer name; for riders show "{Store} Rider"
             const isSeller = (other.role === 'seller');
-            const displayName = isSeller ? (c.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown');
+            const isRider = (other.role === 'rider' || c.is_rider_thread === true);
+            const storeName = c.store_name || (c.order_context && c.order_context.store_name) || '';
+            const displayName = isRider
+                ? (storeName ? `${storeName} Rider` : (other.full_name ? `${other.full_name} (Rider)` : 'Rider'))
+                : (isSeller ? (c.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown'));
             const displayAvatar = isSeller ? (c.store_logo || other.avatar_url) : other.avatar_url;
             const avatar = _withPresenceDot(
                 _avatarHtml(displayAvatar, displayName, 44, !isSeller),
@@ -2229,7 +2233,10 @@ const chatWidget = (() => {
     function _renderHeader(convo) {
         const other = convo.other_user || {};
         const isSeller = (other.role === 'seller');
-        const displayName = isSeller ? (convo.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown');
+        const isRider = (other.role === 'rider' || convo.is_rider_thread === true);
+        const displayName = isRider
+            ? (other.full_name || (convo.store_name ? convo.store_name + ' Rider' : 'Rider'))
+            : (isSeller ? (convo.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown'));
         const displayAvatar = isSeller ? (convo.store_logo || other.avatar_url) : other.avatar_url;
         const avatarEl = document.getElementById('chat-detail-avatar');
         let bare;
@@ -2739,7 +2746,10 @@ const chatWidget = (() => {
         if (convo) {
             const other = convo.other_user || {};
             const isSeller = (other.role === 'seller');
-            name = isSeller ? (convo.store_name || other.full_name || 'this seller') : (other.full_name || 'this conversation');
+            const isRider = (other.role === 'rider' || convo.is_rider_thread === true);
+            name = isRider
+                ? (other.full_name || (convo.store_name ? convo.store_name + ' Rider' : 'Rider'))
+                : (isSeller ? (convo.store_name || other.full_name || 'this seller') : (other.full_name || 'this conversation'));
         } else {
             const nameEl = document.getElementById('chat-detail-name');
             if (nameEl && nameEl.textContent) name = nameEl.textContent.trim();
