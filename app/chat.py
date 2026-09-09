@@ -1037,6 +1037,10 @@ def delete_conversation(convo_id):
     if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
 
+    other_user = convo.seller if user.id == convo.customer_id else convo.customer
+    if (other_user and getattr(other_user, 'role', None) == 'admin') or getattr(user, 'role', None) == 'admin':
+        return jsonify({'error': 'Support conversations cannot be deleted'}), 400
+
     now = pht_now()
     if user.id == convo.customer_id:
         convo.customer_deleted_at = now

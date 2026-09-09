@@ -1035,7 +1035,7 @@ window.__eflowersChatUnread = {{ chat_unread_count|default(0)|int }};
                     <div class="name" id="chat-detail-name"></div>
                     <div class="status" id="chat-detail-status"><span class="offline-dot"></span> Offline</div>
                 </div>
-                <button class="more-btn" id="chat-convo-more-btn" onclick="chatWidget.toggleConvoMenu(event)" title="Conversation options"><i class="ri-more-2-fill"></i></button>
+                <button class="more-btn" id="chat-convo-more-btn" style="display:none;" onclick="chatWidget.toggleConvoMenu(event)" title="Conversation options"><i class="ri-more-2-fill"></i></button>
                 <button class="close-btn" onclick="chatWidget.close()" title="Close"><i class="ri-close-line"></i></button>
             </div>
             <div class="chat-messages" id="chat-messages-area"></div>
@@ -1438,6 +1438,8 @@ const chatWidget = (() => {
             avatarEl.removeAttribute('data-bare-avatar');
             avatarEl.innerHTML = '';
         }
+        const moreBtn = document.getElementById('chat-convo-more-btn');
+        if (moreBtn) moreBtn.style.display = 'none';
     }
 
     function close() {
@@ -1739,9 +1741,9 @@ const chatWidget = (() => {
                 <div class="meta">
                     <div class="time">${_timeAgo(c.last_message_at)}</div>
                     ${unread > 0 ? `<div class="unread-badge">${unread > 99 ? '99+' : unread}</div>` : ''}
-                    <button class="inbox-item-delete" onclick="event.stopPropagation(); chatWidget.confirmDeleteConversation(${c.id}, '${_esc(displayName)}')" title="Delete conversation">
+                    ${(other.role !== 'admin') ? `<button class="inbox-item-delete" onclick="event.stopPropagation(); chatWidget.confirmDeleteConversation(${c.id}, '${_esc(displayName)}')" title="Delete conversation">
                         <i class="ri-delete-bin-line"></i>
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>`;
         }));
@@ -2191,6 +2193,8 @@ const chatWidget = (() => {
         document.getElementById('chat-inbox-view').style.display = 'none';
         document.getElementById('chat-detail-view').style.display = 'flex';
         _setComposerVisible(false);
+        const moreBtn = document.getElementById('chat-convo-more-btn');
+        if (moreBtn) moreBtn.style.display = 'none';
 
         document.getElementById('chat-detail-avatar').innerHTML = _botAvatar(38);
         document.getElementById('chat-detail-name').textContent = 'Quick Answers';
@@ -2234,6 +2238,11 @@ const chatWidget = (() => {
         const other = convo.other_user || {};
         const isSeller = (other.role === 'seller');
         const isRider = (other.role === 'rider' || convo.is_rider_thread === true);
+        const isAdmin = (other.role === 'admin');
+        const moreBtn = document.getElementById('chat-convo-more-btn');
+        if (moreBtn) {
+            moreBtn.style.display = (isAdmin || _quickAnswersMode) ? 'none' : 'flex';
+        }
         const displayName = isRider
             ? (other.full_name || (convo.store_name ? convo.store_name + ' Rider' : 'Rider'))
             : (isSeller ? (convo.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown'));
@@ -2687,14 +2696,22 @@ const chatWidget = (() => {
         if (ev) ev.stopPropagation();
         const menu = document.getElementById('chat-convo-menu');
         const btn = document.getElementById('chat-convo-more-btn');
-        if (!menu || !btn || !_activeConvoId) return;
+        if (!menu || !btn || !_activeConvoId || _quickAnswersMode) {
+            _closeAllMenus();
+            return;
+        }
+
+        const convo = _convos.find(c => c.id === _activeConvoId);
+        const other = (convo && convo.other_user) || {};
+        if (other.role === 'admin') {
+            _closeAllMenus();
+            return;
+        }
 
         const isOpen = menu.classList.contains('open');
         _closeAllMenus();
         if (isOpen) return;
 
-        const convo = _convos.find(c => c.id === _activeConvoId);
-        const other = (convo && convo.other_user) || {};
         const isSeller = other.role === 'seller';
         const storeId = (convo && convo.store_id) || (other.store_id || null);
 
@@ -2739,12 +2756,14 @@ const chatWidget = (() => {
 
     async function deleteCurrentConversation() {
         _closeAllMenus();
-        if (!_activeConvoId) return;
+        if (!_activeConvoId || _quickAnswersMode) return;
         const convoId = _activeConvoId;
         const convo = _convos.find(c => c.id === convoId);
+        const other = (convo && convo.other_user) || {};
+        if (other.role === 'admin') return;
+
         let name = 'this conversation';
         if (convo) {
-            const other = convo.other_user || {};
             const isSeller = (other.role === 'seller');
             const isRider = (other.role === 'rider' || convo.is_rider_thread === true);
             name = isRider
@@ -2787,6 +2806,10 @@ const chatWidget = (() => {
 
     async function confirmDeleteConversation(convoId, displayName) {
         _closeAllMenus();
+        if (!convoId) return;
+        const convo = _convos.find(c => c.id === convoId);
+        if (convo && convo.other_user && convo.other_user.role === 'admin') return;
+
         const confirmMsg = `Delete your conversation with ${displayName || 'this contact'}?`;
         if (typeof window.openConfirmModal === 'function') {
             if (!await window.openConfirmModal(confirmMsg)) return;
