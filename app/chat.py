@@ -646,7 +646,7 @@ def _support_store_for_chat(customer_id, admin_user_id=None):
 
 
 def _bump_other_unread(convo, sender_id):
-    """Atomically increment the recipient unread counter."""
+    """Atomically increment the recipient unread counter and restore thread for both participants."""
     if sender_id == convo.customer_id:
         Conversation.query.filter_by(id=convo.id).update(
             {Conversation.seller_unread: func.coalesce(Conversation.seller_unread, 0) + 1},
@@ -654,6 +654,8 @@ def _bump_other_unread(convo, sender_id):
         )
         if convo.seller_deleted_at:
             convo.seller_deleted_at = None
+        if convo.customer_deleted_at:
+            convo.customer_deleted_at = None
     else:
         Conversation.query.filter_by(id=convo.id).update(
             {Conversation.customer_unread: func.coalesce(Conversation.customer_unread, 0) + 1},
@@ -661,6 +663,8 @@ def _bump_other_unread(convo, sender_id):
         )
         if convo.customer_deleted_at:
             convo.customer_deleted_at = None
+        if convo.seller_deleted_at:
+            convo.seller_deleted_at = None
 
 
 def _refresh_conversation_preview(convo):
@@ -813,6 +817,16 @@ def create_or_get_rider_conversation():
         db.session.add(convo)
         db.session.commit()
         created = True
+    else:
+        changed = False
+        if user.id == convo.customer_id and convo.customer_deleted_at:
+            convo.customer_deleted_at = None
+            changed = True
+        elif user.id == convo.seller_id and convo.seller_deleted_at:
+            convo.seller_deleted_at = None
+            changed = True
+        if changed:
+            db.session.commit()
     try:
         payload = _conversation_payload(convo, user, preferred_order_id=order.id)
     except Exception:
@@ -924,6 +938,9 @@ def create_or_get_support_conversation():
         if convo.customer_deleted_at:
             convo.customer_deleted_at = None
             changed = True
+        if convo.seller_deleted_at:
+            convo.seller_deleted_at = None
+            changed = True
         if changed:
             db.session.commit()
         return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 200
@@ -971,6 +988,16 @@ def get_conversation(convo_id):
 
     if not _can_access_conversation(user, convo):
         return jsonify({'error': 'Access denied'}), 403
+
+    changed = False
+    if user.id == convo.customer_id and convo.customer_deleted_at:
+        convo.customer_deleted_at = None
+        changed = True
+    elif user.id == convo.seller_id and convo.seller_deleted_at:
+        convo.seller_deleted_at = None
+        changed = True
+    if changed:
+        db.session.commit()
 
     preferred_order_id = request.args.get('order_id', type=int)
     payload = _conversation_payload(convo, user, preferred_order_id=preferred_order_id)

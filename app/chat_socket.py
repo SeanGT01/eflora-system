@@ -215,10 +215,14 @@ def handle_send_message(data):
         convo.seller_unread = (convo.seller_unread or 0) + 1
         if convo.seller_deleted_at:
             convo.seller_deleted_at = None
+        if convo.customer_deleted_at:
+            convo.customer_deleted_at = None
     else:
         convo.customer_unread = (convo.customer_unread or 0) + 1
         if convo.customer_deleted_at:
             convo.customer_deleted_at = None
+        if convo.seller_deleted_at:
+            convo.seller_deleted_at = None
 
     try:
         from app.chat import _maybe_notify_seller_new_chat, _maybe_notify_admin_new_chat
