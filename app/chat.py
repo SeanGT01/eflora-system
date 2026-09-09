@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models import User, Store, Conversation, ChatMessage, Rider, Order, OrderItem, Product
+from app.models import User, Store, Conversation, ChatMessage, Rider, Order, OrderItem, Product, SupportFAQ
 
 import cloudinary
 import cloudinary.uploader
@@ -973,6 +973,26 @@ def create_or_get_support_conversation():
         return jsonify({'conversation': existing.to_dict(current_user_id=user.id)}), 200
 
     return jsonify({'conversation': convo.to_dict(current_user_id=user.id)}), 201
+
+
+@chat_bp.route('/support-faqs', methods=['GET'])
+def get_support_faqs():
+    """
+    GET /api/v1/chat/support-faqs
+    Returns active support FAQs for Quick Answers.
+    """
+    try:
+        rows = (
+            SupportFAQ.query
+            .filter_by(is_active=True)
+            .order_by(SupportFAQ.updated_at.desc(), SupportFAQ.id.desc())
+            .limit(50)
+            .all()
+        )
+        return jsonify({'faqs': [r.to_dict() for r in rows]}), 200
+    except Exception as ex:
+        current_app.logger.exception('get_support_faqs: %s', ex)
+        return jsonify({'faqs': []}), 200
 
 
 @chat_bp.route('/conversations/<int:convo_id>', methods=['GET'])
