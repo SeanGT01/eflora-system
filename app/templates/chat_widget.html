@@ -198,6 +198,7 @@
     width: 13px;
     height: 13px;
 }
+.chat-head .more-btn,
 .chat-head .close-btn {
     cursor: pointer;
     width: 32px;
@@ -215,6 +216,11 @@
     transition: background .15s, color .15s, border-color .15s;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
+.chat-head .more-btn {
+    font-size: 18px;
+    margin-right: 2px;
+}
+.chat-head .more-btn:hover,
 .chat-head .close-btn:hover {
     background: rgba(255, 255, 255, 0.8);
     color: var(--charcoal);
@@ -263,6 +269,34 @@
     background: linear-gradient(135deg, #c24e68, #d878a0); color: #fff; font-size: 10px;
     font-weight: 700; display: flex; align-items: center; justify-content: center;
     padding: 0 4px;
+}
+.inbox-item .inbox-item-delete {
+    display: none;
+    cursor: pointer;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    align-items: center;
+    justify-content: center;
+    font-size: 13.5px;
+    transition: all .15s ease;
+    padding: 0;
+    margin-top: 2px;
+}
+.inbox-item:hover .inbox-item-delete {
+    display: flex;
+}
+.inbox-item .inbox-item-delete:hover {
+    color: #d32f2f;
+    background: rgba(211, 47, 47, 0.08);
+}
+@media (hover: none) {
+    .inbox-item .inbox-item-delete {
+        display: flex;
+    }
 }
 .inbox-empty { padding: 40px 16px; text-align: center; color: var(--muted); font-size: 14px; }
 
@@ -598,34 +632,48 @@
 .msg-menu-popup {
     display: none;
 }
-#chat-msg-menu {
+#chat-msg-menu,
+#chat-convo-menu {
     display: none;
     position: fixed;
-    z-index: 10020;
+    z-index: 10025;
     background: #fff;
-    border-radius: 10px;
-    box-shadow: 0 8px 28px rgba(0,0,0,.18);
-    min-width: 148px;
-    max-width: min(220px, calc(100vw - 16px));
-    padding: 4px 0;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
+    min-width: 154px;
+    max-width: min(240px, calc(100vw - 16px));
+    padding: 6px 0;
     font-size: 13px;
     top: 0;
     left: 0;
+    border: 1px solid rgba(0,0,0,0.06);
 }
-#chat-msg-menu.open { display: block; }
+#chat-msg-menu.open,
+#chat-convo-menu.open { display: block; }
 .msg-menu-popup .menu-item,
-#chat-msg-menu .menu-item {
-    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
-    cursor: pointer; color: var(--charcoal); white-space: nowrap; transition: background .12s;
+.convo-menu-popup .menu-item,
+#chat-msg-menu .menu-item,
+#chat-convo-menu .menu-item {
+    display: flex; align-items: center; gap: 9px; padding: 8px 14px;
+    cursor: pointer; color: var(--charcoal); white-space: nowrap; transition: background .12s, color .12s;
+    font-weight: 500;
 }
 .msg-menu-popup .menu-item:hover,
-#chat-msg-menu .menu-item:hover { background: rgba(0,0,0,.04); }
+.convo-menu-popup .menu-item:hover,
+#chat-msg-menu .menu-item:hover,
+#chat-convo-menu .menu-item:hover { background: rgba(0,0,0,.04); }
 .msg-menu-popup .menu-item.danger,
-#chat-msg-menu .menu-item.danger { color: #d32f2f; }
+.convo-menu-popup .menu-item.danger,
+#chat-msg-menu .menu-item.danger,
+#chat-convo-menu .menu-item.danger { color: #d32f2f; }
 .msg-menu-popup .menu-item.danger:hover,
-#chat-msg-menu .menu-item.danger:hover { background: rgba(211,47,47,.06); }
+.convo-menu-popup .menu-item.danger:hover,
+#chat-msg-menu .menu-item.danger:hover,
+#chat-convo-menu .menu-item.danger:hover { background: rgba(211,47,47,.07); }
 .msg-menu-popup .menu-item i,
-#chat-msg-menu .menu-item i { font-size: 15px; width: 18px; text-align: center; }
+.convo-menu-popup .menu-item i,
+#chat-msg-menu .menu-item i,
+#chat-convo-menu .menu-item i { font-size: 15px; width: 18px; text-align: center; }
 
 /* ══════════ DELETED MESSAGE ══════════ */
 .msg-deleted-content {
@@ -987,6 +1035,7 @@ window.__eflowersChatUnread = {{ chat_unread_count|default(0)|int }};
                     <div class="name" id="chat-detail-name"></div>
                     <div class="status" id="chat-detail-status"><span class="offline-dot"></span> Offline</div>
                 </div>
+                <button class="more-btn" id="chat-convo-more-btn" onclick="chatWidget.toggleConvoMenu(event)" title="Conversation options"><i class="ri-more-2-fill"></i></button>
                 <button class="close-btn" onclick="chatWidget.close()" title="Close"><i class="ri-close-line"></i></button>
             </div>
             <div class="chat-messages" id="chat-messages-area"></div>
@@ -1020,6 +1069,7 @@ window.__eflowersChatUnread = {{ chat_unread_count|default(0)|int }};
         </div>
     </div>
     <div id="chat-msg-menu" class="msg-menu-popup" role="menu" onclick="event.stopPropagation()"></div>
+    <div id="chat-convo-menu" class="convo-menu-popup" role="menu" onclick="event.stopPropagation()"></div>
 </div>
 
 <script>
@@ -1685,6 +1735,9 @@ const chatWidget = (() => {
                 <div class="meta">
                     <div class="time">${_timeAgo(c.last_message_at)}</div>
                     ${unread > 0 ? `<div class="unread-badge">${unread > 99 ? '99+' : unread}</div>` : ''}
+                    <button class="inbox-item-delete" onclick="event.stopPropagation(); chatWidget.confirmDeleteConversation(${c.id}, '${_esc(displayName)}')" title="Delete conversation">
+                        <i class="ri-delete-bin-line"></i>
+                    </button>
                 </div>
             </div>`;
         }));
@@ -1724,7 +1777,15 @@ const chatWidget = (() => {
                 }
             } catch(e) {}
         }
-        if (convo) _renderHeader(convo);
+        if (convo) {
+            const existingIdx = _convos.findIndex(c => c.id === convo.id);
+            if (existingIdx >= 0) {
+                _convos[existingIdx] = convo;
+            } else {
+                _convos.unshift(convo);
+            }
+            _renderHeader(convo);
+        }
 
         let orderCtx = (convo && convo.order_context) || _pendingOrderContext || null;
         _pendingOrderContext = null;
@@ -1739,6 +1800,12 @@ const chatWidget = (() => {
                 const data = await res.json();
                 if (data.conversation) {
                     convo = data.conversation;
+                    const existingIdx = _convos.findIndex(c => c.id === convo.id);
+                    if (existingIdx >= 0) {
+                        _convos[existingIdx] = convo;
+                    } else {
+                        _convos.unshift(convo);
+                    }
                     _renderHeader(convo);
                     orderCtx = convo.order_context || data.order_context || orderCtx;
                     if (orderCtx) _threadOrderContext = orderCtx;
@@ -1832,6 +1899,12 @@ const chatWidget = (() => {
             const data = await res.json();
             if (data.conversation) {
                 open();
+                const existingIdx = _convos.findIndex(c => c.id === data.conversation.id);
+                if (existingIdx >= 0) {
+                    _convos[existingIdx] = data.conversation;
+                } else {
+                    _convos.unshift(data.conversation);
+                }
                 openConvo(data.conversation.id);
             } else {
                 alert(data.error || 'Could not open chat');
@@ -1865,6 +1938,12 @@ const chatWidget = (() => {
             const data = await res.json();
             if (data.conversation) {
                 _pendingOrderContext = data.conversation.order_context || data.order_context || null;
+                const existingIdx = _convos.findIndex(c => c.id === data.conversation.id);
+                if (existingIdx >= 0) {
+                    _convos[existingIdx] = data.conversation;
+                } else {
+                    _convos.unshift(data.conversation);
+                }
                 await openConvo(data.conversation.id);
             } else {
                 alert(data.error || 'Could not open rider chat');
@@ -2570,8 +2649,13 @@ const chatWidget = (() => {
             portal.innerHTML = '';
             portal.removeAttribute('data-source-id');
         }
-        document.querySelectorAll('.msg-menu-popup.open').forEach(el => {
-            if (el.id !== 'chat-msg-menu') el.classList.remove('open');
+        const convoMenu = document.getElementById('chat-convo-menu');
+        if (convoMenu) {
+            convoMenu.classList.remove('open');
+            convoMenu.innerHTML = '';
+        }
+        document.querySelectorAll('.msg-menu-popup.open, .convo-menu-popup.open').forEach(el => {
+            if (el.id !== 'chat-msg-menu' && el.id !== 'chat-convo-menu') el.classList.remove('open');
         });
     }
     document.addEventListener('click', _closeAllMenus);
@@ -2583,6 +2667,145 @@ const chatWidget = (() => {
             e.stopPropagation();
             if (e.target.closest('.menu-item')) setTimeout(_closeAllMenus, 0);
         });
+    }
+    const _convoMenuEl = document.getElementById('chat-convo-menu');
+    if (_convoMenuEl) {
+        _convoMenuEl.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (e.target.closest('.menu-item')) setTimeout(_closeAllMenus, 0);
+        });
+    }
+
+    function toggleConvoMenu(ev) {
+        if (ev) ev.stopPropagation();
+        const menu = document.getElementById('chat-convo-menu');
+        const btn = document.getElementById('chat-convo-more-btn');
+        if (!menu || !btn || !_activeConvoId) return;
+
+        const isOpen = menu.classList.contains('open');
+        _closeAllMenus();
+        if (isOpen) return;
+
+        const convo = _convos.find(c => c.id === _activeConvoId);
+        const other = (convo && convo.other_user) || {};
+        const isSeller = other.role === 'seller';
+        const storeId = (convo && convo.store_id) || (other.store_id || null);
+
+        let items = '';
+        if (isSeller && storeId) {
+            items += `<div class="menu-item" onclick="chatWidget.viewStore()"><i class="ri-store-2-line"></i> Visit Store</div>`;
+        }
+        items += `<div class="menu-item danger" onclick="chatWidget.deleteCurrentConversation()"><i class="ri-delete-bin-line"></i> Delete Conversation</div>`;
+
+        menu.innerHTML = items;
+        menu.classList.add('open');
+
+        const drawer = document.getElementById('chat-drawer');
+        const bounds = (drawer || document.getElementById('chat-overlay')).getBoundingClientRect();
+        const btnRect = btn.getBoundingClientRect();
+        const pad = 8;
+        const mw = menu.offsetWidth || 170;
+        const mh = menu.offsetHeight || 80;
+
+        let top = btnRect.bottom + 4;
+        if (top + mh > bounds.bottom - pad) {
+            top = btnRect.top - mh - 4;
+        }
+        let left = btnRect.right - mw;
+        if (left < bounds.left + pad) left = bounds.left + pad;
+        if (left + mw > bounds.right - pad) left = bounds.right - pad - mw;
+
+        menu.style.top = Math.round(top) + 'px';
+        menu.style.left = Math.round(left) + 'px';
+    }
+
+    function viewStore() {
+        _closeAllMenus();
+        if (!_activeConvoId) return;
+        const convo = _convos.find(c => c.id === _activeConvoId);
+        const other = (convo && convo.other_user) || {};
+        const storeId = (convo && convo.store_id) || (other.store_id || null);
+        if (storeId) {
+            window.location.href = `/store/${storeId}`;
+        }
+    }
+
+    async function deleteCurrentConversation() {
+        _closeAllMenus();
+        if (!_activeConvoId) return;
+        const convoId = _activeConvoId;
+        const convo = _convos.find(c => c.id === convoId);
+        let name = 'this conversation';
+        if (convo) {
+            const other = convo.other_user || {};
+            const isSeller = (other.role === 'seller');
+            name = isSeller ? (convo.store_name || other.full_name || 'this seller') : (other.full_name || 'this conversation');
+        } else {
+            const nameEl = document.getElementById('chat-detail-name');
+            if (nameEl && nameEl.textContent) name = nameEl.textContent.trim();
+        }
+
+        const confirmMsg = `Delete your conversation with ${name}?`;
+        if (typeof window.openConfirmModal === 'function') {
+            if (!await window.openConfirmModal(confirmMsg)) return;
+        } else {
+            if (!confirm(confirmMsg)) return;
+        }
+
+        try {
+            const res = await _fetch(API + '/conversations/' + convoId, {
+                method: 'DELETE',
+                headers: _headers(),
+            });
+            if (!res.ok) {
+                console.error('Chat: delete conversation failed');
+                return;
+            }
+            _convos = _convos.filter(c => c.id !== convoId);
+            _locallyReadIds.delete(convoId);
+
+            const remainingUnread = _convos.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+            _setFabBadge(remainingUnread);
+            _renderInbox();
+
+            // Automatically navigate back to inbox!
+            showInbox();
+        } catch (e) {
+            console.error('Chat: delete conversation error', e);
+        }
+    }
+
+    async function confirmDeleteConversation(convoId, displayName) {
+        _closeAllMenus();
+        const confirmMsg = `Delete your conversation with ${displayName || 'this contact'}?`;
+        if (typeof window.openConfirmModal === 'function') {
+            if (!await window.openConfirmModal(confirmMsg)) return;
+        } else {
+            if (!confirm(confirmMsg)) return;
+        }
+
+        try {
+            const res = await _fetch(API + '/conversations/' + convoId, {
+                method: 'DELETE',
+                headers: _headers(),
+            });
+            if (!res.ok) {
+                console.error('Chat: delete conversation failed');
+                return;
+            }
+            _convos = _convos.filter(c => c.id !== convoId);
+            _locallyReadIds.delete(convoId);
+
+            const remainingUnread = _convos.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+            _setFabBadge(remainingUnread);
+            _renderInbox();
+
+            if (_activeConvoId === convoId) {
+                showInbox();
+            }
+        } catch (e) {
+            console.error('Chat: delete conversation error', e);
+        }
     }
 
     function previewImage(fileInput) {
@@ -2858,6 +3081,10 @@ const chatWidget = (() => {
         copyMessage,
         deleteMessage,
         _toggleMenu,
+        toggleConvoMenu,
+        viewStore,
+        deleteCurrentConversation,
+        confirmDeleteConversation,
     };
 })();
 window.chatWidget = chatWidget;
