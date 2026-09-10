@@ -3,7 +3,7 @@ Checkout endpoints for cart selection, delivery validation, and GCash checkout.
 """
 
 print("=" * 60)
-print("🔵 LOADING CHECKOUT_ROUTES.PY")
+print("[BLUE] LOADING CHECKOUT_ROUTES.PY")
 print("=" * 60)
 
 from decimal import Decimal
@@ -31,7 +31,7 @@ from app.addon_helpers import (
 
 # Create blueprint
 checkout_bp = Blueprint("checkout", __name__)
-print(f"✅ checkout_bp created: {checkout_bp}")
+print(f"checkout_bp created: {checkout_bp}")
 
 MAX_ACTIVE_CUSTOMER_ORDERS = 5
 ACTIVE_ORDER_LIMIT_MESSAGE = (
@@ -99,7 +99,7 @@ def test_checkout():
         ]
     }), 200
 
-print("✅ Test route added to checkout_bp")
+print("Test route added to checkout_bp")
 print("=" * 60)
 
 
@@ -2410,5 +2410,5 @@ def buy_now_create_order():
         return jsonify({"error": str(e)}), 500
 
 
-print("✅ checkout_routes.py loaded successfully")
+print("checkout_routes.py loaded successfully")
 print("=" * 60)

@@ -75,7 +75,7 @@ def create_app(config_class='default'):
     app.config['REMEMBER_COOKIE_SECURE'] = not app.debug
     app.config['REMEMBER_COOKIE_DURATION'] = 86400 * 30
     
-    print(f"🗺️ Mapbox token loaded: {app.config['MAPBOX_PUBLIC_TOKEN'][:15] if app.config['MAPBOX_PUBLIC_TOKEN'] else 'NOT FOUND'}...")
+    print(f"[MAPBOX] Mapbox token loaded: {app.config['MAPBOX_PUBLIC_TOKEN'][:15] if app.config['MAPBOX_PUBLIC_TOKEN'] else 'NOT FOUND'}...")
     
     # ====================================================
     # INITIALIZE EXTENSIONS WITH APP
@@ -280,7 +280,7 @@ def create_app(config_class='default'):
     sendgrid_key = app.config.get('SENDGRID_API_KEY', '')
     mail_pass = '***SET***' if app.config.get('MAIL_PASSWORD') else '***MISSING***'
     
-    print(f"📧 Mail config: server={mail_server}:{mail_port} TLS={mail_tls}")
+    print(f"Mail config: server={mail_server}:{mail_port} TLS={mail_tls}")
     print(f"   SMTP user={mail_user}")
     print(f"   Default sender={mail_sender}")
     print(f"   Password={mail_pass}")
@@ -436,6 +436,21 @@ def create_app(config_class='default'):
         except Exception as db_patch_error:
             db.session.rollback()
             app.logger.warning(f"Could not apply pos_orders.is_seen_by_seller patch: {db_patch_error}")
+
+    # Backward-safe DB patch: add custom_quote_tickets.allow_dedication_card if missing.
+    with app.app_context():
+        try:
+            inspector = inspect(db.engine)
+            cqt_columns = {col['name'] for col in inspector.get_columns('custom_quote_tickets')}
+            if 'allow_dedication_card' not in cqt_columns:
+                db.session.execute(
+                    text("ALTER TABLE custom_quote_tickets ADD COLUMN allow_dedication_card BOOLEAN NOT NULL DEFAULT TRUE")
+                )
+                db.session.commit()
+                app.logger.info("Added custom_quote_tickets.allow_dedication_card column with default true")
+        except Exception as db_patch_error:
+            db.session.rollback()
+            app.logger.warning(f"Could not apply custom_quote_tickets.allow_dedication_card patch: {db_patch_error}")
     
     # ====================================================
     # REGISTER BLUEPRINTS (INCLUDING CLOUDINARY)

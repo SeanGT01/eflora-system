@@ -1,6 +1,13 @@
 # run.py — Production-ready entry point
 import os
 import sys
+
+# Force UTF-8 encoding for standard streams to prevent UnicodeEncodeError on Windows
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 from app import create_app
 from app.chat_socket import socketio
 
@@ -33,4 +40,4 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 8000))  # Changed from 5000 to 8000
     
     print(f"🎯 Starting Flask+SocketIO on 0.0.0.0:{port} (debug={debug_mode})", file=sys.stderr)
-    socketio.run(app, debug=debug_mode, host='0.0.0.0', port=port)
+    socketio.run(app, debug=debug_mode, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
