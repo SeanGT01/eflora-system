@@ -292,6 +292,7 @@ class Store(db.Model):
     status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    allow_dedication_card = db.Column(db.Boolean, default=True, nullable=False)
     
     # Seller application tracking fields
     seller_application_id = db.Column(db.Integer, db.ForeignKey('seller_applications.id'), nullable=True)
@@ -1798,6 +1799,7 @@ class Order(db.Model):
     cancellation_reason_code = db.Column(db.String(50), nullable=True)
     cancellation_reason = db.Column(db.Text, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
+    custom_ticket_id = db.Column(db.Integer, db.ForeignKey('custom_quote_tickets.id', ondelete='SET NULL'), nullable=True)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1973,7 +1975,8 @@ class Order(db.Model):
             'store_logo': self.store.logo_url if self.store else None,  # Cloudinary only
             'store_latitude': float(self.store.latitude) if self.store and self.store.latitude is not None else None,
             'store_longitude': float(self.store.longitude) if self.store and self.store.longitude is not None else None,
-            'rider_name': self.assigned_rider.user.full_name if self.assigned_rider and self.assigned_rider.user else None
+            'rider_name': self.assigned_rider.user.full_name if self.assigned_rider and self.assigned_rider.user else None,
+            'custom_ticket_id': self.custom_ticket_id,
         }
 
 
@@ -1998,6 +2001,9 @@ class OrderItem(db.Model):
     @property
     def product_image(self):
         """Get the appropriate product image (variant or main) - Cloudinary only"""
+        if self.order and self.order.order_type == 'custom_chat':
+            return self.order.custom_ticket.image_url if self.order.custom_ticket else None
+            
         if self.variant and self.variant.image_url:
             return self.variant.image_url
         elif self.product and self.product.images:
@@ -2020,6 +2026,11 @@ class OrderItem(db.Model):
         addons_list = [a.to_dict() for a in (self.addons or [])]
         addons_sum = sum(float(a.get('total') or 0) for a in addons_list)
         
+        # Override name for custom tickets
+        resolved_name = product.name if product else None
+        if self.order and self.order.order_type == 'custom_chat' and self.order.custom_ticket:
+            resolved_name = self.order.custom_ticket.title
+        
         return {
             'id': self.id,
             'order_id': self.order_id,
@@ -2029,8 +2040,9 @@ class OrderItem(db.Model):
             'quantity': self.quantity,
             'price': unit,
             'total': (unit * int(self.quantity or 0)) + addons_sum,
-            'product_name': product.name if product else None,
+            'product_name': resolved_name,
             'product_image_url': self.product_image,
+            'is_custom_order': bool(self.order and self.order.order_type == 'custom_chat'),
             'addons': addons_list,
             'addons_total': addons_sum,
         }
@@ -3119,7 +3131,7 @@ class ChatMessage(db.Model):
     sender = db.relationship('User', backref=db.backref('sent_messages', lazy='dynamic'))
     reply_to = db.relationship('ChatMessage', remote_side='ChatMessage.id', uselist=False)
 
-    def to_dict(self):
+    def to_dict(self, preloaded_tickets=None):
         d = {
             'id': self.id,
             'conversation_id': self.conversation_id,
@@ -3138,6 +3150,7 @@ class ChatMessage(db.Model):
             'reply_to_sender_role': None,
             'reply_to_message_type': None,
             'order_card': None,
+            'custom_ticket': None,
         }
         if self.is_deleted:
             d['text'] = None
@@ -3152,12 +3165,39 @@ class ChatMessage(db.Model):
                     d['order_card'] = json.loads(self.text)
                 except (TypeError, ValueError, json.JSONDecodeError):
                     d['order_card'] = None
+            elif self.message_type == 'custom_ticket' and self.text:
+                try:
+                    payload = json.loads(self.text)
+                    if payload and payload.get('ticket_id'):
+                        try:
+                            tid = payload['ticket_id']
+                            live_ticket = preloaded_tickets.get(tid) if preloaded_tickets is not None else CustomQuoteTicket.query.get(tid)
+                            if live_ticket:
+                                payload = live_ticket.to_dict()
+                        except Exception:
+                            pass
+                    d['custom_ticket'] = payload
+                    d['text'] = None  # prevent raw JSON from showing as chat text
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    d['custom_ticket'] = None
             elif self.text and str(self.text).strip().startswith('{'):
                 try:
                     payload = json.loads(self.text)
                     if payload.get('order_id') and payload.get('items') is not None:
                         d['order_card'] = payload
                         d['message_type'] = 'order_card'
+                    elif payload.get('ticket_id') or payload.get('ticket_number'):
+                        if payload.get('ticket_id'):
+                            try:
+                                tid = payload['ticket_id']
+                                live_ticket = preloaded_tickets.get(tid) if preloaded_tickets is not None else CustomQuoteTicket.query.get(tid)
+                                if live_ticket:
+                                    payload = live_ticket.to_dict()
+                            except Exception:
+                                pass
+                        d['custom_ticket'] = payload
+                        d['message_type'] = 'custom_ticket'
+                        d['text'] = None  # prevent raw JSON from showing as chat text
                 except (TypeError, ValueError, json.JSONDecodeError):
                     pass
         if self.reply_to_id and self.reply_to:
@@ -3167,6 +3207,9 @@ class ChatMessage(db.Model):
             elif self.reply_to.message_type == 'order_card':
                 d['reply_to_text'] = 'Order details'
                 d['reply_to_message_type'] = 'order_card'
+            elif self.reply_to.message_type == 'custom_ticket':
+                d['reply_to_text'] = 'Custom arrangement quote'
+                d['reply_to_message_type'] = 'custom_ticket'
             elif self.reply_to.text:
                 d['reply_to_text'] = self.reply_to.text
                 d['reply_to_message_type'] = self.reply_to.message_type or 'text'
@@ -3179,3 +3222,103 @@ class ChatMessage(db.Model):
             d['reply_to_sender_name'] = self.reply_to.sender.full_name if self.reply_to.sender else None
             d['reply_to_sender_role'] = self.reply_to.sender.role if self.reply_to.sender else None
         return d
+
+
+class CustomQuoteTicket(db.Model):
+    """Bespoke / Custom arrangement quote ticket created by seller in chat / POS."""
+    __tablename__ = 'custom_quote_tickets'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ticket_number = db.Column(db.String(32), unique=True, nullable=False, index=True)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id', ondelete='SET NULL'), nullable=True)
+
+    title = db.Column(db.String(150), nullable=False)
+    category = db.Column(db.String(50), nullable=False, default='bouquets')  # bouquets, fresh-flowers, potted-plants, succulents, others
+    base_price = db.Column(db.Numeric(10, 2), nullable=False)
+    inclusions = db.Column(db.Text, nullable=True)
+    image_url = db.Column(db.String(500), nullable=True)
+    image_public_id = db.Column(db.String(255), nullable=True)
+
+    # 4-hour validity window
+    expires_at = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), default='pending', index=True)  # pending, accepted, expired, declined, cancelled
+    allow_dedication_card = db.Column(db.Boolean, default=True, nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id', ondelete='SET NULL'), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    store = db.relationship('Store', backref=db.backref('custom_quote_tickets', lazy='dynamic'))
+    customer = db.relationship('User', foreign_keys=[customer_id], backref=db.backref('custom_quote_tickets', lazy='dynamic'))
+    conversation = db.relationship('Conversation', backref=db.backref('custom_quote_tickets', lazy='dynamic'))
+    order = db.relationship('Order', foreign_keys=[order_id], backref=db.backref('custom_ticket', uselist=False))
+
+    @property
+    def is_expired(self):
+        if self.status != 'pending':
+            return False
+        return self.expires_at is not None and datetime.utcnow() > self.expires_at
+
+    def to_dict(self):
+        effective_status = self.status
+        if self.is_expired:
+            effective_status = 'expired'
+
+        remaining_seconds = 0
+        if self.expires_at:
+            delta = (self.expires_at - datetime.utcnow()).total_seconds()
+            remaining_seconds = max(0, int(delta))
+
+        # Store payment flags and GCash details
+        store_allows_cod = False
+        store_allows_gcash = True
+        store_gcash_number = None
+        store_gcash_qr_url = None
+        if self.store:
+            try:
+                from app.checkout_routes import _store_payment_flags
+                store_allows_gcash, store_allows_cod = _store_payment_flags(self.store_id)
+            except Exception:
+                pass
+
+            store_gcash_number = None
+            try:
+                primary_qr = GCashQR.query.filter_by(store_id=self.store_id, is_primary=True).first()
+                if not primary_qr:
+                    primary_qr = GCashQR.query.filter_by(store_id=self.store_id).first()
+                if primary_qr:
+                    store_gcash_qr_url = primary_qr.cloudinary_url
+            except Exception:
+                pass
+
+        return {
+            'id': self.id,
+            'ticket_id': self.id,
+            'ticket_number': self.ticket_number,
+            'store_id': self.store_id,
+            'store_name': self.store.name if self.store else None,
+            'store_logo': self.store.logo_url if self.store else None,
+            'store_allows_cod': store_allows_cod,
+            'store_allows_gcash': store_allows_gcash,
+            'store_gcash_number': store_gcash_number,
+            'store_gcash_qr_url': store_gcash_qr_url,
+            'customer_id': self.customer_id,
+            'customer_name': self.customer.full_name if self.customer else None,
+            'conversation_id': self.conversation_id,
+            'title': self.title,
+            'category': self.category,
+            'base_price': float(self.base_price or 0),
+            'inclusions': self.inclusions,
+            'image_url': self.image_url,
+            'allow_dedication_card': bool(self.allow_dedication_card if self.allow_dedication_card is not None else True),
+            'expires_at': to_pht_iso(self.expires_at),
+            'expires_at_raw': self.expires_at.isoformat() if self.expires_at else None,
+            'remaining_seconds': remaining_seconds,
+            'status': effective_status,
+            'is_expired': self.is_expired,
+            'order_id': self.order_id,
+            'created_at': to_pht_iso(self.created_at),
+        }
