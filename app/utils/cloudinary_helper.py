@@ -112,7 +112,47 @@ def upload_to_cloudinary(file, folder, public_id=None, transformation=None, **op
         }
     except Exception as e:
         print(f"Cloudinary upload error: {e}")
-        return {'success': False, 'error': str(e)}
+def optimize_cloudinary_url(url: Optional[str], width: Optional[int] = 700, height: Optional[int] = None, crop: str = 'limit', quality: str = 'auto', format: str = 'auto') -> Optional[str]:
+    """
+    Safely injects Cloudinary transformations (f_auto, q_auto, width limits)
+    into a raw Cloudinary image URL to optimize loading speed, RAM usage,
+    and prevent downloading multi-megapixel uncompressed originals.
+    """
+    if not url or not isinstance(url, str):
+        return url
+    if 'res.cloudinary.com' not in url or '/image/upload/' not in url:
+        return url
+
+    parts = []
+    if format:
+        parts.append(f"f_{format}")
+    if quality:
+        parts.append(f"q_{quality}")
+    if width:
+        parts.append(f"w_{width}")
+    if height:
+        parts.append(f"h_{height}")
+    if crop and (width or height):
+        parts.append(f"c_{crop}")
+
+    transform_str = ','.join(parts)
+    if not transform_str:
+        return url
+
+    parts_url = url.split('/image/upload/')
+    if len(parts_url) != 2:
+        return url
+
+    base_prefix = parts_url[0] + '/image/upload/'
+    rest = parts_url[1]
+
+    # Don't duplicate if already transformed
+    first_segment = rest.split('/')[0]
+    if 'f_auto' in first_segment or 'q_auto' in first_segment or 'w_' in first_segment:
+        return url
+
+    return f"{base_prefix}{transform_str}/{rest}"
+
 
 def get_transformed_url(public_id, width=None, height=None, crop='fill', format=None):
     """Generate transformed URL - matches model's get_transformed_url method"""

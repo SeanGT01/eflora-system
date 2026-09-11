@@ -339,9 +339,10 @@ class Store(db.Model):
     
     @property
     def logo_url(self):
-        """Get store logo from seller application - Cloudinary only"""
-        if self.seller_application:
-            return self.seller_application.store_logo_url
+        """Get store logo from seller application - Cloudinary only with auto optimization"""
+        from app.utils.cloudinary_helper import optimize_cloudinary_url
+        if self.seller_application and self.seller_application.store_logo_url:
+            return optimize_cloudinary_url(self.seller_application.store_logo_url, width=250)
         return None
 
     @property
@@ -547,7 +548,7 @@ class Store(db.Model):
             'contact_number': self.contact_number,
             'description': self.description,
             'logo_url': self.logo_url,  # Cloudinary only
-            'banner_url': self.banner_url,
+            'banner_url': optimize_cloudinary_url(self.banner_url, width=1200) if self.banner_url else None,
             'banner_public_id': self.banner_public_id,
             'seller_application_id': self.seller_application_id,
             'approved_at': self.approved_at.isoformat() if self.approved_at else None,
@@ -1080,6 +1081,26 @@ class Product(db.Model):
         if self.store_category:
             return f"{self.main_category.name} / {self.store_category.name}"
         return self.main_category.name
+
+    @property
+    def image_url(self):
+        """Get primary product image URL with Cloudinary auto-optimization."""
+        from app.utils.cloudinary_helper import optimize_cloudinary_url
+        sorted_images = sorted(self.images, key=lambda x: x.sort_order)
+        primary = next((img for img in sorted_images if img.is_primary), sorted_images[0] if sorted_images else None)
+        if primary and primary.cloudinary_url:
+            return optimize_cloudinary_url(primary.cloudinary_url, width=700)
+        return None
+
+    @property
+    def thumbnail_url(self):
+        """Get compact thumbnail image URL."""
+        from app.utils.cloudinary_helper import optimize_cloudinary_url
+        sorted_images = sorted(self.images, key=lambda x: x.sort_order)
+        primary = next((img for img in sorted_images if img.is_primary), sorted_images[0] if sorted_images else None)
+        if primary and primary.cloudinary_url:
+            return optimize_cloudinary_url(primary.cloudinary_url, width=250)
+        return None
     
     def archive(self, user_id):
         """Move product to archive"""
@@ -1294,8 +1315,13 @@ class ProductImage(db.Model):
     
     @property
     def image_url(self):
-        """Get Cloudinary URL - no local fallback"""
-        return self.cloudinary_url
+        """Get Cloudinary URL with auto-optimization (f_auto, q_auto, max width)"""
+        from app.utils.cloudinary_helper import optimize_cloudinary_url
+        return optimize_cloudinary_url(self.cloudinary_url, width=700)
+    
+    @image_url.setter
+    def image_url(self, value):
+        self.cloudinary_url = value
     
     def get_transformed_url(self, width=None, height=None, crop='fill'):
         """Generate transformed URL on the fly"""
@@ -1391,8 +1417,9 @@ class ProductVariant(db.Model):
 
     @property
     def image(self):
-        """Get Cloudinary URL - no local fallback"""
-        return self.image_url
+        """Get Cloudinary URL - auto-optimized"""
+        from app.utils.cloudinary_helper import optimize_cloudinary_url
+        return optimize_cloudinary_url(self.image_url, width=500) if self.image_url else None
     
     def get_transformed_url(self, width=None, height=None, crop='fill'):
         """Generate transformed variant image URL"""
@@ -1418,6 +1445,7 @@ class ProductVariant(db.Model):
         return url
     
     def to_dict(self):
+        from app.utils.cloudinary_helper import optimize_cloudinary_url
         return {
             'id': self.id,
             'product_id': self.product_id,
@@ -1428,7 +1456,7 @@ class ProductVariant(db.Model):
             'discount_pct': self.discount_pct,
             'stock_quantity': self.stock_quantity,
             'sku': self.sku,
-            'image_url': self.image_url,  # Cloudinary only
+            'image_url': optimize_cloudinary_url(self.image_url, width=500) if self.image_url else None,
             'image_thumbnail': self.get_transformed_url(width=100, height=100),
             'image_public_id': self.image_public_id,
             'attributes': self.attributes,
@@ -1504,6 +1532,7 @@ class ProductAddonOption(db.Model):
     order_item_addons = db.relationship('OrderItemAddon', back_populates='addon_option', lazy=True)
 
     def to_dict(self):
+        from app.utils.cloudinary_helper import optimize_cloudinary_url
         return {
             'id': self.id,
             'group_id': self.group_id,
@@ -1511,7 +1540,7 @@ class ProductAddonOption(db.Model):
             'name': self.name,
             'price': float(self.price) if self.price is not None else 0,
             'stock_quantity': int(self.stock_quantity or 0),
-            'image_url': self.image_url,
+            'image_url': optimize_cloudinary_url(self.image_url, width=300) if self.image_url else None,
             'image_public_id': self.image_public_id,
             'sort_order': self.sort_order or 0,
             'is_available': self.is_available,

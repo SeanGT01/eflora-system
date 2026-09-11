@@ -2441,17 +2441,38 @@
             return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
         }
 
-        const DEFAULT_CUSTOMER_AVATAR_URL = '/static/images/default-customer-avatar.svg';
+        const DEFAULT_CUSTOMER_AVATAR_COLORS = ['pink', 'lavender', 'peach', 'yellow', 'blue', 'mint'];
 
-        function _customerDefaultAvatarHtml(size) {
-            size = size || 38;
-            return `<img class="avatar avatar--customer-default" src="${DEFAULT_CUSTOMER_AVATAR_URL}" alt="" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;">`;
+        function _resolveAvatarColor(seed) {
+            if (seed == null || seed === '') return 'pink';
+            if (typeof seed === 'number') {
+                return DEFAULT_CUSTOMER_AVATAR_COLORS[Math.abs(seed) % DEFAULT_CUSTOMER_AVATAR_COLORS.length];
+            }
+            const str = String(seed).trim();
+            if (!str) return 'pink';
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return DEFAULT_CUSTOMER_AVATAR_COLORS[Math.abs(hash) % DEFAULT_CUSTOMER_AVATAR_COLORS.length];
         }
 
-        function _avatarHtml(url, name, size, customerDefault) {
+        function _customerDefaultAvatarUrl(seed) {
+            const color = _resolveAvatarColor(seed);
+            return `/static/images/default-customer-avatar-${color}.svg`;
+        }
+
+        function _customerDefaultAvatarHtml(size, seed) {
+            size = size || 38;
+            const src = _customerDefaultAvatarUrl(seed);
+            return `<img class="avatar avatar--customer-default" src="${src}" alt="" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;">`;
+        }
+
+        function _avatarHtml(url, name, size, customerDefault, seed) {
             size = size || 38;
             if (url) return `<img class="avatar" src="${url}" alt="" style="width:${size}px;height:${size}px;">`;
-            if (customerDefault) return _customerDefaultAvatarHtml(size);
+            if (customerDefault) return _customerDefaultAvatarHtml(size, seed || name);
             return `<div class="avatar-placeholder" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.37)}px;">${_initials(name)}</div>`;
         }
 
@@ -2590,12 +2611,13 @@
                 _syncBadgeFromInbox();
                 if (!_unreadPollTimer) {
                     _unreadPollTimer = setInterval(function () {
+                        if (document.hidden) return;
                         const drawerOpen = !!document.getElementById('chat-overlay')?.classList.contains('open');
                         // Thread open: message poll owns freshness — skip unread churn
                         if (drawerOpen && _activeConvoId) return;
                         if (drawerOpen) _pollUnread();
                         else _syncBadgeFromInbox();
-                    }, 20000);
+                    }, 35000);
                 }
                 if (!_badgeVisibilityBound) {
                     _badgeVisibilityBound = true;
@@ -2891,7 +2913,7 @@
                 if (document.hidden || !_userId) return;
                 const drawerOpen = !!document.getElementById('chat-overlay')?.classList.contains('open');
                 if (!drawerOpen) _syncBadgeFromInbox();
-            }, 20000);
+            }, 35000);
         }
         _ensureClosedBadgeSync();
 
@@ -3041,7 +3063,7 @@
                     : (isSeller ? (c.store_name || other.full_name || 'Unknown') : (other.full_name || 'Unknown'));
                 const displayAvatar = isSeller ? (c.store_logo || other.avatar_url) : other.avatar_url;
                 const avatar = _withPresenceDot(
-                    _avatarHtml(displayAvatar, displayName, 44, !isSeller),
+                    _avatarHtml(displayAvatar, displayName, 44, !isSeller, other.id || displayName),
                     _isUserOnlineCached(other.id)
                 );
                 return `<div class="inbox-item" onclick="chatWidget.openConvo(${c.id})">
@@ -3683,7 +3705,7 @@
             if (other.role === 'admin') {
                 bare = _adminAvatar(38);
             } else {
-                bare = _avatarHtml(displayAvatar, displayName, 38, !isSeller);
+                bare = _avatarHtml(displayAvatar, displayName, 38, !isSeller, other.id || displayName);
             }
             _activeOtherUid = other.id || convo.seller_id || null;
             const storeId = convo.store_id || (other.store_id || null);
@@ -3822,7 +3844,7 @@
                 if (isSent) return '';
                 if (m.sender_avatar) return `<img class="sender-avatar" src="${m.sender_avatar}" alt="">`;
                 if (m.sender_role !== 'seller' && m.sender_role !== 'admin') {
-                    return _customerDefaultAvatarHtml(26);
+                    return _customerDefaultAvatarHtml(26, m.sender_id || m.sender_name);
                 }
                 const name = (m.sender_name || '?').trim();
                 const initial = _esc((name[0] || '?').toUpperCase());
@@ -4535,6 +4557,7 @@
         function _startQuoteCountdownTicker() {
             if (_quoteCountdownInterval) return;
             _quoteCountdownInterval = setInterval(() => {
+                if (document.hidden) return;
                 const timers = document.querySelectorAll('.chat-cq-timer');
                 if (!timers.length) return;
                 const now = new Date().getTime();

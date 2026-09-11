@@ -5,10 +5,10 @@
 {% block extra_css %}
 
 
-    <script src='https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.js'></script>
+    <script defer src='https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v3.19.0/mapbox-gl.css' rel='stylesheet' />
     
-    <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js'></script>
+    <script defer src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js'></script>
     <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css' />
 
 <style>
@@ -800,11 +800,30 @@
     };
 
     // ===== PROFILE PAGE INIT (CLOUDINARY AVATAR SUPPORT) =====
-    const DEFAULT_CUSTOMER_AVATAR_URL = "{{ url_for('static', filename='images/default-customer-avatar.svg') }}";
+    const DEFAULT_CUSTOMER_AVATAR_COLORS = ['pink', 'lavender', 'peach', 'yellow', 'blue', 'mint'];
 
-    function setCustomerDefaultAvatar(el) {
+    function getCustomerDefaultAvatarUrl(seed) {
+        if (!seed) return "{{ url_for('static', filename='images/default-customer-avatar.svg') }}";
+        let idx = 0;
+        if (typeof seed === 'number') {
+            idx = Math.abs(seed) % DEFAULT_CUSTOMER_AVATAR_COLORS.length;
+        } else {
+            const str = String(seed).trim();
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            idx = Math.abs(hash) % DEFAULT_CUSTOMER_AVATAR_COLORS.length;
+        }
+        const color = DEFAULT_CUSTOMER_AVATAR_COLORS[idx];
+        return `/static/images/default-customer-avatar-${color}.svg`;
+    }
+
+    function setCustomerDefaultAvatar(el, seed) {
         if (!el) return;
-        el.innerHTML = `<img src="${DEFAULT_CUSTOMER_AVATAR_URL}" alt="Profile">`;
+        const src = getCustomerDefaultAvatarUrl(seed);
+        el.innerHTML = `<img src="${src}" alt="Profile">`;
     }
 
     function initProfilePage() {
@@ -827,7 +846,7 @@
                 if (user.avatar_url) {
                     avatarCircle.innerHTML = `<img src="${user.avatar_url}?t=${Date.now()}" alt="Profile">`;
                 } else {
-                    setCustomerDefaultAvatar(avatarCircle);
+                    setCustomerDefaultAvatar(avatarCircle, user.id || user.full_name);
                 }
             }
 

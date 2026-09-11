@@ -35,6 +35,8 @@
             var isDesktopComputer = !isIOS && !isAndroid && !isMobileUa;
             var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
             var mem = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : null;
+            var cores = typeof navigator.hardwareConcurrency === 'number' ? navigator.hardwareConcurrency : null;
+            var lowCpu = cores !== null && cores <= 4;
             var lowMem = mem !== null && mem <= 4;
             var highMem = mem !== null && mem >= 6;
             var saveData = !!(c && c.saveData);
@@ -44,17 +46,17 @@
                 reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             } catch (e1) {}
 
-            // Blur degrade for constrained non-Apple clients only
-            if (!isIOS && !isDesktopComputer && (lowMem || saveData || slowNet)) {
+            // Blur degrade for constrained non-Apple clients or low-spec devices
+            if (!isDesktopComputer && (lowMem || lowCpu || saveData || slowNet)) {
                 document.documentElement.classList.add('perf-lite');
             }
 
-            // Carousel / rich UI: always on for desktop computers + iPhone/iPad
-            var richFx = isDesktopComputer || isIOS || (isAndroid && highMem);
+            // Carousel / rich UI: desktop computers + high-spec mobile
+            var richFx = isDesktopComputer || isIOS || (isAndroid && highMem && !lowCpu);
             // Decorative petals only (respect OS reduce-motion)
             var decorFx = richFx && !reduceMotion;
 
-            // fx-lite only for low-end / typical Android phones — never desktop/iPhone
+            // fx-lite for low-end / constrained devices
             if (!richFx) {
                 document.documentElement.classList.add('fx-lite');
             }
@@ -131,16 +133,7 @@
             min-height: 100dvh;
         }
 
-        /* ─── Grain Overlay ─── */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-            pointer-events: none;
-            z-index: 9999;
-            opacity: 0.4;
-        }
+        /* Grain Overlay removed for mobile rendering performance */
 
         /*
           iPhone status bar / Dynamic Island band. A dedicated element (not a
@@ -2990,47 +2983,87 @@
             }
         }
 
-        /* ─── LOW-END PERFORMANCE: drop expensive backdrop blur ─── */
-        /* iPhone/iPad keep glass (desktop-like). Only fx-lite / perf-lite / a11y. */
+        /* ─── PERFORMANCE: Hardware-accelerated and low-end rendering optimizations ─── */
+        /* Explicit targets rather than universal selectors to eliminate style recalc thrashing */
         @media (prefers-reduced-transparency: reduce) {
-            body *,
-            body *::before,
-            body *::after {
+            .main-header,
+            .mobile-bottom-nav,
+            .product-card,
+            .store-card,
+            .category-card,
+            .modal-content,
+            .chat-window,
+            .chat-drawer,
+            .glass-card,
+            .review-card,
+            .dropdown-menu {
                 backdrop-filter: none !important;
                 -webkit-backdrop-filter: none !important;
             }
         }
 
-        html.fx-lite body *,
-        html.fx-lite body *::before,
-        html.fx-lite body *::after,
-        html.perf-lite body *,
-        html.perf-lite body *::before,
-        html.perf-lite body *::after {
+        html.fx-lite .main-header,
+        html.perf-lite .main-header,
+        html.fx-lite .mobile-bottom-nav,
+        html.perf-lite .mobile-bottom-nav,
+        html.fx-lite .product-card,
+        html.perf-lite .product-card,
+        html.fx-lite .store-card,
+        html.perf-lite .store-card,
+        html.fx-lite .category-card,
+        html.perf-lite .category-card,
+        html.fx-lite .modal-content,
+        html.perf-lite .modal-content,
+        html.fx-lite .chat-window,
+        html.perf-lite .chat-window,
+        html.fx-lite .chat-drawer,
+        html.perf-lite .chat-drawer,
+        html.fx-lite .glass-card,
+        html.perf-lite .glass-card,
+        html.fx-lite .review-card,
+        html.perf-lite .review-card,
+        html.fx-lite .dropdown-menu,
+        html.perf-lite .dropdown-menu {
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
         }
+
         html.fx-lite .main-header,
         html.perf-lite .main-header {
             will-change: auto;
-            background: rgba(255, 250, 252, 0.96) !important;
+            background: rgba(255, 250, 252, 0.98) !important;
         }
         html.fx-lite .product-card,
-        html.perf-lite .product-card {
-            background: rgba(255, 255, 255, 0.92) !important;
+        html.perf-lite .product-card,
+        html.fx-lite .store-card,
+        html.perf-lite .store-card {
+            background: #ffffff !important;
         }
         html.fx-lite #chat-fab.pulse,
         html.perf-lite #chat-fab.pulse {
             animation: none !important;
         }
-        html.fx-lite body::before,
-        html.perf-lite body::before {
-            display: none !important;
+
+        /* Mobile screen GPU relief: keep glass subtle on header/nav, solid on repeated cards */
+        @media (max-width: 768px) {
+            .product-card,
+            .store-card,
+            .category-card,
+            .review-card,
+            .order-card {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                background: #ffffff !important;
+            }
         }
-        /* Keep paint work bounded on constrained devices without changing layout. */
-        html.fx-lite body *,
-        html.perf-lite body * {
-            scroll-behavior: auto;
+
+        /* Render off-screen cards lazily for fast initial paint and fluid scrolling */
+        .product-card,
+        .store-card,
+        .category-card,
+        .order-card {
+            content-visibility: auto;
+            contain-intrinsic-size: auto 320px;
         }
 
         @media (prefers-reduced-motion: reduce) {
