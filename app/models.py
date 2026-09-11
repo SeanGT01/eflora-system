@@ -2082,6 +2082,14 @@ class POSOrder(db.Model):
     discount = db.Column(db.Numeric(10, 2), default=0.00, nullable=True)  # Discount amount
     # ==============================
     
+    # ===== CUSTOM ORDER & DEDICATION CARD FIELDS =====
+    is_custom_order = db.Column(db.Boolean, default=False, nullable=False)
+    dedication_to = db.Column(db.String(100), nullable=True)
+    dedication_from = db.Column(db.String(100), nullable=True)
+    dedication_message = db.Column(db.Text, nullable=True)
+    florist_notes = db.Column(db.Text, nullable=True)
+    # ==================================================
+
     customer_name = db.Column(db.String(100))
     customer_contact = db.Column(db.String(20))
     is_seen_by_seller = db.Column(db.Boolean, default=False, nullable=False)
@@ -2115,6 +2123,11 @@ class POSOrder(db.Model):
             'customer_name': self.customer_name,
             'customer_contact': self.customer_contact,
             'is_seen_by_seller': self.is_seen_by_seller,
+            'is_custom_order': bool(self.is_custom_order),
+            'dedication_to': self.dedication_to,
+            'dedication_from': self.dedication_from,
+            'dedication_message': self.dedication_message,
+            'florist_notes': self.florist_notes,
             'items': [item.to_dict() for item in self.items],
             'item_count': len(self.items),
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -2127,7 +2140,7 @@ class POSOrderItem(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     pos_order_id = db.Column(db.Integer, db.ForeignKey('pos_orders.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=True)
     variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
     quantity = db.Column(db.Integer, default=1)
     price = db.Column(db.Numeric(10, 2))
@@ -2139,6 +2152,11 @@ class POSOrderItem(db.Model):
         db.ForeignKey('product_addon_options.id', ondelete='SET NULL'),
         nullable=True,
     )
+    # Custom item specific fields
+    is_custom = db.Column(db.Boolean, default=False, nullable=False)
+    custom_title = db.Column(db.String(255), nullable=True)
+    custom_inclusions = db.Column(db.Text, nullable=True)
+    custom_category = db.Column(db.String(50), nullable=True)
     
     # FIXED: Use back_populates to match the relationship in POSOrder
     pos_order = db.relationship('POSOrder', back_populates='items', lazy=True)
@@ -2173,12 +2191,14 @@ class POSOrderItem(db.Model):
 
         if self.line_name:
             display_name = self.line_name
+        elif self.custom_title:
+            display_name = self.custom_title
         elif product:
             display_name = product.name
             if variant_name:
                 display_name = f'{display_name} - {variant_name}'
         else:
-            display_name = None
+            display_name = self.custom_title or 'Custom Arrangement'
         
         return {
             'id': self.id,
@@ -2193,9 +2213,13 @@ class POSOrderItem(db.Model):
             'line_name': self.line_name,
             'is_addon': bool(self.addon_option_id),
             'addon_option_id': self.addon_option_id,
+            'is_custom': bool(self.is_custom),
+            'custom_title': self.custom_title,
+            'custom_inclusions': self.custom_inclusions,
+            'custom_category': self.custom_category,
             'product_image_url': self.product_image,  # Cloudinary only
-            # ADD THESE LINES - Category information
-            'main_category_name': product.main_category.name if product and product.main_category else None,
+            # Category information
+            'main_category_name': product.main_category.name if product and product.main_category else (self.custom_category or None),
             'main_category_id': product.main_category_id if product else None,
             'subcategory_name': product.store_category.name if product and product.store_category else None,
             'subcategory_id': product.store_category_id if product else None

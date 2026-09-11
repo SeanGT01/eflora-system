@@ -203,16 +203,46 @@ def create_app(config_class='default'):
         try:
             with app.app_context():
                 existing_tables = inspect(db.engine).get_table_names()
+                if 'pos_orders' in existing_tables:
+                    order_cols = {c['name'] for c in inspect(db.engine).get_columns('pos_orders')}
+                    order_stmts = []
+                    if 'is_custom_order' not in order_cols:
+                        order_stmts.append("ALTER TABLE pos_orders ADD COLUMN is_custom_order BOOLEAN NOT NULL DEFAULT FALSE")
+                    if 'dedication_to' not in order_cols:
+                        order_stmts.append("ALTER TABLE pos_orders ADD COLUMN dedication_to VARCHAR(100)")
+                    if 'dedication_from' not in order_cols:
+                        order_stmts.append("ALTER TABLE pos_orders ADD COLUMN dedication_from VARCHAR(100)")
+                    if 'dedication_message' not in order_cols:
+                        order_stmts.append("ALTER TABLE pos_orders ADD COLUMN dedication_message TEXT")
+                    if 'florist_notes' not in order_cols:
+                        order_stmts.append("ALTER TABLE pos_orders ADD COLUMN florist_notes TEXT")
+                    for stmt in order_stmts:
+                        try:
+                            db.session.execute(text(stmt))
+                            db.session.commit()
+                        except Exception:
+                            db.session.rollback()
+
                 if 'pos_order_items' not in existing_tables:
                     return
                 cols = {c['name'] for c in inspect(db.engine).get_columns('pos_order_items')}
-                stmts = []
+                stmts = [
+                    "ALTER TABLE pos_order_items ALTER COLUMN product_id DROP NOT NULL"
+                ]
                 if 'line_name' not in cols:
                     stmts.append("ALTER TABLE pos_order_items ADD COLUMN line_name VARCHAR(255)")
                 if 'line_image_url' not in cols:
                     stmts.append("ALTER TABLE pos_order_items ADD COLUMN line_image_url VARCHAR(500)")
                 if 'addon_option_id' not in cols:
                     stmts.append("ALTER TABLE pos_order_items ADD COLUMN addon_option_id INTEGER")
+                if 'is_custom' not in cols:
+                    stmts.append("ALTER TABLE pos_order_items ADD COLUMN is_custom BOOLEAN NOT NULL DEFAULT FALSE")
+                if 'custom_title' not in cols:
+                    stmts.append("ALTER TABLE pos_order_items ADD COLUMN custom_title VARCHAR(255)")
+                if 'custom_inclusions' not in cols:
+                    stmts.append("ALTER TABLE pos_order_items ADD COLUMN custom_inclusions TEXT")
+                if 'custom_category' not in cols:
+                    stmts.append("ALTER TABLE pos_order_items ADD COLUMN custom_category VARCHAR(50)")
                 for stmt in stmts:
                     try:
                         db.session.execute(text(stmt))
@@ -451,6 +481,43 @@ def create_app(config_class='default'):
         except Exception as db_patch_error:
             db.session.rollback()
             app.logger.warning(f"Could not apply custom_quote_tickets.allow_dedication_card patch: {db_patch_error}")
+
+    # Backward-safe DB patch: add POS custom order & dedication fields if missing.
+    with app.app_context():
+        try:
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            
+            if 'pos_orders' in tables:
+                pos_order_cols = {col['name'] for col in inspector.get_columns('pos_orders')}
+                if 'is_custom_order' not in pos_order_cols:
+                    db.session.execute(text("ALTER TABLE pos_orders ADD COLUMN is_custom_order BOOLEAN NOT NULL DEFAULT FALSE"))
+                if 'dedication_to' not in pos_order_cols:
+                    db.session.execute(text("ALTER TABLE pos_orders ADD COLUMN dedication_to VARCHAR(100)"))
+                if 'dedication_from' not in pos_order_cols:
+                    db.session.execute(text("ALTER TABLE pos_orders ADD COLUMN dedication_from VARCHAR(100)"))
+                if 'dedication_message' not in pos_order_cols:
+                    db.session.execute(text("ALTER TABLE pos_orders ADD COLUMN dedication_message TEXT"))
+                if 'florist_notes' not in pos_order_cols:
+                    db.session.execute(text("ALTER TABLE pos_orders ADD COLUMN florist_notes TEXT"))
+                db.session.commit()
+                app.logger.info("Checked/applied pos_orders custom order schema columns")
+
+            if 'pos_order_items' in tables:
+                pos_item_cols = {col['name'] for col in inspector.get_columns('pos_order_items')}
+                if 'is_custom' not in pos_item_cols:
+                    db.session.execute(text("ALTER TABLE pos_order_items ADD COLUMN is_custom BOOLEAN NOT NULL DEFAULT FALSE"))
+                if 'custom_title' not in pos_item_cols:
+                    db.session.execute(text("ALTER TABLE pos_order_items ADD COLUMN custom_title VARCHAR(255)"))
+                if 'custom_inclusions' not in pos_item_cols:
+                    db.session.execute(text("ALTER TABLE pos_order_items ADD COLUMN custom_inclusions TEXT"))
+                if 'custom_category' not in pos_item_cols:
+                    db.session.execute(text("ALTER TABLE pos_order_items ADD COLUMN custom_category VARCHAR(50)"))
+                db.session.commit()
+                app.logger.info("Checked/applied pos_order_items custom order schema columns")
+        except Exception as db_patch_error:
+            db.session.rollback()
+            app.logger.warning(f"Could not apply pos_orders / pos_order_items custom fields patch: {db_patch_error}")
     
     # ====================================================
     # REGISTER BLUEPRINTS (INCLUDING CLOUDINARY)

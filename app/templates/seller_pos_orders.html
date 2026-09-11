@@ -455,10 +455,13 @@ function renderOrders(orders) {
 
         const amountGiven  = parseFloat(order.amount_given  || order.total_amount);
         const method       = order.payment_method || 'cash';
+        const customBadge  = order.is_custom_order 
+            ? `<span style="background:#b5445a;color:#fff;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;text-transform:uppercase;letter-spacing:0.04em;">Custom</span>` 
+            : '';
 
         return `
             <tr>
-                <td data-label="Order #" style="font-family:monospace;font-weight:600;">#POS-${String(order.id).padStart(4,'0')}</td>
+                <td data-label="Order #" style="font-family:monospace;font-weight:600;">#POS-${String(order.id).padStart(4,'0')}${customBadge}</td>
                 <td data-label="Date">
                     <div>${dateStr}</div>
                     <div style="font-size:11px;color:var(--muted);">${timeStr}</div>
@@ -660,18 +663,56 @@ function renderOrderModal(order) {
         cashBlock.style.display = 'none';
     }
 
+    // Custom recipe & dedication notes
+    const customWithInclusions = items.find(i => i.is_custom && i.custom_inclusions);
+    const recipeBlock = document.getElementById('receiptCustomNotesBlock');
+    const recipeText = document.getElementById('receiptFloristNotes');
+    if (recipeBlock && recipeText) {
+        if (customWithInclusions && customWithInclusions.custom_inclusions) {
+            recipeText.textContent = customWithInclusions.custom_inclusions;
+            recipeBlock.style.display = 'block';
+        } else if (order.florist_notes) {
+            recipeText.textContent = order.florist_notes;
+            recipeBlock.style.display = 'block';
+        } else {
+            recipeBlock.style.display = 'none';
+        }
+    }
+
+    const dedBlock = document.getElementById('receiptDedicationBlock');
+    const dedTo = document.getElementById('receiptDedicationTo');
+    const dedMsg = document.getElementById('receiptDedicationMsg');
+    const dedFrom = document.getElementById('receiptDedicationFrom');
+    if (dedBlock) {
+        if (order.dedication_to || order.dedication_message || order.dedication_from) {
+            if (dedTo) dedTo.textContent = order.dedication_to ? `To: ${order.dedication_to}` : '';
+            if (dedMsg) dedMsg.textContent = order.dedication_message ? `"${order.dedication_message}"` : '';
+            if (dedFrom) dedFrom.textContent = order.dedication_from ? `From: ${order.dedication_from}` : '';
+            dedBlock.style.display = 'block';
+        } else {
+            dedBlock.style.display = 'none';
+        }
+    }
+
     document.getElementById('receiptLines').innerHTML = items.map(item => {
         const qty = Number(item.quantity) || 1;
         const amt = Number.isFinite(parseFloat(item.subtotal))
             ? parseFloat(item.subtotal)
             : qty * (parseFloat(item.unit_price) || 0);
-        const name = item.product_name || 'Item';
+        let name = item.product_name || 'Item';
+        if (item.is_custom) {
+            name = `[Custom] ${item.custom_title || name}`;
+        }
         const addonTag = item.is_addon ? ' (add-on)' : '';
+        const recipeRow = (item.is_custom && item.custom_inclusions)
+            ? `<div class="rcpt-addon" style="color:#2c2520;font-style:italic;">Recipe: ${escapeHtmlPos(item.custom_inclusions)}</div>`
+            : '';
         return `<div class="rcpt-item">
             <div class="rcpt-item-top">
                 <span class="rcpt-item-name">${qty}  ${escapeHtmlPos(name)}${addonTag}</span>
                 <span class="rcpt-item-amt">${peso(amt)}</span>
             </div>
+            ${recipeRow}
         </div>`;
     }).join('');
 

@@ -428,7 +428,11 @@ def _order_line_details_map(order_ids: Sequence[int]) -> dict:
         .all()
     )
     grouped = defaultdict(list)
+    order_is_custom = {}
     for it in items:
+        if it.order:
+            is_cust = bool(it.order.order_type == 'custom_chat' or it.order.custom_ticket_id)
+            order_is_custom[it.order_id] = is_cust
         name = it.product.name if it.product else 'Item'
         if it.order and it.order.order_type == 'custom_chat' and getattr(it.order, 'custom_ticket', None):
             name = it.order.custom_ticket.title
@@ -443,7 +447,15 @@ def _order_line_details_map(order_ids: Sequence[int]) -> dict:
         if addon_bits:
             chunk = f"{chunk} (+ {', '.join(addon_bits)})"
         grouped[it.order_id].append(chunk)
-    return {oid: '; '.join(parts) for oid, parts in grouped.items()}
+
+    result = {}
+    for oid, parts in grouped.items():
+        text = '; '.join(parts)
+        if order_is_custom.get(oid):
+            result[oid] = f"(CUSTOM) {text}" if text else "(CUSTOM)"
+        else:
+            result[oid] = text
+    return result
 
 
 def _period_catalog_sales(start, end, store_id=None):
@@ -481,6 +493,7 @@ def _period_catalog_sales(start, end, store_id=None):
         .filter(
             POSOrder.created_at >= start,
             POSOrder.created_at < end,
+            POSOrderItem.product_id.isnot(None),
             POSOrderItem.addon_option_id.is_(None),
         )
     )
@@ -490,6 +503,8 @@ def _period_catalog_sales(start, end, store_id=None):
 
     pv = {}
     for r in list(oi_q.all()) + list(pos_q.all()):
+        if not r.product_id:
+            continue
         key = (int(r.product_id), int(r.variant_id) if r.variant_id else None)
         entry = pv.setdefault(key, {'qty': 0, 'revenue': 0.0})
         entry['qty'] += int(_to_float(r.qty))
@@ -724,6 +739,39 @@ def _order_status_breakdown(store_id, start, end):
     return out
 
 
+def _pos_order_line_details(pos_order: POSOrder) -> str:
+    """Build a compact, descriptive items string for a POS order row."""
+    parts = []
+    for it in (pos_order.items or []):
+        qty = int(it.quantity or 1)
+        if it.is_custom:
+            title = (it.custom_title or it.line_name or 'Custom Arrangement').strip()
+            desc = f"{title} x{qty}"
+            extra = []
+            if it.custom_category:
+                extra.append(it.custom_category.replace('-', ' ').title())
+            if it.custom_inclusions:
+                inc = it.custom_inclusions.strip().replace('\n', ', ')
+                if len(inc) > 50:
+                    inc = inc[:47] + '...'
+                extra.append(f"Recipe: {inc}")
+            if extra:
+                desc = f"{desc} [{', '.join(extra)}]"
+            parts.append(desc)
+        else:
+            name = (it.line_name or (it.product.name if it.product else 'Item')).strip()
+            if it.variant and it.variant.name:
+                name = f"{name} — {it.variant.name.strip()}"
+            parts.append(f"{name} x{qty}")
+    out = '; '.join(parts) if parts else '—'
+    if pos_order.florist_notes:
+        fn = pos_order.florist_notes.strip().replace('\n', ' ')
+        if len(fn) > 40:
+            fn = fn[:37] + '...'
+        out = f"{out} (Notes: {fn})"
+    return out
+
+
 def _sales_by_category(store_id, start, end):
     online_rows = db.session.query(
         Category.name,
@@ -751,7 +799,22 @@ def _sales_by_category(store_id, start, end):
         POSOrder.store_id == store_id,
         POSOrder.created_at >= start,
         POSOrder.created_at < end,
+        POSOrderItem.product_id.isnot(None),
+        (POSOrderItem.is_custom.is_(False)) | (POSOrderItem.is_custom.is_(None)),
      ).group_by(Category.name) \
+      .all()
+
+    pos_custom_rows = db.session.query(
+        POSOrderItem.custom_category,
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('qty'),
+        func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('revenue'),
+    ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .filter(
+        POSOrder.store_id == store_id,
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+        (POSOrderItem.is_custom.is_(True)) | (POSOrderItem.product_id.is_(None)),
+     ).group_by(POSOrderItem.custom_category) \
       .all()
 
     merged = {}
@@ -770,6 +833,30 @@ def _sales_by_category(store_id, start, end):
 
     for row in pos_rows:
         key = row[0] or 'Uncategorized'
+        merged.setdefault(key, {
+            'name': key,
+            'online_qty': 0,
+            'online_revenue': 0.0,
+            'pos_qty': 0,
+            'pos_revenue': 0.0,
+            'revenue': 0.0,
+        })
+        merged[key]['pos_qty'] += int(row[1] or 0)
+        merged[key]['pos_revenue'] += _to_float(row[2])
+
+    cat_lookup = {}
+    try:
+        for c in Category.query.all():
+            if c.slug:
+                cat_lookup[c.slug.strip().lower()] = c.name
+            if c.name:
+                cat_lookup[c.name.strip().lower()] = c.name
+    except Exception:
+        pass
+
+    for row in pos_custom_rows:
+        raw_cat = (row[0] or '').strip().lower()
+        key = cat_lookup.get(raw_cat) or (raw_cat.replace('-', ' ').title() if raw_cat else 'Custom Arrangements')
         merged.setdefault(key, {
             'name': key,
             'online_qty': 0,
@@ -1182,31 +1269,74 @@ def _orders_section(store_id, start, end):
         orders.append(o)
     details_map = _order_line_details_map([o.id for o in orders])
     for o, item_qty in results:
+        is_custom = bool(o.order_type == 'custom_chat' or o.custom_ticket_id)
+        details = details_map.get(o.id) or '—'
+        if is_custom and not details.startswith('(CUSTOM)') and not details.startswith('[CUSTOM]'):
+            details = f"(CUSTOM) {details}" if details != '—' else '(CUSTOM)'
         rows.append([
             f"#{o.id:05d}",
             o.customer.full_name if o.customer else 'Walk-in',
             _format_pht(o.created_at),
             int(item_qty or 0),
-            details_map.get(o.id) or '—',
+            details,
             float(o.total_amount or 0),
             float(o.delivery_fee or 0),
             (o.status or 'pending').replace('_', ' ').title(),
             (o.payment_method or 'gcash').upper(),
             (o.payment_status or 'pending').replace('_', ' ').title(),
         ])
+
+    pos_orders_q = (
+        POSOrder.query
+        .options(
+            joinedload(POSOrder.items).joinedload(POSOrderItem.product),
+            joinedload(POSOrder.items).joinedload(POSOrderItem.variant),
+        )
+        .filter(
+            POSOrder.store_id == store_id,
+            POSOrder.created_at >= start,
+            POSOrder.created_at < end,
+        )
+        .order_by(POSOrder.created_at.desc())
+        .all()
+    )
+
+    pos_rows = []
+    for p in pos_orders_q:
+        item_qty = sum(int(it.quantity or 1) for it in (p.items or []))
+        details = _pos_order_line_details(p)
+        order_type = 'Walk-in (Custom)' if (p.is_custom_order or any(it.is_custom for it in (p.items or []))) else 'Walk-in (Standard)'
+        pos_rows.append([
+            f"POS-{p.id:05d}",
+            p.customer_name or 'Walk-in',
+            _format_pht(p.created_at),
+            item_qty,
+            details,
+            float(p.total_amount or 0),
+            float(p.discount or 0),
+            order_type,
+            (p.payment_method or 'cash').upper(),
+            'Completed',
+        ])
+
     delivered = sum(1 for o in orders if _order_status_key(o.status) == 'delivered')
     completed = sum(1 for o in orders if _order_status_key(o.status) == 'completed')
     cancelled = sum(1 for o in orders if _order_status_key(o.status) == 'cancelled')
     paid_orders = [o for o in orders if _is_paid_order_status(o.status)]
-    revenue = sum(float(o.total_amount or 0) for o in paid_orders)
+    online_revenue = sum(float(o.total_amount or 0) for o in paid_orders)
+    pos_revenue = sum(float(p.total_amount or 0) for p in pos_orders_q)
+    total_revenue = online_revenue + pos_revenue
     delivery_fees = sum(float(o.delivery_fee or 0) for o in paid_orders)
+
     summary = [
-        ('Total Orders', f"{len(orders):,}"),
-        ('Delivered', f"{delivered:,}"),
-        ('Completed', f"{completed:,}"),
-        ('Cancelled', f"{cancelled:,}"),
-        ('Revenue (Delivered + Completed)', peso(revenue)),
-        ('Delivery Fees (Delivered + Completed)', peso(delivery_fees)),
+        ('Online Orders', f"{len(orders):,}"),
+        ('POS / Walk-in Orders', f"{len(pos_orders_q):,}"),
+        ('Total Orders', f"{(len(orders) + len(pos_orders_q)):,}"),
+        ('Online Revenue', peso(online_revenue)),
+        ('POS Revenue', peso(pos_revenue)),
+        ('Total Revenue', peso(total_revenue)),
+        ('Online Delivery Fees', peso(delivery_fees)),
+        ('Cancelled Online Orders', f"{cancelled:,}"),
     ]
     return {
         'key': 'orders',
@@ -1216,6 +1346,12 @@ def _orders_section(store_id, start, end):
             'Amount (₱)', 'Delivery Fee (₱)', 'Status', 'Payment', 'Payment Status',
         ],
         'rows': rows,
+        'pos_title': 'Walk-in / POS Orders',
+        'pos_columns': [
+            'Receipt #', 'Customer', 'Date (PHT)', 'Items', 'Details / Custom Recipe',
+            'Amount (₱)', 'Discount (₱)', 'Type', 'Payment', 'Status',
+        ],
+        'pos_rows': pos_rows,
         'summary': summary,
     }
 
@@ -1600,9 +1736,11 @@ def _year_end_section(store_id, start, end):
     total_rev = online_rev + pos_rev
 
     online_orders = _online_order_count(store_id, start, end)
+    completed_online = _completed_online_order_count(store_id, start, end)
     pos_orders = _pos_order_count(store_id, start, end)
     total_orders = online_orders + pos_orders
-    avg_order = (total_rev / total_orders) if total_orders else 0.0
+    completed_orders = completed_online + pos_orders
+    avg_order = (total_rev / completed_orders) if completed_orders else 0.0
 
     new_customers = _new_customer_count(store_id, start, end)
     active_products = db.session.query(func.count(Product.id)).filter(
@@ -1660,7 +1798,7 @@ def _year_end_section(store_id, start, end):
     rows = [
         ['KPI', 'Total Revenue', total_rev, f"Online {peso(online_rev)} + POS {peso(pos_rev)}"],
         ['KPI', 'Total Orders', total_orders, f"Online {online_orders:,} + POS {pos_orders:,}"],
-        ['KPI', 'Average Order Value', avg_order, 'Total revenue / total orders'],
+        ['KPI', 'Average Order Value', avg_order, 'Total completed revenue / completed orders'],
         ['KPI', 'New Customers', new_customers, 'Customers placing their first order in period'],
         ['KPI', 'Active Products', active_products, 'Non-archived products in catalogue'],
         ['KPI', 'Active Riders', active_riders, f"{active_riders:,} active of {total_riders:,} total"],
@@ -1675,7 +1813,8 @@ def _year_end_section(store_id, start, end):
         m_pos_rev = _pos_revenue(store_id, b_start, b_end)
         m_total_rev = m_online_rev + m_pos_rev
         m_orders = _online_order_count(store_id, b_start, b_end) + _pos_order_count(store_id, b_start, b_end)
-        m_avg = (m_total_rev / m_orders) if m_orders else 0.0
+        m_completed = _completed_online_order_count(store_id, b_start, b_end) + _pos_order_count(store_id, b_start, b_end)
+        m_avg = (m_total_rev / m_completed) if m_completed else 0.0
 
         rows.append([
             'Month',
@@ -1762,14 +1901,26 @@ def apply_php_sort(payload: dict, mode: Optional[str] = None) -> dict:
             (i for i, col in enumerate(columns) if _MONEY_COL_RE.search(str(col or ''))),
             -1,
         )
-        if col_idx < 0:
-            continue
-        rows = list(section.get('rows') or [])
-        rows.sort(
-            key=lambda row: _money_sort_value(row[col_idx] if col_idx < len(row) else 0),
-            reverse=reverse,
+        if col_idx >= 0:
+            rows = list(section.get('rows') or [])
+            rows.sort(
+                key=lambda row: _money_sort_value(row[col_idx] if col_idx < len(row) else 0),
+                reverse=reverse,
+            )
+            section['rows'] = rows
+
+        pos_columns = section.get('pos_columns') or []
+        pos_col_idx = next(
+            (i for i, col in enumerate(pos_columns) if _MONEY_COL_RE.search(str(col or ''))),
+            -1,
         )
-        section['rows'] = rows
+        if pos_col_idx >= 0:
+            pos_rows = list(section.get('pos_rows') or [])
+            pos_rows.sort(
+                key=lambda row: _money_sort_value(row[pos_col_idx] if pos_col_idx < len(row) else 0),
+                reverse=reverse,
+            )
+            section['pos_rows'] = pos_rows
     return payload
 
 
@@ -1828,7 +1979,7 @@ def render_pdf(payload: dict) -> bytes:
     requested_by = (payload.get('requested_by') or '').strip() or 'Unknown user'
 
     buf = io.BytesIO()
-    max_cols = max((len(s.get('columns') or []) for s in sections), default=0)
+    max_cols = max((max(len(s.get('columns') or []), len(s.get('pos_columns') or [])) for s in sections), default=0)
     page_size = landscape(A4) if max_cols >= 7 else A4
     page_w, page_h = page_size
     doc = SimpleDocTemplate(
@@ -1967,7 +2118,7 @@ def render_pdf(payload: dict) -> bytes:
             return 'date'
         if h.strip() in ('type',):
             return 'center'
-        if any(k in h for k in ('amount', 'revenue', 'price', 'total', 'spent', 'avg', 'aov', 'fee', 'delivery')):
+        if any(k in h for k in ('amount', 'revenue', 'price', 'total', 'spent', 'avg', 'aov', 'fee', 'delivery', 'discount')):
             return 'amount'
         if h.strip() in ('items',) or any(k in h for k in ('qty', 'count', 'units sold', 'stock')):
             return 'center'
@@ -1989,6 +2140,189 @@ def render_pdf(payload: dict) -> bytes:
         if '@sms.eflora.internal' in text.lower():
             return _report_email(text)
         return text
+
+    def _build_flowable_table(header, rows, subtitle=None):
+        tbl_story = []
+        if subtitle:
+            tbl_story.append(Spacer(1, 10))
+            sub_style = ParagraphStyle(
+                'EFloraSubHdr', parent=section_style,
+                fontSize=11, leading=14, textColor=MAROON, spaceBefore=4, spaceAfter=6,
+            )
+            tbl_story.append(Paragraph(_xml_escape(_pdf_plain(subtitle)), sub_style))
+            tbl_story.append(Spacer(1, 4))
+
+        if not rows:
+            tbl_story.append(Paragraph('No data found for this period.', empty_style))
+            return tbl_story
+
+        kinds = [_col_kind(h) for h in header]
+        formatted_rows = [
+            [_format_cell_text(c, kinds[i] if i < len(kinds) else 'left') for i, c in enumerate(r)]
+            for r in rows
+        ]
+
+        def _datetime_html(text):
+            raw = (text or '').strip()
+            parts = raw.rsplit(' ', 2)
+            if len(parts) == 3 and ':' in parts[1] and parts[2].upper() in ('AM', 'PM'):
+                return f'{_xml_escape(parts[0])}<br/>{_xml_escape(parts[1] + " " + parts[2])}'
+            return _xml_escape(raw)
+
+        def _email_html(text):
+            raw = (text or '').strip()
+            if '@' in raw:
+                local, domain = raw.split('@', 1)
+                return f'{_xml_escape(local)}@<br/>{_xml_escape(domain)}'
+            return _xml_escape(raw)
+
+        def _body_cell(text, kind):
+            if kind == 'status':
+                return _pill(text, 'status')
+            if kind == 'payment_status':
+                return _pill(text, 'payment')
+            if kind == 'datetime':
+                return Paragraph(_datetime_html(text), body_cell_left)
+            if kind == 'email':
+                return Paragraph(_email_html(text), body_cell_left)
+            if kind == 'amount':
+                return Paragraph(_xml_escape(text), body_cell_right)
+            if kind == 'center':
+                return Paragraph(_xml_escape(text), body_cell_center)
+            if text and ('(CUSTOM)' in text or '[CUSTOM]' in text):
+                esc = _xml_escape(text)
+                esc = esc.replace('(CUSTOM)', '<font color="#C4714B"><b>[CUSTOM]</b></font>')
+                esc = esc.replace('[CUSTOM]', '<font color="#C4714B"><b>[CUSTOM]</b></font>')
+                return Paragraph(esc, body_cell_left)
+            return Paragraph(_xml_escape(text), body_cell_left)
+
+        wrapped_header = []
+        for h, kind in zip(header, kinds):
+            st = ParagraphStyle(
+                'hdr_' + kind, parent=header_cell_style,
+                alignment=TA_RIGHT if kind == 'amount' else (TA_CENTER if kind in ('center', 'status', 'payment_status') else TA_LEFT),
+            )
+            raw_h = _pdf_plain(h)
+            if ' / ' in raw_h:
+                header_html = '<br/>'.join(_xml_escape(p) for p in raw_h.split(' / '))
+            elif '(' in raw_h and raw_h.endswith(')'):
+                head, rest = raw_h.rsplit('(', 1)
+                header_html = f'{_xml_escape(head.strip())}<br/>({_xml_escape(rest)}'
+            elif ' ' in raw_h and len(raw_h) > 12:
+                header_html = _xml_escape(raw_h)
+            else:
+                header_html = _xml_escape(raw_h).replace(' ', '&nbsp;')
+            wrapped_header.append(Paragraph(header_html, st))
+
+        wrapped_rows = [
+            [_body_cell(c, kinds[i] if i < len(kinds) else 'left') for i, c in enumerate(row)]
+            for row in formatted_rows
+        ]
+        table_data = [wrapped_header] + wrapped_rows
+
+        def _measure(text, font='Helvetica', size=7.5):
+            return stringWidth(str(text or '')[:60], font, size)
+
+        col_count = max(1, len(header))
+        sample_rows = formatted_rows[:80]
+        pad = 16
+        mins, ideals = [], []
+        for i in range(col_count):
+            h = str(header[i]) if i < len(header) else ''
+            hlow = h.lower()
+            kind = kinds[i] if i < len(kinds) else 'left'
+            min_w = 44
+            if kind in ('status', 'payment_status'):
+                min_w = 72
+            elif 'delivery' in hlow or 'fee' in hlow:
+                min_w = 78
+            elif kind == 'amount':
+                min_w = 68
+            elif kind == 'datetime':
+                min_w = 78
+            elif 'date' in hlow or 'joined' in hlow or 'last order' in hlow:
+                min_w = 72
+            elif 'order id' in hlow or 'receipt' in hlow:
+                min_w = 52
+            elif 'add-on' in hlow or 'variant' in hlow or 'recipe' in hlow or 'inclusions' in hlow:
+                min_w = 130
+            elif 'email' in hlow:
+                min_w = 132
+            elif 'customer' in hlow:
+                min_w = 78
+            elif 'product' in hlow:
+                min_w = 80
+            elif 'payment' in hlow:
+                min_w = 52
+            elif hlow.strip() in ('items', 'stock', 'type'):
+                min_w = 40
+
+            header_w = _measure(_pdf_plain(h).replace(' / ', '/'), 'Helvetica-Bold', 7.2) + pad
+            body_w = 0
+            cap = 40 if 'email' in hlow else (
+                28 if ('add-on' in hlow or 'variant' in hlow or 'customer' in hlow or 'product' in hlow or 'recipe' in hlow) else 18
+            )
+            for r in sample_rows:
+                if i < len(r):
+                    body_w = max(body_w, _measure(r[i][:cap]))
+            if 'email' in hlow:
+                max_cap = 200
+            elif 'add-on' in hlow or 'variant' in hlow or 'recipe' in hlow:
+                max_cap = 220
+            else:
+                max_cap = 160
+            ideal = min(max(min_w, header_w, body_w + pad), max_cap)
+            mins.append(min_w)
+            ideals.append(ideal)
+
+        total_ideal = sum(ideals) or float(col_count)
+        if total_ideal <= content_w:
+            extra = content_w - total_ideal
+            grow = [
+                i for i, (kind, h) in enumerate(zip(kinds, header))
+                if kind in ('left', 'email') or 'add-on' in str(h).lower()
+                or 'variant' in str(h).lower() or 'customer' in str(h).lower()
+                or 'product' in str(h).lower() or 'email' in str(h).lower()
+                or 'recipe' in str(h).lower()
+            ]
+            if not grow:
+                grow = list(range(col_count))
+            add = extra / len(grow)
+            col_sizes = list(ideals)
+            for i in grow:
+                col_sizes[i] += add
+        else:
+            scale = content_w / total_ideal
+            col_sizes = [max(mins[i] * 0.85, ideals[i] * scale) for i in range(col_count)]
+            col_sizes[-1] += content_w - sum(col_sizes)
+
+        tight = col_count >= 8
+        table = Table(table_data, colWidths=col_sizes, repeatRows=1, hAlign='LEFT')
+        table_cmds = [
+            ('BACKGROUND', (0, 0), (-1, 0), MAROON),
+            ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 7.0 if tight else 7.4),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, ZEBRA]),
+            ('LINEBELOW', (0, 0), (-1, -2), 0.4, BORDER),
+            ('LINEBELOW', (0, -1), (-1, -1), 0.4, BORDER),
+            ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+            ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6 if tight else 7),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6 if tight else 7),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ]
+        for i, kind in enumerate(kinds):
+            if kind == 'amount':
+                table_cmds.append(('ALIGN', (i, 0), (i, -1), 'RIGHT'))
+            elif kind in ('center', 'status', 'payment_status'):
+                table_cmds.append(('ALIGN', (i, 0), (i, -1), 'CENTER'))
+        table.setStyle(TableStyle(table_cmds))
+        tbl_story.append(table)
+        return tbl_story
 
     default_system_logo = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'static', 'images', 'eflora-flower-logo.png')
@@ -2143,172 +2477,14 @@ def render_pdf(payload: dict) -> bytes:
                 story.append(kpi_tbl)
             story.append(Spacer(1, 12))
 
-        rows = sec['rows']
-        if not rows:
-            story.append(Paragraph('No data found for this period.', empty_style))
-            continue
+        main_sub = 'Online Orders' if sec.get('pos_rows') is not None else None
+        story.extend(_build_flowable_table(sec['columns'], sec['rows'], subtitle=main_sub))
 
-        header = sec['columns']
-        kinds = [_col_kind(h) for h in header]
-        formatted_rows = [
-            [_format_cell_text(c, kinds[i] if i < len(kinds) else 'left') for i, c in enumerate(r)]
-            for r in rows
-        ]
-
-        def _datetime_html(text):
-            raw = (text or '').strip()
-            parts = raw.rsplit(' ', 2)
-            if len(parts) == 3 and ':' in parts[1] and parts[2].upper() in ('AM', 'PM'):
-                return f'{_xml_escape(parts[0])}<br/>{_xml_escape(parts[1] + " " + parts[2])}'
-            return _xml_escape(raw)
-
-        def _email_html(text):
-            raw = (text or '').strip()
-            if '@' in raw:
-                local, domain = raw.split('@', 1)
-                return f'{_xml_escape(local)}@<br/>{_xml_escape(domain)}'
-            return _xml_escape(raw)
-
-        def _body_cell(text, kind):
-            if kind == 'status':
-                return _pill(text, 'status')
-            if kind == 'payment_status':
-                return _pill(text, 'payment')
-            if kind == 'datetime':
-                return Paragraph(_datetime_html(text), body_cell_left)
-            if kind == 'email':
-                return Paragraph(_email_html(text), body_cell_left)
-            if kind == 'amount':
-                return Paragraph(_xml_escape(text), body_cell_right)
-            if kind == 'center':
-                return Paragraph(_xml_escape(text), body_cell_center)
-            return Paragraph(_xml_escape(text), body_cell_left)
-
-        wrapped_header = []
-        for h, kind in zip(header, kinds):
-            st = ParagraphStyle(
-                'hdr_' + kind, parent=header_cell_style,
-                alignment=TA_RIGHT if kind == 'amount' else (TA_CENTER if kind in ('center', 'status', 'payment_status') else TA_LEFT),
-            )
-            raw_h = _pdf_plain(h)
-            if ' / ' in raw_h:
-                header_html = '<br/>'.join(_xml_escape(p) for p in raw_h.split(' / '))
-            elif '(' in raw_h and raw_h.endswith(')'):
-                head, rest = raw_h.rsplit('(', 1)
-                header_html = f'{_xml_escape(head.strip())}<br/>({_xml_escape(rest)}'
-            elif ' ' in raw_h and len(raw_h) > 12:
-                header_html = _xml_escape(raw_h)
-            else:
-                header_html = _xml_escape(raw_h).replace(' ', '&nbsp;')
-            wrapped_header.append(Paragraph(header_html, st))
-
-        wrapped_rows = [
-            [_body_cell(c, kinds[i] if i < len(kinds) else 'left') for i, c in enumerate(row)]
-            for row in formatted_rows
-        ]
-        table_data = [wrapped_header] + wrapped_rows
-
-        def _measure(text, font='Helvetica', size=7.5):
-            return stringWidth(str(text or '')[:60], font, size)
-
-        col_count = max(1, len(header))
-        sample_rows = formatted_rows[:80]
-        pad = 16
-        mins, ideals = [], []
-        for i in range(col_count):
-            h = str(header[i]) if i < len(header) else ''
-            hlow = h.lower()
-            kind = kinds[i] if i < len(kinds) else 'left'
-            min_w = 44
-            if kind in ('status', 'payment_status'):
-                min_w = 72
-            elif 'delivery' in hlow or 'fee' in hlow:
-                min_w = 78
-            elif kind == 'amount':
-                min_w = 68
-            elif kind == 'datetime':
-                min_w = 78
-            elif 'date' in hlow or 'joined' in hlow or 'last order' in hlow:
-                min_w = 72
-            elif 'order id' in hlow:
-                min_w = 52
-            elif 'add-on' in hlow or 'variant' in hlow:
-                min_w = 130
-            elif 'email' in hlow:
-                min_w = 132
-            elif 'customer' in hlow:
-                min_w = 78
-            elif 'product' in hlow:
-                min_w = 80
-            elif 'payment' in hlow:
-                min_w = 52
-            elif hlow.strip() in ('items', 'stock', 'type'):
-                min_w = 40
-
-            header_w = _measure(_pdf_plain(h).replace(' / ', '/'), 'Helvetica-Bold', 7.2) + pad
-            body_w = 0
-            cap = 40 if 'email' in hlow else (
-                28 if ('add-on' in hlow or 'variant' in hlow or 'customer' in hlow or 'product' in hlow) else 18
-            )
-            for r in sample_rows:
-                if i < len(r):
-                    body_w = max(body_w, _measure(r[i][:cap]))
-            if 'email' in hlow:
-                max_cap = 200
-            elif 'add-on' in hlow or 'variant' in hlow:
-                max_cap = 220
-            else:
-                max_cap = 160
-            ideal = min(max(min_w, header_w, body_w + pad), max_cap)
-            mins.append(min_w)
-            ideals.append(ideal)
-
-        total_ideal = sum(ideals) or float(col_count)
-        if total_ideal <= content_w:
-            extra = content_w - total_ideal
-            grow = [
-                i for i, (kind, h) in enumerate(zip(kinds, header))
-                if kind in ('left', 'email') or 'add-on' in str(h).lower()
-                or 'variant' in str(h).lower() or 'customer' in str(h).lower()
-                or 'product' in str(h).lower() or 'email' in str(h).lower()
-            ]
-            if not grow:
-                grow = list(range(col_count))
-            add = extra / len(grow)
-            col_sizes = list(ideals)
-            for i in grow:
-                col_sizes[i] += add
-        else:
-            scale = content_w / total_ideal
-            col_sizes = [max(mins[i] * 0.85, ideals[i] * scale) for i in range(col_count)]
-            col_sizes[-1] += content_w - sum(col_sizes)
-
-        tight = col_count >= 8
-        table = Table(table_data, colWidths=col_sizes, repeatRows=1, hAlign='LEFT')
-        table_cmds = [
-            ('BACKGROUND', (0, 0), (-1, 0), MAROON),
-            ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 7.0 if tight else 7.4),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('TOPPADDING', (0, 0), (-1, 0), 8),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, ZEBRA]),
-            ('LINEBELOW', (0, 0), (-1, -2), 0.4, BORDER),
-            ('LINEBELOW', (0, -1), (-1, -1), 0.4, BORDER),
-            ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-            ('VALIGN', (0, 1), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6 if tight else 7),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6 if tight else 7),
-            ('TOPPADDING', (0, 1), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        ]
-        for i, kind in enumerate(kinds):
-            if kind == 'amount':
-                table_cmds.append(('ALIGN', (i, 0), (i, -1), 'RIGHT'))
-            elif kind in ('center', 'status', 'payment_status'):
-                table_cmds.append(('ALIGN', (i, 0), (i, -1), 'CENTER'))
-        table.setStyle(TableStyle(table_cmds))
-        story.append(table)
+        if sec.get('pos_rows') is not None:
+            pos_title = sec.get('pos_title') or 'Walk-in / POS Orders'
+            pos_header = sec.get('pos_columns') or []
+            pos_rows = sec.get('pos_rows') or []
+            story.extend(_build_flowable_table(pos_header, pos_rows, subtitle=pos_title))
 
     if not sections:
         story.append(Paragraph('No report types selected.', empty_style))
@@ -2360,12 +2536,23 @@ def _section_to_csv_bytes(section: dict) -> bytes:
     for k, v in section.get('summary', []):
         writer.writerow([f"# {k}", v])
     writer.writerow([])
+    if section.get('pos_rows') is not None:
+        writer.writerow(["# ONLINE ORDERS"])
     writer.writerow(section['columns'])
     for row in section['rows']:
         writer.writerow([
             f"{cell:.2f}" if isinstance(cell, (float, Decimal)) else cell
             for cell in row
         ])
+    if section.get('pos_rows') is not None:
+        writer.writerow([])
+        writer.writerow([f"# {section.get('pos_title', 'WALK-IN / POS ORDERS').upper()}"])
+        writer.writerow(section.get('pos_columns', []))
+        for row in section.get('pos_rows', []):
+            writer.writerow([
+                f"{cell:.2f}" if isinstance(cell, (float, Decimal)) else cell
+                for cell in row
+            ])
     # \ufeff = BOM so Excel auto-detects UTF-8 + the peso symbol
     return ('\ufeff' + buf.getvalue()).encode('utf-8')
 
@@ -2651,7 +2838,21 @@ def _platform_sales_by_category(start, end):
      .filter(
         POSOrder.created_at >= start,
         POSOrder.created_at < end,
+        POSOrderItem.product_id.isnot(None),
+        (POSOrderItem.is_custom.is_(False)) | (POSOrderItem.is_custom.is_(None)),
      ).group_by(Category.name) \
+      .all()
+
+    pos_custom_rows = db.session.query(
+        POSOrderItem.custom_category,
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('qty'),
+        func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('revenue'),
+    ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+        (POSOrderItem.is_custom.is_(True)) | (POSOrderItem.product_id.is_(None)),
+     ).group_by(POSOrderItem.custom_category) \
       .all()
 
     merged = {}
@@ -2670,6 +2871,30 @@ def _platform_sales_by_category(start, end):
 
     for row in pos_rows:
         key = row[0] or 'Uncategorized'
+        merged.setdefault(key, {
+            'name': key,
+            'online_qty': 0,
+            'online_revenue': 0.0,
+            'pos_qty': 0,
+            'pos_revenue': 0.0,
+            'revenue': 0.0,
+        })
+        merged[key]['pos_qty'] += int(row[1] or 0)
+        merged[key]['pos_revenue'] += _to_float(row[2])
+
+    cat_lookup = {}
+    try:
+        for c in Category.query.all():
+            if c.slug:
+                cat_lookup[c.slug.strip().lower()] = c.name
+            if c.name:
+                cat_lookup[c.name.strip().lower()] = c.name
+    except Exception:
+        pass
+
+    for row in pos_custom_rows:
+        raw_cat = (row[0] or '').strip().lower()
+        key = cat_lookup.get(raw_cat) or (raw_cat.replace('-', ' ').title() if raw_cat else 'Custom Arrangements')
         merged.setdefault(key, {
             'name': key,
             'online_qty': 0,
@@ -3056,31 +3281,75 @@ def _admin_orders_section(start, end):
         orders.append(o)
     details_map = _order_line_details_map([o.id for o in orders])
     for o, item_qty in results:
+        is_custom = bool(o.order_type == 'custom_chat' or o.custom_ticket_id)
+        details = details_map.get(o.id) or '—'
+        if is_custom and not details.startswith('(CUSTOM)') and not details.startswith('[CUSTOM]'):
+            details = f"(CUSTOM) {details}" if details != '—' else '(CUSTOM)'
         rows.append([
             f"#{o.id:05d}",
             o.store.name if getattr(o, 'store', None) else '—',
             o.customer.full_name if o.customer else 'Walk-in',
             _format_pht(o.created_at),
             int(item_qty or 0),
-            details_map.get(o.id) or '—',
+            details,
             float(o.total_amount or 0),
             float(o.delivery_fee or 0),
             (o.status or 'pending').replace('_', ' ').title(),
             (o.payment_method or 'gcash').upper(),
         ])
+
+    pos_orders_q = (
+        POSOrder.query
+        .options(
+            joinedload(POSOrder.store),
+            joinedload(POSOrder.items).joinedload(POSOrderItem.product),
+            joinedload(POSOrder.items).joinedload(POSOrderItem.variant),
+        )
+        .filter(
+            POSOrder.created_at >= start,
+            POSOrder.created_at < end,
+        )
+        .order_by(POSOrder.created_at.desc())
+        .all()
+    )
+
+    pos_rows = []
+    for p in pos_orders_q:
+        item_qty = sum(int(it.quantity or 1) for it in (p.items or []))
+        details = _pos_order_line_details(p)
+        order_type = 'Walk-in (Custom)' if (p.is_custom_order or any(it.is_custom for it in (p.items or []))) else 'Walk-in (Standard)'
+        pos_rows.append([
+            f"POS-{p.id:05d}",
+            p.store.name if getattr(p, 'store', None) else '—',
+            p.customer_name or 'Walk-in',
+            _format_pht(p.created_at),
+            item_qty,
+            details,
+            float(p.total_amount or 0),
+            float(p.discount or 0),
+            order_type,
+            (p.payment_method or 'cash').upper(),
+            'Completed',
+        ])
+
     delivered = sum(1 for o in orders if _order_status_key(o.status) == 'delivered')
     completed = sum(1 for o in orders if _order_status_key(o.status) == 'completed')
     cancelled = sum(1 for o in orders if _order_status_key(o.status) == 'cancelled')
     paid_orders = [o for o in orders if _is_paid_order_status(o.status)]
-    revenue = sum(float(o.total_amount or 0) for o in paid_orders)
+    online_revenue = sum(float(o.total_amount or 0) for o in paid_orders)
+    pos_revenue = sum(float(p.total_amount or 0) for p in pos_orders_q)
+    total_revenue = online_revenue + pos_revenue
     delivery_fees = sum(float(o.delivery_fee or 0) for o in paid_orders)
+
     summary = [
-        ('Total Orders', f"{len(orders):,}"),
-        ('Delivered', f"{delivered:,}"),
-        ('Completed', f"{completed:,}"),
-        ('Cancelled', f"{cancelled:,}"),
-        ('Revenue (Delivered + Completed)', peso(revenue)),
-        ('Delivery Fees (Delivered + Completed)', peso(delivery_fees)),
+        ('Online Orders', f"{len(orders):,}"),
+        ('POS / Walk-in Orders', f"{len(pos_orders_q):,}"),
+        ('Total Orders', f"{(len(orders) + len(pos_orders_q)):,}"),
+        ('Online Revenue', peso(online_revenue)),
+        ('POS Revenue', peso(pos_revenue)),
+        ('Total Revenue', peso(total_revenue)),
+        ('Online Delivery Fees', peso(delivery_fees)),
+        ('Cancelled Online Orders', f"{cancelled:,}"),
     ]
     return {
         'key': 'orders',
@@ -3088,6 +3357,10 @@ def _admin_orders_section(start, end):
         'columns': ['Order ID', 'Store', 'Customer', 'Date (PHT)', 'Items', 'Variants / Add-ons',
                     'Amount (₱)', 'Delivery Fee (₱)', 'Status', 'Payment'],
         'rows': rows,
+        'pos_title': 'Walk-in / POS Orders (All Stores)',
+        'pos_columns': ['Receipt #', 'Store', 'Customer', 'Date (PHT)', 'Items', 'Details / Custom Recipe',
+                        'Amount (₱)', 'Discount (₱)', 'Type', 'Payment', 'Status'],
+        'pos_rows': pos_rows,
         'summary': summary,
     }
 
@@ -3146,25 +3419,53 @@ def _admin_stores_section(start, end):
                        & (Order.created_at >= start)
                        & (Order.created_at < end)) \
      .group_by(Store.id, Store.name, Store.status, User.full_name, User.email) \
-     .order_by(func.sum(Order.total_amount).desc().nullslast()) \
      .all()
 
-    out_rows = []
+    pos_rows = db.session.query(
+        POSOrder.store_id,
+        func.count(POSOrder.id).label('pos_orders'),
+        func.coalesce(func.sum(POSOrder.total_amount), 0).label('pos_revenue'),
+    ).filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).group_by(POSOrder.store_id).all()
+    pos_map = {r.store_id: (int(r.pos_orders or 0), float(r.pos_revenue or 0)) for r in pos_rows}
+
+    store_data = []
     combined_revenue = 0.0
     for r in rows:
-        revenue = float(r.revenue or 0)
-        combined_revenue += revenue
+        online_rev = float(r.revenue or 0)
+        online_orders = int(r.orders or 0)
+        pos_orders, pos_rev = pos_map.get(r.id, (0, 0.0))
+        tot_rev = online_rev + pos_rev
+        tot_orders = online_orders + pos_orders
+        combined_revenue += tot_rev
+        store_data.append({
+            'name': r.name,
+            'status': (r.status or 'pending').replace('_', ' ').title(),
+            'raw_status': (r.status or '').lower(),
+            'owner_name': r.owner_name or 'Unassigned',
+            'owner_email': _report_email(r.owner_email),
+            'orders': tot_orders,
+            'revenue': tot_rev,
+        })
+
+    # Sort stores by combined revenue descending
+    store_data.sort(key=lambda x: x['revenue'], reverse=True)
+
+    out_rows = []
+    for s in store_data:
         out_rows.append([
-            r.name,
-            (r.status or 'pending').replace('_', ' ').title(),
-            r.owner_name or 'Unassigned',
-            _report_email(r.owner_email),
-            int(r.orders or 0),
-            peso(revenue),
+            s['name'],
+            s['status'],
+            s['owner_name'],
+            s['owner_email'],
+            s['orders'],
+            peso(s['revenue']),
         ])
-    active = sum(1 for r in rows if (r.status or '').lower() == 'active')
-    pending = sum(1 for r in rows if (r.status or '').lower() == 'pending')
-    suspended = sum(1 for r in rows if (r.status or '').lower() == 'suspended')
+    active = sum(1 for s in store_data if s['raw_status'] == 'active')
+    pending = sum(1 for s in store_data if s['raw_status'] == 'pending')
+    suspended = sum(1 for s in store_data if s['raw_status'] == 'suspended')
     summary = [
         ('Total Stores', f"{len(out_rows):,}"),
         ('Active', f"{active:,}"),
@@ -3176,7 +3477,7 @@ def _admin_stores_section(start, end):
         'key': 'stores',
         'title': 'Stores Performance Report',
         'columns': ['Store', 'Status', 'Owner', 'Email',
-                    'Delivered Orders', 'Revenue (₱)'],
+                    'Delivered/Completed Orders', 'Revenue (₱)'],
         'rows': out_rows,
         'summary': summary,
     }
@@ -3276,9 +3577,11 @@ def _admin_year_end_section(start, end):
     total_rev = online_rev + pos_rev
 
     online_orders = _platform_online_order_count(start, end)
+    completed_online = _platform_completed_online_order_count(start, end)
     pos_orders = _platform_pos_order_count(start, end)
     total_orders = online_orders + pos_orders
-    avg_order = (total_rev / total_orders) if total_orders else 0.0
+    completed_orders = completed_online + pos_orders
+    avg_order = (total_rev / completed_orders) if completed_orders else 0.0
 
     new_customers = _platform_new_customer_count(start, end)
     active_stores = db.session.query(func.count(Store.id)).filter(Store.status == 'active').scalar() or 0
@@ -3286,19 +3589,9 @@ def _admin_year_end_section(start, end):
     total_riders = db.session.query(func.count(Rider.id)).scalar() or 0
     active_riders = db.session.query(func.count(Rider.id)).filter(Rider.is_active.is_(True)).scalar() or 0
 
-    top_store_row = db.session.query(
-        Store.name,
-        func.coalesce(func.sum(Order.total_amount), 0).label('rev'),
-    ).join(Order, Order.store_id == Store.id) \
-     .filter(
-        _paid_order_status_filter(),
-        Order.created_at >= start,
-        Order.created_at < end,
-     ).group_by(Store.name) \
-      .order_by(func.sum(Order.total_amount).desc()) \
-      .first()
-    top_store_name = top_store_row.name if top_store_row else 'N/A'
-    top_store_rev = _to_float(top_store_row.rev) if top_store_row else 0.0
+    top_stores = _platform_top_stores(start, end, limit=1)
+    top_store_name = top_stores[0]['name'] if top_stores else 'N/A'
+    top_store_rev = top_stores[0]['revenue'] if top_stores else 0.0
 
     top_products = _platform_top_products(start, end, limit=3)
     top_products_label = ', '.join(p['name'] for p in top_products) if top_products else 'N/A'
@@ -3306,7 +3599,7 @@ def _admin_year_end_section(start, end):
     rows = [
         ['KPI', 'Total Revenue', total_rev, f"Online {peso(online_rev)} + POS {peso(pos_rev)}"],
         ['KPI', 'Total Orders', total_orders, f"Online {online_orders:,} + POS {pos_orders:,}"],
-        ['KPI', 'Average Order Value', avg_order, 'Total revenue / total orders'],
+        ['KPI', 'Average Order Value', avg_order, 'Total completed revenue / completed orders'],
         ['KPI', 'New Customers', new_customers, 'Customers placing first order in period'],
         ['KPI', 'Active Stores', active_stores, f"{pending_stores:,} pending review"],
         ['KPI', 'Active Riders', active_riders, f"{active_riders:,} active of {total_riders:,} total"],
@@ -3319,7 +3612,8 @@ def _admin_year_end_section(start, end):
         m_pos_rev = _platform_pos_revenue(b_start, b_end)
         m_total_rev = m_online_rev + m_pos_rev
         m_orders = _platform_online_order_count(b_start, b_end) + _platform_pos_order_count(b_start, b_end)
-        m_avg = (m_total_rev / m_orders) if m_orders else 0.0
+        m_completed = _platform_completed_online_order_count(b_start, b_end) + _platform_pos_order_count(b_start, b_end)
+        m_avg = (m_total_rev / m_completed) if m_completed else 0.0
 
         rows.append([
             'Month',

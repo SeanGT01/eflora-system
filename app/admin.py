@@ -1,10 +1,10 @@
 from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from app import db
-from app.models import User, Store, Order, Product, Rider, OrderAnalytics, SellerApplication, Notification
+from app.models import User, Store, Order, Product, Rider, OrderAnalytics, SellerApplication, Notification, POSOrder
 from sqlalchemy import func, text
 from datetime import datetime, timedelta
-from app.utils.report_service import period_range, pht_sql_date
+from app.utils.report_service import period_range, pht_sql_date, COMPLETED_ORDER_STATUSES
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -240,32 +240,63 @@ def get_all_orders():
 def get_analytics():
     period = request.args.get('period', 'month')  # day, week, month, year
     day = pht_sql_date(Order.created_at)
+    pos_day = pht_sql_date(POSOrder.created_at)
 
     if period == 'day':
         start_date, end_date, _ = period_range('today')
         group_by = day
+        pos_group_by = pos_day
     elif period == 'week':
         start_date, end_date, _ = period_range('week')
         group_by = day
+        pos_group_by = pos_day
     elif period == 'year':
         start_date, end_date, _ = period_range('year')
         group_by = func.date_trunc(
             'month', Order.created_at + text("INTERVAL '8 hours'")
         )
+        pos_group_by = func.date_trunc(
+            'month', POSOrder.created_at + text("INTERVAL '8 hours'")
+        )
     else:  # month
         start_date, end_date, _ = period_range('month')
         group_by = day
+        pos_group_by = pos_day
 
-    # Revenue trend
-    revenue_trend = db.session.query(
+    # Revenue trend (Online completed + POS)
+    online_trend = db.session.query(
         group_by.label('period'),
         func.count(Order.id).label('order_count'),
-        func.sum(Order.total_amount).label('revenue')
+        func.coalesce(func.sum(Order.total_amount), 0).label('revenue')
     ).filter(
         Order.created_at >= start_date,
         Order.created_at < end_date,
-        Order.status == 'delivered'
-    ).group_by(group_by).order_by(group_by).all()
+        Order.status.in_(COMPLETED_ORDER_STATUSES)
+    ).group_by(group_by).all()
+
+    pos_trend = db.session.query(
+        pos_group_by.label('period'),
+        func.count(POSOrder.id).label('order_count'),
+        func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue')
+    ).filter(
+        POSOrder.created_at >= start_date,
+        POSOrder.created_at < end_date,
+    ).group_by(pos_group_by).all()
+
+    merged_trend = {}
+    for row in online_trend:
+        key = row.period.isoformat() if hasattr(row.period, 'isoformat') else str(row.period)
+        merged_trend.setdefault(key, {'period': key, 'order_count': 0, 'revenue': 0.0})
+        merged_trend[key]['order_count'] += int(row.order_count or 0)
+        merged_trend[key]['revenue'] += float(row.revenue or 0)
+
+    for row in pos_trend:
+        key = row.period.isoformat() if hasattr(row.period, 'isoformat') else str(row.period)
+        merged_trend.setdefault(key, {'period': key, 'order_count': 0, 'revenue': 0.0})
+        merged_trend[key]['order_count'] += int(row.order_count or 0)
+        merged_trend[key]['revenue'] += float(row.revenue or 0)
+
+    sorted_trend = sorted(merged_trend.values(), key=lambda x: x['period'])
     
     # Order status distribution
     status_distribution = db.session.query(
@@ -276,38 +307,50 @@ def get_analytics():
         Order.created_at < end_date,
     ).group_by(Order.status).all()
     
-    # Top stores
-    top_stores = db.session.query(
+    # Top stores (Online completed + POS)
+    online_stores = db.session.query(
+        Store.id,
         Store.name,
         func.count(Order.id).label('order_count'),
-        func.sum(Order.total_amount).label('revenue')
+        func.coalesce(func.sum(Order.total_amount), 0).label('revenue')
     ).join(Order, Store.id == Order.store_id).filter(
         Order.created_at >= start_date,
         Order.created_at < end_date,
-        Order.status == 'delivered'
-    ).group_by(Store.id, Store.name).order_by(func.sum(Order.total_amount).desc()).limit(10).all()
-    
+        Order.status.in_(COMPLETED_ORDER_STATUSES)
+    ).group_by(Store.id, Store.name).all()
+
+    pos_stores = db.session.query(
+        Store.id,
+        Store.name,
+        func.count(POSOrder.id).label('order_count'),
+        func.coalesce(func.sum(POSOrder.total_amount), 0).label('revenue')
+    ).join(POSOrder, Store.id == POSOrder.store_id).filter(
+        POSOrder.created_at >= start_date,
+        POSOrder.created_at < end_date,
+    ).group_by(Store.id, Store.name).all()
+
+    merged_stores = {}
+    for row in online_stores:
+        key = row.id
+        merged_stores.setdefault(key, {'store_name': row.name, 'order_count': 0, 'revenue': 0.0})
+        merged_stores[key]['order_count'] += int(row.order_count or 0)
+        merged_stores[key]['revenue'] += float(row.revenue or 0)
+
+    for row in pos_stores:
+        key = row.id
+        merged_stores.setdefault(key, {'store_name': row.name, 'order_count': 0, 'revenue': 0.0})
+        merged_stores[key]['order_count'] += int(row.order_count or 0)
+        merged_stores[key]['revenue'] += float(row.revenue or 0)
+
+    top_stores = sorted(merged_stores.values(), key=lambda x: x['revenue'], reverse=True)[:10]
+
     return jsonify({
-        'revenue_trend': [
-            {
-                'period': row.period.isoformat() if hasattr(row.period, 'isoformat') else str(row.period),
-                'order_count': row.order_count,
-                'revenue': float(row.revenue or 0)
-            }
-            for row in revenue_trend
-        ],
+        'revenue_trend': sorted_trend,
         'status_distribution': [
             {'status': row.status, 'count': row.count}
             for row in status_distribution
         ],
-        'top_stores': [
-            {
-                'store_name': row.name,
-                'order_count': row.order_count,
-                'revenue': float(row.revenue or 0)
-            }
-            for row in top_stores
-        ]
+        'top_stores': top_stores
     }), 200
 
 

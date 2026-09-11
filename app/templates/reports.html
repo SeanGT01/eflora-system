@@ -377,6 +377,22 @@
   margin-bottom: .75rem;
 }
 
+.section-subtitle {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--charcoal);
+  margin-top: 1.35rem;
+  margin-bottom: .65rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.section-subtitle:first-of-type {
+  margin-top: .35rem;
+}
+
 .section-summary {
   display: flex;
   flex-wrap: wrap;
@@ -743,6 +759,22 @@
 .sp-rose  { background:rgba(181,68,90,.1);  color:var(--deep-rose); }
 .sp-terra { background:rgba(196,113,75,.13); color:var(--terracotta); }
 .sp-bark  { background:rgba(107,76,59,.1);   color:var(--bark); }
+
+.pill-custom {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  margin-right: 5px;
+  vertical-align: 1px;
+  display: inline-block;
+  line-height: 1.2;
+  text-transform: uppercase;
+  background: rgba(196,113,75,.16);
+  color: var(--terracotta);
+  border: 1px solid rgba(196,113,75,.28);
+}
 
 .report-two-col {
   display: grid;
@@ -1734,6 +1766,9 @@ async function generateReport() {
     lastPreviewPayload = data;
     data.sections.forEach(function(section) {
       section._originalRows = (section.rows || []).map(function(row) { return row.slice(); });
+      if (section.pos_rows) {
+        section._originalPosRows = section.pos_rows.map(function(row) { return row.slice(); });
+      }
     });
     const sortEl = document.getElementById('phpSortSelect');
     if (sortEl) sortEl.value = 'original';
@@ -1780,7 +1815,7 @@ function statusPillFor(value) {
   const v = String(value || '').toLowerCase();
   if (/out of stock/.test(v)) return 'sp-red';
   if (/low stock/.test(v)) return 'sp-yellow';
-  if (/(delivered|paid|verified|active|available|ok)/.test(v)) return 'sp-green';
+  if (/(delivered|paid|verified|active|available|ok|completed)/.test(v)) return 'sp-green';
   if (/(processing|preparing|pending)/.test(v)) return 'sp-rose';
   if (/(on delivery|inactive|on leave)/.test(v)) return 'sp-terra';
   return 'sp-bark';
@@ -1802,7 +1837,7 @@ function formatCurrencyText(text) {
 
 function isMoneyColumn(columnName) {
   const c = String(columnName || '').toLowerCase();
-  return /(amount|total|subtotal|revenue|sales|price|aov|average order value|earnings|fee|cost|income)/.test(c);
+  return /(amount|total|subtotal|revenue|sales|price|aov|average order value|earnings|fee|cost|income|discount)/.test(c);
 }
 
 function formatReportCell(columnName, cellValue) {
@@ -1844,23 +1879,79 @@ function applyPhpSort(mode) {
     const rows = source.map(function(row) { return row.slice(); });
     if (previewPhpSort === 'original') {
       section.rows = rows;
-      return;
-    }
-    const colIdx = (section.columns || []).findIndex(function(col) { return isMoneyColumn(col); });
-    if (colIdx < 0) {
+    } else {
+      const colIdx = (section.columns || []).findIndex(function(col) { return isMoneyColumn(col); });
+      if (colIdx >= 0) {
+        rows.sort(function(a, b) {
+          const av = moneySortValue(a[colIdx]);
+          const bv = moneySortValue(b[colIdx]);
+          return previewPhpSort === 'php-desc' ? bv - av : av - bv;
+        });
+      }
       section.rows = rows;
-      return;
     }
-    rows.sort(function(a, b) {
-      const av = moneySortValue(a[colIdx]);
-      const bv = moneySortValue(b[colIdx]);
-      return previewPhpSort === 'php-desc' ? bv - av : av - bv;
-    });
-    section.rows = rows;
+
+    if (section.pos_rows || section._originalPosRows) {
+      const posSource = section._originalPosRows || section.pos_rows || [];
+      const posRows = posSource.map(function(row) { return row.slice(); });
+      if (previewPhpSort === 'original') {
+        section.pos_rows = posRows;
+      } else {
+        const posColIdx = (section.pos_columns || []).findIndex(function(col) { return isMoneyColumn(col); });
+        if (posColIdx >= 0) {
+          posRows.sort(function(a, b) {
+            const av = moneySortValue(a[posColIdx]);
+            const bv = moneySortValue(b[posColIdx]);
+            return previewPhpSort === 'php-desc' ? bv - av : av - bv;
+          });
+        }
+        section.pos_rows = posRows;
+      }
+    }
   });
   renderPreview(lastPreviewPayload);
 }
 window.applyPhpSort = applyPhpSort;
+
+function _renderTable(cols, rows, totalCount, subtitle) {
+  let tHtml = '';
+  if (subtitle) {
+    tHtml += `<div class="section-subtitle">${escapeHtml(subtitle)}</div>`;
+  }
+  if (!rows || !rows.length) {
+    tHtml += `<div class="section-empty" style="margin-bottom:1rem;">No records found for this period.</div>`;
+    return tHtml;
+  }
+  tHtml += `<div class="table-scroll"><table class="rpt-table"><thead><tr>`;
+  for (const col of cols) tHtml += `<th>${escapeHtml(col)}</th>`;
+  tHtml += `</tr></thead><tbody>`;
+
+  const statusIdx = cols.findIndex(c => /status/i.test(c));
+  const previewRows = rows.slice(0, 25);
+  for (const row of previewRows) {
+    tHtml += `<tr>`;
+    row.forEach((cell, i) => {
+      const columnName = cols[i] || '';
+      const displayValue = formatReportCell(columnName, cell);
+      if (statusIdx > -1 && i === statusIdx) {
+        tHtml += `<td data-label="${escapeHtml(columnName)}"><span class="s-pill ${statusPillFor(displayValue)}">${escapeHtml(displayValue)}</span></td>`;
+      } else {
+        let cellContent = escapeHtml(displayValue);
+        if (/\[CUSTOM\]|\(CUSTOM\)/i.test(cellContent)) {
+          cellContent = cellContent.replace(/\[CUSTOM\]|\(CUSTOM\)/gi, '<span class="pill-custom">CUSTOM</span>');
+        }
+        tHtml += `<td data-label="${escapeHtml(columnName)}">${cellContent}</td>`;
+      }
+    });
+    tHtml += `</tr>`;
+  }
+  tHtml += `</tbody></table></div>`;
+
+  if (totalCount > previewRows.length) {
+    tHtml += `<div style="font-size:12px;color:var(--muted);margin-top:.6rem;margin-bottom:1rem;">Showing ${previewRows.length} of ${totalCount.toLocaleString()} row(s) — download PDF or CSV for the full list.</div>`;
+  }
+  return tHtml;
+}
 
 function renderPreview(payload) {
   const preview  = document.getElementById('previewBody');
@@ -1906,35 +1997,23 @@ function renderPreview(payload) {
       html += `</div>`;
     }
 
-    if (!section.row_count) {
+    const hasOnline = Boolean(section.row_count && section.rows && section.rows.length);
+    const hasPos = Boolean((section.pos_row_count || (section.pos_rows && section.pos_rows.length)) && section.pos_rows && section.pos_rows.length);
+
+    if (!hasOnline && !hasPos) {
       html += `<div class="section-empty">No data found for this period.</div></div>`;
       continue;
     }
 
-    html += `<div class="table-scroll"><table class="rpt-table"><thead><tr>`;
-    for (const col of section.columns) html += `<th>${escapeHtml(col)}</th>`;
-    html += `</tr></thead><tbody>`;
-
-    const statusIdx = section.columns.findIndex(c => /status/i.test(c));
-    const previewRows = section.rows.slice(0, 25);
-    for (const row of previewRows) {
-      html += `<tr>`;
-      row.forEach((cell, i) => {
-        const columnName = section.columns[i] || '';
-        const displayValue = formatReportCell(columnName, cell);
-        if (statusIdx > -1 && i === statusIdx) {
-          html += `<td data-label="${escapeHtml(columnName)}"><span class="s-pill ${statusPillFor(displayValue)}">${escapeHtml(displayValue)}</span></td>`;
-        } else {
-          html += `<td data-label="${escapeHtml(columnName)}">${escapeHtml(displayValue)}</td>`;
-        }
-      });
-      html += `</tr>`;
+    if (section.pos_columns && section.pos_rows !== undefined) {
+      const onlineSub = (hasOnline || hasPos) ? 'Online Store Orders' : '';
+      html += _renderTable(section.columns, section.rows || [], section.row_count || 0, onlineSub);
+      const posSub = section.pos_title || 'Walk-in / POS Orders';
+      html += _renderTable(section.pos_columns, section.pos_rows || [], section.pos_row_count || (section.pos_rows ? section.pos_rows.length : 0), posSub);
+    } else {
+      html += _renderTable(section.columns, section.rows || [], section.row_count || 0, '');
     }
-    html += `</tbody></table></div>`;
 
-    if (section.row_count > previewRows.length) {
-      html += `<div style="font-size:12px;color:var(--muted);margin-top:.6rem;">Showing ${previewRows.length} of ${section.row_count.toLocaleString()} row(s) — download PDF or CSV for the full list.</div>`;
-    }
     html += `</div>`;
   }
 

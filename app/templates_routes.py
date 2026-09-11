@@ -625,7 +625,7 @@ def _ensure_order_fulfillment_columns():
 
 
 def _ensure_pos_order_item_line_columns():
-    """Add line_name / line_image_url / addon_option_id for accurate POS add-on display."""
+    """Add line_name / line_image_url / addon_option_id and custom order columns for accurate POS display."""
     required = {
         'line_name': "ALTER TABLE pos_order_items ADD COLUMN line_name VARCHAR(255)",
         'line_image_url': "ALTER TABLE pos_order_items ADD COLUMN line_image_url VARCHAR(500)",
@@ -633,6 +633,10 @@ def _ensure_pos_order_item_line_columns():
             "ALTER TABLE pos_order_items ADD COLUMN addon_option_id INTEGER "
             "REFERENCES product_addon_options(id) ON DELETE SET NULL"
         ),
+        'is_custom': "ALTER TABLE pos_order_items ADD COLUMN is_custom BOOLEAN NOT NULL DEFAULT FALSE",
+        'custom_title': "ALTER TABLE pos_order_items ADD COLUMN custom_title VARCHAR(255)",
+        'custom_inclusions': "ALTER TABLE pos_order_items ADD COLUMN custom_inclusions TEXT",
+        'custom_category': "ALTER TABLE pos_order_items ADD COLUMN custom_category VARCHAR(50)",
     }
     try:
         cols = {c['name'] for c in inspect(db.engine).get_columns('pos_order_items')}
@@ -5457,7 +5461,21 @@ def seller_dashboard():
         Product.store_id == store.id,
         POSOrder.created_at >= range_start,
         POSOrder.created_at < range_end,
+        POSOrderItem.product_id.isnot(None),
+        (POSOrderItem.is_custom.is_(False)) | (POSOrderItem.is_custom.is_(None)),
     ).group_by(Category.name).all()
+
+    pos_custom_category_sales_query = db.session.query(
+        POSOrderItem.custom_category,
+        func.coalesce(func.sum(POSOrderItem.quantity), 0).label('qty'),
+        func.coalesce(func.sum(POSOrderItem.price * POSOrderItem.quantity), 0).label('rev')
+    ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
+     .filter(
+        POSOrder.store_id == store.id,
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
+        (POSOrderItem.is_custom.is_(True)) | (POSOrderItem.product_id.is_(None)),
+    ).group_by(POSOrderItem.custom_category).all()
 
     category_breakdown = {}
 
@@ -5475,6 +5493,29 @@ def seller_dashboard():
 
     for cat_name, qty, rev in pos_category_sales_query:
         key = cat_name or 'Uncategorized'
+        category_breakdown.setdefault(key, {
+            'name': key,
+            'online_qty': 0,
+            'online_revenue': 0.0,
+            'pos_qty': 0,
+            'pos_revenue': 0.0,
+        })
+        category_breakdown[key]['pos_qty'] += int(qty or 0)
+        category_breakdown[key]['pos_revenue'] += float(rev or 0)
+
+    cat_lookup = {}
+    try:
+        for c in Category.query.all():
+            if c.slug:
+                cat_lookup[c.slug.strip().lower()] = c.name
+            if c.name:
+                cat_lookup[c.name.strip().lower()] = c.name
+    except Exception:
+        pass
+
+    for raw_cat, qty, rev in pos_custom_category_sales_query:
+        cat_key = (raw_cat or '').strip().lower()
+        key = cat_lookup.get(cat_key) or (cat_key.replace('-', ' ').title() if cat_key else 'Custom Arrangements')
         category_breakdown.setdefault(key, {
             'name': key,
             'online_qty': 0,
@@ -9232,23 +9273,87 @@ def pos_create_order():
     if not items_payload:
         return jsonify({'error': 'Order must contain at least one item.'}), 400
 
+    # ── Custom order & Dedication info ─────────────────────────────────────────
+    is_custom_order = bool(data.get('is_custom_order'))
+    dedication_to = (data.get('dedication_to') or '').strip() or None
+    dedication_from = (data.get('dedication_from') or '').strip() or None
+    dedication_message = (data.get('dedication_message') or '').strip() or None
+    florist_notes = (data.get('florist_notes') or '').strip() or None
+
     # ── Validate every item before touching the DB ────────────────────────────
     from app.addon_helpers import (
         resolve_structured_addon_selections,
         structured_addons_subtotal,
         decrement_addon_option_stock,
     )
+    from app.models import ProductAddonOption
 
     validated_items = []
     for entry in items_payload:
-        product_id = entry.get('product_id')
-        variant_id = entry.get('variant_id')  # May be None
+        is_custom_line = bool(entry.get('is_custom'))
         quantity   = int(entry.get('quantity', 1))
         unit_price = Decimal(str(entry.get('price', 0)))
         addon_raw  = entry.get('addons') or entry.get('addon_option_ids') or []
 
         if quantity < 1:
-            return jsonify({'error': f'Quantity must be at least 1 (product id {product_id}).'}), 400
+            return jsonify({'error': 'Quantity must be at least 1.'}), 400
+
+        if is_custom_line:
+            is_custom_order = True
+            custom_title = (entry.get('custom_title') or entry.get('name') or 'Custom Arrangement').strip()
+            custom_inclusions = (entry.get('custom_inclusions') or entry.get('inclusions') or '').strip() or None
+            custom_category = (entry.get('custom_category') or entry.get('category') or 'bouquets').strip()
+            labor_cost = Decimal(str(entry.get('labor_cost') or 0))
+
+            if labor_cost > 0:
+                labor_note = f"Labor/Assembly: ₱{labor_cost:.2f}"
+                if custom_inclusions:
+                    if "Labor/Assembly" not in custom_inclusions:
+                        custom_inclusions = f"{custom_inclusions} | {labor_note}"
+                else:
+                    custom_inclusions = labor_note
+
+            if unit_price < 0:
+                return jsonify({'error': 'Custom arrangement price cannot be negative.'}), 400
+
+            # Resolve add-ons if chosen under custom arrangement
+            addon_lines = []
+            if addon_raw:
+                for a in addon_raw:
+                    opt_id = a.get('addon_option_id') or a.get('option_id')
+                    if opt_id:
+                        opt = ProductAddonOption.query.get(opt_id)
+                        if opt:
+                            opt_qty = int(a.get('quantity') or a.get('qty') or 1) * quantity
+                            stock_qty = opt.stock_quantity or 0
+                            if stock_qty < opt_qty and opt.is_available is not False:
+                                return jsonify({
+                                    'error': f'Insufficient stock for add-on "{opt.name}". Available: {stock_qty}, requested: {opt_qty}.'
+                                }), 400
+                            addon_lines.append({
+                                'option': opt,
+                                'name': opt.name,
+                                'price': Decimal(str(opt.price or 0)),
+                                'quantity': opt_qty,
+                                'image_url': opt.image_url,
+                            })
+
+            validated_items.append({
+                'is_custom': True,
+                'custom_title': custom_title,
+                'custom_inclusions': custom_inclusions,
+                'custom_category': custom_category,
+                'product': None,
+                'variant_id': None,
+                'quantity': quantity,
+                'price': unit_price,
+                'addon_lines': addon_lines,
+                'addons_only': False,
+            })
+            continue
+
+        product_id = entry.get('product_id') or entry.get('id')
+        variant_id = entry.get('variant_id')  # May be None
 
         # Check if product exists and belongs to store
         product = Product.query.filter_by(id=product_id, store_id=store.id).first()
@@ -9296,6 +9401,7 @@ def pos_create_order():
             return jsonify({'error': 'Add-on only lines must include add-ons.'}), 400
 
         validated_items.append({
+            'is_custom': False,
             'product': product,
             'variant_id': None if addons_only else variant_id,
             'quantity': quantity,
@@ -9340,7 +9446,7 @@ def pos_create_order():
     if total < 0:
         return jsonify({'error': 'Discount cannot exceed subtotal'}), 400
 
-    # Create the order with discount
+    # Create the order with discount & custom metadata
     pos_order = POSOrder(
         store_id=store.id,
         total_amount=total,
@@ -9350,6 +9456,11 @@ def pos_create_order():
         customer_name=customer_name,
         customer_contact=customer_contact,
         is_seen_by_seller=False,
+        is_custom_order=is_custom_order,
+        dedication_to=dedication_to,
+        dedication_from=dedication_from,
+        dedication_message=dedication_message,
+        florist_notes=florist_notes,
         discount=discount,
         created_by=user_id,
     )
@@ -9366,9 +9477,45 @@ def pos_create_order():
             line_name = None
             line_image_url = None
             addon_option_id = None
-            product_id_for_row = item['product'].id
             addon_lines = item.get('addon_lines') or []
 
+            if item.get('is_custom'):
+                # Custom bespoke arrangement line
+                custom_title = item.get('custom_title') or 'Custom Arrangement'
+                addon_names = [str(l.get('name') or '').strip() for l in addon_lines if l.get('name')]
+                addon_names = [n for n in addon_names if n]
+                if addon_names:
+                    line_name = f"{custom_title} (+ {', '.join(addon_names)})"
+                else:
+                    line_name = custom_title
+
+                pos_item = POSOrderItem(
+                    pos_order=pos_order,
+                    product_id=None,
+                    variant_id=None,
+                    quantity=item['quantity'],
+                    price=item['price'] + extra_per_unit,
+                    line_name=line_name,
+                    line_image_url=None,
+                    addon_option_id=None,
+                    is_custom=True,
+                    custom_title=custom_title,
+                    custom_inclusions=item.get('custom_inclusions'),
+                    custom_category=item.get('custom_category'),
+                )
+                db.session.add(pos_item)
+
+                # Decrement add-on options stock if any
+                if addon_lines:
+                    decrement_addon_option_stock(
+                        addon_lines,
+                        user_id=user_id,
+                        reason='pos_sale',
+                        reason_notes=f'POS Custom Sale add-on - Order #{pos_order.id} by {cashier_name}',
+                    )
+                continue
+
+            product_id_for_row = item['product'].id
             if item.get('addons_only') and addon_lines:
                 names = [str(l.get('name') or '').strip() for l in addon_lines if l.get('name')]
                 line_name = ', '.join(n for n in names if n) or 'Add-on'
@@ -9412,6 +9559,7 @@ def pos_create_order():
                 line_name=line_name,
                 line_image_url=line_image_url,
                 addon_option_id=addon_option_id,
+                is_custom=False,
             )
             db.session.add(pos_item)
 
@@ -10111,6 +10259,14 @@ def reports_preview():
             ] for r in s['rows']],
             'summary': [list(t) for t in s['summary']],
             'row_count': len(s['rows']),
+            'pos_title': s.get('pos_title'),
+            'pos_columns': s.get('pos_columns'),
+            'pos_rows': [[
+                f"{float(c):.2f}" if isinstance(c, (float, Decimal)) and not isinstance(c, bool)
+                else c
+                for c in r
+            ] for r in (s.get('pos_rows') or [])] if s.get('pos_rows') is not None else None,
+            'pos_row_count': len(s.get('pos_rows') or []) if s.get('pos_rows') is not None else None,
         } for s in payload['sections']],
     })
 
@@ -13709,7 +13865,9 @@ def pos_order_detail_api(order_id):
         items = []
         subtotal = 0
         for item in order.items:
-            if item.line_name:
+            if item.is_custom:
+                product_name = item.custom_title or item.line_name or 'Custom Arrangement'
+            elif item.line_name:
                 product_name = item.line_name
             else:
                 product_name = 'Unknown Product'
@@ -13735,6 +13893,10 @@ def pos_order_detail_api(order_id):
                 'product_name': product_name,
                 'product_image_url': item.product_image,
                 'is_addon': bool(item.addon_option_id),
+                'is_custom': bool(item.is_custom),
+                'custom_title': item.custom_title,
+                'custom_inclusions': item.custom_inclusions,
+                'custom_category': item.custom_category,
                 'quantity': item.quantity,
                 'unit_price': unit_price,
                 'subtotal': item_subtotal
@@ -13768,6 +13930,11 @@ def pos_order_detail_api(order_id):
             'total_amount': total_val,
             'subtotal': subtotal_val,
             'discount': discount_val,
+            'is_custom_order': bool(order.is_custom_order),
+            'dedication_to': order.dedication_to,
+            'dedication_from': order.dedication_from,
+            'dedication_message': order.dedication_message,
+            'florist_notes': order.florist_notes,
             'items': items,
             'item_count': len(items)
         })
@@ -13789,15 +13956,20 @@ def pos_order_history_api():
     per_page = min(request.args.get('per_page', 20, type=int), 100)
     date_filter = request.args.get('date', 'this_week')
     payment_filter = request.args.get('payment', 'all')
+    type_filter = request.args.get('type', 'all')
     search_query = request.args.get('search', '')
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
     query = POSOrder.query.filter_by(store_id=store.id)
 
+    # ── Custom / Standard type filter ─────────────────────────────────────────
+    if type_filter == 'custom':
+        query = query.filter_by(is_custom_order=True)
+    elif type_filter == 'standard':
+        query = query.filter_by(is_custom_order=False)
+
     # ── Date filtering ────────────────────────────────────────────────────────
-    # created_at is UTC-naive (datetime.utcnow). Convert PH calendar-day bounds
-    # to UTC-naive before comparing so "today" / week / month match Manila time.
     today_ph = datetime.now(PHT).date()
 
     if date_filter == 'today':
@@ -13857,7 +14029,6 @@ def pos_order_history_api():
     )
 
     # ── Serialize ─────────────────────────────────────────────────────────────
-    # created_at is UTC-naive; convert to Asia/Manila before emitting ISO.
     orders = []
     for o in pagination.items:
         subtotal   = sum(float(item.price * item.quantity) for item in o.items)
@@ -13889,7 +14060,12 @@ def pos_order_history_api():
             'total_amount':   total_f,
             'amount_given':   float(o.amount_given) if o.amount_given is not None else 0,
             'change_amount':  float(o.change_amount) if o.change_amount is not None else 0,
-            'payment_method': o.payment_method or 'cash'
+            'payment_method': o.payment_method or 'cash',
+            'is_custom_order': bool(o.is_custom_order),
+            'dedication_to':  o.dedication_to,
+            'dedication_from': o.dedication_from,
+            'dedication_message': o.dedication_message,
+            'florist_notes': o.florist_notes,
         })
 
     return jsonify({
