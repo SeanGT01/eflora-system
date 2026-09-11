@@ -668,15 +668,37 @@ def create_app(config_class='default'):
         # data. Allow browsers to reuse them instead of re-downloading CSS,
         # scripts, and local assets on every navigation.
         if request.path.startswith('/static/'):
-            response.headers['Cache-Control'] = 'public, max-age=86400'
-            return response
-
-        # Avoid stale auth/session pages being shown from browser history cache.
-        if request.path in ('/login', '/register') or session.get('user_id'):
+            response.headers['Cache-Control'] = 'public, max-age=86400, stale-while-revalidate=86400'
+        elif request.path in ('/login', '/register') or session.get('user_id'):
+            # Avoid stale auth/session pages being shown from browser history cache.
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
-        
+
+        # Gzip compression for text responses >= 500 bytes when client supports it
+        accept_encoding = request.headers.get('Accept-Encoding', '')
+        if (
+            'gzip' in accept_encoding.lower()
+            and response.status_code < 300
+            and not response.direct_passthrough
+            and not response.headers.get('Content-Encoding')
+        ):
+            content_type = response.headers.get('Content-Type', '')
+            compressible_types = (
+                'text/html', 'text/css', 'text/plain', 'text/xml',
+                'application/json', 'application/javascript', 'application/xml',
+                'image/svg+xml'
+            )
+            if any(content_type.startswith(ct) for ct in compressible_types):
+                response_data = response.get_data()
+                if len(response_data) >= 500:
+                    import gzip
+                    compressed_data = gzip.compress(response_data, compresslevel=5)
+                    response.set_data(compressed_data)
+                    response.headers['Content-Encoding'] = 'gzip'
+                    response.headers['Content-Length'] = len(compressed_data)
+
+        response.headers.add('Vary', 'Accept-Encoding')
         return response
     
     # ====================================================
@@ -810,11 +832,11 @@ def create_app(config_class='default'):
     # DEBUG: PRINT ALL REGISTERED ROUTES
     # ====================================================
     print("\n" + "="*60)
-    print("📋 REGISTERED BLUEPRINTS AND ROUTES:")
+    print("[ROUTES] REGISTERED BLUEPRINTS AND ROUTES:")
     print("="*60)
     for rule in app.url_map.iter_rules():
         if 'cloudinary' in str(rule):
-            print(f"   ✅ {rule}")
+            print(f"   [OK] {rule}")
         elif 'api' in str(rule):
             print(f"      {rule}")
     print("="*60 + "\n")

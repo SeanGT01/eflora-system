@@ -48,23 +48,24 @@
         z-index: 0;
         pointer-events: none;
         overflow: hidden;
+        contain: strict;
     }
 
     .landing-white-florals__flower {
         position: absolute;
         width: clamp(72px, 9vw, 130px);
         height: auto;
-        opacity: 0.25;
-        filter:
-            drop-shadow(0 6px 10px rgba(120, 90, 100, 0.22))
-            drop-shadow(0 14px 28px rgba(140, 110, 120, 0.18))
-            drop-shadow(0 2px 4px rgba(90, 70, 80, 0.16));
+        opacity: 0.22;
+        filter: drop-shadow(0 6px 10px rgba(120, 90, 100, 0.16));
         animation: whiteFloralDrift 22s ease-in-out infinite;
         will-change: transform;
+        contain: layout paint;
     }
     html.fx-lite .landing-white-florals__flower,
     html.perf-lite .landing-white-florals__flower {
-        filter: drop-shadow(0 6px 10px rgba(120, 90, 100, 0.18));
+        filter: none;
+        animation: none !important;
+        opacity: 0.18;
         will-change: auto;
     }
 
@@ -80,7 +81,7 @@
         top: 4%;
         left: 1%;
         width: clamp(88px, 10vw, 140px);
-        opacity: 0.28;
+        opacity: 0.25;
     }
 
     .landing-white-florals__flower--2 {
@@ -98,7 +99,7 @@
         width: clamp(96px, 11vw, 148px);
         animation-delay: -10s;
         animation-duration: 20s;
-        opacity: 0.26;
+        opacity: 0.24;
     }
 
     .landing-white-florals__flower--4 {
@@ -116,7 +117,7 @@
         width: clamp(100px, 12vw, 156px);
         animation-delay: -3s;
         animation-duration: 21s;
-        opacity: 0.28;
+        opacity: 0.25;
     }
 
     .landing-white-florals__flower--6 {
@@ -134,7 +135,7 @@
         width: clamp(78px, 9vw, 126px);
         animation-delay: -7s;
         animation-duration: 19s;
-        opacity: 0.25;
+        opacity: 0.22;
     }
 
     .landing-white-florals__flower--8 {
@@ -181,7 +182,7 @@
     .landing-white-florals__flower--10 { --flower-rot: -63deg; }
 
     @media (prefers-reduced-motion: reduce) {
-        .landing-white-florals__flower { animation: none; }
+        .landing-white-florals__flower { animation: none !important; }
         .petal { animation: none !important; display: none !important; }
     }
 
@@ -194,17 +195,23 @@
     }
     html.fx-lite .landing-white-florals__flower {
         animation: none !important;
-        opacity: 0.2;
+        opacity: 0.18;
     }
     html.fx-lite .petal {
         display: none !important;
     }
 
-    /* Narrow screens still hide the farthest florals, but keep motion on capable devices */
+    /* Narrow screens: disable continuous floral drift animation for smooth mobile scrolling */
     @media (max-width: 768px) {
+        .landing-white-florals__flower--7,
+        .landing-white-florals__flower--8,
         .landing-white-florals__flower--9,
         .landing-white-florals__flower--10 { display: none; }
-        .landing-white-florals__flower { opacity: 0.28; }
+        .landing-white-florals__flower {
+            animation: none !important;
+            will-change: auto;
+            opacity: 0.22;
+        }
     }
 
     body:has(.landing-atmosphere) .main-content,
@@ -218,16 +225,15 @@
         background:
             radial-gradient(ellipse 80% 120% at 0% 50%, rgba(255, 190, 210, 0.45) 0%, transparent 55%),
             radial-gradient(ellipse 70% 100% at 100% 50%, rgba(210, 190, 240, 0.4) 0%, transparent 55%),
-            rgba(255, 250, 252, 0.42);
-        backdrop-filter: blur(20px) saturate(1.45);
-        -webkit-backdrop-filter: blur(20px) saturate(1.45);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+            rgba(255, 250, 252, 0.85);
+        backdrop-filter: blur(10px) saturate(1.25);
+        -webkit-backdrop-filter: blur(10px) saturate(1.25);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.65);
         box-shadow:
             0 8px 28px rgba(181, 68, 90, 0.06),
             inset 0 1px 0 rgba(255, 255, 255, 0.65);
         position: sticky;
         top: 0;
-        /* Above page content, below cart / modals */
         z-index: 1100;
         pointer-events: auto;
         padding-top: env(safe-area-inset-top, 0px);
@@ -237,16 +243,25 @@
         background:
             radial-gradient(ellipse 80% 120% at 0% 50%, rgba(255, 190, 210, 0.4) 0%, transparent 55%),
             radial-gradient(ellipse 70% 100% at 100% 50%, rgba(210, 190, 240, 0.35) 0%, transparent 55%),
-            rgba(255, 250, 252, 0.5);
-        backdrop-filter: blur(16px) saturate(1.35);
-        -webkit-backdrop-filter: blur(16px) saturate(1.35);
-        border-top: 1px solid rgba(255, 255, 255, 0.55);
+            rgba(255, 250, 252, 0.88);
+        backdrop-filter: blur(8px) saturate(1.2);
+        -webkit-backdrop-filter: blur(8px) saturate(1.2);
+        border-top: 1px solid rgba(255, 255, 255, 0.65);
         box-shadow:
             0 4px 16px rgba(181, 68, 90, 0.06),
             inset 0 1px 0 rgba(255, 255, 255, 0.65);
         position: relative;
         z-index: 1;
         pointer-events: auto;
+    }
+
+    html.perf-lite body:has(.landing-atmosphere) .main-header,
+    html.perf-lite body:has(.landing-atmosphere) .main-nav,
+    html.fx-lite body:has(.landing-atmosphere) .main-header,
+    html.fx-lite body:has(.landing-atmosphere) .main-nav {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background: #fffbf7 !important;
     }
 
     .landing-atmosphere {
@@ -261,12 +276,11 @@
         z-index: 1;
     }
 
-    /* Sections below the fold do not need layout or paint work until approached.
-       Skip testimonials: paint containment clips the glass cards’ soft side shadows. */
+    /* Content visibility for fast initial render */
     @supports (content-visibility: auto) {
-        .landing-atmosphere > section:not(.hero-section):not(.testimonials-section):not(.featured-section) {
+        .landing-atmosphere > section:not(.hero-section) {
             content-visibility: auto;
-            contain-intrinsic-size: auto 620px;
+            contain-intrinsic-size: auto 500px;
         }
     }
 
@@ -275,14 +289,21 @@
     }
 
     .glass-panel {
-        background: rgba(255, 253, 249, 0.38);
-        border: 1px solid rgba(255, 255, 255, 0.65);
+        background: rgba(255, 253, 249, 0.65);
+        border: 1px solid rgba(255, 255, 255, 0.75);
         box-shadow:
-            0 4px 12px rgba(42, 35, 30, 0.08),
-            0 16px 48px rgba(181, 68, 90, 0.16),
-            inset 0 1px 0 rgba(255, 255, 255, 0.75);
-        backdrop-filter: blur(22px) saturate(1.5);
-        -webkit-backdrop-filter: blur(22px) saturate(1.5);
+            0 4px 12px rgba(42, 35, 30, 0.06),
+            0 16px 40px rgba(181, 68, 90, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(10px) saturate(1.25);
+        -webkit-backdrop-filter: blur(10px) saturate(1.25);
+    }
+
+    html.perf-lite .glass-panel,
+    html.fx-lite .glass-panel {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background: rgba(255, 253, 249, 0.95) !important;
     }
 
     /* Extra side breathing room on the home page */
@@ -4068,26 +4089,18 @@ function setupStoresCarousel() {
             return;
         }
         if (!storesLastTs) storesLastTs = ts;
-        const delta = ts - storesLastTs;
+        const delta = Math.min(ts - storesLastTs, 64);
         storesLastTs = ts;
 
         if (!storesAutoScrollPaused && !storesManualAnimating && hasOverflow()) {
-            const speed = 0.02;
-            const px = Math.max(0.35, delta * speed);
+            const speed = 0.025;
+            const px = delta * speed;
             container.scrollLeft += px;
             
-            // Portal loop: when a card exits left, it reappears on the right
-            const stepPx = Math.max(1, storesStepPx || 1);
-            
-            // Check if we've scrolled past one card width
-            if (container.scrollLeft >= stepPx) {
-                const firstCard = container.firstElementChild;
-                if (firstCard) {
-                    // Move the first card to the end (portal effect)
-                    container.appendChild(firstCard);
-                    // Adjust scroll to maintain continuous motion
-                    container.scrollLeft -= stepPx;
-                }
+            // Seamless loop without DOM manipulation (stores row is already duplicated in template)
+            const halfScroll = container.scrollWidth / 2;
+            if (halfScroll > 10 && container.scrollLeft >= halfScroll) {
+                container.scrollLeft -= halfScroll;
             }
         }
         storesRafId = window.requestAnimationFrame(autoScrollTickRaf);

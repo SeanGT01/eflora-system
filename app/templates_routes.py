@@ -919,6 +919,8 @@ def _product_list_for_storefront(orm_products):
             if key == 'main':
                 rating_map[product_id] = (bucket['avg'], bucket['count'])
 
+    from app.utils.cloudinary_helper import optimize_cloudinary_url
+
     ymal_by_store = {}
     for product in orm_products:
         product_dict = product.to_dict()
@@ -938,6 +940,15 @@ def _product_list_for_storefront(orm_products):
                 'name': product.store_category.name,
                 'slug': product.store_category.slug
             }
+        # Optimize listing card image for high-performance responsive thumbnail loading
+        if product_dict.get('image_url'):
+            product_dict['image_url'] = optimize_cloudinary_url(
+                product_dict['image_url'],
+                width=380,
+                crop='limit',
+                quality='auto',
+                format='auto'
+            )
         # Listing card = Standard / main-product ratings only (not variants)
         avg_rating, review_count = rating_map.get(product.id, (0.0, 0))
         overall_avg, overall_count = overall_map.get(product.id, (0.0, 0))
@@ -961,7 +972,7 @@ FEATURED_HOME_CATEGORY_ROWS = (
     ('succulents', 'Succulents'),
     ('others', 'Others'),
 )
-FEATURED_PRODUCTS_PER_CATEGORY = 48
+FEATURED_PRODUCTS_PER_CATEGORY = 8
 
 
 def _apply_storefront_delivery_flags(product_list, orm_products, is_customer, customer_address):

@@ -46,17 +46,15 @@
                 reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             } catch (e1) {}
 
-            // Blur degrade for constrained non-Apple clients or low-spec devices
-            if (!isDesktopComputer && (lowMem || lowCpu || saveData || slowNet)) {
+            // Blur degrade for constrained or budget mobile devices to guarantee smooth 60fps
+            if (!isDesktopComputer && (lowMem || lowCpu || saveData || slowNet || !highMem)) {
                 document.documentElement.classList.add('perf-lite');
             }
 
             // Carousel / rich UI: desktop computers + high-spec mobile
-            var richFx = isDesktopComputer || isIOS || (isAndroid && highMem && !lowCpu);
-            // Decorative petals only (respect OS reduce-motion)
+            var richFx = isDesktopComputer || (isIOS && !lowMem) || (isAndroid && highMem && !lowCpu);
             var decorFx = richFx && !reduceMotion;
 
-            // fx-lite for low-end / constrained devices
             if (!richFx) {
                 document.documentElement.classList.add('fx-lite');
             }
@@ -64,8 +62,8 @@
                 document.documentElement.classList.add('reduce-motion');
             }
 
-            window.__eflowersRichFx = !!richFx;   // stores auto-carousel
-            window.__eflowersDecorFx = !!decorFx; // petals / hero florals motion
+            window.__eflowersRichFx = !!richFx;
+            window.__eflowersDecorFx = !!decorFx;
         } catch (e) {
             window.__eflowersRichFx = true;
             window.__eflowersDecorFx = true;
@@ -7296,20 +7294,41 @@ window.showCartActionError = showCartActionError;
     // Initial pass
     formatMoneyIn(document.body);
 
-    // Re-format dynamically injected or updated content
-    const observer = new MutationObserver(function(mutations) {
-        for (const m of mutations) {
-            if (m.type === 'characterData') {
-                formatNodeText(m.target);
-                continue;
+    // Re-format dynamically injected or updated content in debounced animation frames
+    let pendingNodes = [];
+    let rafScheduled = false;
+
+    function flushMoneyFormatting() {
+        rafScheduled = false;
+        const nodesToProcess = pendingNodes;
+        pendingNodes = [];
+        for (let i = 0; i < nodesToProcess.length; i++) {
+            const node = nodesToProcess[i];
+            if (node.nodeType === Node.TEXT_NODE) {
+                formatNodeText(node);
+            } else if (node.nodeType === Node.ELEMENT_NODE && node.isConnected) {
+                formatMoneyIn(node);
             }
-            m.addedNodes.forEach(function(node) {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    formatNodeText(node);
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                    formatMoneyIn(node);
+        }
+    }
+
+    const observer = new MutationObserver(function(mutations) {
+        let hasWork = false;
+        for (let i = 0; i < mutations.length; i++) {
+            const m = mutations[i];
+            if (m.type === 'characterData') {
+                pendingNodes.push(m.target);
+                hasWork = true;
+            } else if (m.addedNodes && m.addedNodes.length > 0) {
+                for (let j = 0; j < m.addedNodes.length; j++) {
+                    pendingNodes.push(m.addedNodes[j]);
                 }
-            });
+                hasWork = true;
+            }
+        }
+        if (hasWork && !rafScheduled) {
+            rafScheduled = true;
+            requestAnimationFrame(flushMoneyFormatting);
         }
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
