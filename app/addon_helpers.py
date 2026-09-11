@@ -262,3 +262,76 @@ def ymal_addon_option_dicts(product):
         d['ymal_type'] = 'addon_option'
         out.append(d)
     return out
+
+
+def store_ymal_addon_option_dicts(store_id):
+    """
+    Return all active, in-stock add-ons for a given store.
+    Prioritizes show_in_you_may_also_like options, but falls back to any active,
+    in-stock options for that store so custom order checkout always has add-ons available.
+    """
+    from sqlalchemy.orm import joinedload
+    from app.models import Product, ProductAddonGroup, ProductAddonOption
+
+    if not store_id:
+        return []
+
+    # 1. First try options flagged as show_in_you_may_also_like
+    base_query = (
+        ProductAddonOption.query
+        .join(ProductAddonGroup, ProductAddonOption.group_id == ProductAddonGroup.id)
+        .join(Product, ProductAddonGroup.product_id == Product.id)
+        .options(joinedload(ProductAddonOption.group).joinedload(ProductAddonGroup.product))
+        .filter(
+            Product.store_id == store_id,
+            Product.is_archived.is_(False),
+            ProductAddonOption.is_available.is_(True),
+            ProductAddonGroup.is_active.is_(True),
+            ProductAddonOption.stock_quantity > 0,
+        )
+    )
+
+    rows = (
+        base_query
+        .filter(
+            ProductAddonOption.show_in_you_may_also_like.is_(True),
+            or_(
+                Product.is_available.is_(True),
+                Product.keep_ymal_addons_when_unavailable.is_(True),
+            ),
+        )
+        .order_by(
+            ProductAddonGroup.sort_order.asc(),
+            ProductAddonOption.sort_order.asc(),
+            ProductAddonOption.id.asc(),
+        )
+        .all()
+    )
+
+    # 2. Fallback: if no strict YMAL options, fetch any active in-stock option from store products
+    if not rows:
+        rows = (
+            base_query
+            .filter(Product.is_available.is_(True))
+            .order_by(
+                ProductAddonGroup.sort_order.asc(),
+                ProductAddonOption.sort_order.asc(),
+                ProductAddonOption.id.asc(),
+            )
+            .all()
+        )
+
+    out = []
+    seen = set()
+    for opt in rows:
+        if opt.id in seen:
+            continue
+        seen.add(opt.id)
+        d = opt.to_dict()
+        d['group_id'] = opt.group_id
+        d['group_name'] = opt.group.name if opt.group else None
+        d['source_product_id'] = opt.group.product_id if opt.group else None
+        d['ymal_type'] = 'addon_option'
+        out.append(d)
+    return out
+

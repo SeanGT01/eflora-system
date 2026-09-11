@@ -93,7 +93,8 @@ def get_pending_payment_proofs():
                 'items_count': len(order.items),
                 'items': [
                     {
-                        'product_name': item.product.name if item.product else 'Unknown',
+                        'product_name': order.custom_ticket.title if (order.order_type == 'custom_chat' and order.custom_ticket) else (item.product.name if item.product else 'Unknown'),
+                        'product_image_url': order.custom_ticket.image_url if (order.order_type == 'custom_chat' and order.custom_ticket) else (item.variant.image_url if item.variant and item.variant.image_url else (item.product.images[0].image_url if item.product and item.product.images else None)),
                         'variant_name': item.variant.name if item.variant else None,
                         'quantity': item.quantity,
                         'price': float(item.price),

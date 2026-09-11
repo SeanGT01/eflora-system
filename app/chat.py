@@ -15,10 +15,10 @@ import pytz
 
 from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
-from app.models import User, Store, Conversation, ChatMessage, Rider, Order, OrderItem, Product, SupportFAQ
+from app.models import User, Store, Conversation, ChatMessage, Rider, Order, OrderItem, Product, SupportFAQ, CustomQuoteTicket, UserAddress, OrderItemAddon, ProductAddonOption, StockReduction, stock_audit_actor_id
 
 import cloudinary
 import cloudinary.uploader
@@ -203,9 +203,14 @@ def _build_order_chat_context(order):
                 image_url = item.product_image
             except Exception:
                 image_url = None
+
+            resolved_name = product.name if product else 'Product'
+            if getattr(order, 'order_type', '') == 'custom_chat' and getattr(order, 'custom_ticket', None):
+                resolved_name = order.custom_ticket.title
+
             items.append({
                 'id': item.id,
-                'name': product.name if product else 'Product',
+                'name': resolved_name,
                 'variant_name': variant.name if variant else None,
                 'quantity': qty,
                 'price': unit,
@@ -398,7 +403,7 @@ def _assign_card_order_ids(card_msgs, orders):
     return assigned
 
 
-def _complete_order_card_payload(msg, persist=False, forced_order_id=None):
+def _complete_order_card_payload(msg, persist=False, forced_order_id=None, preloaded_orders=None):
     """Return this message's own order snapshot. Never use another order in the thread."""
     if not msg or msg.is_deleted:
         return None
@@ -424,14 +429,24 @@ def _complete_order_card_payload(msg, persist=False, forced_order_id=None):
         except (TypeError, ValueError):
             snapshot_oid = None
 
+    def get_order(order_id):
+        if preloaded_orders is not None:
+            return preloaded_orders.get(order_id)
+        return _load_order_for_card(order_id)
+
     # Keep a complete snapshot if it already belongs to this card's order.
     if payload and items and snapshot_oid and (not oid or snapshot_oid == oid):
         live_oid = oid or snapshot_oid
-        live = _build_order_chat_context(_load_order_for_card(live_oid)) if live_oid else None
+        live = _build_order_chat_context(get_order(live_oid)) if live_oid else None
         live_items = (live or {}).get('items') or []
         live_has_addons = any((i.get('addons') or []) for i in live_items)
         stored_has_addons = any((i.get('addons') or []) for i in items)
-        if live and live_has_addons and not stored_has_addons:
+        
+        name_mismatch = False
+        if live_items and items and live.get('order_type') == 'custom_chat':
+            name_mismatch = live_items[0].get('name') != items[0].get('name')
+            
+        if live and (name_mismatch or (live_has_addons and not stored_has_addons)):
             if persist and is_card:
                 snap = json.dumps(live)
                 if msg.text != snap:
@@ -441,7 +456,7 @@ def _complete_order_card_payload(msg, persist=False, forced_order_id=None):
         return _json_safe(payload)
 
     if oid:
-        order = _load_order_for_card(oid)
+        order = get_order(oid)
         ctx = _build_order_chat_context(order) if order else None
         if ctx and ctx.get('items'):
             if persist and is_card:
@@ -470,15 +485,15 @@ def _complete_order_card_payload(msg, persist=False, forced_order_id=None):
     return _json_safe(payload) if payload else None
 
 
-def _message_to_dict(msg, persist_card=False, forced_order_id=None):
-    data = msg.to_dict()
+def _message_to_dict(msg, persist_card=False, forced_order_id=None, preloaded_orders=None, preloaded_tickets=None):
+    data = msg.to_dict(preloaded_tickets=preloaded_tickets)
     if msg.is_deleted:
         return data
     is_card = (msg.message_type == 'order_card') or (data.get('message_type') == 'order_card')
     if not is_card:
         return data
     card = _complete_order_card_payload(
-        msg, persist=persist_card, forced_order_id=forced_order_id
+        msg, persist=persist_card, forced_order_id=forced_order_id, preloaded_orders=preloaded_orders
     )
     if card:
         data['message_type'] = 'order_card'
@@ -495,12 +510,57 @@ def _hydrate_message_list(convo, msgs, persist=False):
     assigned = {}
     if cards:
         assigned = _assign_card_order_ids(cards, _orders_for_rider_thread(convo))
+        
+    # Bulk load orders to fix N+1 issue for long histories
+    needed_oids = set()
+    for m in cards:
+        oid = assigned.get(m.id) or _parse_order_card_id(m)
+        if oid:
+            needed_oids.add(oid)
+            
+    preloaded_orders = {}
+    if needed_oids:
+        orders = Order.query.options(
+            selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
+            selectinload(Order.items).joinedload(OrderItem.variant),
+            selectinload(Order.items).selectinload(OrderItem.addons),
+            joinedload(Order.store),
+        ).filter(Order.id.in_(needed_oids)).all()
+        for o in orders:
+            preloaded_orders[o.id] = o
+
+    # Bulk load custom tickets
+    needed_ticket_ids = set()
+    for m in msgs:
+        if not m.is_deleted and m.text and str(m.text).strip().startswith('{'):
+            try:
+                payload = json.loads(m.text)
+                if payload and (payload.get('ticket_id') or payload.get('id')):
+                    tid = payload.get('ticket_id') or payload.get('id')
+                    try:
+                        needed_ticket_ids.add(int(tid))
+                    except (ValueError, TypeError):
+                        pass
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+                
+    preloaded_tickets = {}
+    if needed_ticket_ids:
+        tickets = CustomQuoteTicket.query.options(
+            joinedload(CustomQuoteTicket.store),
+            joinedload(CustomQuoteTicket.customer)
+        ).filter(CustomQuoteTicket.id.in_(needed_ticket_ids)).all()
+        for t in tickets:
+            preloaded_tickets[t.id] = t
+
     out = []
     for m in msgs:
         out.append(_message_to_dict(
             m,
             persist_card=persist,
             forced_order_id=assigned.get(m.id),
+            preloaded_orders=preloaded_orders,
+            preloaded_tickets=preloaded_tickets
         ))
     return out
 
@@ -687,6 +747,12 @@ def _refresh_conversation_preview(convo):
             preview = _order_card_preview(json.loads(latest.text or '{}'))
         except (TypeError, ValueError, json.JSONDecodeError):
             preview = 'Order details'
+    elif latest.message_type == 'custom_ticket':
+        try:
+            tdata = json.loads(latest.text or '{}')
+            preview = f"Custom Quote: {tdata.get('title') or 'Floral Arrangement'} (₱{float(tdata.get('base_price') or 0):,.2f})"
+        except (TypeError, ValueError, json.JSONDecodeError):
+            preview = 'Custom Quote'
     else:
         preview = (latest.text[:200] if latest.text else None)
     convo.last_message_text = preview
@@ -1071,9 +1137,16 @@ def get_messages(convo_id):
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 30, type=int), 100)
 
-    pagination = ChatMessage.query.filter_by(conversation_id=convo_id) \
-        .order_by(ChatMessage.created_at.desc()) \
+    pagination = (
+        ChatMessage.query
+        .filter_by(conversation_id=convo_id)
+        .options(
+            joinedload(ChatMessage.sender),
+            joinedload(ChatMessage.reply_to).joinedload(ChatMessage.sender),
+        )
+        .order_by(ChatMessage.created_at.desc())
         .paginate(page=page, per_page=per_page, error_out=False)
+    )
 
     chrono = list(reversed(pagination.items))
     messages = _hydrate_message_list(convo, chrono, persist=True)
@@ -1546,3 +1619,576 @@ def get_typing(convo_id):
         _typing_state.pop(convo_id, None)
 
     return jsonify({'typing': typing_users}), 200
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CUSTOM QUOTE TICKETS (Chat / POS Bespoke Flow)
+# ═══════════════════════════════════════════════════════════════════════
+
+@chat_bp.route('/conversations/<int:convo_id>/custom-ticket', methods=['POST'])
+@chat_auth_required
+def create_custom_ticket(convo_id):
+    """
+    POST /api/v1/chat/conversations/<id>/custom-ticket
+    Seller or Seller Admin creates a bespoke arrangement quote.
+    Body:
+      - title: (str) e.g. "Custom Pastel Rose Box"
+      - category: (str) "bouquets", "fresh-flowers", etc.
+      - base_price: (float) e.g. 1800.00
+      - inclusions: (str, optional)
+      - image_url: (str, optional)
+      - image_public_id: (str, optional)
+    """
+    user = _current_user()
+    convo = Conversation.query.get_or_404(convo_id)
+
+    if not _can_access_conversation(user, convo):
+        return jsonify({'error': 'Access denied'}), 403
+
+    # Must be seller or seller admin of the store (Platform admins do not create flower quotes)
+    is_seller = (convo.seller_id == user.id)
+    is_seller_admin = (user.role == 'seller_admin')
+    if not (is_seller or is_seller_admin):
+        return jsonify({'error': 'Only sellers and seller admins can create custom arrangement quotes'}), 403
+
+    # Support JSON or multipart form data (with file upload)
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        image_url = (data.get('image_url') or '').strip() or None
+        image_public_id = (data.get('image_public_id') or '').strip() or None
+    else:
+        data = request.form or {}
+        image_url = (data.get('image_url') or '').strip() or None
+        image_public_id = (data.get('image_public_id') or '').strip() or None
+        if 'image' in request.files and request.files['image'].filename:
+            file = request.files['image']
+            try:
+                upload_res = cloudinary.uploader.upload(
+                    file,
+                    folder='e-flowers/custom-tickets',
+                    resource_type='image',
+                    transformation=[{'width': 1200, 'height': 1200, 'crop': 'limit'}]
+                )
+                image_url = upload_res.get('secure_url')
+                image_public_id = upload_res.get('public_id')
+            except Exception as e:
+                return jsonify({'error': f'Image upload failed: {str(e)}'}), 500
+
+    title = (data.get('title') or '').strip()
+    if not title:
+        return jsonify({'error': 'Custom arrangement title is required'}), 400
+
+    category = (data.get('category') or 'bouquets').strip().lower()
+    try:
+        base_price = float(data.get('base_price') or 0)
+        if base_price <= 0:
+            return jsonify({'error': 'Base price must be greater than 0'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Valid base price is required'}), 400
+
+    inclusions = (data.get('inclusions') or '').strip() or None
+
+    # Dedication card toggle (defaults to False)
+    raw_allow_dedication = data.get('allow_dedication_card')
+    if raw_allow_dedication is None:
+        allow_dedication_card = False
+    elif isinstance(raw_allow_dedication, str):
+        allow_dedication_card = raw_allow_dedication.lower() in ('true', '1', 'yes', 'on')
+    else:
+        allow_dedication_card = bool(raw_allow_dedication)
+
+    # Generate unique ticket number: CQT-YYYYMMDD-XXXX
+    now_utc = datetime.utcnow()
+    date_str = now_utc.strftime('%Y%m%d')
+    rand_suffix = '%04d' % (CustomQuoteTicket.query.count() + 1)
+    ticket_number = f"CQT-{date_str}-{rand_suffix}"
+
+    # 4-hour validity window
+    expires_at = now_utc + timedelta(hours=4)
+
+    ticket = CustomQuoteTicket(
+        ticket_number=ticket_number,
+        store_id=convo.store_id,
+        customer_id=convo.customer_id,
+        conversation_id=convo.id,
+        title=title,
+        category=category,
+        base_price=Decimal(str(base_price)),
+        inclusions=inclusions,
+        allow_dedication_card=allow_dedication_card,
+        image_url=image_url,
+        image_public_id=image_public_id,
+        expires_at=expires_at,
+        status='pending',
+    )
+    db.session.add(ticket)
+    db.session.flush()
+
+    # Create ChatMessage of type 'custom_ticket'
+    ticket_dict = ticket.to_dict()
+    ticket_json = json.dumps(ticket_dict)
+    msg = ChatMessage(
+        conversation_id=convo.id,
+        sender_id=user.id,
+        message_type='custom_ticket',
+        text=ticket_json,
+    )
+    db.session.add(msg)
+
+    # Update conversation last message
+    now = pht_now()
+    preview_text = f"Custom Quote: {title} (₱{base_price:,.2f})"
+    convo.last_message_text = preview_text[:200]
+    convo.last_message_at = now
+    convo.last_sender_id = user.id
+    convo.updated_at = now
+
+    _bump_other_unread(convo, user.id)
+
+    try:
+        from app.utils.push import queue_chat_push
+        queue_chat_push(convo, user, preview_text)
+    except Exception:
+        pass
+
+    db.session.commit()
+
+    return jsonify({
+        'status': 'ok',
+        'ticket': ticket.to_dict(),
+        'message': _message_to_dict(msg),
+    }), 201
+
+
+@chat_bp.route('/custom-ticket/<int:ticket_id>', methods=['GET'])
+@chat_auth_required
+def get_custom_ticket(ticket_id):
+    """
+    GET /api/v1/chat/custom-ticket/<id>
+    Fetches live ticket data, remaining seconds, and store information.
+    """
+    user = _current_user()
+    ticket = CustomQuoteTicket.query.get_or_404(ticket_id)
+
+    # Verify access
+    if user.id not in (ticket.customer_id, ticket.store.seller_id) and user.role not in ('admin', 'seller_admin'):
+        return jsonify({'error': 'Access denied'}), 403
+
+    return jsonify({'ticket': ticket.to_dict()}), 200
+
+
+@chat_bp.route('/stores/<int:store_id>/addons', methods=['GET'])
+@chat_auth_required
+def get_store_addons(store_id):
+    """
+    GET /api/v1/chat/stores/<store_id>/addons
+    Returns active, in-stock YMAL add-ons for the specified store
+    to populate the optional add-ons selector in the checkout sheet.
+    """
+    from app.addon_helpers import store_ymal_addon_option_dicts
+    addons = store_ymal_addon_option_dicts(store_id)
+    return jsonify({'addons': addons}), 200
+
+
+@chat_bp.route('/stores/<int:store_id>/check-delivery', methods=['GET'])
+@chat_auth_required
+def check_store_delivery_api(store_id):
+    """
+    GET /api/v1/chat/stores/<store_id>/check-delivery?address_id=<id>&subtotal=<float>
+    Checks whether the store delivers to the specified address (radius, customzone, municipality).
+    """
+    user = _current_user()
+    store = Store.query.get_or_404(store_id)
+    addr_id = request.args.get('address_id', type=int)
+    subtotal = request.args.get('subtotal', default=100.0, type=float)
+
+    user_addr = None
+    if addr_id:
+        user_addr = UserAddress.query.filter_by(id=addr_id, user_id=user.id).first()
+    if not user_addr:
+        user_addr = UserAddress.query.filter_by(user_id=user.id, is_default=True).first()
+        if not user_addr:
+            user_addr = UserAddress.query.filter_by(user_id=user.id).order_by(UserAddress.id.desc()).first()
+
+    if not user_addr:
+        return jsonify({
+            'can_deliver': False,
+            'reason': 'Please add or select a delivery address in your saved addresses.'
+        }), 200
+
+    from app.checkout_routes import _check_store_delivery
+    check = _check_store_delivery(store, user_addr, subtotal)
+    return jsonify({
+        'can_deliver': check.get('can_deliver', False),
+        'reason': check.get('reason'),
+        'distance_km': round(check['distance_km'], 2) if check.get('distance_km') is not None else None,
+        'delivery_fee': float(check['delivery_fee']) if check.get('delivery_fee') is not None else None,
+        'delivery_method': store.delivery_method,
+    }), 200
+
+
+@chat_bp.route('/custom-ticket/<int:ticket_id>/checkout', methods=['POST'])
+@chat_auth_required
+def checkout_custom_ticket(ticket_id):
+    """
+    POST /api/v1/chat/custom-ticket/<id>/checkout
+    Customer checks out the custom ticket quote.
+    Body:
+      - delivery_address_id: (int, optional if raw address passed)
+      - delivery_address: (str)
+      - customer_latitude: (float, optional)
+      - customer_longitude: (float, optional)
+      - delivery_notes: (str, optional)
+      - requested_delivery_date: (str YYYY-MM-DD, optional)
+      - requested_delivery_time: (str, optional)
+      - dedication_card: (str, optional)
+      - payment_method: 'cod' or 'gcash'
+      - payment_proof_url: (str, optional for gcash)
+      - payment_proof_public_id: (str, optional for gcash)
+      - addons: list of { "addon_option_id": int, "quantity": int } (OPTIONAL)
+    """
+    user = _current_user()
+    ticket = CustomQuoteTicket.query.get_or_404(ticket_id)
+    try:
+        if ticket.customer_id != user.id:
+            return jsonify({'error': 'Only the recipient customer can check out this ticket'}), 403
+
+        if ticket.status != 'pending':
+            return jsonify({'error': f'Ticket is already {ticket.status}'}), 400
+
+        if ticket.is_expired:
+            ticket.status = 'expired'
+            db.session.commit()
+            return jsonify({'error': 'This quote has expired. Please request a new quote from the florist.'}), 400
+
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+            proof_url = data.get('payment_proof_url') or None
+            proof_public_id = data.get('payment_proof_public_id') or None
+        else:
+            data = request.form or {}
+            proof_url = data.get('payment_proof_url') or None
+            proof_public_id = data.get('payment_proof_public_id') or None
+            if 'receipt' in request.files and request.files['receipt'].filename:
+                file = request.files['receipt']
+                try:
+                    upload_res = cloudinary.uploader.upload(
+                        file,
+                        folder='e-flowers/receipts',
+                        resource_type='image',
+                        transformation=[{'width': 1200, 'height': 1200, 'crop': 'limit'}]
+                    )
+                    proof_url = upload_res.get('secure_url')
+                    proof_public_id = upload_res.get('public_id')
+                except Exception as e:
+                    return jsonify({'error': f'Receipt upload failed: {str(e)}'}), 500
+
+        # Delivery address resolution — MUST be from customer's saved addresses
+        addr_id = data.get('delivery_address_id')
+        user_addr = None
+        if addr_id:
+            try:
+                user_addr = UserAddress.query.filter_by(id=int(addr_id), user_id=user.id).first()
+            except (ValueError, TypeError):
+                user_addr = None
+
+        if not user_addr:
+            # Fallback to default or latest saved address if addr_id wasn't passed directly
+            user_addr = UserAddress.query.filter_by(user_id=user.id, is_default=True).first()
+            if not user_addr:
+                user_addr = UserAddress.query.filter_by(user_id=user.id).order_by(UserAddress.id.desc()).first()
+
+        if not user_addr:
+            return jsonify({'error': 'Please add or select a delivery address in your saved addresses before checking out.'}), 400
+
+        delivery_address = user_addr.address_line or (data.get('delivery_address') or '').strip()
+        cust_lat = user_addr.latitude or data.get('customer_latitude')
+        cust_lng = user_addr.longitude or data.get('customer_longitude')
+        place_id = user_addr.place_id
+
+        # Verify payment method against store payment settings
+        from app.checkout_routes import _store_payment_flags, _validate_requested_delivery_slot, _normalize_requested_delivery_time
+        allow_gcash, allow_cod = _store_payment_flags(ticket.store_id)
+        payment_method = (data.get('payment_method') or 'cod').strip().lower()
+        if payment_method == 'gcash' and not allow_gcash:
+            return jsonify({'error': 'GCash is disabled by this store. Please select another payment method.'}), 400
+        if payment_method == 'cod' and not allow_cod:
+            return jsonify({'error': 'Cash on delivery is disabled by this store. Please select another payment method.'}), 400
+        if payment_method not in ('cod', 'gcash'):
+            payment_method = 'cod' if allow_cod else 'gcash'
+
+        # Optional YMAL Add-ons processing
+        addons_raw = data.get('addons') or []
+        if isinstance(addons_raw, str):
+            try:
+                addons_raw = json.loads(addons_raw)
+            except Exception:
+                addons_raw = []
+        if not isinstance(addons_raw, list):
+            addons_raw = []
+        selected_addons = []
+        addons_total = Decimal('0.00')
+
+        for a_item in addons_raw:
+            try:
+                opt_id = int(a_item.get('addon_option_id') or a_item.get('id') or 0)
+                qty = max(1, int(a_item.get('quantity') or a_item.get('units') or 1))
+            except (TypeError, ValueError):
+                continue
+
+            if opt_id <= 0:
+                continue
+
+            opt = ProductAddonOption.query.get(opt_id)
+            if not opt or not opt.is_available:
+                return jsonify({'error': f'Selected add-on #{opt_id} is unavailable'}), 400
+
+            if int(opt.stock_quantity or 0) < qty:
+                return jsonify({'error': f'Insufficient stock for add-on "{opt.name}". Available: {opt.stock_quantity}'}), 400
+
+            selected_addons.append({'option': opt, 'quantity': qty, 'price': Decimal(str(opt.price or 0))})
+            addons_total += Decimal(str(opt.price or 0)) * qty
+
+        base_price = Decimal(str(ticket.base_price or 0))
+        subtotal_amount = base_price + addons_total
+
+        # Delivery coverage & fee verification against store delivery settings
+        # (checks radius, customzone polygon, or municipality coverage)
+        store = ticket.store
+        delivery_fee = Decimal('100.00')
+        distance_km = 3.0
+        if store:
+            from app.checkout_routes import _check_store_delivery
+            delivery_check = _check_store_delivery(store, user_addr, float(subtotal_amount))
+            if not delivery_check.get('can_deliver', False):
+                reason = delivery_check.get('reason') or f"{store.name} does not deliver to the selected address."
+                return jsonify({'error': reason}), 400
+
+            if delivery_check.get('delivery_fee') is not None:
+                delivery_fee = Decimal(str(delivery_check['delivery_fee']))
+            if delivery_check.get('distance_km') is not None:
+                distance_km = float(delivery_check['distance_km'])
+        elif cust_lat and cust_lng and store and store.latitude and store.longitude:
+            try:
+                from app.checkout_routes import _calculate_delivery_fee, _calculate_distance
+                dist = _calculate_distance(float(store.latitude), float(store.longitude), float(cust_lat), float(cust_lng))
+                fee = _calculate_delivery_fee(dist)
+                distance_km = float(dist)
+                delivery_fee = Decimal(str(fee))
+            except Exception:
+                pass
+
+        total_amount = subtotal_amount + delivery_fee
+
+        # Parse and validate requested delivery date & time slot
+        req_date_raw = data.get('requested_delivery_date')
+        req_date = None
+        if req_date_raw:
+            try:
+                req_date = datetime.strptime(str(req_date_raw)[:10], '%Y-%m-%d').date()
+            except Exception:
+                req_date = None
+
+        req_time_raw = data.get('requested_delivery_time') or None
+        req_time = _normalize_requested_delivery_time(req_time_raw) if req_time_raw else None
+
+        # Validate against store schedule & cutoff
+        if store and req_date and req_time:
+            slot_err = _validate_requested_delivery_slot(store, req_date, req_time)
+            if slot_err:
+                return jsonify({'error': slot_err}), 400
+
+        delivery_notes = (data.get('delivery_notes') or '').strip() or None
+        dedication_card = (data.get('dedication_card') or '').strip()
+        if dedication_card and getattr(ticket, 'allow_dedication_card', True) is not False:
+            delivery_notes = f"Card Message: {dedication_card}\n\n{delivery_notes or ''}".strip()
+
+        # Keep custom quotes in the same payment-review workflow as ordinary
+        # checkout orders. Seller portals use these states to expose the
+        # approval and fulfillment actions.
+        payment_status = (
+            'cod_approved'
+            if payment_method == 'cod'
+            else 'pending_verification'
+        )
+
+        # Build PostGIS Point for rider navigation
+        delivery_location_point = None
+        if cust_lat and cust_lng:
+            try:
+                from geoalchemy2.shape import from_shape
+                from shapely.geometry import Point
+                delivery_location_point = from_shape(Point(float(cust_lng), float(cust_lat)), srid=4326)
+            except Exception as e:
+                print(f"⚠️ Error building delivery_location Point: {e}")
+
+        # Create the Order
+        order = Order(
+            customer_id=user.id,
+            store_id=ticket.store_id,
+            order_type='custom_chat',
+            status='pending',
+            subtotal_amount=subtotal_amount,
+            delivery_fee=delivery_fee,
+            distance_km=distance_km,
+            total_amount=total_amount,
+            payment_method=payment_method,
+            payment_status=payment_status,
+            payment_proof_url=proof_url,
+            payment_proof_public_id=proof_public_id,
+            delivery_location=delivery_location_point,
+            delivery_address=delivery_address,
+            delivery_notes=delivery_notes,
+            customer_latitude=float(cust_lat) if cust_lat else None,
+            customer_longitude=float(cust_lng) if cust_lng else None,
+            mapbox_place_id=place_id,
+            requested_delivery_date=req_date,
+            requested_delivery_time=req_time or req_time_raw,
+            custom_ticket_id=ticket.id,
+        )
+        db.session.add(order)
+        db.session.flush()
+
+        # Find or attach a representative product for the custom bouquet line item
+        custom_product = Product.query.filter_by(store_id=ticket.store_id, is_archived=False).first()
+        first_product_id = custom_product.id if custom_product else 1
+
+        custom_order_item = OrderItem(
+            order_id=order.id,
+            product_id=first_product_id,
+            quantity=1,
+            price=base_price,
+        )
+        db.session.add(custom_order_item)
+        db.session.flush()
+
+        # Attach any selected add-ons and deduct stock with StockReduction logging
+        for sel in selected_addons:
+            opt = sel['option']
+            qty = sel['quantity']
+
+            # Decrement stock
+            opt.stock_quantity = int(opt.stock_quantity or 0) - qty
+            if hasattr(opt, 'updated_at'):
+                opt.updated_at = datetime.utcnow()
+
+            # Log into StockReduction for Inventory History modal
+            owner_product = opt.group.product if opt.group else None
+            actor_id = stock_audit_actor_id(user.id, product=owner_product)
+            db.session.add(StockReduction(
+                product_id=opt.group.product_id if opt.group else first_product_id,
+                variant_id=None,
+                addon_option_id=opt.id,
+                reduction_amount=qty,
+                reason='sale',
+                reason_notes=f'Custom order #{order.id} add-on: {ticket.title}',
+                reduced_by=actor_id,
+            ))
+
+            # Add OrderItemAddon record (image_public_id is not a DB column — image_url is enough)
+            db.session.add(OrderItemAddon(
+                order_item_id=custom_order_item.id,
+                addon_option_id=opt.id,
+                name=opt.name,
+                price=sel['price'],
+                quantity=qty,
+                image_url=opt.image_url,
+            ))
+
+        # Update ticket status to accepted and link order
+        ticket.status = 'accepted'
+        ticket.order_id = order.id
+        if ticket.conversation_id:
+            convo = Conversation.query.get(ticket.conversation_id)
+            if convo:
+                # We no longer send a separate text message; the ticket state handles it.
+                convo.last_message_text = f"✅ Custom Order Placed: #{order.id}"
+                convo.last_message_at = pht_now()
+                convo.last_sender_id = user.id
+                _bump_other_unread(convo, user.id)
+
+        db.session.commit()
+
+        return jsonify({
+            'status': 'ok',
+            'order_id': order.id,
+            'order_number': 'ORD-%05d' % int(order.id),
+            'total_amount': float(total_amount),
+            'ticket': ticket.to_dict(),
+        }), 201
+
+    except Exception as _checkout_err:
+        import traceback
+        db.session.rollback()
+        err_detail = traceback.format_exc()
+        print(f"❌ checkout_custom_ticket error: {_checkout_err}\n{err_detail}")
+        return jsonify({'error': f'Checkout failed: {str(_checkout_err)}'}), 500
+
+
+@chat_bp.route('/orders/<int:order_id>/cancel-cod', methods=['POST'])
+@chat_auth_required
+def cancel_cod_order(order_id):
+    """
+    POST /api/v1/chat/orders/<id>/cancel-cod
+    Only the Seller or Seller Admin can cancel a COD order.
+    Restores any attached add-on stock, writes to StockReduction audit log,
+    marks order and ticket cancelled, and posts cancellation notice in chat.
+    """
+    user = _current_user()
+    order = Order.query.get_or_404(order_id)
+
+    # Verify order is COD and eligible for cancellation
+    if (order.payment_method or '').lower() != 'cod':
+        return jsonify({'error': 'Only COD orders can be cancelled directly. Prepaid orders require admin review.'}), 400
+
+    if order.status in ('delivered', 'completed', 'cancelled'):
+        return jsonify({'error': f'Order is already {order.status}'}), 400
+
+    if order.status in ('on_delivery', 'out_for_delivery', 'picked_up'):
+        return jsonify({'error': 'Order cannot be cancelled because the rider is already delivering.'}), 400
+
+    # Verify role: must be seller or seller admin of this store
+    is_seller = (order.store.seller_id == user.id)
+    is_admin = (user.role in ('admin', 'seller_admin'))
+    if not (is_seller or is_admin):
+        return jsonify({'error': 'Only the seller or store admin can cancel this order'}), 403
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or data.get('reason_notes') or 'Customer requested cancellation in chat').strip()
+
+    # Cancel order
+    order.status = 'cancelled'
+    order.cancelled_at = datetime.utcnow()
+    order.cancellation_reason_code = 'seller_cancelled_cod'
+    order.cancellation_reason = reason
+
+    # Restore any attached add-on stock and log restock in StockReduction
+    order.restore_stock_on_cancel(user.id)
+
+    # Cancel linked custom ticket if present
+    if order.custom_ticket_id:
+        t = CustomQuoteTicket.query.get(order.custom_ticket_id)
+        if t:
+            t.status = 'cancelled'
+            if t.conversation_id:
+                convo = Conversation.query.get(t.conversation_id)
+                if convo:
+                    cancel_notice = f"🚫 Custom COD Order #{order.id} has been cancelled by the florist.\nReason: {reason}"
+                    db.session.add(ChatMessage(
+                        conversation_id=convo.id,
+                        sender_id=user.id,
+                        message_type='text',
+                        text=cancel_notice,
+                    ))
+                    convo.last_message_text = cancel_notice[:200]
+                    convo.last_message_at = pht_now()
+                    _bump_other_unread(convo, user.id)
+
+    db.session.commit()
+
+    return jsonify({
+        'status': 'ok',
+        'message': f'Order #{order.id} cancelled successfully and add-on inventory restored.',
+        'order_id': order.id,
+    }), 200
+

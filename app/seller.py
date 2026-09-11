@@ -262,12 +262,13 @@ def verify_order_payment(order_id):
         return jsonify({'error': 'No active store found'}), 404
     
     order = Order.query.filter_by(id=order_id, store_id=store.id).first_or_404()
-    if not order.payment_proof_url:
+    is_cod = (order.payment_method or '').lower() == 'cod'
+    if not is_cod and not order.payment_proof_url:
         return jsonify({'error': 'No payment proof uploaded'}), 400
-    
-    order.payment_status = 'verified'
-    if order.status == 'pending':
-        order.set_status('accepted')
+
+    order.payment_status = 'cod_approved' if is_cod else 'verified'
+    if order.status in ('pending', 'accepted'):
+        order.set_status('preparing')
     db.session.commit()
     
     return jsonify({

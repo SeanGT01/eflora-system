@@ -3168,9 +3168,9 @@ class ChatMessage(db.Model):
             elif self.message_type == 'custom_ticket' and self.text:
                 try:
                     payload = json.loads(self.text)
-                    if payload and payload.get('ticket_id'):
+                    if payload and (payload.get('ticket_id') or payload.get('id')):
                         try:
-                            tid = payload['ticket_id']
+                            tid = payload.get('ticket_id') or payload.get('id')
                             live_ticket = preloaded_tickets.get(tid) if preloaded_tickets is not None else CustomQuoteTicket.query.get(tid)
                             if live_ticket:
                                 payload = live_ticket.to_dict()
@@ -3186,10 +3186,10 @@ class ChatMessage(db.Model):
                     if payload.get('order_id') and payload.get('items') is not None:
                         d['order_card'] = payload
                         d['message_type'] = 'order_card'
-                    elif payload.get('ticket_id') or payload.get('ticket_number'):
-                        if payload.get('ticket_id'):
+                    elif payload.get('ticket_id') or payload.get('id') or payload.get('ticket_number'):
+                        if payload.get('ticket_id') or payload.get('id'):
                             try:
-                                tid = payload['ticket_id']
+                                tid = payload.get('ticket_id') or payload.get('id')
                                 live_ticket = preloaded_tickets.get(tid) if preloaded_tickets is not None else CustomQuoteTicket.query.get(tid)
                                 if live_ticket:
                                     payload = live_ticket.to_dict()

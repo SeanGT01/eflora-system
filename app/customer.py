@@ -223,10 +223,10 @@ def get_products():
     per_page = min(request.args.get('per_page', 20, type=int), 100)
     _, address = _resolve_optional_customer_address()
     # Match web storefront: when a customer has a default address, hide
-    # out-of-range products unless include_outside_location=1.
+    # out-of-range products unless include_outside_location=1 or a specific store_id is queried.
     include_outside_arg = request.args.get('include_outside_location')
     if include_outside_arg is None:
-        include_outside = address is None
+        include_outside = (address is None) or bool(store_id)
     else:
         include_outside = include_outside_arg in ('1', 'true', 'True', 'yes')
 
@@ -967,12 +967,11 @@ def get_orders():
             Order.query
             .filter_by(customer_id=user_id)
             .options(
-                selectinload(Order.items).joinedload(OrderItem.product).selectinload(Product.images),
+                selectinload(Order.items).joinedload(OrderItem.product),
                 selectinload(Order.items).joinedload(OrderItem.variant),
-                selectinload(Order.items).selectinload(OrderItem.addons).joinedload(OrderItemAddon.addon_option),
+                selectinload(Order.items).selectinload(OrderItem.addons),
                 joinedload(Order.store),
                 joinedload(Order.customer),
-                joinedload(Order.assigned_rider).joinedload(Rider.user),
             )
         )
         if status:

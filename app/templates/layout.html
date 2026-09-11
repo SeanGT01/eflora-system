@@ -3034,6 +3034,90 @@
         };
     })();
 
+    // Unified prompt modal helper (styled replacement for window.prompt)
+    (function setupUnifiedPromptModal() {
+        if (window.openPromptModal) return;
+
+        const style = document.createElement('style');
+        style.textContent = `
+            .app-prompt-overlay{position:fixed;inset:0;background:rgba(42,35,30,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:clamp(.75rem,3vw,1.25rem);z-index:12001}
+            .app-prompt-overlay.show{display:flex}
+            .app-prompt-card{width:min(22rem,100%);max-width:100%;background:rgba(255,253,249,.94);border:1px solid rgba(255,255,255,.72);border-radius:18px;box-shadow:0 20px 48px rgba(90,40,80,.16),inset 0 1px 0 rgba(255,255,255,.8);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);padding:1.15rem 1.15rem 1.05rem}
+            .app-prompt-title{font-family:var(--font-display),Georgia,serif;font-size:1.35rem;font-weight:500;color:var(--charcoal,#2c2520);margin:0 0 .45rem;letter-spacing:-0.02em;line-height:1.25}
+            .app-prompt-message{font-family:var(--font-sans),'DM Sans',system-ui,sans-serif;font-size:.9rem;color:var(--muted,#9a8d85);line-height:1.55;margin:0 0 .75rem;white-space:pre-line}
+            .app-prompt-input{width:100%;box-sizing:border-box;font-family:var(--font-sans),'DM Sans',system-ui,sans-serif;font-size:.875rem;color:var(--charcoal,#2c2520);background:rgba(255,255,255,.9);border:1.5px solid rgba(181,68,90,.22);border-radius:10px;padding:.5rem .75rem;outline:none;transition:border-color .2s ease,box-shadow .2s ease;margin-bottom:1rem}
+            .app-prompt-input:focus{border-color:var(--deep-rose,#b5445a);box-shadow:0 0 0 3px rgba(181,68,90,.1)}
+            .app-prompt-actions{display:flex;justify-content:flex-end;align-items:center;gap:.5rem;flex-wrap:wrap}
+            .app-prompt-btn{border:1.5px solid rgba(181,68,90,.22);border-radius:999px;background:rgba(255,255,255,.92);color:var(--charcoal,#2c2520);padding:.48rem .95rem;font-size:.85rem;font-weight:600;cursor:pointer;font-family:var(--font-sans),'DM Sans',system-ui,sans-serif;transition:background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease}
+            .app-prompt-btn:hover{background:rgba(255,245,248,.96);border-color:var(--deep-rose,#b5445a);color:var(--deep-rose,#b5445a)}
+            .app-prompt-btn.primary{background:linear-gradient(135deg,#c24e68 0%,#d878a0 55%,#b070c8 100%);border-color:rgba(255,255,255,.35);color:#fff;box-shadow:0 6px 16px rgba(181,68,90,.22)}
+            .app-prompt-btn.primary:hover{background:linear-gradient(135deg,#b04058 0%,#c86890 55%,#9f60b8 100%);border-color:rgba(255,255,255,.35);color:#fff}
+            @media (max-width:380px){
+                .app-prompt-card{padding:1rem .95rem .9rem;border-radius:16px}
+                .app-prompt-title{font-size:1.2rem}
+                .app-prompt-actions{flex-direction:column-reverse;align-items:stretch}
+                .app-prompt-btn{width:100%;text-align:center}
+            }
+        `;
+        document.head.appendChild(style);
+
+        const overlay = document.createElement('div');
+        overlay.className = 'app-prompt-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.innerHTML = `
+            <div class="app-prompt-card" role="document">
+                <div class="app-prompt-title" id="appPromptTitle">Enter Details</div>
+                <div class="app-prompt-message" id="appPromptMessage"></div>
+                <input type="text" class="app-prompt-input" id="appPromptInput" autocomplete="off" />
+                <div class="app-prompt-actions">
+                    <button type="button" class="app-prompt-btn" id="appPromptCancel">Cancel</button>
+                    <button type="button" class="app-prompt-btn primary" id="appPromptOk">OK</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const msgEl = overlay.querySelector('#appPromptMessage');
+        const titleEl = overlay.querySelector('#appPromptTitle');
+        const inputEl = overlay.querySelector('#appPromptInput');
+        const cancelBtn = overlay.querySelector('#appPromptCancel');
+        const okBtn = overlay.querySelector('#appPromptOk');
+
+        window.openPromptModal = function(message, opts) {
+            const options = opts || {};
+            titleEl.textContent = options.title || 'Enter Details';
+            msgEl.textContent = message || '';
+            inputEl.value = options.defaultValue || '';
+            inputEl.placeholder = options.placeholder || '';
+            cancelBtn.textContent = options.cancelText || 'Cancel';
+            okBtn.textContent = options.confirmText || 'OK';
+            return new Promise(function(resolve) {
+                overlay.classList.add('show');
+                requestAnimationFrame(function() { inputEl.focus(); inputEl.select(); });
+                const close = function(result) {
+                    overlay.classList.remove('show');
+                    overlay.removeEventListener('click', handleOverlayClick);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    okBtn.removeEventListener('click', onConfirm);
+                    inputEl.removeEventListener('keydown', onInputKey);
+                    resolve(result);
+                };
+                const onCancel = function() { close(null); };
+                const onConfirm = function() { close(inputEl.value.trim() || ''); };
+                const handleOverlayClick = function(e) { if (e.target === overlay) close(null); };
+                const onInputKey = function(e) {
+                    if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+                    if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+                };
+                overlay.addEventListener('click', handleOverlayClick);
+                cancelBtn.addEventListener('click', onCancel);
+                okBtn.addEventListener('click', onConfirm);
+                inputEl.addEventListener('keydown', onInputKey);
+            });
+        };
+    })();
+
     // Global money formatting for UI text: ₱/Php/PHP + number
     (function setupMoneyFormatter() {
         const moneyPattern = /(₱\s*|PHP\s*|Php\s*)(\d[\d,]*(?:\.\d+)?)/g;
@@ -3271,8 +3355,8 @@
 })();
 </script>
 
-{% if session.get('role') in ['seller', 'store_admin', 'admin'] %}
-<!-- Seller/Admin Chat Widget -->
+{% if session.get('user_id') %}
+<!-- Chat Widget -->
 {% include 'chat_widget.html' %}
 <script>
 (function () {

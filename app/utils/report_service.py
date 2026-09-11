@@ -419,6 +419,7 @@ def _order_line_details_map(order_ids: Sequence[int]) -> dict:
     items = (
         db.session.query(OrderItem)
         .options(
+            joinedload(OrderItem.order),
             joinedload(OrderItem.product),
             joinedload(OrderItem.variant),
             joinedload(OrderItem.addons),
@@ -429,6 +430,8 @@ def _order_line_details_map(order_ids: Sequence[int]) -> dict:
     grouped = defaultdict(list)
     for it in items:
         name = it.product.name if it.product else 'Item'
+        if it.order and it.order.order_type == 'custom_chat' and getattr(it.order, 'custom_ticket', None):
+            name = it.order.custom_ticket.title
         if it.variant and it.variant.name:
             name = f"{name} — {it.variant.name}"
         chunk = f"{name} x{int(it.quantity or 0)}"
@@ -618,11 +621,14 @@ def _pos_order_count(store_id, start, end) -> int:
 
 
 def _new_customer_count(store_id, start, end) -> int:
-    """Customers whose *first* order at this store falls in the period."""
+    """Customers whose *first* completed order at this store falls in the period."""
     first_orders = db.session.query(
         Order.customer_id,
         func.min(Order.created_at).label('first_order'),
-    ).filter(Order.store_id == store_id).group_by(Order.customer_id).subquery()
+    ).filter(
+        Order.store_id == store_id,
+        _paid_order_status_filter(),
+    ).group_by(Order.customer_id).subquery()
 
     return db.session.query(func.count(first_orders.c.customer_id)).filter(
         first_orders.c.first_order >= start,
@@ -1224,6 +1230,7 @@ def _customers_section(store_id, start, end):
         func.max(Order.created_at).label('last_order'),
     ).join(Order, Order.customer_id == User.id) \
      .filter(Order.store_id == store_id,
+             _paid_order_status_filter(),
              Order.created_at >= start,
              Order.created_at < end) \
      .group_by(User.id, User.full_name, User.email) \
@@ -2457,10 +2464,12 @@ def _platform_pos_order_count(start, end) -> int:
 
 
 def _platform_new_customer_count(start, end) -> int:
-    """Customers whose *very first* online order falls in the period."""
+    """Customers whose *very first* completed online order falls in the period."""
     first_orders = db.session.query(
         Order.customer_id,
         func.min(Order.created_at).label('first_order'),
+    ).filter(
+        _paid_order_status_filter(),
     ).group_by(Order.customer_id).subquery()
 
     return db.session.query(func.count(first_orders.c.customer_id)).filter(
@@ -3092,7 +3101,8 @@ def _admin_customers_section(start, end):
         func.coalesce(func.sum(Order.total_amount), 0).label('total_spent'),
         func.max(Order.created_at).label('last_order'),
     ).join(Order, Order.customer_id == User.id) \
-     .filter(Order.created_at >= start,
+     .filter(_paid_order_status_filter(),
+             Order.created_at >= start,
              Order.created_at < end) \
      .group_by(User.id, User.full_name, User.email) \
      .order_by(func.sum(Order.total_amount).desc()).all()

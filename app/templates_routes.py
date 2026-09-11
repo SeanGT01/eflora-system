@@ -497,18 +497,21 @@ def _serialize_customer_order(
         if item_rating is not None:
             item_rating = max(1, min(5, int(item_rating)))
 
+        custom_ticket = order.custom_ticket if order.order_type == 'custom_chat' else None
+        resolved_name = custom_ticket.title if custom_ticket else (item.product.name if item.product else 'Product')
         items_payload.append({
             'id': item.id,
             'product_id': item.product_id,
             'variant_id': item.variant_id,
-            'product_name': item.product.name if item.product else 'Product',
-            'name': item.product.name if item.product else 'Product',
+            'product_name': resolved_name,
+            'name': resolved_name,
             'variant_name': item.variant.name if item.variant else None,
             'quantity': quantity,
             'price': unit_price,
             'total': float(quantity * unit_price) + addons_sum,
             'product_image_url': item.product_image,
             'image_url': item.product_image,
+            'is_custom_order': bool(order.order_type == 'custom_chat'),
             'is_rated': item.id in rated_item_ids,
             'rating': item_rating,
             'addons': addons_list,
@@ -536,6 +539,8 @@ def _serialize_customer_order(
     return {
         'id': order.id,
         'order_number': f'ORD-{order.id:05d}',
+        'order_type': order.order_type,
+        'custom_ticket_id': order.custom_ticket_id,
         'status': order.status,
         'payment_method': order.payment_method,
         'payment_status': order.payment_status,
@@ -8427,14 +8432,17 @@ def seller_order_verify_payment_api(order_id):
         return jsonify({'error': 'Order not found'}), 404
 
     payment_status = (order.payment_status or '').lower()
-    if payment_status == 'cod_pending':
+    # Some older custom quotes were saved as `verified` rather than
+    # `cod_pending`. The payment method is authoritative for COD approval.
+    if (order.payment_method or '').lower() == 'cod':
         # COD approval flow: no receipt required, seller confirms and moves to preparing.
         order.payment_status = 'cod_approved'
         order.set_status('preparing')
     else:
         if not order.payment_proof_url:
             return jsonify({'error': 'No payment proof uploaded'}), 400
-        # GCash verification flow.
+        # GCash verification flow (also supports legacy custom quotes whose
+        # receipt status was saved as `paid`).
         order.payment_status = 'verified'
         order.set_status('preparing')
     db.session.commit()
@@ -12044,6 +12052,15 @@ def update_store_settings():
                 except:
                     qr_ids_to_delete = []
 
+        orphaned_public_ids = []
+        if 'gcash_qr_orphaned_public_ids' in data:
+            orphaned_str = data['gcash_qr_orphaned_public_ids']
+            if orphaned_str:
+                try:
+                    orphaned_public_ids = json.loads(orphaned_str)
+                except:
+                    orphaned_public_ids = []
+
         primary_qr_id = data.get('primary_qr_id')
         primary_qr_public_id = data.get('primary_qr_public_id')
 
@@ -12062,6 +12079,11 @@ def update_store_settings():
                 # Delete from database
                 db.session.delete(qr)
                 print(f"   ✅ Deleted QR record ID: {qr_id}")
+
+        # Delete newly uploaded but then removed QR images directly from Cloudinary
+        for public_id in orphaned_public_ids:
+            delete_from_cloudinary(public_id)
+            print(f"   🗑️ Deleted orphaned newly uploaded QR from Cloudinary: {public_id}")
 
         # Process new QR code uploads from Cloudinary
         current_qr_count = GCashQR.query.filter_by(store_id=store.id).count()

@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = 'add_special_price_001'
-down_revision = 'add_variant_id_to_stock_reductions'
+down_revision = 'add_variant_id_stock_reductions_001'
 branch_labels = None
 depends_on = None
 

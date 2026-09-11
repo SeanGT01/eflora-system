@@ -127,15 +127,27 @@ def _ensure_store_payment_settings_table():
 
 def _store_payment_flags(store_id):
     """Return (allow_gcash, allow_cod). GCash defaults on; COD defaults off."""
+    from app.models import GCashQR
+    qr_count = GCashQR.query.filter_by(store_id=store_id).count()
+    has_qr = qr_count > 0
+
     if not _ensure_store_payment_settings_table():
-        return True, False
+        return has_qr, not has_qr
+
     row = StorePaymentSetting.query.filter_by(store_id=store_id).first()
     if not row:
-        return True, False
+        return has_qr, not has_qr
+
     allow_gcash = True if getattr(row, "allow_gcash", None) is None else bool(row.allow_gcash)
     allow_cod = bool(row.allow_cod)
+
+    if not has_qr:
+        allow_gcash = False
+        allow_cod = True
+
     if not allow_gcash and not allow_cod:
-        allow_gcash = True
+        allow_cod = True  # Fallback to COD if both are disabled
+
     return allow_gcash, allow_cod
 
 
@@ -355,16 +367,66 @@ def _cart_structured_addon_lines(cart_items):
     return lines
 
 
-def _validate_structured_addon_stock(lines):
+def _collect_structured_addon_stock_issues(lines):
+    """Return structured stock issues for add-on options."""
+    issues = []
+    needed_by_option = {}
     for line in lines or []:
-        opt = line['option']
-        need = int(line['quantity'])
+        opt = line.get('option')
+        if not opt:
+            continue
+        qty = int(line.get('quantity') or 1)
+        if opt.id not in needed_by_option:
+            needed_by_option[opt.id] = {
+                'option': opt,
+                'total_quantity': 0,
+            }
+        needed_by_option[opt.id]['total_quantity'] += qty
+
+    for item in needed_by_option.values():
+        opt = item['option']
+        total_needed = item['total_quantity']
+        available = int(opt.stock_quantity or 0)
+        label = f"Add-on: {opt.name}"
+
         if not opt.is_available or not opt.group or not opt.group.is_active:
-            raise ValueError(f'"{opt.name}" is no longer available')
-        if int(opt.stock_quantity or 0) < need:
-            raise ValueError(
-                f'Insufficient stock for "{opt.name}". Available: {opt.stock_quantity}'
-            )
+            issues.append({
+                "addon_option_id": opt.id,
+                "name": label,
+                "requested": total_needed,
+                "available": 0,
+                "code": "unavailable",
+                "message": f'Add-on "{opt.name}" is no longer available from the store.',
+                "image_url": opt.image_url,
+            })
+        elif available <= 0:
+            issues.append({
+                "addon_option_id": opt.id,
+                "name": label,
+                "requested": total_needed,
+                "available": 0,
+                "code": "out_of_stock",
+                "message": f'Add-on "{opt.name}" is out of stock.',
+                "image_url": opt.image_url,
+            })
+        elif available < total_needed:
+            issues.append({
+                "addon_option_id": opt.id,
+                "name": label,
+                "requested": total_needed,
+                "available": available,
+                "code": "insufficient",
+                "message": f'Add-on "{opt.name}" only has {available} left, but {total_needed} were selected.',
+                "image_url": opt.image_url,
+            })
+
+    return issues
+
+
+def _validate_structured_addon_stock(lines):
+    issues = _collect_structured_addon_stock_issues(lines)
+    if issues:
+        raise ValueError(issues[0]["message"])
 
 
 def _validate_stock_lookup(stock_lookup):
@@ -856,10 +918,7 @@ def validate_checkout_stock():
             )
             if struct_err:
                 return struct_err
-            try:
-                _validate_structured_addon_stock(struct_lines)
-            except ValueError as e:
-                return jsonify({"success": False, "error": str(e)}), 400
+            addon_lines = struct_lines
         else:
             cart = Cart.query.filter_by(user_id=user_id).first()
             if not cart:
@@ -901,16 +960,20 @@ def validate_checkout_stock():
                     }
                 stock_lookup[key]["quantity"] += max(qty, 0)
 
-            try:
-                _validate_structured_addon_stock(_cart_structured_addon_lines(selected_items))
-            except ValueError as e:
-                return jsonify({"success": False, "error": str(e)}), 400
+            addon_lines = _cart_structured_addon_lines(selected_items)
 
+        # Collect product/variant issues
         issues = _collect_stock_issues(stock_lookup)
+
+        # Collect structured add-on stock issues
+        addon_issues = _collect_structured_addon_stock_issues(addon_lines)
+        if addon_issues:
+            issues.extend(addon_issues)
+
         if issues:
             return jsonify({
                 "success": False,
-                "error": "Some selected items are unavailable or have insufficient stock.",
+                "error": "Some selected items or add-ons are unavailable or have insufficient stock.",
                 "stock_issues": issues,
             }), 400
 

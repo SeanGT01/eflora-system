@@ -702,7 +702,13 @@
             <span class="sep">/</span>
             <span class="current">${info.breadcrumb}</span>`;
         document.title = `${info.title} — E-FLORA`;
-        history.replaceState({ page }, '', `/my-account?page=${page}`);
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', page);
+            history.replaceState({ page }, '', url.pathname + (url.search ? url.search : ''));
+        } catch (e) {
+            history.replaceState({ page }, '', `/my-account?page=${page}`);
+        }
     }
 
     function initializePageScripts(page) {
@@ -1241,16 +1247,28 @@
             { code: 'payment_issue', label: 'Payment / checkout issue' },
             { code: 'other', label: 'Other' },
         ];
-        const picked = window.prompt(
-            'Select a reason code:\n' + reasons.map((r, i) => `${i + 1}. ${r.label}`).join('\n') +
-            '\n\nEnter number (1-7):'
+        const picked = await window.openPromptModal(
+            'Enter a reason number:\n' + reasons.map((r, i) => `${i + 1}. ${r.label}`).join('\n'),
+            {
+                title: 'Cancel Order',
+                placeholder: '1–7',
+                confirmText: 'Continue',
+                cancelText: 'Go Back',
+            }
         );
         const idx = parseInt(picked, 10) - 1;
         if (!picked || Number.isNaN(idx) || idx < 0 || idx >= reasons.length) return;
         const reason = reasons[idx];
         let details = '';
         if (reason.code === 'other') {
-            details = (window.prompt('Please tell us specifically why you are cancelling:') || '').trim();
+            details = await window.openPromptModal('Please tell us specifically why you are cancelling:', {
+                title: 'Cancel Order — Details',
+                placeholder: 'Describe your reason…',
+                confirmText: 'Submit',
+                cancelText: 'Go Back',
+            });
+            if (details === null) return;
+            details = details.trim();
             if (details.length < 5) {
                 showToast('Please provide a more specific reason.');
                 return;
