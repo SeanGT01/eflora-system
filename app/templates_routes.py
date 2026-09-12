@@ -498,14 +498,20 @@ def _serialize_customer_order(
             item_rating = max(1, min(5, int(item_rating)))
 
         custom_ticket = order.custom_ticket if order.order_type == 'custom_chat' else None
-        resolved_name = custom_ticket.title if custom_ticket else (item.product.name if item.product else 'Product')
+        raw_name = custom_ticket.title if custom_ticket else (item.product_name or (item.product.name if item.product else 'Product'))
+        resolved_name = raw_name
+        if resolved_name:
+            if resolved_name.startswith('[Deleted Snapshot]'):
+                resolved_name = resolved_name[len('[Deleted Snapshot]'):].strip(' -') or 'Product'
+            elif resolved_name.startswith('[Deleted'):
+                resolved_name = resolved_name.split(']', 1)[-1].strip(' -') or 'Product'
         items_payload.append({
             'id': item.id,
             'product_id': item.product_id,
             'variant_id': item.variant_id,
             'product_name': resolved_name,
             'name': resolved_name,
-            'variant_name': item.variant.name if item.variant else None,
+            'variant_name': item.variant_name or (item.variant.name if item.variant else None),
             'quantity': quantity,
             'price': unit_price,
             'total': float(quantity * unit_price) + addons_sum,
@@ -681,6 +687,58 @@ def _ensure_pos_order_item_line_columns():
     except Exception as exc:
         db.session.rollback()
         current_app.logger.warning('Failed ensuring pos_order_items line columns: %s', exc)
+        return False
+
+
+def _ensure_order_item_snapshot_columns():
+    """Add product_name, product_image_url, and variant_name to order_items for frozen history."""
+    try:
+        existing = inspect(db.engine).get_table_names()
+        if 'order_items' not in existing:
+            return False
+        cols = {c['name'] for c in inspect(db.engine).get_columns('order_items')}
+        stmts = []
+        if 'product_name' not in cols:
+            stmts.append("ALTER TABLE order_items ADD COLUMN product_name VARCHAR(255)")
+        if 'product_image_url' not in cols:
+            stmts.append("ALTER TABLE order_items ADD COLUMN product_image_url VARCHAR(500)")
+        if 'variant_name' not in cols:
+            stmts.append("ALTER TABLE order_items ADD COLUMN variant_name VARCHAR(255)")
+        for stmt in stmts:
+            try:
+                db.session.execute(text(stmt))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+        # Safe ANSI-SQL backfill for existing order_items from active products/variants
+        try:
+            db.session.execute(text("""
+                UPDATE order_items
+                SET product_name = (
+                    SELECT name FROM products WHERE products.id = order_items.product_id
+                )
+                WHERE product_name IS NULL AND product_id IS NOT NULL
+            """))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        try:
+            db.session.execute(text("""
+                UPDATE order_items
+                SET variant_name = (
+                    SELECT name FROM product_variants WHERE product_variants.id = order_items.variant_id
+                )
+                WHERE variant_name IS NULL AND variant_id IS NOT NULL
+            """))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        return True
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.warning('Failed ensuring order_items snapshot columns: %s', exc)
         return False
 
 

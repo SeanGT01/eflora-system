@@ -252,6 +252,54 @@ def create_app(config_class='default'):
         except Exception:
             db.session.rollback()
 
+    def _ensure_order_item_snapshot_columns():
+        try:
+            with app.app_context():
+                existing_tables = inspect(db.engine).get_table_names()
+                if 'order_items' not in existing_tables:
+                    return
+                cols = {c['name'] for c in inspect(db.engine).get_columns('order_items')}
+                stmts = []
+                if 'product_name' not in cols:
+                    stmts.append("ALTER TABLE order_items ADD COLUMN product_name VARCHAR(255)")
+                if 'product_image_url' not in cols:
+                    stmts.append("ALTER TABLE order_items ADD COLUMN product_image_url VARCHAR(500)")
+                if 'variant_name' not in cols:
+                    stmts.append("ALTER TABLE order_items ADD COLUMN variant_name VARCHAR(255)")
+                for stmt in stmts:
+                    try:
+                        db.session.execute(text(stmt))
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+
+                # Safe ANSI-SQL backfill for existing order_items from active products/variants
+                try:
+                    db.session.execute(text("""
+                        UPDATE order_items
+                        SET product_name = (
+                            SELECT name FROM products WHERE products.id = order_items.product_id
+                        )
+                        WHERE product_name IS NULL AND product_id IS NOT NULL
+                    """))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
+                try:
+                    db.session.execute(text("""
+                        UPDATE order_items
+                        SET variant_name = (
+                            SELECT name FROM product_variants WHERE product_variants.id = order_items.variant_id
+                        )
+                        WHERE variant_name IS NULL AND variant_id IS NOT NULL
+                    """))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+        except Exception:
+            db.session.rollback()
+
     def _ensure_keep_ymal_addons_column():
         try:
             with app.app_context():
@@ -333,6 +381,7 @@ def create_app(config_class='default'):
         _ensure_store_free_delivery_column()
         _ensure_store_allow_gcash_column()
         _ensure_pos_order_item_line_columns()
+        _ensure_order_item_snapshot_columns()
         _ensure_keep_ymal_addons_column()
         _ensure_store_admin_tables()
         _ensure_main_categories()

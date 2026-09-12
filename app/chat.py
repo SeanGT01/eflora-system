@@ -2058,6 +2058,9 @@ def checkout_custom_ticket(ticket_id):
             product_id=first_product_id,
             quantity=1,
             price=base_price,
+            product_name=ticket.title or 'Custom Bouquet',
+            product_image_url=ticket.image_url,
+            variant_name=None,
         )
         db.session.add(custom_order_item)
         db.session.flush()

@@ -224,9 +224,22 @@ def permanent_delete_product(product_id):
             )
             refs['pos_order_items'] = 0
 
-        # Preserve online order history by re-pointing order items as well.
+        # Preserve online order history by freezing snapshot fields and re-pointing order items.
+        has_order_history = False
+        if refs.get('pos_order_items') or refs.get('order_items'):
+            has_order_history = True
+
         if refs.get('order_items'):
             snapshot = _get_or_create_pos_snapshot_product(store, product)
+            prod_img = product.image_url
+            for oi in OrderItem.query.filter_by(product_id=product_id).all():
+                if not oi.product_name:
+                    oi.product_name = product.name
+                if not oi.product_image_url and prod_img:
+                    oi.product_image_url = prod_img
+                if not oi.variant_name and oi.variant:
+                    oi.variant_name = oi.variant.name
+
             OrderItem.query.filter_by(product_id=product_id).update(
                 {
                     OrderItem.product_id: snapshot.id,
@@ -259,15 +272,21 @@ def permanent_delete_product(product_id):
                 'references': refs,
             }), 400
         
-        # Delete associated media from Cloudinary (best effort per asset)
-        for image in product.images:
-            if image.public_id:
-                try:
-                    delete_from_cloudinary(image.public_id)
-                except Exception:
-                    pass
+        # Delete associated media from Cloudinary ONLY if this product has no order history
+        if not has_order_history:
+            for image in product.images:
+                if image.public_id:
+                    try:
+                        delete_from_cloudinary(image.public_id)
+                    except Exception:
+                        pass
 
-        for variant in product.variants:
+            for variant in product.variants:
+                if variant.image_public_id:
+                    try:
+                        delete_from_cloudinary(variant.image_public_id)
+                    except Exception:
+                        pass
             if variant.image_public_id:
                 try:
                     delete_from_cloudinary(variant.image_public_id)
@@ -410,8 +429,21 @@ def bulk_permanent_delete():
                     )
                     refs['pos_order_items'] = 0
 
+                has_order_history = False
+                if refs.get('pos_order_items') or refs.get('order_items'):
+                    has_order_history = True
+
                 if refs.get('order_items'):
                     snapshot = _get_or_create_pos_snapshot_product(store, product)
+                    prod_img = product.image_url
+                    for oi in OrderItem.query.filter_by(product_id=product_id).all():
+                        if not oi.product_name:
+                            oi.product_name = product.name
+                        if not oi.product_image_url and prod_img:
+                            oi.product_image_url = prod_img
+                        if not oi.variant_name and oi.variant:
+                            oi.variant_name = oi.variant.name
+
                     OrderItem.query.filter_by(product_id=product_id).update(
                         {
                             OrderItem.product_id: snapshot.id,
@@ -444,20 +476,21 @@ def bulk_permanent_delete():
                     })
                     continue
                 
-                # Delete associated media from Cloudinary (best effort per asset)
-                for image in product.images:
-                    if image.public_id:
-                        try:
-                            delete_from_cloudinary(image.public_id)
-                        except Exception:
-                            pass
+                # Delete associated media from Cloudinary ONLY if this product has no order history
+                if not has_order_history:
+                    for image in product.images:
+                        if image.public_id:
+                            try:
+                                delete_from_cloudinary(image.public_id)
+                            except Exception:
+                                pass
 
-                for variant in product.variants:
-                    if variant.image_public_id:
-                        try:
-                            delete_from_cloudinary(variant.image_public_id)
-                        except Exception:
-                            pass
+                    for variant in product.variants:
+                        if variant.image_public_id:
+                            try:
+                                delete_from_cloudinary(variant.image_public_id)
+                            except Exception:
+                                pass
                 
                 db.session.delete(product)
                 deleted_count += 1

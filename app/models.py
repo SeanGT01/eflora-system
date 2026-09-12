@@ -2018,6 +2018,9 @@ class OrderItem(db.Model):
     variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
     quantity = db.Column(db.Integer, default=1)
     price = db.Column(db.Numeric(10, 2))
+    product_name = db.Column(db.String(255), nullable=True)
+    product_image_url = db.Column(db.String(500), nullable=True)
+    variant_name = db.Column(db.String(255), nullable=True)
     
     variant = db.relationship('ProductVariant', backref='order_items', lazy=True)
     addons = db.relationship(
@@ -2029,9 +2032,12 @@ class OrderItem(db.Model):
     
     @property
     def product_image(self):
-        """Get the appropriate product image (variant or main) - Cloudinary only"""
+        """Get the appropriate product image (snapshot, variant, or main) - Cloudinary only"""
         if self.order and self.order.order_type == 'custom_chat':
             return self.order.custom_ticket.image_url if self.order.custom_ticket else None
+            
+        if self.product_image_url:
+            return self.product_image_url
             
         if self.variant and self.variant.image_url:
             return self.variant.image_url
@@ -2046,26 +2052,30 @@ class OrderItem(db.Model):
     
     def to_dict(self):
         product = self.product
-        variant_name = None
-        
-        if self.variant:
-            variant_name = self.variant.name
+        v_name = self.variant_name or (self.variant.name if self.variant else None)
 
         unit = float(self.price) if self.price else 0
         addons_list = [a.to_dict() for a in (self.addons or [])]
         addons_sum = sum(float(a.get('total') or 0) for a in addons_list)
         
         # Override name for custom tickets
-        resolved_name = product.name if product else None
+        raw_name = self.product_name or (product.name if product else None)
         if self.order and self.order.order_type == 'custom_chat' and self.order.custom_ticket:
-            resolved_name = self.order.custom_ticket.title
+            raw_name = self.order.custom_ticket.title
+
+        resolved_name = raw_name
+        if resolved_name:
+            if resolved_name.startswith('[Deleted Snapshot]'):
+                resolved_name = resolved_name[len('[Deleted Snapshot]'):].strip(' -') or 'Product'
+            elif resolved_name.startswith('[Deleted'):
+                resolved_name = resolved_name.split(']', 1)[-1].strip(' -') or 'Product'
         
         return {
             'id': self.id,
             'order_id': self.order_id,
             'product_id': self.product_id,
             'variant_id': self.variant_id,
-            'variant_name': variant_name,
+            'variant_name': v_name,
             'quantity': self.quantity,
             'price': unit,
             'total': (unit * int(self.quantity or 0)) + addons_sum,

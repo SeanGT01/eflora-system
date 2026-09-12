@@ -1402,12 +1402,23 @@ def create_orders():
             print(f"  ✅ Created order #{order.id} for store {store.name} - Total: ₱{float(order.total_amount):,.2f}")
 
             for item_data in order_data.get("items", []):
+                p_obj = Product.query.get(item_data["product_id"])
+                v_obj = ProductVariant.query.get(item_data["variant_id"]) if item_data.get("variant_id") else None
+                p_img = None
+                if v_obj and v_obj.image_url:
+                    p_img = v_obj.image_url
+                elif p_obj:
+                    p_img = p_obj.image_url
+
                 order_item = OrderItem(
                     order_id=order.id,
                     product_id=item_data["product_id"],
                     variant_id=item_data.get("variant_id"),
                     quantity=item_data["quantity"],
                     price=item_data["price"],
+                    product_name=p_obj.name if p_obj else None,
+                    product_image_url=p_img,
+                    variant_name=v_obj.name if v_obj else None,
                 )
                 db.session.add(order_item)
                 db.session.flush()
@@ -1843,12 +1854,23 @@ def process_checkout():
             db.session.flush()
 
             for item_data in order_items_data:
+                p_obj = Product.query.get(item_data["product_id"])
+                v_obj = ProductVariant.query.get(item_data["variant_id"]) if item_data.get("variant_id") else None
+                p_img = None
+                if v_obj and v_obj.image_url:
+                    p_img = v_obj.image_url
+                elif p_obj:
+                    p_img = p_obj.image_url
+
                 order_item = OrderItem(
                     order_id=order.id,
                     product_id=item_data["product_id"],
                     variant_id=item_data["variant_id"],
                     quantity=item_data["quantity"],
                     price=item_data["price"],
+                    product_name=p_obj.name if p_obj else None,
+                    product_image_url=p_img,
+                    variant_name=v_obj.name if v_obj else None,
                 )
                 db.session.add(order_item)
                 db.session.flush()
@@ -2362,24 +2384,32 @@ def buy_now_create_order():
         if not order.total_amount or order.total_amount == 0:
             order.compute_total()
 
+        main_img = variant.image_url if (variant and variant.image_url) else (product.image_url if product else None)
         main_order_item = OrderItem(
             order_id=order.id,
             product_id=product.id,
             variant_id=variant.id if variant else None,
             quantity=quantity,
             price=float(item_price),
+            product_name=product.name if product else None,
+            product_image_url=main_img,
+            variant_name=variant.name if variant else None,
         )
         db.session.add(main_order_item)
         db.session.flush()
         attach_order_item_addons(main_order_item, struct_lines)
 
         for line in addon_lines:
+            line_prod = line["product"]
             db.session.add(OrderItem(
                 order_id=order.id,
-                product_id=line["product"].id,
+                product_id=line_prod.id,
                 variant_id=None,
                 quantity=line["quantity"],
                 price=float(line["price"]),
+                product_name=line_prod.name if line_prod else None,
+                product_image_url=line_prod.image_url if line_prod else None,
+                variant_name=None,
             ))
 
         db.session.flush()
