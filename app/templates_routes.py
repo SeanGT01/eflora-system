@@ -518,8 +518,13 @@ def _serialize_customer_order(
             'addons_total': addons_sum,
         })
 
-    n_items = len(order.items) if order.items else 0
-    products_all_rated = (len(rated_item_ids) >= n_items) if n_items else True
+    rateable_items = [
+        item for item in (order.items or [])
+        if not (item.product and (item.product.name or '').startswith('[Deleted'))
+    ]
+    n_rateable = len(rateable_items)
+    rateable_ids = {item.id for item in rateable_items}
+    products_all_rated = rateable_ids.issubset(rated_item_ids) if n_rateable else True
     if order.status in ('delivered', 'completed'):
         all_rated = bool(store_rated_flag) and products_all_rated
     else:

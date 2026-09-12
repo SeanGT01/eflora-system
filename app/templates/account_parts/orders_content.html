@@ -3783,6 +3783,8 @@ function eligibleForRatingPrompt(order) {
     const st = order.status;
     if (st !== 'delivered' && st !== 'completed') return false;
     if (order.all_rated) return false;
+    const createdAt = order.created_at ? new Date(order.created_at) : null;
+    if (createdAt && !isNaN(createdAt.getTime()) && (Date.now() - createdAt.getTime() > 30 * 24 * 60 * 60 * 1000)) return false;
     try {
         if (sessionStorage.getItem('ratingPromptDismissed_' + order.id)) return false;
     } catch (e) {}
@@ -3942,7 +3944,11 @@ async function rateOrder(orderId, fromAuto) {
         _ratingExistingRatings = ratingsRes.ratings || {};
         _ratingExistingStore = ratingsRes.store_rating || null;
 
-        _ratingUnratedItems = items.filter(item => !_itemHasProductRating(item.id));
+        _ratingUnratedItems = items.filter(item => {
+            if (_itemHasProductRating(item.id)) return false;
+            const nm = item.name || item.product_name || '';
+            return !nm.startsWith('[Deleted');
+        });
 
         const st = orderRes.status;
         const rateable = st === 'delivered' || st === 'completed';

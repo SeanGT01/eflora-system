@@ -236,12 +236,21 @@ def permanent_delete_product(product_id):
             )
             refs['order_items'] = 0
 
-        # Safe to remove cart rows and ratings when deleting archived catalogue products.
+        # Safe to remove cart rows when deleting archived catalogue products.
         if refs.get('carts'):
             CartItem.query.filter_by(product_id=product_id).delete(synchronize_session=False)
             refs['carts'] = 0
+
+        # Preserve customer review history by re-pointing ratings to snapshot product instead of wiping them.
         if refs.get('ratings'):
-            ProductRating.query.filter_by(product_id=product_id).delete(synchronize_session=False)
+            snapshot = _get_or_create_pos_snapshot_product(store, product)
+            ProductRating.query.filter_by(product_id=product_id).update(
+                {
+                    ProductRating.product_id: snapshot.id,
+                    ProductRating.variant_id: None,
+                },
+                synchronize_session=False,
+            )
             refs['ratings'] = 0
 
         if any(refs.values()):
@@ -416,7 +425,14 @@ def bulk_permanent_delete():
                     CartItem.query.filter_by(product_id=product_id).delete(synchronize_session=False)
                     refs['carts'] = 0
                 if refs.get('ratings'):
-                    ProductRating.query.filter_by(product_id=product_id).delete(synchronize_session=False)
+                    snapshot = _get_or_create_pos_snapshot_product(store, product)
+                    ProductRating.query.filter_by(product_id=product_id).update(
+                        {
+                            ProductRating.product_id: snapshot.id,
+                            ProductRating.variant_id: None,
+                        },
+                        synchronize_session=False,
+                    )
                     refs['ratings'] = 0
 
                 if any(refs.values()):

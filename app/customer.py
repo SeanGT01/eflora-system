@@ -1011,9 +1011,15 @@ def get_orders():
             elif o.store_id:
                 d['store_name'] = None
             n_items = len(items)
+            rateable_items = [
+                i for i in items
+                if not (i.product and (i.product.name or '').startswith('[Deleted'))
+            ]
+            n_rateable = len(rateable_items)
             if o.status in ('delivered', 'completed'):
                 rid = rated_by_order.get(o.id, set())
-                products_ok = len(rid) >= n_items if n_items else True
+                rateable_ids = {i.id for i in rateable_items}
+                products_ok = rateable_ids.issubset(rid) if n_rateable else True
                 sr_ok = o.id in store_rated_ids
                 d['store_rated'] = sr_ok
                 d['all_rated'] = products_ok and sr_ok
