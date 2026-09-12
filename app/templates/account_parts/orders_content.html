@@ -1373,6 +1373,39 @@
 .rating-star.hovered {
     color: #f0b429;
 }
+.rating-quick-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    margin: 0.6rem 0 0.75rem;
+}
+.rating-quick-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 11px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    color: var(--charcoal);
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(216, 120, 160, 0.3);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.rating-quick-tag:hover {
+    border-color: var(--rose-cta);
+    background: rgba(216, 120, 160, 0.1);
+}
+.rating-quick-tag.active {
+    background: rgba(216, 120, 160, 0.16);
+    border-color: var(--rose-cta);
+    color: var(--deep-rose);
+    font-weight: 600;
+}
 .rating-comment {
     width: 100%;
     min-height: 52px;
@@ -3830,12 +3863,40 @@ function updateRatingFooterChrome() {
     }
 }
 
+const COMMON_STORE_FEEDBACK_TAGS = [
+    '🌸 Fresh & Beautiful Flowers',
+    '⚡ Fast & On-Time Delivery',
+    '📦 Careful & Secure Packaging',
+    '💬 Responsive & Polite Seller',
+    '🎀 Accurate to Photos',
+    '💌 Neat Dedication Card',
+    '✨ Great Value & Service',
+];
+
+function toggleStoreRatingTag(tag) {
+    if (!_storeRatingState.tags) _storeRatingState.tags = [];
+    const idx = _storeRatingState.tags.indexOf(tag);
+    if (idx > -1) {
+        _storeRatingState.tags.splice(idx, 1);
+    } else {
+        _storeRatingState.tags.push(tag);
+    }
+    const container = document.getElementById('ratingStoreQuickTags');
+    if (container) {
+        container.innerHTML = COMMON_STORE_FEEDBACK_TAGS.map(t => {
+            const isSel = (_storeRatingState.tags || []).includes(t);
+            return `<button type="button" class="rating-quick-tag ${isSel ? 'active' : ''}" onclick="toggleStoreRatingTag('${esc(t)}')">${isSel ? '<i class="ri-check-line" style="font-size:12px;"></i> ' : ''}${esc(t)}</button>`;
+        }).join('');
+    }
+}
+
 function renderStoreRatingStep(orderRes) {
     const body = document.getElementById('ratingModalBody');
     const storeName = esc(orderRes.store_name || 'Store');
     const logo = orderRes.store_logo
         ? `<img src="${esc(orderRes.store_logo)}" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:1px solid var(--border);" onerror="this.style.display='none'">`
         : `<div class="rating-item-img-ph" style="width:56px;height:56px;border-radius:50%;"><i class="ri-store-2-line"></i></div>`;
+    const selectedTags = _storeRatingState.tags || [];
     body.innerHTML = `
         <p style="margin:0 0 1rem;font-size:14px;color:var(--muted);line-height:1.45;">How was your overall experience with this shop? Stars are required to continue; you can add an optional comment.</p>
         <div class="rating-item-card" style="margin-bottom:0;">
@@ -3849,11 +3910,46 @@ function renderStoreRatingStep(orderRes) {
             <div class="rating-stars-row" id="ratingStoreStars" data-store-stars="1">
                 ${[1,2,3,4,5].map(star => `<i class="ri-star-line rating-star" data-star="${star}" onclick="setStoreRating(${star})" onmouseenter="hoverStoreStars(${star})" onmouseleave="unhoverStoreStars()"></i>`).join('')}
             </div>
-            <textarea class="rating-comment" id="ratingStoreComment" placeholder="Optional feedback about packaging, communication, or service" maxlength="500" oninput="_storeRatingState.comment = this.value">${esc(_storeRatingState.comment || '')}</textarea>
+            <div style="font-size:12px;font-weight:600;color:var(--charcoal);margin-top:0.65rem;">What did you like about this shop?</div>
+            <div class="rating-quick-tags" id="ratingStoreQuickTags">
+                ${COMMON_STORE_FEEDBACK_TAGS.map(tag => {
+                    const isSel = selectedTags.includes(tag);
+                    return `<button type="button" class="rating-quick-tag ${isSel ? 'active' : ''}" onclick="toggleStoreRatingTag('${esc(tag)}')">${isSel ? '<i class="ri-check-line" style="font-size:12px;"></i> ' : ''}${esc(tag)}</button>`;
+                }).join('')}
+            </div>
+            <textarea class="rating-comment" id="ratingStoreComment" placeholder="Additional feedback about packaging, communication, or service (optional)" maxlength="500" oninput="_storeRatingState.comment = this.value">${esc(_storeRatingState.comment || '')}</textarea>
         </div>`;
     if (_storeRatingState.rating > 0) setStoreRating(_storeRatingState.rating);
     updateRatingFooterChrome();
     updateSubmitBtnState();
+}
+
+const COMMON_PRODUCT_FEEDBACK_TAGS = [
+    '🌸 Fresh & Long-Lasting',
+    '💐 Beautiful Arrangement',
+    '🎀 Accurate to Photo',
+    '🌷 Fragrant Blooms',
+    '✨ High Quality',
+    '💖 Recipient Loved It',
+];
+
+function toggleProductRatingTag(itemId, tag) {
+    if (!_ratingState[itemId]) _ratingState[itemId] = { rating: 0, comment: '', tags: [] };
+    if (!_ratingState[itemId].tags) _ratingState[itemId].tags = [];
+    const tags = _ratingState[itemId].tags;
+    const idx = tags.indexOf(tag);
+    if (idx > -1) {
+        tags.splice(idx, 1);
+    } else {
+        tags.push(tag);
+    }
+    const container = document.getElementById(`ratingProductQuickTags_${itemId}`);
+    if (container) {
+        container.innerHTML = COMMON_PRODUCT_FEEDBACK_TAGS.map(t => {
+            const isSel = tags.includes(t);
+            return `<button type="button" class="rating-quick-tag ${isSel ? 'active' : ''}" onclick="toggleProductRatingTag(${itemId}, '${esc(t)}')">${isSel ? '<i class="ri-check-line" style="font-size:12px;"></i> ' : ''}${esc(t)}</button>`;
+        }).join('');
+    }
 }
 
 function renderProductRatingStep() {
@@ -3867,7 +3963,7 @@ function renderProductRatingStep() {
     }
     _ratingState = {};
     unratedItems.forEach(item => {
-        _ratingState[item.id] = { rating: 0, comment: '' };
+        _ratingState[item.id] = { rating: 0, comment: '', tags: [] };
     });
     body.innerHTML = `
         <div class="rating-items-list">
@@ -3879,6 +3975,7 @@ function renderProductRatingStep() {
                     ? `<img class="rating-item-img" src="${img}" alt="${esc(name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
                        <div class="rating-item-img-ph" style="display:none;"><i class="ri-flower-line"></i></div>`
                     : `<div class="rating-item-img-ph"><i class="ri-flower-line"></i></div>`;
+                const itemTags = _ratingState[item.id]?.tags || [];
                 return `
                     <div class="rating-item-card" data-item-id="${item.id}">
                         <div class="rating-item-header">
@@ -3891,7 +3988,14 @@ function renderProductRatingStep() {
                         <div class="rating-stars-row" data-item-id="${item.id}">
                             ${[1,2,3,4,5].map(star => `<i class="ri-star-line rating-star" data-star="${star}" data-item-id="${item.id}" onclick="setRating(${item.id}, ${star})" onmouseenter="hoverStars(${item.id}, ${star})" onmouseleave="unhoverStars(${item.id})"></i>`).join('')}
                         </div>
-                        <textarea class="rating-comment" data-item-id="${item.id}" placeholder="Share your thoughts about this product (optional)" maxlength="500" oninput="_ratingState[${item.id}].comment = this.value"></textarea>
+                        <div style="font-size:11.5px;font-weight:600;color:var(--charcoal);margin-top:0.45rem;">What did you like about this product?</div>
+                        <div class="rating-quick-tags" id="ratingProductQuickTags_${item.id}">
+                            ${COMMON_PRODUCT_FEEDBACK_TAGS.map(tag => {
+                                const isSel = itemTags.includes(tag);
+                                return `<button type="button" class="rating-quick-tag ${isSel ? 'active' : ''}" onclick="toggleProductRatingTag(${item.id}, '${esc(tag)}')">${isSel ? '<i class="ri-check-line" style="font-size:12px;"></i> ' : ''}${esc(tag)}</button>`;
+                            }).join('')}
+                        </div>
+                        <textarea class="rating-comment" data-item-id="${item.id}" placeholder="Additional feedback about this product (optional)" maxlength="500" oninput="_ratingState[${item.id}].comment = this.value"></textarea>
                     </div>`;
             }).join('')}
         </div>`;
@@ -3908,7 +4012,7 @@ async function rateOrder(orderId, fromAuto) {
     _ratingExistingRatings = {};
     _ratingExistingStore = null;
     _ratingUnratedItems = [];
-    _storeRatingState = { rating: 0, comment: '' };
+    _storeRatingState = { rating: 0, comment: '', tags: [] };
 
     // Fast path: local list already knows this order is fully rated
     const local = (_allOrders || []).find(o => Number(o.id) === Number(orderId));
@@ -4028,7 +4132,12 @@ async function submitStoreAndAdvance() {
     const btn = document.getElementById('ratingSubmitBtn');
     btn.disabled = true;
     btn.textContent = 'Saving…';
-    const comment = (_storeRatingState.comment || '').trim();
+    const tags = _storeRatingState.tags || [];
+    const custom = (_storeRatingState.comment || '').trim();
+    let finalComment = custom;
+    if (tags.length > 0) {
+        finalComment = custom ? `${tags.join(', ')}. ${custom}` : tags.join(', ');
+    }
     try {
         const res = await fetch(`/api/account/orders/${_ratingOrderId}/rate`, {
             method: 'POST',
@@ -4036,7 +4145,7 @@ async function submitStoreAndAdvance() {
             body: JSON.stringify({
                 store_rating: {
                     rating: _storeRatingState.rating,
-                    comment: comment || null,
+                    comment: finalComment || null,
                 },
             }),
         });
@@ -4120,11 +4229,19 @@ async function submitRatings() {
 
     const ratings = Object.entries(_ratingState)
         .filter(([_, r]) => r.rating > 0)
-        .map(([itemId, r]) => ({
-            order_item_id: parseInt(itemId, 10),
-            rating: r.rating,
-            comment: (r.comment && String(r.comment).trim()) ? String(r.comment).trim() : null,
-        }));
+        .map(([itemId, r]) => {
+            const tags = r.tags || [];
+            const custom = (r.comment && String(r.comment).trim()) ? String(r.comment).trim() : '';
+            let finalComment = custom;
+            if (tags.length > 0) {
+                finalComment = custom ? `${tags.join(', ')}. ${custom}` : tags.join(', ');
+            }
+            return {
+                order_item_id: parseInt(itemId, 10),
+                rating: r.rating,
+                comment: finalComment || null,
+            };
+        });
 
     try {
         const res = await fetch(`/api/account/orders/${_ratingOrderId}/rate`, {
