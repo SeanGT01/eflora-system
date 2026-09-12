@@ -3055,12 +3055,22 @@
             }
         }
 
-        /* Render off-screen cards lazily for fast initial paint and fluid scrolling */
-        .product-card,
-        .category-card,
-        .order-card {
+        /* Render off-screen cards lazily on capable desktop; keep naturally rendered on low-end mobile to avoid pop-in lag */
+        html:not(.perf-lite):not(.fx-lite) .product-card,
+        html:not(.perf-lite):not(.fx-lite) .category-card,
+        html:not(.perf-lite):not(.fx-lite) .order-card {
             content-visibility: auto;
             contain-intrinsic-size: auto 320px;
+        }
+
+        html.perf-lite .product-card,
+        html.perf-lite .category-card,
+        html.perf-lite .order-card,
+        html.fx-lite .product-card,
+        html.fx-lite .category-card,
+        html.fx-lite .order-card {
+            content-visibility: visible !important;
+            contain-intrinsic-size: auto !important;
         }
 
         @media (prefers-reduced-motion: reduce) {
