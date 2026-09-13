@@ -1115,7 +1115,9 @@ def _recent_reviews(store_id, limit=3):
                .order_by(ProductRating.created_at.desc())
                .limit(limit).all())
     return [{
+        'customer_id': r.customer_id,
         'customer_name': r.customer.full_name if r.customer else 'Anonymous',
+        'customer_avatar': (r.customer.display_avatar_url if r.customer and hasattr(r.customer, 'display_avatar_url') else (r.customer.avatar_url if r.customer else None)),
         'rating': r.rating or 0,
         'comment': r.comment or '',
         'created_at': r.created_at,
@@ -3159,7 +3161,9 @@ def _platform_recent_reviews(limit=3):
                .order_by(ProductRating.created_at.desc())
                .limit(limit).all())
     return [{
+        'customer_id': r.customer_id,
         'customer_name': r.customer.full_name if r.customer else 'Anonymous',
+        'customer_avatar': (r.customer.display_avatar_url if r.customer and hasattr(r.customer, 'display_avatar_url') else (r.customer.avatar_url if r.customer else None)),
         'rating': r.rating or 0,
         'comment': r.comment or '',
         'created_at': r.created_at,

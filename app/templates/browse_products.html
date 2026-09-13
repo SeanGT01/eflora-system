@@ -108,13 +108,20 @@
     .product-store { display: none; }
     .product-title {
         font-family: var(--font-display);
-        font-size: 16px;
+        font-size: clamp(15px, 1.35vw, 19.5px);
         font-weight: 500;
-        min-height: 0;
-        margin: 0 0 0.2rem;
-        line-height: 1.25;
-        -webkit-line-clamp: 1;
         color: var(--charcoal);
+        margin: 0 0 0.35rem;
+        line-height: 1.3;
+        display: block;
+        -webkit-line-clamp: unset;
+        -webkit-box-orient: unset;
+        overflow: visible;
+        text-overflow: unset;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        min-height: 2.6em;
     }
     .product-footer,
     .product-meta {
@@ -222,6 +229,33 @@
         -webkit-backdrop-filter: blur(14px) saturate(1.25);
     }
     .empty-state i { color: #d878a0; opacity: 0.45; }
+
+    @media (max-width: 768px) {
+        .product-card .product-title,
+        .product-title {
+            font-size: clamp(12.5px, 2.5vw, 14.5px);
+            line-height: 1.25;
+            min-height: 2.5em;
+            display: block;
+            -webkit-line-clamp: unset;
+            overflow: visible;
+            white-space: normal;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .product-card .product-title,
+        .product-title {
+            font-size: clamp(11.5px, 3.2vw, 13px);
+            line-height: 1.25;
+            margin-bottom: 0.25rem;
+            min-height: 2.5em;
+            display: block;
+            -webkit-line-clamp: unset;
+            overflow: visible;
+            white-space: normal;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -304,7 +338,7 @@
             </div>
 
             <div class="product-content">
-                <h3 class="product-title">{{ product.name }}</h3>
+                <h3 class="product-title">{{ product.name | title_case }}</h3>
                 <div class="product-meta">
                     <div class="product-price">{{ price_tag(product, 'sm', false) }}</div>
                     {% set rating = product.avg_rating if product.avg_rating is defined else 0 %}

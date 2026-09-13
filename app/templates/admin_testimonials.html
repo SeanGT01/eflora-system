@@ -461,11 +461,11 @@ function filterRows() {
     let html = '';
     rows.forEach(function (t) {
         const appr = isApprovedFlag(t)
-            ? '<span style="color:var(--sage);font-weight:600;">Yes</span>'
-            : '<span style="color:var(--muted);">Hidden</span>';
+            ? '<span class="badge" style="background:rgba(122,158,126,0.15);color:var(--deep-sage);font-weight:600;padding:3px 8px;border-radius:99px;font-size:11px;display:inline-block;">Approved</span>'
+            : '<span class="badge" style="background:rgba(212,120,138,0.15);color:var(--deep-rose);font-weight:600;padding:3px 8px;border-radius:99px;font-size:11px;display:inline-block;">Pending</span>';
         const visBtn = isApprovedFlag(t)
             ? '<button type="button" class="btn btn-outline btn-sm" onclick="setTestimonialVisibility(' + t.id + ', false)">Hide</button>'
-            : '<button type="button" class="btn btn-outline btn-sm" style="border-color:var(--sage);color:var(--deep-sage);" onclick="setTestimonialVisibility(' + t.id + ', true)">Show</button>';
+            : '<button type="button" class="btn btn-sm" style="background:var(--sage);color:#fff;border:none;font-weight:600;" onclick="setTestimonialVisibility(' + t.id + ', true)">Approve</button>';
         html += '<tr data-id="' + t.id + '">';
         html += '<td class="tt-col-name">' + escapeHtml(t.customer_name || '') + '</td>';
         html += '<td class="tt-col-rating">' + renderStars(t.rating) + '</td>';
@@ -497,9 +497,11 @@ function openViewModal(id) {
     const toggleBtn = document.getElementById('viewToggleVisibilityBtn');
     if (isApprovedFlag(t)) {
         toggleBtn.textContent = 'Hide from home page';
+        toggleBtn.className = 'btn btn-outline';
         toggleBtn.onclick = function () { setTestimonialVisibility(id, false, true); };
     } else {
-        toggleBtn.textContent = 'Show on home page';
+        toggleBtn.textContent = 'Approve for home page';
+        toggleBtn.className = 'btn btn-primary';
         toggleBtn.onclick = function () { setTestimonialVisibility(id, true, true); };
     }
     document.getElementById('viewModal').classList.add('show');

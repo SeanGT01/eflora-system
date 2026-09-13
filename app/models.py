@@ -2298,7 +2298,7 @@ class HomePageTestimonial(db.Model):
     customer_name = db.Column(db.String(120), nullable=False)
     rating = db.Column(db.Integer, nullable=False)  # 1–5
     comment = db.Column(db.Text, nullable=False)
-    is_approved = db.Column(db.Boolean, nullable=False, default=True)
+    is_approved = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):

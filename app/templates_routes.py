@@ -1,7 +1,7 @@
 # app/templates_routes.py - FIXED VERSION
 from datetime import datetime, timedelta
 from collections import defaultdict
-from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app
+from flask import Blueprint, app, flash, json, make_response, render_template, jsonify, request, session, redirect, url_for, current_app, send_from_directory
 from app.archive_routes import get_seller_store
 from app.models import MunicipalityBoundary, OrderItem, ProductVariant, User, Store, Rider, Product, Order, SellerApplication, Cart, CartItem, ProductImage, POSOrder, POSOrderItem, Testimonial, HomePageTestimonial, SupportFAQ, SavedReport, ProductRating, StoreRating, MunicipalityBoundary, GCashQR, StockReduction, RiderOTP, RiderLocation, Notification, Category, CustomerOTP, SellerSignupOTP, AccountBan, StorePaymentSetting, Conversation, PasswordResetOTP, ProductAddonGroup, ProductAddonOption, CartItemAddon, OrderItemAddon, WishlistItem
 from app.extensions import db
@@ -1292,7 +1292,11 @@ def google_site_verification():
 @templates_bp.route('/favicon.ico')
 @limiter.exempt
 def favicon():
-    return redirect('/static/images/eflora-flower-logo.png', code=301)
+    return send_from_directory(
+        os.path.join(current_app.root_path, 'static'),
+        'favicon.ico',
+        mimetype='image/x-icon'
+    )
 
 
 @templates_bp.route('/robots.txt')
@@ -1302,6 +1306,8 @@ def robots_txt():
     body = (
         'User-agent: *\n'
         'Allow: /\n'
+        'Allow: /favicon.ico\n'
+        'Allow: /static/\n'
         'Disallow: /api/\n'
         'Disallow: /my-account\n'
         'Disallow: /dashboard\n'
@@ -1603,6 +1609,7 @@ def submit_home_testimonial():
         row.customer_name = name
         row.rating = rating
         row.comment = comment
+        row.is_approved = False
         mode = 'updated'
         status_code = 200
     else:
@@ -1610,7 +1617,7 @@ def submit_home_testimonial():
             customer_name=name,
             rating=rating,
             comment=comment,
-            is_approved=True,
+            is_approved=False,
         )
         db.session.add(row)
         mode = 'created'
@@ -8146,6 +8153,77 @@ def date_format(value):
     if not dt:
         return value if isinstance(value, str) else ""
     return dt.strftime('%b %d, %Y')
+
+_TITLE_LOWER_WORDS = {
+    'a', 'an', 'the',
+    'and', 'but', 'or', 'nor', 'for', 'yet', 'so',
+    'in', 'on', 'at', 'to', 'from', 'by', 'with', 'of', 'off', 'as', 'into', 'onto', 'upon', 'via', 'vs', 'v.'
+}
+
+def _smart_title_format(text):
+    if text is None:
+        return ''
+    if not isinstance(text, str):
+        text = str(text)
+    text = text.strip()
+    if not text:
+        return ''
+
+    tokens = re.split(r'(\s+)', text)
+    word_indices = [i for i, t in enumerate(tokens) if t and not t.isspace()]
+    if not word_indices:
+        return text
+
+    first_idx = word_indices[0]
+    last_idx = word_indices[-1]
+
+    def cap_word(w):
+        if '-' in w:
+            parts = w.split('-')
+            return '-'.join(cap_word(p) for p in parts)
+        m = re.match(r'^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$', w)
+        if not m:
+            return w[:1].upper() + w[1:].lower()
+        lead, core, trail = m.groups()
+        if not core:
+            return w
+        if "'" in core:
+            apos_parts = core.split("'")
+            return lead + apos_parts[0][:1].upper() + apos_parts[0][1:].lower() + "'" + apos_parts[1].lower() + trail
+        return lead + core[:1].upper() + core[1:].lower() + trail
+
+    result = []
+    for i, token in enumerate(tokens):
+        if not token or token.isspace():
+            result.append(token)
+            continue
+        
+        clean = re.sub(r'[^a-zA-Z0-9]', '', token).lower()
+        
+        if i == first_idx or i == last_idx:
+            result.append(cap_word(token))
+        elif clean in _TITLE_LOWER_WORDS:
+            m = re.match(r'^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$', token)
+            if m:
+                lead, core, trail = m.groups()
+                result.append(lead + core.lower() + trail)
+            else:
+                result.append(token.lower())
+        else:
+            result.append(cap_word(token))
+
+    return ''.join(result)
+
+@templates_bp.app_template_filter('title_case')
+def title_case_filter(value):
+    """Format string to smart title case (e.g. 'bouquet of jewelry' -> 'Bouquet of Jewelry')."""
+    return _smart_title_format(value)
+
+@templates_bp.app_template_filter('smart_title')
+def smart_title_filter(value):
+    """Alias for title_case filter."""
+    return _smart_title_format(value)
+
 
 def _seller_orders_sync_token(store_id):
     """Cheap snapshot so the orders table can poll without reloading the page."""

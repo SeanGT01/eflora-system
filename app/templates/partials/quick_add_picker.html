@@ -630,6 +630,49 @@
             .replace(/"/g, '&quot;');
     }
 
+    function qaFormatTitleCase(str) {
+        if (!str || typeof str !== 'string') return str || '';
+        var lowerWords = new Set([
+            'a', 'an', 'the', 'and', 'but', 'or', 'nor', 'for', 'yet', 'so',
+            'in', 'on', 'at', 'to', 'from', 'by', 'with', 'of', 'off', 'as', 'into', 'onto', 'upon', 'via', 'vs'
+        ]);
+        var tokens = str.trim().split(/(\s+)/);
+        var wordIndices = [];
+        for (var i = 0; i < tokens.length; i++) {
+            if (tokens[i].trim().length > 0) wordIndices.push(i);
+        }
+        if (wordIndices.length === 0) return str;
+        var firstIdx = wordIndices[0];
+        var lastIdx = wordIndices[wordIndices.length - 1];
+
+        function capWord(w) {
+            if (w.indexOf('-') !== -1) {
+                return w.split('-').map(capWord).join('-');
+            }
+            var m = w.match(/^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$/);
+            if (!m) return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+            var lead = m[1], core = m[2], trail = m[3];
+            if (!core) return w;
+            if (core.indexOf("'") !== -1) {
+                var parts = core.split("'");
+                return lead + parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase() + "'" + parts[1].toLowerCase() + trail;
+            }
+            return lead + core.charAt(0).toUpperCase() + core.slice(1).toLowerCase() + trail;
+        }
+
+        return tokens.map(function(token, i) {
+            if (token.trim().length === 0) return token;
+            var clean = token.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            if (i === firstIdx || i === lastIdx) return capWord(token);
+            if (lowerWords.has(clean)) {
+                var m = token.match(/^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$/);
+                if (m) return m[1] + m[2].toLowerCase() + m[3];
+                return token.toLowerCase();
+            }
+            return capWord(token);
+        }).join('');
+    }
+
     function qaThumbHtml(url) {
         if (url) {
             return '<img class="qa-option-thumb" src="' + qaEscape(url) + '" alt="" onerror="this.outerHTML=\'<div class=&quot;qa-option-thumb qa-option-thumb-fallback&quot;><i class=&quot;ri-image-line&quot;></i></div>\'">';
@@ -958,7 +1001,7 @@
         const imgWrap = document.getElementById('qaPickerImgWrap');
 
         storeEl.textContent = product.store_name || 'Flower Shop';
-        titleEl.textContent = product.name || 'Product';
+        titleEl.textContent = qaFormatTitleCase(product.name) || 'Product';
 
         if (product.image_url) {
             imgWrap.className = 'qa-picker-img';
