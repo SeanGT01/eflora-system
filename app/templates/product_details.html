@@ -554,6 +554,12 @@
         background: var(--border-strong);
     }
 
+    .sold-count {
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 500;
+    }
+
     /* ── Product Reviews modal (matches order-details SDM surface) ── */
     #productReviewsModal.modal-overlay {
         align-items: center;
@@ -2810,7 +2816,9 @@
                 ({{ total_ratings }} review{{ 's' if total_ratings != 1 else '' }})
             </button>
             <span class="rating-divider"></span>
+            <span class="sold-count">{{ total_sold|default(0) }} sold</span>
             {% if product.store %}
+            <span class="rating-divider"></span>
             <a href="{{ url_for('templates.store_detail', store_id=product.store_id) }}" class="store-link">
                 <i class="ri-store-2-line"></i> {{ product.store.name }}
             </a>
@@ -3638,7 +3646,9 @@ function formatReviewDate(isoString) {
     if (!isoString) return '';
     const d = new Date(isoString);
     if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+    const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
+    const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
+    return `${dateStr} at ${timeStr}`;
 }
 
 function esc(text) {
@@ -3742,11 +3752,13 @@ function renderReviewsInModal(payload) {
         const comment = (r.comment && String(r.comment).trim())
             ? r.comment
             : 'No written comment.';
+        const dt = formatReviewDate(r.created_at);
+        const meta = dt ? `— Reviewed by ${esc(name)} • ${esc(dt)}` : `— Reviewed by ${esc(name)}`;
         return `
             <article class="review-row">
                 <div class="review-stars" aria-label="${esc(String(r.rating || 0))} out of 5 stars">${buildReviewStars(r.rating)}</div>
                 <p class="review-comment">${esc(comment)}</p>
-                <p class="review-by">— Reviewed by ${esc(name)}</p>
+                <p class="review-by">${meta}</p>
             </article>
         `;
     }).join('');

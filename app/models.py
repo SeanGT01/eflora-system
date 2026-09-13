@@ -2286,7 +2286,7 @@ class Testimonial(db.Model):
             'comment': self.comment,
             'customer_name': self.customer.full_name if self.customer else None,
             'customer_avatar': self.customer.avatar_url if self.customer else None,  # Cloudinary only
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': to_pht_iso(self.created_at) if self.created_at else None
         }
 
 
@@ -2308,7 +2308,7 @@ class HomePageTestimonial(db.Model):
             'rating': self.rating,
             'comment': self.comment,
             'is_approved': self.is_approved,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_at': to_pht_iso(self.created_at) if self.created_at else None,
         }
 
 
@@ -2420,8 +2420,8 @@ class ProductRating(db.Model):
             'customer_name': self.customer.full_name if self.customer else None,
             'customer_avatar': self.customer.avatar_url if self.customer else None,
             'variant_name': self.variant.name if self.variant else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'created_at': to_pht_iso(self.created_at) if self.created_at else None,
+            'updated_at': to_pht_iso(self.updated_at) if self.updated_at else None,
         }
 
 
@@ -2455,8 +2455,8 @@ class StoreRating(db.Model):
             'rating': self.rating,
             'comment': self.comment,
             'customer_name': self.customer.full_name if self.customer else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'created_at': to_pht_iso(self.created_at) if self.created_at else None,
+            'updated_at': to_pht_iso(self.updated_at) if self.updated_at else None,
         }
 
 

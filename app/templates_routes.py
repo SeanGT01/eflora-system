@@ -8117,35 +8117,35 @@ def get_stock_history(product_id):
 
 
 # Add template filters
-@templates_bp.app_template_filter('time_format')
-def time_format(value):
-    """Format datetime to readable time"""
+def _parse_to_pht(value):
     if not value:
-        return ""
-    
-    # If value is a string, convert to datetime
+        return None
     if isinstance(value, str):
         try:
             value = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except:
-            return value
-    
-    # Format the time
-    return value.strftime('%I:%M %p')  # 12-hour format with AM/PM
+        except Exception:
+            return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = pytz.UTC.localize(value)
+        return value.astimezone(pytz.timezone('Asia/Manila'))
+    return None
+
+@templates_bp.app_template_filter('time_format')
+def time_format(value):
+    """Format datetime to readable time in PHT"""
+    dt = _parse_to_pht(value)
+    if not dt:
+        return value if isinstance(value, str) else ""
+    return dt.strftime('%I:%M %p').lstrip('0')
 
 @templates_bp.app_template_filter('date_format')
 def date_format(value):
-    """Format datetime to readable date"""
-    if not value:
-        return ""
-    
-    if isinstance(value, str):
-        try:
-            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except:
-            return value
-    
-    return value.strftime('%b %d, %Y')  # Feb 07, 2026
+    """Format datetime to readable date in PHT"""
+    dt = _parse_to_pht(value)
+    if not dt:
+        return value if isinstance(value, str) else ""
+    return dt.strftime('%b %d, %Y')
 
 def _seller_orders_sync_token(store_id):
     """Cheap snapshot so the orders table can poll without reloading the page."""
@@ -10581,7 +10581,25 @@ def product_details(product_id):
                 'avg': round(float(row.avg or 0), 1),
                 'count': row.count or 0,
             }
-        
+
+        # Calculate total units sold (completed online orders + POS orders)
+        from app.utils.report_service import COMPLETED_ORDER_STATUSES
+        online_sold = db.session.query(
+            sa_func.coalesce(sa_func.sum(OrderItem.quantity), 0)
+        ).join(Order, Order.id == OrderItem.order_id).filter(
+            OrderItem.product_id == product_id,
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
+        ).scalar() or 0
+
+        pos_sold = db.session.query(
+            sa_func.coalesce(sa_func.sum(POSOrderItem.quantity), 0)
+        ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id).filter(
+            POSOrderItem.product_id == product_id,
+        ).scalar() or 0
+
+        total_sold = int(online_sold) + int(pos_sold)
+        product_dict['total_sold'] = total_sold
+
         return render_template(
             'product_details.html',
             product=product_dict,
@@ -10592,6 +10610,7 @@ def product_details(product_id):
             avg_rating=avg_rating,
             total_ratings=total_ratings,
             variant_ratings=variant_ratings,
+            total_sold=total_sold,
         )
         
     except Exception as e:

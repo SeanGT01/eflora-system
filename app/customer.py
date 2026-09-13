@@ -328,6 +328,36 @@ def get_products():
         if len(products) >= per_page:
             break
 
+    # Calculate total units sold (completed online orders + POS orders) for list
+    if products:
+        try:
+            from app.utils.report_service import COMPLETED_ORDER_STATUSES
+            from app.models import Order, OrderItem, POSOrder, POSOrderItem
+            pids = [item['id'] for item in products if 'id' in item]
+            if pids:
+                online_sold_map = dict(
+                    db.session.query(
+                        OrderItem.product_id,
+                        func.coalesce(func.sum(OrderItem.quantity), 0)
+                    ).join(Order, Order.id == OrderItem.order_id).filter(
+                        OrderItem.product_id.in_(pids),
+                        Order.status.in_(COMPLETED_ORDER_STATUSES),
+                    ).group_by(OrderItem.product_id).all()
+                )
+                pos_sold_map = dict(
+                    db.session.query(
+                        POSOrderItem.product_id,
+                        func.coalesce(func.sum(POSOrderItem.quantity), 0)
+                    ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id).filter(
+                        POSOrderItem.product_id.in_(pids),
+                    ).group_by(POSOrderItem.product_id).all()
+                )
+                for item in products:
+                    pid = item.get('id')
+                    item['total_sold'] = int(online_sold_map.get(pid, 0) or 0) + int(pos_sold_map.get(pid, 0) or 0)
+        except Exception:
+            pass
+
     return jsonify({
         'products': products,
         'total':    paged.total,
@@ -400,6 +430,27 @@ def get_product(product_id):
         data['overall_avg_rating'] = 0.0
         data['overall_total_ratings'] = 0
         data['variant_ratings'] = {}
+
+    # Calculate total units sold (completed online orders + POS orders)
+    try:
+        from app.utils.report_service import COMPLETED_ORDER_STATUSES
+        from app.models import Order, OrderItem, POSOrder, POSOrderItem
+        online_sold = db.session.query(
+            func.coalesce(func.sum(OrderItem.quantity), 0)
+        ).join(Order, Order.id == OrderItem.order_id).filter(
+            OrderItem.product_id == product_id,
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
+        ).scalar() or 0
+
+        pos_sold = db.session.query(
+            func.coalesce(func.sum(POSOrderItem.quantity), 0)
+        ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id).filter(
+            POSOrderItem.product_id == product_id,
+        ).scalar() or 0
+
+        data['total_sold'] = int(online_sold) + int(pos_sold)
+    except Exception:
+        data['total_sold'] = 0
 
     if p.store:
         data['store'] = p.store.to_dict()
