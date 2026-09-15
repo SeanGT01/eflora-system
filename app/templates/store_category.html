@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.name }} - {{ store.name }} - E-FLORA{% endblock %}
+
+{% block content %}
+<div class="category-page" style="max-width: 1280px; margin: 0 auto; padding: 2rem 1.5rem;">
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 2rem; font-size: 14px;">
+        <a href="{{ url_for('templates.index') }}" style="color: var(--muted); text-decoration: none;">Homepage</a>
+        <span class="breadcrumb-sep" style="color: var(--border-strong);"><i class="ri-arrow-right-s-line"></i></span>
+        <a href="{{ url_for('templates.store_detail', store_id=store.id) }}" style="color: var(--muted); text-decoration: none;">{{ store.name }}</a>
+        <span class="breadcrumb-sep" style="color: var(--border-strong);"><i class="ri-arrow-right-s-line"></i></span>
+        <span class="breadcrumb-current" style="color: var(--charcoal); font-weight: 500;">{{ category.name }}</span>
+    </nav>
+
+    <!-- Header -->
+    <div class="category-header" style="text-align: center; margin-bottom: 3rem;">
+        <h1 style="font-size: 2.25rem; font-family: var(--font-display); color: var(--charcoal); margin-bottom: 0.5rem;">{{ category.name }}</h1>
+        <p style="color: var(--muted); font-size: 15px;">Products from <a href="{{ url_for('templates.store_detail', store_id=store.id) }}" style="color: var(--deep-rose); font-weight: 500;">{{ store.name }}</a></p>
+    </div>
+
+    <!-- Products Grid -->
+    {% if products and products|length > 0 %}
+    <div class="product-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 3rem;">
+        {% for product in products %}
+        {% include 'partials/storefront_product_card.html' %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="text-align: center; padding: 4rem 2rem;">
+        <i class="ri-leaf-line" style="font-size: 48px; color: #d878a0; opacity: 0.5;"></i>
+        <p style="color: var(--muted); font-size: 1.1rem; margin-top: 1rem;">No products found in this category</p>
+        <p style="font-size: 14px; margin-top: 0.5rem;">
+            <a href="{{ url_for('templates.store_detail', store_id=store.id) }}" style="color: var(--deep-rose); text-decoration: none; font-weight: 500;">Browse all products from {{ store.name }}</a>
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% include 'partials/quick_add_picker.html' %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function viewProduct(productId) {
+        window.location.href = "{{ url_for('templates.product_details', product_id=0) }}".replace('0', productId);
+    }
+</script>
+{% endblock %}

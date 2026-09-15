@@ -4821,10 +4821,11 @@
             // Fetch store schedule open days
             let openDays = [];
             let hasSchedule = false;
+            const todayStr = (typeof getPhilippineTodayStr === 'function')
+                ? getPhilippineTodayStr()
+                : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
             try {
-                const todayPh = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
-                const todayIso = todayPh.toISOString().split('T')[0];
-                const res = await _fetch('/api/store/' + _activeCheckoutTicket.store_id + '/time-slots?date=' + todayIso);
+                const res = await _fetch('/api/store/' + _activeCheckoutTicket.store_id + '/time-slots?date=' + todayStr);
                 const data = await res.json();
                 if (data && data.success && Array.isArray(data.open_days) && data.open_days.length) {
                     openDays = data.open_days.map(d => String(d).toLowerCase());
@@ -4837,15 +4838,12 @@
                 console.warn('Could not inspect store open days:', e);
             }
 
-            const now = new Date();
-            const phToday = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
-            const yyyy = phToday.getFullYear();
-            const mm = String(phToday.getMonth() + 1).padStart(2, '0');
-            const dd = String(phToday.getDate()).padStart(2, '0');
-            const todayStr = `${yyyy}-${mm}-${dd}`;
+            const [ty, tm, td] = todayStr.split('-').map(Number);
+            const phToday = new Date(ty, tm - 1, td);
+            phToday.setHours(0, 0, 0, 0);
 
-            const maxDate = new Date(phToday);
-            maxDate.setDate(maxDate.getDate() + 14);
+            const maxDate = new Date(ty, tm - 1, td + 14);
+            maxDate.setHours(23, 59, 59, 999);
 
             const weekdayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
             function isDayOpen(d) {

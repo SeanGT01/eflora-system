@@ -1001,7 +1001,8 @@ def _product_list_for_storefront(orm_products):
             product_dict['store_category'] = {
                 'id': product.store_category.id,
                 'name': product.store_category.name,
-                'slug': product.store_category.slug
+                'slug': product.store_category.slug,
+                'filter_key': _subcategory_filter_key(product.store_category.name, product.store_category.slug)
             }
         # Optimize listing card image for high-performance responsive thumbnail loading
         if product_dict.get('image_url'):
@@ -1035,7 +1036,7 @@ FEATURED_HOME_CATEGORY_ROWS = (
     ('succulents', 'Succulents'),
     ('others', 'Others'),
 )
-FEATURED_PRODUCTS_PER_CATEGORY = 8
+FEATURED_PRODUCTS_PER_CATEGORY = 10
 
 
 def _apply_storefront_delivery_flags(product_list, orm_products, is_customer, customer_address):
@@ -1075,18 +1076,19 @@ def _build_featured_product_rows(is_customer, customer_address, location_filter_
         category = category_by_slug.get(slug)
         orm_products = []
         if category:
+            fetch_limit = FEATURED_PRODUCTS_PER_CATEGORY * 4 if (location_filter_on and customer_address) else FEATURED_PRODUCTS_PER_CATEGORY
             orm_products = (
                 _public_storefront_product_base_query(require_sellable=True)
                 .filter(Product.main_category_id == category.id)
                 .order_by(Product.created_at.desc())
-                .limit(FEATURED_PRODUCTS_PER_CATEGORY)
+                .limit(fetch_limit)
                 .all()
             )
             if location_filter_on and customer_address:
                 orm_products = [
                     product for product in orm_products
                     if _store_delivery_match(product.store, customer_address).get('can_deliver')
-                ]
+                ][:FEATURED_PRODUCTS_PER_CATEGORY]
 
         product_list = _product_list_for_storefront(orm_products)
         _apply_storefront_delivery_flags(
@@ -1118,13 +1120,19 @@ def _flatten_featured_product_rows(featured_product_rows):
 
 
 def _subcategory_filter_key(name, slug=None):
-    raw = (slug or name or '').strip().lower()
+    # Prioritize clean name so identical subcategories across different stores merge!
+    # (e.g., 'Valentines', "Valentine's", and 'valentines' from Store 1 and Store 2 both become 'valentines')
+    raw = (name or '').strip().lower()
+    raw = raw.replace("'", "").replace("’", "").replace('"', '')
+    if not raw and slug:
+        raw = re.sub(r'-\d+$', '', slug.strip().lower())
+        raw = raw.replace("'", "").replace("’", "").replace('"', '')
     key = re.sub(r'[^a-z0-9]+', '-', raw).strip('-')
     return key
 
 
 def _subcategory_filters_for_products(product_list):
-    """Unique store-subcategory chips for a main-category listing (grouped by name)."""
+    """Unique store-subcategory chips for a main-category listing (grouped by normalized name)."""
     grouped = {}
     order = []
     for product in product_list or []:
@@ -1143,7 +1151,9 @@ def _subcategory_filters_for_products(product_list):
         if not key:
             continue
         if key not in grouped:
-            grouped[key] = {'key': key, 'name': name or slug, 'count': 0}
+            # Choose the most nicely capitalized name (prefer Title Case / Capitalized)
+            display_name = name.title() if (name.islower() or name.isupper()) else (name or slug.title())
+            grouped[key] = {'key': key, 'name': display_name, 'count': 0}
             order.append(key)
         grouped[key]['count'] += 1
         product['subcategory_filter_key'] = key
@@ -4454,9 +4464,14 @@ def category(category_identifier):
         product_list = _product_list_for_storefront(products)
         subcategories = _subcategory_filters_for_products(product_list)
         requested_sub = _subcategory_filter_key(request.args.get('sub') or '')
-        initial_subcategory = requested_sub if any(
-            item['key'] == requested_sub for item in subcategories
-        ) else 'all'
+        matched_sub = next((item['key'] for item in subcategories if item['key'] == requested_sub), None)
+        if not matched_sub and requested_sub:
+            matched_sub = next(
+                (item['key'] for item in subcategories 
+                 if _subcategory_filter_key(item['name']) == requested_sub or item['key'].startswith(requested_sub + '-')),
+                None
+            )
+        initial_subcategory = matched_sub or 'all'
 
         return render_template('category.html',
                              category=category,
@@ -4738,7 +4753,8 @@ def product_detail(product_id):
             product_dict['store_category'] = {
                 'id': product.store_category.id,
                 'name': product.store_category.name,
-                'slug': product.store_category.slug
+                'slug': product.store_category.slug,
+                'filter_key': _subcategory_filter_key(product.store_category.name, product.store_category.slug)
             }
         
         # Debug print
@@ -6806,16 +6822,54 @@ def create_product():
         if not main_category:
             return jsonify({'error': 'Invalid main category'}), 400
         
-        # Validate store_category_id if provided
+        # Validate store_category_id if provided or resolve/create by store_category_name
+        store_category_name = (request.form.get('store_category_name') or '').strip()
+        from app.models import StoreCategory
+        from sqlalchemy import func
         if store_category_id:
-            from app.models import StoreCategory
             store_category = StoreCategory.query.filter_by(
                 id=store_category_id,
                 store_id=store.id,
                 main_category_id=main_category_id
             ).first()
-            if not store_category:
+            if not store_category and store_category_name:
+                # Fallback: check by name for this store
+                store_category = StoreCategory.query.filter(
+                    StoreCategory.store_id == store.id,
+                    StoreCategory.main_category_id == main_category_id,
+                    func.lower(StoreCategory.name) == func.lower(store_category_name)
+                ).first()
+                if store_category:
+                    store_category_id = store_category.id
+            if not store_category and not store_category_name:
                 return jsonify({'error': 'Invalid store subcategory'}), 400
+        elif store_category_name:
+            # Check if this store already has this subcategory (case-insensitive)
+            store_category = StoreCategory.query.filter(
+                StoreCategory.store_id == store.id,
+                StoreCategory.main_category_id == main_category_id,
+                func.lower(StoreCategory.name) == func.lower(store_category_name)
+            ).first()
+            if not store_category:
+                # Check if standard platform capitalization exists
+                plat_existing = StoreCategory.query.filter(
+                    StoreCategory.main_category_id == main_category_id,
+                    func.lower(StoreCategory.name) == func.lower(store_category_name)
+                ).first()
+                canon_name = plat_existing.name if plat_existing else (
+                    store_category_name.title() if (store_category_name.islower() or store_category_name.isupper()) else store_category_name
+                )
+                import re as _re
+                base_slug = _re.sub(r'[^a-z0-9]+', '-', canon_name.lower()).strip('-')
+                store_category = StoreCategory(
+                    store_id=store.id,
+                    main_category_id=main_category_id,
+                    name=canon_name,
+                    slug=f"{base_slug}-{store.id}"
+                )
+                db.session.add(store_category)
+                db.session.flush()
+            store_category_id = store_category.id
         
         special_price_float = None
         if special_price_raw:
@@ -7056,18 +7110,51 @@ def manage_product(product_id):
                         return jsonify({'error': 'Invalid main category'}), 400
                     product.main_category_id = int(main_category_id)
             
-            if 'store_category_id' in request.form:
-                store_category_id = request.form['store_category_id']
+            if 'store_category_id' in request.form or 'store_category_name' in request.form:
+                store_category_id = request.form.get('store_category_id')
+                store_category_name = (request.form.get('store_category_name') or '').strip()
+                from app.models import StoreCategory
+                from sqlalchemy import func
                 if store_category_id:
-                    from app.models import StoreCategory
                     store_category = StoreCategory.query.filter_by(
                         id=store_category_id,
                         store_id=store.id,
                         main_category_id=product.main_category_id
                     ).first()
-                    if not store_category:
+                    if not store_category and store_category_name:
+                        store_category = StoreCategory.query.filter(
+                            StoreCategory.store_id == store.id,
+                            StoreCategory.main_category_id == product.main_category_id,
+                            func.lower(StoreCategory.name) == func.lower(store_category_name)
+                        ).first()
+                    if not store_category and not store_category_name:
                         return jsonify({'error': 'Invalid store subcategory'}), 400
-                    product.store_category_id = int(store_category_id)
+                    product.store_category_id = store_category.id if store_category else None
+                elif store_category_name:
+                    store_category = StoreCategory.query.filter(
+                        StoreCategory.store_id == store.id,
+                        StoreCategory.main_category_id == product.main_category_id,
+                        func.lower(StoreCategory.name) == func.lower(store_category_name)
+                    ).first()
+                    if not store_category:
+                        plat_existing = StoreCategory.query.filter(
+                            StoreCategory.main_category_id == product.main_category_id,
+                            func.lower(StoreCategory.name) == func.lower(store_category_name)
+                        ).first()
+                        canon_name = plat_existing.name if plat_existing else (
+                            store_category_name.title() if (store_category_name.islower() or store_category_name.isupper()) else store_category_name
+                        )
+                        import re as _re
+                        base_slug = _re.sub(r'[^a-z0-9]+', '-', canon_name.lower()).strip('-')
+                        store_category = StoreCategory(
+                            store_id=store.id,
+                            main_category_id=product.main_category_id,
+                            name=canon_name,
+                            slug=f"{base_slug}-{store.id}"
+                        )
+                        db.session.add(store_category)
+                        db.session.flush()
+                    product.store_category_id = store_category.id
                 else:
                     product.store_category_id = None
             
@@ -10564,7 +10651,8 @@ def product_details(product_id):
             product_dict['store_category'] = {
                 'id': product.store_category.id,
                 'name': product.store_category.name,
-                'slug': product.store_category.slug
+                'slug': product.store_category.slug,
+                'filter_key': _subcategory_filter_key(product.store_category.name, product.store_category.slug)
             }
         
         # Related ("You might also like"): same store + same main category
@@ -14290,6 +14378,7 @@ def seller_pos_orders():
 @templates_bp.route('/store/<int:store_id>/category/<int:category_id>')
 def store_category(store_id, category_id):
     """View products in a store-specific subcategory"""
+    from flask import abort
     from app.models import Store, StoreCategory, Product
     
     store = Store.query.get_or_404(store_id)
@@ -14297,19 +14386,14 @@ def store_category(store_id, category_id):
     
     # Verify category belongs to store
     if category.store_id != store_id:
-        os.abort(404)
+        abort(404)
     
-    products = Product.query.filter_by(
-        store_id=store_id,
-        store_category_id=category_id,
-        is_archived=False,
-        is_available=True
-    ).all()
+    if category.main_category_id:
+        sub_key = _subcategory_filter_key(category.name, category.slug)
+        cat_identifier = category.main_category.slug if (category.main_category and category.main_category.slug) else category.main_category_id
+        return redirect(url_for('templates.category', category_identifier=cat_identifier, sub=sub_key))
     
-    return render_template('store_category.html',
-                         store=store,
-                         category=category,
-                         products=products)
+    return redirect(url_for('templates.store_detail', store_id=store_id))
 
 
 @templates_bp.route('/api/store/categories', methods=['GET'])
@@ -14339,6 +14423,92 @@ def get_store_categories():
     })
 
 
+@templates_bp.route('/api/store/categories/suggestions', methods=['GET'])
+@seller_required
+def get_store_category_suggestions():
+    """Get existing subcategory suggestions across all stores for a main category"""
+    main_category_id = request.args.get('main_category_id')
+    store = _get_seller_store()
+    if not store:
+        return jsonify({'success': False, 'error': 'Store not found'}), 404
+    
+    if not main_category_id:
+        return jsonify({'success': False, 'error': 'Main category ID required'}), 400
+    
+    from app.models import StoreCategory
+    from sqlalchemy import func
+    
+    q = (request.args.get('q') or '').strip().lower()
+    
+    # Query distinct subcategory names under this main_category_id across all stores
+    query = (
+        db.session.query(
+            func.min(StoreCategory.name).label('display_name'),
+            func.count(StoreCategory.id).label('usage_count')
+        )
+        .filter(
+            StoreCategory.main_category_id == main_category_id,
+            StoreCategory.is_active == True
+        )
+    )
+    
+    if q:
+        query = query.filter(func.lower(StoreCategory.name).like(f'%{q}%'))
+    
+    results = (
+        query
+        .group_by(func.lower(StoreCategory.name))
+        .order_by(func.count(StoreCategory.id).desc(), func.min(StoreCategory.name).asc())
+        .limit(30)
+        .all()
+    )
+    
+    # Also fetch all active subcategories currently belonging to this store under this main category
+    my_categories = StoreCategory.query.filter_by(
+        store_id=store.id,
+        main_category_id=main_category_id,
+        is_active=True
+    ).all()
+    my_cat_map = {c.name.strip().lower(): c.id for c in my_categories}
+    
+    suggestions = []
+    seen_names = set()
+    for r in results:
+        name = (r.display_name or '').strip()
+        if not name:
+            continue
+        lower_name = name.lower()
+        if lower_name in seen_names:
+            continue
+        seen_names.add(lower_name)
+        display = name.title() if (name.islower() or name.isupper()) else name
+        my_id = my_cat_map.get(lower_name)
+        suggestions.append({
+            'name': display,
+            'count': r.usage_count,
+            'is_my_store': my_id is not None,
+            'store_category_id': my_id
+        })
+    
+    # If the store has subcategories not yet in platform results (or if q matched them), include them
+    for my_cat in my_categories:
+        lower_name = my_cat.name.strip().lower()
+        if lower_name not in seen_names:
+            if not q or q in lower_name:
+                seen_names.add(lower_name)
+                suggestions.append({
+                    'name': my_cat.name,
+                    'count': 1,
+                    'is_my_store': True,
+                    'store_category_id': my_cat.id
+                })
+    
+    return jsonify({
+        'success': True,
+        'suggestions': suggestions
+    })
+
+
 @templates_bp.route('/api/store/categories/create', methods=['POST'])
 @seller_required
 def create_store_category():
@@ -14360,25 +14530,43 @@ def create_store_category():
         return jsonify({'success': False, 'error': 'Subcategory name required'}), 400
     
     from app.models import StoreCategory, Category
+    from sqlalchemy import func
     
     # Verify main category exists
     main_category = Category.query.get(main_category_id)
     if not main_category:
         return jsonify({'success': False, 'error': 'Main category not found'}), 404
     
-    # Check if subcategory already exists for this store
-    existing = StoreCategory.query.filter_by(
-        store_id=store.id,
-        name=name
+    # Check if subcategory already exists for this store (case-insensitive)
+    existing = StoreCategory.query.filter(
+        StoreCategory.store_id == store.id,
+        StoreCategory.main_category_id == main_category_id,
+        func.lower(StoreCategory.name) == func.lower(name)
     ).first()
     
     if existing:
-        return jsonify({'success': False, 'error': 'Subcategory already exists'}), 400
+        # Gracefully return existing subcategory so the seller can immediately select and use it
+        return jsonify({
+            'success': True,
+            'category': existing.to_dict(),
+            'message': 'Subcategory already exists for your store'
+        })
+    
+    # Check if standard capitalization already exists in other stores on the platform
+    platform_existing = StoreCategory.query.filter(
+        StoreCategory.main_category_id == main_category_id,
+        func.lower(StoreCategory.name) == func.lower(name)
+    ).first()
+    if platform_existing:
+        if name.islower() or name.isupper():
+            name = platform_existing.name
+    elif name.islower() or name.isupper():
+        name = name.title()
     
     # Create slug
     import re
-    slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
-    slug = f"{slug}-{store.id}"
+    base_slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    slug = f"{base_slug}-{store.id}"
     
     subcategory = StoreCategory(
         store_id=store.id,

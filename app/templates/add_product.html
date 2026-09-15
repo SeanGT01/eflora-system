@@ -68,20 +68,57 @@
                                 <small class="form-hint">Select the main category for your product</small>
                             </div>
                             
-                            <div class="form-group">
-                                <label class="form-label">Store Subcategory (Optional)</label>
-                                <select id="storeCategory" name="store_category_id" class="form-select">
-                                    <option value="">No Subcategory</option>
-                                    {% if product and product.store_category %}
-                                        <option value="{{ product.store_category.id }}" selected>
-                                            {{ product.store_category.name }}
-                                        </option>
-                                    {% endif %}
-                                </select>
-                                <small class="form-hint">Add a custom subcategory for your store</small>
-                                <button type="button" class="btn btn-link btn-sm" onclick="showAddSubcategoryModal()" style="margin-top: 0.5rem;">
-                                    <i class="ri-add-line"></i> Create New Subcategory
-                                </button>
+                            <div class="form-group subcat-form-group" style="position: relative;">
+                                <label class="form-label" for="storeCategoryInput">Store Subcategory (Optional)</label>
+                                
+                                <div class="subcat-input-container" style="position: relative;">
+                                    <!-- Hidden input for backward compatibility and form submission -->
+                                    <input type="hidden" id="storeCategory" name="store_category_id" value="{{ product.store_category.id if product and product.store_category else '' }}">
+                                    
+                                    <!-- Searchable input with suggestion dropdown -->
+                                    <div class="subcat-input-box">
+                                        <i class="ri-price-tag-3-line subcat-box-icon"></i>
+                                        <input type="text" id="storeCategoryInput" name="store_category_name" class="form-control subcat-text-input"
+                                               placeholder="Type or search subcategory (e.g., Valentines)..." 
+                                               value="{{ product.store_category.name if product and product.store_category else '' }}"
+                                               autocomplete="off">
+                                        <button type="button" id="subcatClearBtn" class="subcat-icon-btn subcat-clear-btn" 
+                                                title="Clear subcategory" style="display: {{ 'flex' if product and product.store_category else 'none' }};"
+                                                onclick="clearStoreSubcategory(event)">
+                                            <i class="ri-close-line"></i>
+                                        </button>
+                                        <button type="button" id="subcatToggleBtn" class="subcat-icon-btn subcat-toggle-btn" 
+                                                title="Show all suggestions" onclick="toggleStoreSubcategoryDropdown(event)">
+                                            <i class="ri-arrow-down-s-line"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Inline Floating Suggestions Dropdown -->
+                                    <div id="inlineSubcatDropdown" class="subcat-suggestions-dropdown" style="display: none;">
+                                        <div class="subcat-suggestions-header">
+                                            <span><i class="ri-lightbulb-line"></i> Available Subcategories</span>
+                                            <span style="font-weight: 400; font-size: 10.5px; opacity: 0.8;">Click to select</span>
+                                        </div>
+                                        <div id="inlineSubcatList" class="subcat-suggestions-list"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Popular Suggestions Quick Chips -->
+                                <div id="inlineSubcatChipsWrap" style="display: none; margin-top: 0.5rem;">
+                                    <small class="form-hint" style="display: block; margin-bottom: 0.35rem; font-weight: 500;">
+                                        <i class="ri-fire-line" style="color: var(--deep-rose);"></i> Popular in this category:
+                                    </small>
+                                    <div id="inlineSubcatChips" style="display: flex; flex-wrap: wrap; gap: 0.35rem;"></div>
+                                </div>
+                                
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.4rem; gap: 0.5rem;">
+                                    <small class="form-hint" id="subcatHintMessage" style="margin-top: 0;">
+                                        Type to pick or create. Matching existing words (e.g. "Valentines") groups your products under that filter across stores.
+                                    </small>
+                                    <button type="button" class="btn btn-link btn-sm" onclick="showAddSubcategoryModal()" style="padding: 0; font-size: 11.5px; white-space: nowrap; text-decoration: none;">
+                                        <i class="ri-add-line"></i> Add with Description
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -459,6 +496,171 @@
     </form>
 </div>
 
+<!-- ===== Subcategory Suggestions Styles & Modal ===== -->
+<style>
+.subcat-input-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+.subcat-box-icon {
+    position: absolute;
+    left: 0.85rem;
+    color: var(--muted);
+    font-size: 16px;
+    pointer-events: none;
+    z-index: 2;
+    transition: color 0.2s ease;
+}
+.subcat-input-box:focus-within .subcat-box-icon {
+    color: var(--deep-rose);
+}
+.subcat-text-input {
+    padding-left: 2.35rem !important;
+    padding-right: 4.3rem !important;
+    width: 100%;
+    border-radius: 10px;
+    transition: all 0.2s ease;
+}
+.subcat-icon-btn {
+    position: absolute;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--muted);
+    transition: all 0.15s ease;
+    padding: 0;
+    z-index: 3;
+}
+.subcat-icon-btn:hover {
+    color: var(--deep-rose);
+    background: rgba(194, 78, 104, 0.1);
+}
+.subcat-clear-btn {
+    right: 2.1rem;
+    font-size: 16px;
+}
+.subcat-toggle-btn {
+    right: 0.5rem;
+    font-size: 18px;
+}
+.subcat-badge-my-store {
+    font-size: 10.5px;
+    color: #15803d;
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+    padding: 2px 7px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+.subcat-badge-popular {
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(0, 0, 0, 0.05);
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+.subcat-create-item {
+    border-top: 1px dashed rgba(194, 78, 104, 0.35);
+    color: var(--deep-rose) !important;
+    font-weight: 600;
+    background: rgba(194, 78, 104, 0.04);
+}
+.subcat-create-item:hover {
+    background: rgba(194, 78, 104, 0.12) !important;
+}
+.subcat-suggestions-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1.5px solid rgba(194, 78, 104, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(42, 35, 30, 0.16);
+    z-index: 1060;
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 0.35rem 0;
+}
+.subcat-suggestions-header {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 0.4rem 0.85rem 0.3rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+}
+.subcat-suggestion-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.85rem;
+    font-size: 13.5px;
+    color: var(--charcoal);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.subcat-suggestion-item:hover,
+.subcat-suggestion-item.is-active {
+    background: rgba(194, 78, 104, 0.09);
+    color: var(--deep-rose);
+}
+.subcat-suggestion-count {
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(0, 0, 0, 0.05);
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+.subcat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.28rem 0.65rem;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    background: rgba(194, 78, 104, 0.08);
+    color: var(--deep-rose);
+    border: 1px solid rgba(194, 78, 104, 0.22);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+.subcat-chip:hover {
+    background: var(--deep-rose);
+    color: #ffffff;
+    border-color: var(--deep-rose);
+    transform: translateY(-1px);
+}
+.subcat-chip-count {
+    font-size: 10px;
+    opacity: 0.8;
+    background: rgba(0, 0, 0, 0.08);
+    padding: 1px 5px;
+    border-radius: 8px;
+}
+.subcat-chip:hover .subcat-chip-count {
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+}
+</style>
+
 <!-- ===== NEW: Add Subcategory Modal ===== -->
 <div id="addSubcategoryModal" class="modal-overlay" style="display: none;">
     <div class="modal modal-md">
@@ -473,11 +675,27 @@
                 <label class="form-label">Main Category</label>
                 <input type="text" id="modalMainCategoryName" class="form-control" readonly>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="position: relative;">
                 <label class="form-label">Subcategory Name <span class="required">*</span></label>
-                <input type="text" id="newSubcategoryName" class="form-control" required
-                       placeholder="e.g., Crochet Bouquets, Wedding Bouquets">
-                <small class="form-hint">This will be visible only to your store</small>
+                <div style="position: relative;">
+                    <input type="text" id="newSubcategoryName" class="form-control" required
+                           placeholder="e.g., Valentines, Crochet Bouquets" autocomplete="off">
+                    <div id="subcatSuggestionsDropdown" class="subcat-suggestions-dropdown" style="display: none;">
+                        <div class="subcat-suggestions-header">
+                            <i class="ri-lightbulb-line"></i> Suggestions from other stores
+                        </div>
+                        <div id="subcatSuggestionsList"></div>
+                    </div>
+                </div>
+                <div id="subcatPopularChipsWrap" style="display: none; margin-top: 0.6rem;">
+                    <small class="form-hint" style="display: block; margin-bottom: 0.35rem; font-weight: 500;">
+                        <i class="ri-fire-line" style="color: var(--deep-rose);"></i> Popular in this category:
+                    </small>
+                    <div id="subcatPopularChips" style="display: flex; flex-wrap: wrap; gap: 0.35rem;"></div>
+                </div>
+                <small class="form-hint" style="margin-top: 0.45rem; display: block;">
+                    Matching existing subcategories helps customers find your products when browsing by category.
+                </small>
             </div>
             <div class="form-group">
                 <label class="form-label">Description (Optional)</label>
@@ -2275,37 +2493,320 @@
     }
 
     // ===== NEW: LOAD STORE SUBCATEGORIES =====
-    function loadStoreSubcategories() {
-        const mainCategoryId = document.getElementById('mainCategory').value;
-        const storeCategorySelect = document.getElementById('storeCategory');
-        
-        if (!mainCategoryId) {
-            storeCategorySelect.innerHTML = '<option value="">No Subcategory</option>';
-            return;
-        }
-        
-        storeCategorySelect.innerHTML = '<option value="">Loading...</option>';
-        
-        fetch(`/api/store/categories?main_category_id=${mainCategoryId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.categories && data.categories.length > 0) {
-                    let options = '<option value="">No Subcategory</option>';
-                    data.categories.forEach(cat => {
-                        options += `<option value="${cat.id}">${cat.name}</option>`;
-                    });
-                    storeCategorySelect.innerHTML = options;
-                } else {
-                    storeCategorySelect.innerHTML = '<option value="">No Subcategory</option>';
-                }
-            })
-            .catch(error => {
-                console.error('Error loading subcategories:', error);
-                storeCategorySelect.innerHTML = '<option value="">Error loading</option>';
-            });
+    // ===== SUB-CATEGORY SUGGESTIONS & AUTOCOMPLETE =====
+    let _inlineSuggestions = [];
+    let _activeSubcatSuggestions = [];
+    let _highlightedInlineIndex = -1;
+    let _highlightedSuggestionIndex = -1;
+
+    function escapeSubcatHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
-    // ===== NEW: SHOW ADD SUBCATEGORY MODAL =====
+    // ===== LOAD STORE SUBCATEGORIES & SUGGESTIONS =====
+    async function loadStoreSubcategories(preserveSelection = false) {
+        const mainCatEl = document.getElementById('mainCategory');
+        const mainCategoryId = mainCatEl ? mainCatEl.value : null;
+        const hiddenInput = document.getElementById('storeCategory');
+        const textInput = document.getElementById('storeCategoryInput');
+        const clearBtn = document.getElementById('subcatClearBtn');
+        const chipsWrap = document.getElementById('inlineSubcatChipsWrap');
+        const chipsContainer = document.getElementById('inlineSubcatChips');
+
+        if (!preserveSelection) {
+            if (hiddenInput) hiddenInput.value = '';
+            if (textInput) textInput.value = '';
+            if (clearBtn) clearBtn.style.display = 'none';
+        }
+
+        if (!mainCategoryId) {
+            _inlineSuggestions = [];
+            _activeSubcatSuggestions = [];
+            if (chipsWrap) chipsWrap.style.display = 'none';
+            if (chipsContainer) chipsContainer.innerHTML = '';
+            hideInlineSubcatDropdown();
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/store/categories/suggestions?main_category_id=${mainCategoryId}`);
+            const data = await res.json();
+            if (data.success && Array.isArray(data.suggestions)) {
+                _inlineSuggestions = data.suggestions;
+                _activeSubcatSuggestions = data.suggestions;
+
+                // If preserveSelection and we have an ID, synchronize textInput name
+                if (preserveSelection && hiddenInput && hiddenInput.value) {
+                    const matched = _inlineSuggestions.find(s => s.store_category_id == hiddenInput.value);
+                    if (matched && textInput && !textInput.value) {
+                        textInput.value = matched.name;
+                        if (clearBtn) clearBtn.style.display = 'flex';
+                    }
+                }
+
+                // Render top chips in product form
+                if (chipsContainer && chipsWrap) {
+                    const topChips = _inlineSuggestions.slice(0, 6);
+                    if (topChips.length > 0) {
+                        let html = '';
+                        topChips.forEach(item => {
+                            const safeName = item.name.replace(/'/g, "\\'");
+                            const storeIdArg = item.store_category_id ? item.store_category_id : 'null';
+                            html += `<button type="button" class="subcat-chip" onclick="selectInlineSubcategory('${safeName}', ${storeIdArg})">
+                                <i class="ri-hashtag"></i> ${escapeSubcatHtml(item.name)}
+                                ${item.count > 1 ? `<span class="subcat-chip-count">${item.count} stores</span>` : ''}
+                            </button>`;
+                        });
+                        chipsContainer.innerHTML = html;
+                        chipsWrap.style.display = 'block';
+                    } else {
+                        chipsWrap.style.display = 'none';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error loading subcategory suggestions:', error);
+        }
+    }
+
+    function renderInlineSubcatDropdown(matches, query = '') {
+        const dropdown = document.getElementById('inlineSubcatDropdown');
+        const list = document.getElementById('inlineSubcatList');
+        if (!dropdown || !list) return;
+
+        list.innerHTML = '';
+        _highlightedInlineIndex = -1;
+
+        const mainCategoryId = document.getElementById('mainCategory')?.value;
+        if (!mainCategoryId) {
+            list.innerHTML = `<div style="padding: 0.85rem 1rem; color: var(--muted); font-size: 13px; text-align: center;">
+                <i class="ri-information-line"></i> Please select a main category first
+            </div>`;
+            dropdown.style.display = 'block';
+            return;
+        }
+
+        const normalizedQuery = (query || '').trim().toLowerCase();
+        let exactMatch = false;
+        let html = '';
+
+        if (matches && matches.length > 0) {
+            matches.forEach((item, idx) => {
+                if (item.name.toLowerCase() === normalizedQuery) {
+                    exactMatch = true;
+                }
+                const safeName = item.name.replace(/'/g, "\\'");
+                const storeIdArg = item.store_category_id ? item.store_category_id : 'null';
+                const badge = item.is_my_store 
+                    ? `<span class="subcat-badge-my-store"><i class="ri-store-2-line"></i> Your Store</span>`
+                    : (item.count > 1 ? `<span class="subcat-badge-popular">${item.count} stores</span>` : '');
+
+                // Highlight matching letters
+                let displayName = escapeSubcatHtml(item.name);
+                if (normalizedQuery) {
+                    const regex = new RegExp(`(${normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                    displayName = displayName.replace(regex, '<strong style="color: var(--deep-rose); text-decoration: underline;">$1</strong>');
+                }
+
+                html += `<div class="subcat-suggestion-item" data-index="${idx}" onmousedown="selectInlineSubcategory('${safeName}', ${storeIdArg})">
+                    <span style="display: flex; align-items: center; gap: 0.4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <i class="ri-price-tag-3-line" style="opacity: 0.6; color: var(--deep-rose); flex-shrink: 0;"></i>
+                        <span>${displayName}</span>
+                        ${badge}
+                    </span>
+                    <i class="ri-arrow-right-s-line" style="opacity: 0.35; font-size: 16px; flex-shrink: 0;"></i>
+                </div>`;
+            });
+        }
+
+        // Offer to create if query is non-empty and does not exactly match an existing subcategory
+        if (normalizedQuery && !exactMatch) {
+            const safeQuery = query.trim().replace(/'/g, "\\'");
+            const cleanDisplay = query.trim();
+            html += `<div class="subcat-suggestion-item subcat-create-item" onmousedown="selectInlineSubcategory('${safeQuery}', null)">
+                <span>
+                    <i class="ri-add-circle-line" style="margin-right: 0.35rem;"></i>
+                    Create new subcategory: <strong>"${escapeSubcatHtml(cleanDisplay)}"</strong>
+                </span>
+                <span class="subcat-badge-my-store" style="background: rgba(194,78,104,0.1); border-color: rgba(194,78,104,0.3); color: var(--deep-rose);">+ Add</span>
+            </div>`;
+        } else if ((!matches || matches.length === 0) && !normalizedQuery) {
+            html = `<div style="padding: 0.85rem 1rem; color: var(--muted); font-size: 13px; text-align: center;">
+                No subcategories in this category yet.<br>Start typing to create one!
+            </div>`;
+        }
+
+        list.innerHTML = html;
+        dropdown.style.display = 'block';
+    }
+
+    function hideInlineSubcatDropdown() {
+        const dropdown = document.getElementById('inlineSubcatDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+        _highlightedInlineIndex = -1;
+    }
+
+    function toggleStoreSubcategoryDropdown(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const dropdown = document.getElementById('inlineSubcatDropdown');
+        if (!dropdown) return;
+
+        if (dropdown.style.display === 'block') {
+            hideInlineSubcatDropdown();
+        } else {
+            const input = document.getElementById('storeCategoryInput');
+            const q = input ? input.value.trim() : '';
+            const matches = q 
+                ? _inlineSuggestions.filter(s => s.name.toLowerCase().includes(q.toLowerCase()))
+                : _inlineSuggestions;
+            renderInlineSubcatDropdown(matches, q);
+            if (input) input.focus();
+        }
+    }
+
+    async function selectInlineSubcategory(name, storeCategoryId) {
+        const input = document.getElementById('storeCategoryInput');
+        const hidden = document.getElementById('storeCategory');
+        const clearBtn = document.getElementById('subcatClearBtn');
+        const mainCatId = document.getElementById('mainCategory')?.value;
+
+        if (input) input.value = name;
+        if (clearBtn) clearBtn.style.display = 'flex';
+        hideInlineSubcatDropdown();
+
+        if (storeCategoryId) {
+            if (hidden) hidden.value = storeCategoryId;
+            return;
+        }
+
+        if (!mainCatId) {
+            showToast('Please select a main category first', 'error');
+            return;
+        }
+
+        // Auto-create / link subcategory for this store via backend
+        try {
+            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+            const response = await fetch('/api/store/categories/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    main_category_id: mainCatId,
+                    name: name
+                })
+            });
+            const data = await response.json();
+            if (data.success && data.category) {
+                if (hidden) hidden.value = data.category.id;
+                if (input) input.value = data.category.name; // Canonical platform casing!
+                // Refresh suggestions cache
+                loadStoreSubcategories(true);
+            } else {
+                showToast(data.error || 'Failed to link subcategory', 'error');
+            }
+        } catch (err) {
+            console.error('Error creating subcategory:', err);
+        }
+    }
+
+    function clearStoreSubcategory(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const input = document.getElementById('storeCategoryInput');
+        const hidden = document.getElementById('storeCategory');
+        const clearBtn = document.getElementById('subcatClearBtn');
+        if (input) input.value = '';
+        if (hidden) hidden.value = '';
+        if (clearBtn) clearBtn.style.display = 'none';
+        hideInlineSubcatDropdown();
+    }
+
+    // Modal subcategory functions (for advanced create with description)
+    async function fetchSubcategorySuggestions(mainCategoryId) {
+        const chipsWrap = document.getElementById('subcatPopularChipsWrap');
+        const chipsContainer = document.getElementById('subcatPopularChips');
+        if (chipsWrap) chipsWrap.style.display = 'none';
+        if (chipsContainer) chipsContainer.innerHTML = '';
+        _activeSubcatSuggestions = [];
+
+        if (!mainCategoryId) return;
+
+        try {
+            const res = await fetch(`/api/store/categories/suggestions?main_category_id=${mainCategoryId}`);
+            const data = await res.json();
+            if (data.success && data.suggestions && data.suggestions.length > 0) {
+                _activeSubcatSuggestions = data.suggestions;
+                if (chipsContainer && chipsWrap) {
+                    const topChips = data.suggestions.slice(0, 6);
+                    let html = '';
+                    topChips.forEach(item => {
+                        const safeName = item.name.replace(/'/g, "\\'");
+                        html += `<button type="button" class="subcat-chip" onclick="selectSubcategorySuggestion('${safeName}')">
+                            <i class="ri-hashtag"></i> ${escapeSubcatHtml(item.name)}
+                        </button>`;
+                    });
+                    chipsContainer.innerHTML = html;
+                    chipsWrap.style.display = 'block';
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching modal suggestions:', e);
+        }
+    }
+
+    function selectSubcategorySuggestion(name) {
+        const input = document.getElementById('newSubcategoryName');
+        if (input) {
+            input.value = name;
+            input.focus();
+        }
+        hideSubcategoryDropdown();
+    }
+
+    function renderSubcategoryDropdown(matches) {
+        const dropdown = document.getElementById('subcatSuggestionsDropdown');
+        const list = document.getElementById('subcatSuggestionsList');
+        if (!dropdown || !list) return;
+
+        if (!matches || matches.length === 0) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        let html = '';
+        matches.forEach((item, idx) => {
+            const safeName = item.name.replace(/'/g, "\\'");
+            const isSelected = idx === _highlightedSuggestionIndex ? 'is-active' : '';
+            html += `<div class="subcat-suggestion-item ${isSelected}" 
+                          onmousedown="selectSubcategorySuggestion('${safeName}')">
+                <span><i class="ri-price-tag-3-line" style="margin-right: 0.35rem; opacity: 0.6;"></i> ${escapeSubcatHtml(item.name)}</span>
+                <span class="subcat-suggestion-count">${item.count} store${item.count > 1 ? 's' : ''}</span>
+            </div>`;
+        });
+        list.innerHTML = html;
+        dropdown.style.display = 'block';
+    }
+
+    function hideSubcategoryDropdown() {
+        const dropdown = document.getElementById('subcatSuggestionsDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+        _highlightedSuggestionIndex = -1;
+    }
+
     function showAddSubcategoryModal() {
         const mainCategoryId = document.getElementById('mainCategory').value;
         if (!mainCategoryId) {
@@ -2316,12 +2817,14 @@
         const mainCategoryName = document.getElementById('mainCategory').selectedOptions[0].text;
         document.getElementById('modalMainCategoryName').value = mainCategoryName;
         document.getElementById('addSubcategoryModal').style.display = 'flex';
+        fetchSubcategorySuggestions(mainCategoryId);
     }
 
     function closeAddSubcategoryModal() {
         document.getElementById('addSubcategoryModal').style.display = 'none';
         document.getElementById('newSubcategoryName').value = '';
         document.getElementById('newSubcategoryDescription').value = '';
+        hideSubcategoryDropdown();
     }
 
     async function createSubcategory() {
@@ -2353,20 +2856,21 @@
             const data = await response.json();
             
             if (data.success) {
-                showToast('Subcategory created successfully!', 'success');
+                showToast(data.message || 'Subcategory created successfully!', 'success');
                 closeAddSubcategoryModal();
-                loadStoreSubcategories();
+                loadStoreSubcategories(true);
                 
-                // Select the newly created category
+                // Select newly created category in the product form
                 setTimeout(() => {
-                    const select = document.getElementById('storeCategory');
-                    for (let option of select.options) {
-                        if (option.text === name) {
-                            option.selected = true;
-                            break;
-                        }
+                    const hidden = document.getElementById('storeCategory');
+                    const textInput = document.getElementById('storeCategoryInput');
+                    const clearBtn = document.getElementById('subcatClearBtn');
+                    if (data.category) {
+                        if (hidden) hidden.value = data.category.id;
+                        if (textInput) textInput.value = data.category.name;
+                        if (clearBtn) clearBtn.style.display = 'flex';
                     }
-                }, 500);
+                }, 300);
             } else {
                 showToast(data.error || 'Failed to create subcategory', 'error');
             }
@@ -2375,6 +2879,122 @@
             showToast('Network error', 'error');
         }
     }
+
+    // Attach autocomplete listeners to input
+    document.addEventListener('DOMContentLoaded', function() {
+        // Form inline subcategory input
+        const inlineSubcatInput = document.getElementById('storeCategoryInput');
+        if (inlineSubcatInput) {
+            inlineSubcatInput.addEventListener('input', function() {
+                const query = this.value.trim().toLowerCase();
+                const clearBtn = document.getElementById('subcatClearBtn');
+                if (clearBtn) clearBtn.style.display = this.value.trim() ? 'flex' : 'none';
+                
+                if (!this.value.trim()) {
+                    const hidden = document.getElementById('storeCategory');
+                    if (hidden) hidden.value = '';
+                }
+                
+                const matches = query
+                    ? _inlineSuggestions.filter(s => s.name.toLowerCase().includes(query))
+                    : _inlineSuggestions;
+                renderInlineSubcatDropdown(matches, this.value);
+            });
+
+            inlineSubcatInput.addEventListener('focus', function() {
+                const query = this.value.trim().toLowerCase();
+                const matches = query
+                    ? _inlineSuggestions.filter(s => s.name.toLowerCase().includes(query))
+                    : _inlineSuggestions;
+                renderInlineSubcatDropdown(matches, this.value);
+            });
+
+            inlineSubcatInput.addEventListener('blur', function() {
+                setTimeout(hideInlineSubcatDropdown, 250);
+            });
+
+            inlineSubcatInput.addEventListener('keydown', function(e) {
+                const dropdown = document.getElementById('inlineSubcatDropdown');
+                if (!dropdown || dropdown.style.display === 'none') {
+                    if (e.key === 'ArrowDown') {
+                        toggleStoreSubcategoryDropdown(e);
+                    }
+                    return;
+                }
+                const items = dropdown.querySelectorAll('.subcat-suggestion-item');
+                if (!items.length) return;
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    _highlightedInlineIndex = (_highlightedInlineIndex + 1) % items.length;
+                    items.forEach((it, i) => it.classList.toggle('is-active', i === _highlightedInlineIndex));
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    _highlightedInlineIndex = (_highlightedInlineIndex - 1 + items.length) % items.length;
+                    items.forEach((it, i) => it.classList.toggle('is-active', i === _highlightedInlineIndex));
+                } else if (e.key === 'Enter') {
+                    if (_highlightedInlineIndex >= 0 && items[_highlightedInlineIndex]) {
+                        e.preventDefault();
+                        items[_highlightedInlineIndex].dispatchEvent(new MouseEvent('mousedown'));
+                    }
+                } else if (e.key === 'Escape') {
+                    hideInlineSubcatDropdown();
+                }
+            });
+        }
+
+        // Modal input
+        const subcatInput = document.getElementById('newSubcategoryName');
+        if (subcatInput) {
+            subcatInput.addEventListener('input', function() {
+                const query = this.value.trim().toLowerCase();
+                if (!query) {
+                    renderSubcategoryDropdown(_activeSubcatSuggestions.slice(0, 8));
+                    return;
+                }
+                const matches = _activeSubcatSuggestions.filter(s =>
+                    s.name.toLowerCase().includes(query)
+                );
+                renderSubcategoryDropdown(matches);
+            });
+
+            subcatInput.addEventListener('focus', function() {
+                const query = this.value.trim().toLowerCase();
+                const matches = query
+                    ? _activeSubcatSuggestions.filter(s => s.name.toLowerCase().includes(query))
+                    : _activeSubcatSuggestions.slice(0, 8);
+                renderSubcategoryDropdown(matches);
+            });
+
+            subcatInput.addEventListener('blur', function() {
+                setTimeout(hideSubcategoryDropdown, 250);
+            });
+
+            subcatInput.addEventListener('keydown', function(e) {
+                const dropdown = document.getElementById('subcatSuggestionsDropdown');
+                if (!dropdown || dropdown.style.display === 'none') return;
+                const items = dropdown.querySelectorAll('.subcat-suggestion-item');
+                if (!items.length) return;
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    _highlightedSuggestionIndex = (_highlightedSuggestionIndex + 1) % items.length;
+                    items.forEach((it, i) => it.classList.toggle('is-active', i === _highlightedSuggestionIndex));
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    _highlightedSuggestionIndex = (_highlightedSuggestionIndex - 1 + items.length) % items.length;
+                    items.forEach((it, i) => it.classList.toggle('is-active', i === _highlightedSuggestionIndex));
+                } else if (e.key === 'Enter') {
+                    if (_highlightedSuggestionIndex >= 0 && items[_highlightedSuggestionIndex]) {
+                        e.preventDefault();
+                        items[_highlightedSuggestionIndex].dispatchEvent(new MouseEvent('mousedown'));
+                    }
+                } else if (e.key === 'Escape') {
+                    hideSubcategoryDropdown();
+                }
+            });
+        }
+    });
 
     // ===== CLOUDINARY UPLOAD HELPER =====
     async function uploadToCloudinary(file, folder) {
@@ -2439,12 +3059,20 @@
                     // Set main category and load subcategories
                     if (product.main_category_id) {
                         setTimeout(() => {
-                            loadStoreSubcategories();
+                            loadStoreSubcategories(true);
                             
                             // Set store category after subcategories are loaded
                             if (product.store_category_id) {
                                 setTimeout(() => {
-                                    document.getElementById('storeCategory').value = product.store_category_id;
+                                    const hidden = document.getElementById('storeCategory');
+                                    if (hidden) hidden.value = product.store_category_id;
+                                    const subcatName = (product.store_category && product.store_category.name) || product.store_category_name || '';
+                                    if (subcatName) {
+                                        const input = document.getElementById('storeCategoryInput');
+                                        if (input) input.value = subcatName;
+                                        const clearBtn = document.getElementById('subcatClearBtn');
+                                        if (clearBtn) clearBtn.style.display = 'flex';
+                                    }
                                 }, 500);
                             }
                         }, 300);
@@ -3429,6 +4057,10 @@
         if (storeCategoryId) {
             formData.append('store_category_id', storeCategoryId);
         }
+        const storeCategoryName = document.getElementById('storeCategoryInput')?.value?.trim();
+        if (storeCategoryName) {
+            formData.append('store_category_name', storeCategoryName);
+        }
         
         formData.append('is_available', document.getElementById('isAvailable').checked);
         formData.append(
@@ -3675,6 +4307,7 @@
             } else {
                 document.getElementById('addProductForm').reset();
                 initializeImageSlots();
+                clearStoreSubcategory();
                 document.getElementById('hasVariants').checked = false;
                 toggleVariantsSection();
                 document.getElementById('nameCount').textContent = '0';
@@ -4893,6 +5526,9 @@ function updateVariantStockInData(variantId, newStock) {
     window.toggleVariantsHelp = toggleVariantsHelp;
     window.showToast = showToast;
     window.loadStoreSubcategories = loadStoreSubcategories;
+    window.selectInlineSubcategory = selectInlineSubcategory;
+    window.clearStoreSubcategory = clearStoreSubcategory;
+    window.toggleStoreSubcategoryDropdown = toggleStoreSubcategoryDropdown;
     window.showAddSubcategoryModal = showAddSubcategoryModal;
     window.closeAddSubcategoryModal = closeAddSubcategoryModal;
     window.createSubcategory = createSubcategory;

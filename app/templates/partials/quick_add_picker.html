@@ -1262,9 +1262,13 @@
         return true;
         {% else %}
         if (typeof window.addToCartLocalStorage === 'function') {
-            window.addToCartLocalStorage(payload);
+            const res = window.addToCartLocalStorage(payload);
+            if (res && !res.success) {
+                throw new Error(res.error || 'Could not add to cart');
+            }
         } else if (typeof window.addToCart === 'function') {
-            window.addToCart(payload);
+            const added = await window.addToCart(payload);
+            if (!added) throw new Error('Could not add to cart');
         } else {
             throw new Error('Cart is unavailable');
         }
@@ -1350,7 +1354,9 @@
                     store_id: qaCurrentProduct.store_id || null,
                     store_name: qaCurrentProduct.store_name || 'Flower Shop',
                     image_url: selected.image_url || qaCurrentProduct.image_url || '',
-                    quantity: quantity
+                    quantity: quantity,
+                    stock: selected.stock,
+                    stock_quantity: selected.stock
                 };
                 if (selected.variant_id) payload.variant_id = selected.variant_id;
                 // Attach add-ons once to the first product line only

@@ -94,26 +94,29 @@
     </div>
 </div>
 
-<!-- Archived Products Grid -->
-<div id="archivedGrid" class="products-grid"></div>
-
 <!-- Bulk Actions Bar -->
 <div class="bulk-bar" id="bulkBar" style="display: none;">
     <div class="bulk-bar-label">
-        <span id="selectedCount">0</span> product(s) selected
+        <span class="bulk-count-badge" id="selectedCountBadge">
+            <i class="ri-checkbox-circle-line"></i>
+            <span><strong id="selectedCount">0</strong> product(s) selected</span>
+        </span>
     </div>
     <div class="bulk-bar-actions">
-        <button class="btn btn-outline btn-sm" id="selectAllBtn">
+        <button type="button" class="btn btn-outline btn-sm" id="selectAllBtn">
             <i class="ri-checkbox-multiple-line"></i> Select All
         </button>
-        <button class="btn btn-primary btn-sm" id="bulkRestoreBtn" disabled>
+        <button type="button" class="btn btn-primary btn-sm" id="bulkRestoreBtn" disabled>
             <i class="ri-history-line"></i> Restore Selected
         </button>
-        <button class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
+        <button type="button" class="btn btn-danger-outline btn-sm" id="bulkDeleteBtn" disabled>
             <i class="ri-delete-bin-line"></i> Permanently Delete
         </button>
     </div>
 </div>
+
+<!-- Archived Products Grid -->
+<div id="archivedGrid" class="products-grid"></div>
 
 <!-- Loading State -->
 <div id="loadingState" style="text-align: center; padding: 4rem;">
@@ -321,6 +324,91 @@
         white-space: nowrap;
     }
     
+    /* Bulk Actions Bar */
+    .bulk-bar {
+        background: var(--warm-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        padding: 0.875rem 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(42, 35, 30, 0.04);
+        flex-wrap: wrap;
+    }
+    
+    .bulk-bar-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 13px;
+        color: var(--charcoal);
+        font-weight: 500;
+    }
+    
+    .bulk-count-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.35rem 0.85rem;
+        border-radius: var(--radius-pill);
+        background: rgba(42, 35, 30, 0.05);
+        color: var(--muted);
+        border: 1px solid var(--border);
+        font-size: 13px;
+        font-weight: 500;
+        transition: var(--transition);
+    }
+    
+    .bulk-count-badge strong {
+        color: var(--charcoal);
+        font-weight: 700;
+    }
+    
+    .bulk-count-badge.has-selected {
+        background: rgba(181, 68, 90, 0.1);
+        color: var(--deep-rose);
+        border-color: rgba(181, 68, 90, 0.25);
+    }
+    
+    .bulk-count-badge.has-selected strong {
+        color: var(--deep-rose);
+    }
+    
+    .bulk-count-badge i {
+        font-size: 15px;
+        line-height: 1;
+    }
+    
+    .bulk-bar-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .bulk-bar-actions .btn-sm {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        padding: 0.45rem 0.95rem;
+        font-size: 12.5px;
+        font-weight: 500;
+        border-radius: var(--radius-md);
+        height: 38px;
+        line-height: 1;
+        white-space: nowrap;
+        transition: var(--transition);
+    }
+    
+    .bulk-bar-actions .btn-sm i {
+        font-size: 15px;
+        line-height: 1;
+    }
+    
     .spinner {
         width: 40px;
         height: 40px;
@@ -509,9 +597,19 @@
         
         .bulk-bar {
             flex-direction: column;
-            align-items: flex-start;
-            gap: 0.75rem;
+            align-items: stretch;
+            gap: 0.65rem;
             padding: 0.875rem 1rem !important;
+        }
+        
+        .bulk-bar-label {
+            width: 100%;
+        }
+
+        .bulk-count-badge {
+            width: 100%;
+            justify-content: center;
+            font-size: 12px;
         }
         
         .bulk-bar-actions {
@@ -520,12 +618,24 @@
             grid-template-columns: 1fr 1fr !important;
             gap: 0.5rem !important;
         }
+
+        .bulk-bar-actions #selectAllBtn {
+            grid-column: 1 / -1;
+            width: 100% !important;
+        }
+
+        .bulk-bar-actions #bulkRestoreBtn,
+        .bulk-bar-actions #bulkDeleteBtn {
+            width: 100% !important;
+        }
         
         .bulk-bar-actions .btn-sm {
             width: 100% !important;
-            padding: 0.3rem 0.5rem !important;
-            font-size: 9px !important;
+            height: 38px;
+            padding: 0.4rem 0.6rem !important;
+            font-size: 12px !important;
             min-width: auto;
+            justify-content: center;
         }
         
         .filters-grid {
@@ -659,12 +769,13 @@
         }
         
         .bulk-bar {
-            padding: 0.75rem 0.9rem !important;
-            gap: 0.6rem;
+            padding: 0.75rem 0.85rem !important;
+            gap: 0.55rem;
         }
         
-        .bulk-bar-label {
-            font-size: 9px;
+        .bulk-count-badge {
+            font-size: 11.5px;
+            padding: 0.3rem 0.65rem;
         }
         
         .bulk-bar-actions {
@@ -672,8 +783,9 @@
         }
         
         .bulk-bar-actions .btn-sm {
-            font-size: 8px !important;
-            padding: 0.25rem 0.4rem !important;
+            font-size: 11px !important;
+            padding: 0.35rem 0.45rem !important;
+            height: 36px;
         }
         
         .card {
@@ -806,25 +918,21 @@
         }
         
         .bulk-bar {
-            padding: 0.65rem 0.8rem !important;
+            padding: 0.65rem 0.75rem !important;
             gap: 0.5rem;
-            flex-wrap: wrap;
         }
         
-        .bulk-bar-label {
-            font-size: 8px;
-            width: 100%;
+        .bulk-count-badge {
+            font-size: 11px;
         }
         
         .bulk-bar-actions {
-            width: 100%;
-            grid-template-columns: 1fr 1fr !important;
-            gap: 0.3rem !important;
+            gap: 0.35rem !important;
         }
         
         .bulk-bar-actions .btn-sm {
-            font-size: 7.5px !important;
-            padding: 0.2rem 0.35rem !important;
+            font-size: 10.5px !important;
+            padding: 0.3rem 0.4rem !important;
         }
         
         .filters-grid {
@@ -965,26 +1073,17 @@
             font-size: 10px !important;
         }
         
-        .bulk-bar {
-            padding: 0.65rem 0.8rem !important;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-        
-        .bulk-bar-label {
-            font-size: 8px;
-            width: 100%;
-        }
-        
         .bulk-bar-actions {
-            width: 100%;
-            grid-template-columns: 1fr 1fr !important;
-            gap: 0.3rem !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 0.35rem !important;
         }
         
         .bulk-bar-actions .btn-sm {
-            font-size: 7.5px !important;
-            padding: 0.2rem 0.35rem !important;
+            font-size: 10.5px !important;
+            padding: 0.35rem 0.5rem !important;
+            width: 100% !important;
+            height: 36px;
         }
         
         .filters-grid {
@@ -1037,16 +1136,36 @@
         .bulk-bar {
             flex-direction: column;
             align-items: stretch;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem !important;
         }
-        .bulk-bar-actions {
-            grid-template-columns: 1fr 1fr !important;
+        .bulk-bar-label {
             width: 100%;
         }
+        .bulk-count-badge {
+            width: 100%;
+            justify-content: center;
+        }
+        .bulk-bar-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 0.5rem !important;
+            width: 100%;
+        }
+        .bulk-bar-actions #selectAllBtn {
+            grid-column: 1 / -1;
+            width: 100% !important;
+        }
+        .bulk-bar-actions #bulkRestoreBtn,
+        .bulk-bar-actions #bulkDeleteBtn {
+            width: 100% !important;
+        }
         .bulk-bar-actions .btn-sm {
-            min-height: 44px;
+            min-height: 38px;
             font-size: 12px !important;
-            padding: 0.5rem 0.6rem !important;
-            white-space: normal;
+            padding: 0.45rem 0.6rem !important;
+            white-space: nowrap;
+            justify-content: center;
         }
         .action-buttons .btn-sm {
             min-height: 40px;
@@ -1071,6 +1190,13 @@
         document.getElementById('archivedGrid').style.display = 'none';
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('bulkBar').style.display = 'none';
+        selectedProducts.clear();
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        if (selectAllBtn) {
+            selectAllBtn.innerHTML = '<i class="ri-checkbox-multiple-line"></i> Select All';
+        }
+        updateSelectedCount();
+        updateBulkButtons();
 
         fetch('/api/v1/seller/archive/products')
             .then(response => response.json())
@@ -1177,7 +1303,13 @@
     }
 
     function updateSelectedCount() {
-        document.getElementById('selectedCount').textContent = selectedProducts.size;
+        const count = selectedProducts.size;
+        const countEl = document.getElementById('selectedCount');
+        if (countEl) countEl.textContent = count;
+        const badgeEl = document.getElementById('selectedCountBadge');
+        if (badgeEl) {
+            badgeEl.classList.toggle('has-selected', count > 0);
+        }
     }
 
     function updateBulkButtons() {
