@@ -1644,11 +1644,11 @@ table.dash-table {
     <!-- Delivery Rate -->
     <div class="kpi-card bark">
       <div class="kpi-top">
-        <div class="kpi-label">Delivery Rate</div>
+        <div class="kpi-label">Fulfillment Rate</div>
         <div class="kpi-icon"><i class="ri-truck-line"></i></div>
       </div>
       <div class="kpi-value">{% if delivery_rate is not none %}{{ delivery_rate }}%{% else %}—{% endif %}</div>
-      <div class="kpi-sub">Delivered / active (excl. cancelled)</div>
+      <div class="kpi-sub">Delivered & picked up / active</div>
       {% if delivery_rate is none %}
         <span class="kpi-badge flat">—</span>
       {% elif delivery_rate >= 95 %}
@@ -1771,7 +1771,7 @@ table.dash-table {
           ] %}
           {% for order in recent_orders %}
           <tr>
-            <td data-label="Order"><span class="order-id">#{{ '%05d' % order.id }}</span></td>
+            <td data-label="Order"><span class="order-id">#{{ '%05d' % order.id }}</span>{% if (order.fulfillment_type or '') == 'pickup' %} <span class="badge" style="background:#6a4a9a;color:#fff;font-size:9px;padding:2px 5px;border-radius:4px;font-weight:600;"><i class="ri-store-2-line"></i> PICKUP</span>{% endif %}</td>
             <td data-label="Customer">
               <div class="customer-cell">
                 {% set color_keys = ['pink', 'lavender', 'peach', 'yellow', 'blue', 'mint'] %}
@@ -1783,12 +1783,12 @@ table.dash-table {
             <td data-label="Date" style="color:var(--muted);font-size:12.5px;">{{ order.date }}</td>
             <td data-label="Amount"><span class="amount-cell">₱{{ '{:,.2f}'.format(order.total) }}</span></td>
             <td data-label="Status">
-              {% if order.status == 'delivered' %}
-                <span class="status-pill s-delivered">Delivered</span>
+              {% if order.status == 'delivered' or order.status == 'completed' %}
+                <span class="status-pill s-delivered">{{ 'Picked Up' if (order.fulfillment_type or '') == 'pickup' or order.status == 'completed' else 'Delivered' }}</span>
               {% elif order.status == 'on_delivery' %}
                 <span class="status-pill s-delivery">On Delivery</span>
               {% elif order.status in ['preparing', 'accepted', 'done_preparing'] %}
-                <span class="status-pill s-processing">{{ order.status|replace('_', ' ')|title }}</span>
+                <span class="status-pill s-processing">{{ 'Ready for Pickup' if (order.fulfillment_type or '') == 'pickup' and order.status == 'done_preparing' else order.status|replace('_', ' ')|title }}</span>
               {% elif order.status == 'cancelled' %}
                 <span class="status-pill s-cancelled">Cancelled</span>
               {% else %}
@@ -2064,7 +2064,7 @@ table.dash-table {
         </div>
         <div class="mini-stats">
           <div class="mini-stat">
-            <div class="mini-stat-label">Delivered</div>
+            <div class="mini-stat-label">Delivered / Picked Up</div>
             <div class="mini-stat-value sage">{{ order_status_dist.get('delivered', 0) + order_status_dist.get('completed', 0) }}</div>
           </div>
           <div class="mini-stat">
@@ -2510,6 +2510,7 @@ const tooltipStyle = {
   const colors = [];
   const colorMap = {
     'delivered': '#7a9e7e',
+    'completed': '#7a9e7e',
     'on_delivery': '#c4714b',
     'preparing': '#d4788a',
     'accepted': '#a9c5e8',
@@ -2518,7 +2519,7 @@ const tooltipStyle = {
     'cancelled': '#b5445a'
   };
   for (const [status, count] of Object.entries(statusData)) {
-    labels.push(status.replace('_',' ').replace(/\b\w/g, l => l.toUpperCase()));
+    labels.push(status === 'completed' ? 'Picked Up' : status.replace('_',' ').replace(/\b\w/g, l => l.toUpperCase()));
     values.push(count);
     colors.push(colorMap[status] || '#ccc');
   }

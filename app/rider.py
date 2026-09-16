@@ -234,6 +234,9 @@ def accept_order(order_id):
     
     if order.status not in ('accepted', 'done_preparing') or order.rider_id is not None:
         return jsonify({'error': 'Order cannot be accepted'}), 400
+
+    if getattr(order, 'fulfillment_type', '') == 'pickup':
+        return jsonify({'error': 'Store pickup orders cannot be accepted by riders'}), 400
     
     order.rider_id = rider.id
     order.set_status('on_delivery')

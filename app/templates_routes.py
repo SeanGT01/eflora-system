@@ -4986,6 +4986,7 @@ def _render_admin_dashboard():
             'total': float(o.total_amount or 0),
             'status': o.status or 'pending',
             'type': 'online',
+            'fulfillment_type': getattr(o, 'fulfillment_type', 'delivery') or 'delivery',
         })
     for p in pos_recent_q:
         recent_orders_list.append({
@@ -5388,6 +5389,7 @@ def seller_dashboard():
             'total': float(o.total_amount or 0),
             'status': o.status,
             'type': 'online',
+            'fulfillment_type': getattr(o, 'fulfillment_type', 'delivery') or 'delivery',
         })
     for p in pos_recent:
         recent_orders_list.append({

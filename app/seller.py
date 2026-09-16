@@ -233,7 +233,7 @@ def update_order_status(order_id):
     data = request.get_json() or {}
     new_status = data.get('status')
     
-    allowed_statuses = {'pending', 'accepted', 'preparing', 'done_preparing', 'on_delivery', 'delivered', 'cancelled'}
+    allowed_statuses = {'pending', 'accepted', 'preparing', 'done_preparing', 'on_delivery', 'delivered', 'completed', 'cancelled'}
     if new_status not in allowed_statuses:
         return jsonify({'error': 'Invalid status'}), 400
 
@@ -243,6 +243,8 @@ def update_order_status(order_id):
         order.restore_stock_on_cancel(user_id)
     
     order.set_status(new_status)
+    if new_status == 'completed' and getattr(order, 'fulfillment_type', '') == 'pickup' and order.payment_status in ('cop_pending', 'cop_approved', 'pending'):
+        order.payment_status = 'paid'
     db.session.commit()
     
     return jsonify({

@@ -477,8 +477,7 @@
     .status-accepted, .status-preparing { background: rgba(59, 130, 246, 0.13); color: #1d4ed8; border-color: rgba(59, 130, 246, 0.28); }
     .status-done_preparing { background: rgba(34, 197, 94, 0.13); color: #15803d; border-color: rgba(34, 197, 94, 0.3); }
     .status-on_delivery { background: rgba(122, 158, 126, 0.16); color: var(--deep-sage); border-color: rgba(122, 158, 126, 0.32); }
-    .status-delivered { background: rgba(16, 185, 129, 0.16); color: #047857; border-color: rgba(16, 185, 129, 0.28); }
-    .status-completed { background: rgba(59, 130, 246, 0.14); color: #1d4ed8; border-color: rgba(59, 130, 246, 0.28); }
+    .status-delivered, .status-completed { background: rgba(16, 185, 129, 0.16); color: #047857; border-color: rgba(16, 185, 129, 0.28); }
     .status-cancelled { background: rgba(225, 29, 72, 0.14); color: #be123c; border-color: rgba(225, 29, 72, 0.28); }
 
     .proof-gallery {
@@ -509,11 +508,12 @@
         background: var(--cream);
     }
 
-    .payment-pending { background: rgba(148, 163, 184, 0.14); color: #475569; }
-    .payment-pending_verification { background: rgba(245, 158, 11, 0.14); color: #9a6700; }
-    .payment-cod_pending, .payment-cop_pending { background: rgba(59, 130, 246, 0.14); color: #1d4ed8; }
-    .payment-cod_approved, .payment-cop_approved { background: rgba(16, 185, 129, 0.14); color: #047857; }
-    .payment-verified { background: rgba(16, 185, 129, 0.14); color: #047857; }
+    .payment-pending { background: rgba(148, 163, 184, 0.14); color: #475569; border-color: rgba(148, 163, 184, 0.3); }
+    .payment-pending_verification { background: rgba(245, 158, 11, 0.14); color: #9a6700; border-color: rgba(245, 158, 11, 0.35); }
+    .payment-cod_pending, .payment-cop_pending { background: rgba(59, 130, 246, 0.14); color: #1d4ed8; border-color: rgba(59, 130, 246, 0.28); }
+    .payment-cod_approved, .payment-cop_approved { background: rgba(16, 185, 129, 0.14); color: #047857; border-color: rgba(16, 185, 129, 0.28); }
+    .payment-verified, .payment-paid, .payment-completed { background: rgba(16, 185, 129, 0.14); color: #047857; border-color: rgba(16, 185, 129, 0.28); }
+    .payment-failed, .payment-cancelled { background: rgba(225, 29, 72, 0.14); color: #be123c; border-color: rgba(225, 29, 72, 0.28); }
 
     .orders-table select {
         width: 135px;
@@ -1142,16 +1142,22 @@
                 <option value="all">All statuses</option>
                 <option value="pending">Pending</option>
                 <option value="preparing">Preparing</option>
-                <option value="done_preparing">Done Preparing</option>
+                <option value="done_preparing">Done Preparing / Ready</option>
                 <option value="on_delivery">On Delivery</option>
                 <option value="delivered">Delivered</option>
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
             </select>
+            <select id="sellerFulfillmentSelect" class="inv-filter-select" aria-label="Filter by fulfillment">
+                <option value="all">All fulfillment</option>
+                <option value="delivery">Delivery</option>
+                <option value="pickup">Store Pickup</option>
+            </select>
             <select id="sellerPaymentSelect" class="inv-filter-select" aria-label="Filter by payment">
                 <option value="all">All payments</option>
                 <option value="gcash">GCash</option>
                 <option value="cod">COD</option>
+                <option value="cop">COP (Pickup)</option>
             </select>
             <div class="orders-date-filter">
                 <div class="orders-date-field">
@@ -1265,6 +1271,8 @@
                                 {% set pay_status_label = 'Pending' %}
                             {% elif pay_status == 'cod_approved' or pay_status == 'cop_approved' %}
                                 {% set pay_status_label = 'Approved' %}
+                            {% elif pay_status == 'paid' or pay_status == 'completed' %}
+                                {% set pay_status_label = 'Paid' %}
                             {% else %}
                                 {% set pay_status_label = pay_status.replace('_', ' ')|title %}
                             {% endif %}
@@ -1538,8 +1546,13 @@
             cod_approved: 'Approved',
             cop_pending: 'Pending',
             cop_approved: 'Approved',
+            paid: 'Paid',
+            completed: 'Paid',
         }[statusKey] || titleCaseStatus(status);
-        return [statusLabel, methodLabel].filter(Boolean).join(' ').trim() || '—';
+        if (methodLabel && statusLabel) {
+            return `${methodLabel} · ${statusLabel}`;
+        }
+        return [methodLabel, statusLabel].filter(Boolean).join(' ').trim() || '—';
     }
 
     function formatAmount(value) {
@@ -1691,12 +1704,14 @@
     function getFilteredSellerRows() {
         const search = (document.getElementById('sellerOrderSearch').value || '').trim().toLowerCase();
         const status = document.getElementById('sellerStatusSelect').value;
+        const fulfillment = (document.getElementById('sellerFulfillmentSelect')?.value || 'all').toLowerCase();
         const payment = document.getElementById('sellerPaymentSelect').value;
         const { startDate, endDate } = getSellerDateRange();
 
         return sellerRows.filter(row => {
             const matchesSearch = !search || (row.dataset.search || '').includes(search);
             const matchesStatus = status === 'all' || row.dataset.status === status;
+            const matchesFulfillment = fulfillment === 'all' || (row.dataset.fulfillmentType || 'delivery').toLowerCase() === fulfillment;
             const matchesPayment = payment === 'all' || (row.dataset.paymentMethod || '') === payment;
             const matchesDate = rowMatchesSellerDateRange(row, startDate, endDate);
             let matchesCard = true;
@@ -1711,7 +1726,7 @@
                 matchesCard = (row.dataset.isToday || '') === 'true';
             }
 
-            return matchesSearch && matchesStatus && matchesPayment && matchesDate && matchesCard;
+            return matchesSearch && matchesStatus && matchesFulfillment && matchesPayment && matchesDate && matchesCard;
         });
     }
 
@@ -1980,6 +1995,7 @@
 
     document.getElementById('sellerOrderSearch').addEventListener('input', () => applySellerFilters(true));
     document.getElementById('sellerStatusSelect').addEventListener('change', () => applySellerFilters(true));
+    document.getElementById('sellerFulfillmentSelect')?.addEventListener('change', () => applySellerFilters(true));
     document.getElementById('sellerPaymentSelect').addEventListener('change', () => applySellerFilters(true));
 
     const sellerDateRange = (typeof bindLinkedDatePickers === 'function')
@@ -2248,7 +2264,7 @@
                             <section class="sdm-block">
                                 <h4>Payment</h4>
                                 <div class="sdm-rows">
-                                    <div class="sdm-row"><span class="sdm-k">Payment</span><span class="sdm-v">${escapeHtml(formatPaymentCombined(order.payment_method, order.payment_status))}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Payment</span><span class="sdm-v"><span class="payment-pill payment-combined payment-${escapeAttr(String(order.payment_status || '').toLowerCase())}">${escapeHtml(formatPaymentCombined(order.payment_method, order.payment_status))}</span></span></div>
                                     <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">₱${formatAmount(displaySubtotal)}</span></div>
                                     <div class="sdm-row"><span class="sdm-k">Delivery fee</span><span class="sdm-v">${isPickup ? 'None' : `₱${formatAmount(deliveryFee)}`}</span></div>
                                     <div class="sdm-row"><span class="sdm-k">Total</span><span class="sdm-v" style="font-weight:600;color:var(--charcoal);">₱${formatAmount(displayTotal)}</span></div>
@@ -2274,9 +2290,9 @@
                             <section class="sdm-block">
                                 <h4>Schedule</h4>
                                 <div class="sdm-rows">
-                                    <div class="sdm-row"><span class="sdm-k">Distance</span><span class="sdm-v">${order.distance_km ? `${Number(order.distance_km).toFixed(2)} km` : '—'}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Date</span><span class="sdm-v">${order.requested_delivery_date ? formatDate(order.requested_delivery_date) : '—'}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Time</span><span class="sdm-v">${formatDeliveryTimeSlot(order.requested_delivery_time)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">${isPickup ? 'Fulfillment' : 'Distance'}</span><span class="sdm-v">${isPickup ? 'Store Counter' : (order.distance_km ? `${Number(order.distance_km).toFixed(2)} km` : '—')}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">${isPickup ? 'Pickup Date' : 'Date'}</span><span class="sdm-v">${order.requested_delivery_date ? formatDate(order.requested_delivery_date) : '—'}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">${isPickup ? 'Pickup Time' : 'Time'}</span><span class="sdm-v">${formatDeliveryTimeSlot(order.requested_delivery_time)}</span></div>
                                 </div>
                             </section>
                         </div>
