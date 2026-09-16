@@ -107,11 +107,17 @@ def _ensure_store_payment_settings_table():
     try:
         if inspect(db.engine).has_table("store_payment_settings"):
             cols = {c["name"] for c in inspect(db.engine).get_columns("store_payment_settings")}
+            from sqlalchemy import text
             if "allow_gcash" not in cols:
-                from sqlalchemy import text
                 db.session.execute(text(
                     "ALTER TABLE store_payment_settings "
                     "ADD COLUMN allow_gcash BOOLEAN NOT NULL DEFAULT TRUE"
+                ))
+                db.session.commit()
+            if "allow_cop" not in cols:
+                db.session.execute(text(
+                    "ALTER TABLE store_payment_settings "
+                    "ADD COLUMN allow_cop BOOLEAN NOT NULL DEFAULT FALSE"
                 ))
                 db.session.commit()
             return True
@@ -126,20 +132,21 @@ def _ensure_store_payment_settings_table():
 
 
 def _store_payment_flags(store_id):
-    """Return (allow_gcash, allow_cod). GCash defaults on; COD defaults off."""
+    """Return (allow_gcash, allow_cod, allow_cop). GCash defaults on; COD & COP default off."""
     from app.models import GCashQR
     qr_count = GCashQR.query.filter_by(store_id=store_id).count()
     has_qr = qr_count > 0
 
     if not _ensure_store_payment_settings_table():
-        return has_qr, not has_qr
+        return has_qr, not has_qr, False
 
     row = StorePaymentSetting.query.filter_by(store_id=store_id).first()
     if not row:
-        return has_qr, not has_qr
+        return has_qr, not has_qr, False
 
     allow_gcash = True if getattr(row, "allow_gcash", None) is None else bool(row.allow_gcash)
     allow_cod = bool(row.allow_cod)
+    allow_cop = bool(getattr(row, "allow_cop", False))
 
     if not has_qr:
         allow_gcash = False
@@ -148,11 +155,15 @@ def _store_payment_flags(store_id):
     if not allow_gcash and not allow_cod:
         allow_cod = True  # Fallback to COD if both are disabled
 
-    return allow_gcash, allow_cod
+    return allow_gcash, allow_cod, allow_cop
 
 
 def _store_allows_cod(store_id):
     return _store_payment_flags(store_id)[1]
+
+
+def _store_allows_cop(store_id):
+    return _store_payment_flags(store_id)[2]
 
 
 def _store_allows_gcash(store_id):
@@ -1003,16 +1014,24 @@ def validate_checkout():
         if not customer:
             return jsonify({"error": "User not found"}), 404
 
+        fulfillment_type = str(data.get("fulfillment_type") or "delivery").strip().lower()
+        if fulfillment_type not in {"delivery", "pickup"}:
+            fulfillment_type = "delivery"
+
         address_id = data.get("delivery_address_id")
         delivery_notes = data.get("delivery_notes", "")
         requested_items = data.get("items") or []
 
-        if not address_id:
-            return jsonify({"error": "delivery_address_id is required"}), 400
-
-        address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
-        if not address:
-            return jsonify({"error": "Delivery address not found"}), 404
+        address = None
+        if fulfillment_type == "delivery":
+            if not address_id:
+                return jsonify({"error": "delivery_address_id is required"}), 400
+            address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
+            if not address:
+                return jsonify({"error": "Delivery address not found"}), 404
+        else:
+            if address_id:
+                address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
 
         cart = Cart.query.filter_by(user_id=user_id).first()
         if not cart:
@@ -1074,7 +1093,6 @@ def validate_checkout():
                     opt = row.addon_option
                     if not opt:
                         continue
-                    # Cart stores fixed addon units; flower qty does not scale add-on price.
                     units = max(1, int(row.quantity or 1))
                     if not opt.is_available or int(opt.stock_quantity or 0) < units:
                         raise Exception(
@@ -1104,44 +1122,84 @@ def validate_checkout():
                     "addons_total": float(addons_sum),
                 })
 
-            delivery_check = _check_store_delivery(store, address, subtotal)
-            
-            if not delivery_check["can_deliver"]:
-                undeliverable_stores.append({
-                    "store_id": store.id,
-                    "store_name": store.name,
-                    "reason": delivery_check["reason"],
-                    "distance_km": round(delivery_check["distance_km"], 2) if delivery_check["distance_km"] is not None else None,
-                })
+            if fulfillment_type == "pickup":
+                if not bool(getattr(store, "allow_pickup", True)):
+                    undeliverable_stores.append({
+                        "store_id": store.id,
+                        "store_name": store.name,
+                        "reason": "This store does not offer in-store pickup.",
+                        "distance_km": None,
+                    })
+                else:
+                    store_checkout_data.append({
+                        "temp_id": f"temp_{uuid.uuid4().hex[:8]}",
+                        "store_id": store.id,
+                        "store_name": store.name,
+                        "subtotal": float(subtotal),
+                        "delivery_fee": 0.0,
+                        "distance_km": None,
+                        "total": float(subtotal),
+                        "items": order_items_data,
+                        "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
+                        "gcash_instructions": store.gcash_instructions,
+                        "allow_cod": False,
+                        "allow_cop": _store_allows_cop(store.id),
+                        "allow_gcash": _store_allows_gcash(store.id),
+                        "allow_pickup": bool(getattr(store, "allow_pickup", True)),
+                        "fulfillment_type": "pickup",
+                        "store_address": store.usable_address or store.address,
+                        "store_phone": store.contact_number or "",
+                        "store_latitude": store.latitude,
+                        "store_longitude": store.longitude,
+                        "store_schedule": store.store_schedule,
+                    })
             else:
-                store_checkout_data.append({
-                    "temp_id": f"temp_{uuid.uuid4().hex[:8]}",
-                    "store_id": store.id,
-                    "store_name": store.name,
-                    "subtotal": float(subtotal),
-                    "delivery_fee": float(delivery_check["delivery_fee"]),
-                    "distance_km": delivery_check["distance_km"],
-                    "total": float(subtotal + delivery_check["delivery_fee"]),
-                    "items": order_items_data,
-                    "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
-                    "gcash_instructions": store.gcash_instructions,
-                    "allow_cod": _store_allows_cod(store.id),
-                    "allow_gcash": _store_allows_gcash(store.id),
-                    "store_schedule": store.store_schedule,
-                    **_free_delivery_fields(store, subtotal, delivery_check["delivery_fee"]),
-                })
+                delivery_check = _check_store_delivery(store, address, subtotal)
+                
+                if not delivery_check["can_deliver"]:
+                    undeliverable_stores.append({
+                        "store_id": store.id,
+                        "store_name": store.name,
+                        "reason": delivery_check["reason"],
+                        "distance_km": round(delivery_check["distance_km"], 2) if delivery_check["distance_km"] is not None else None,
+                    })
+                else:
+                    store_checkout_data.append({
+                        "temp_id": f"temp_{uuid.uuid4().hex[:8]}",
+                        "store_id": store.id,
+                        "store_name": store.name,
+                        "subtotal": float(subtotal),
+                        "delivery_fee": float(delivery_check["delivery_fee"]),
+                        "distance_km": delivery_check["distance_km"],
+                        "total": float(subtotal + delivery_check["delivery_fee"]),
+                        "items": order_items_data,
+                        "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
+                        "gcash_instructions": store.gcash_instructions,
+                        "allow_cod": _store_allows_cod(store.id),
+                        "allow_cop": _store_allows_cop(store.id),
+                        "allow_gcash": _store_allows_gcash(store.id),
+                        "allow_pickup": bool(getattr(store, "allow_pickup", True)),
+                        "fulfillment_type": "delivery",
+                        "store_address": store.usable_address or store.address,
+                        "store_phone": store.contact_number or "",
+                        "store_latitude": store.latitude,
+                        "store_longitude": store.longitude,
+                        "store_schedule": store.store_schedule,
+                        **_free_delivery_fields(store, subtotal, delivery_check["delivery_fee"]),
+                    })
 
         if undeliverable_stores:
             return jsonify({
                 "success": False,
-                "error": "Some selected items cannot be delivered to this address.",
+                "error": "Some selected items cannot be delivered or picked up.",
                 "undeliverable_stores": undeliverable_stores,
             }), 400
 
         return jsonify({
             "success": True,
             "orders": store_checkout_data,
-            "address": address.to_dict()
+            "fulfillment_type": fulfillment_type,
+            "address": address.to_dict() if address else None
         }), 200
 
     except Exception as e:
@@ -1262,15 +1320,23 @@ def create_orders():
         print(f"📝 Delivery notes: {delivery_notes}")
         print(f"📦 Orders count: {len(orders_data)}")
 
-        if not address_id:
-            return jsonify({"error": "Address ID required"}), 400
-
         if not orders_data:
             return jsonify({"error": "No orders data provided"}), 400
 
-        address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
-        if not address:
-            return jsonify({"error": "Delivery address not found"}), 404
+        needs_delivery = any(
+            str(od.get("fulfillment_type") or data.get("fulfillment_type") or "delivery").strip().lower() != "pickup"
+            for od in orders_data
+        )
+
+        address = None
+        if address_id:
+            address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
+
+        if needs_delivery:
+            if not address_id:
+                return jsonify({"error": "Address ID required for delivery orders"}), 400
+            if not address:
+                return jsonify({"error": "Delivery address not found"}), 404
 
         cart = Cart.query.filter_by(user_id=user_id).first()
         if not cart:
@@ -1294,7 +1360,6 @@ def create_orders():
         cart_addon_lines = _cart_structured_addon_lines(selected_items)
         _validate_structured_addon_stock(cart_addon_lines)
 
-        delivery_point = from_shape(Point(address.longitude, address.latitude), srid=4326)
         orders_created = []
 
         for order_data in orders_data:
@@ -1303,12 +1368,29 @@ def create_orders():
                 print(f"⚠️ Store not found: {order_data.get('store_id')}")
                 continue
 
+            order_fulfillment = str(
+                order_data.get("fulfillment_type") or data.get("fulfillment_type") or "delivery"
+            ).strip().lower()
+            if order_fulfillment not in {"delivery", "pickup"}:
+                order_fulfillment = "delivery"
+
+            if order_fulfillment == "pickup" and not bool(getattr(store, "allow_pickup", True)):
+                return jsonify({"error": f"{store.name} does not offer in-store pickup."}), 400
+
             payment_method = str(order_data.get("payment_method") or "gcash").strip().lower()
-            if payment_method not in {"gcash", "cod"}:
+            if payment_method not in {"gcash", "cod", "cop"}:
                 return jsonify({"error": "Invalid payment method"}), 400
-            if payment_method == "cod" and not _store_allows_cod(store.id):
-                return jsonify({"error": f"Cash on Delivery is not enabled for {store.name}"}), 400
-            if payment_method == "gcash" and not _store_allows_gcash(store.id):
+            if payment_method == "cod":
+                if order_fulfillment == "pickup":
+                    return jsonify({"error": f"Cash on Delivery is only available for delivery orders on {store.name}."}), 400
+                if not _store_allows_cod(store.id):
+                    return jsonify({"error": f"Cash on Delivery is not enabled for {store.name}"}), 400
+            elif payment_method == "cop":
+                if order_fulfillment != "pickup":
+                    return jsonify({"error": f"Cash on Pickup is only available for store pickup orders on {store.name}."}), 400
+                if not _store_allows_cop(store.id):
+                    return jsonify({"error": f"Cash on Pickup is not enabled for {store.name}. Please pay via GCash."}), 400
+            elif payment_method == "gcash" and not _store_allows_gcash(store.id):
                 return jsonify({"error": f"GCash is not enabled for {store.name}"}), 400
 
             # Phase 1: Extract and parse per-store delivery date/time
@@ -1350,41 +1432,64 @@ def create_orders():
             if cart_subtotal > payload_subtotal:
                 computed_subtotal = cart_subtotal
 
-            delivery_check = _check_store_delivery(store, address, computed_subtotal)
-            if not delivery_check["can_deliver"]:
-                return jsonify({
-                    "error": delivery_check["reason"] or f"Cannot deliver from {store.name}."
-                }), 400
-            computed_fee = delivery_check["delivery_fee"]
-            computed_distance = delivery_check["distance_km"]
-            computed_total = computed_subtotal + Decimal(str(computed_fee or 0))
+            if order_fulfillment == "pickup":
+                computed_fee = Decimal('0.00')
+                computed_distance = None
+                computed_total = computed_subtotal
+                order_delivery_point = from_shape(Point(store.longitude, store.latitude), srid=4326) if (store.latitude and store.longitude) else None
+                order_delivery_address = f"Store Pickup: {store.usable_address or store.address}"
+                order_cust_lat = store.latitude
+                order_cust_lng = store.longitude
+                order_place_id = store.place_id
+            else:
+                delivery_check = _check_store_delivery(store, address, computed_subtotal)
+                if not delivery_check["can_deliver"]:
+                    return jsonify({
+                        "error": delivery_check["reason"] or f"Cannot deliver from {store.name}."
+                    }), 400
+                computed_fee = delivery_check["delivery_fee"]
+                computed_distance = delivery_check["distance_km"]
+                computed_total = computed_subtotal + Decimal(str(computed_fee or 0))
+                order_delivery_point = from_shape(Point(address.longitude, address.latitude), srid=4326) if address else None
+                order_delivery_address = address.address_line if address else ""
+                order_cust_lat = address.latitude if address else None
+                order_cust_lng = address.longitude if address else None
+                order_place_id = address.place_id if address else None
+
+            if payment_method == "cop":
+                order_payment_status = "cop_pending"
+            elif payment_method == "cod":
+                order_payment_status = "cod_pending"
+            else:
+                order_payment_status = "pending_verification"
 
             order = Order(
                 customer_id=user_id,
                 store_id=store.id,
                 order_type="online",
+                fulfillment_type=order_fulfillment,
                 status="pending",
                 subtotal_amount=computed_subtotal,
                 delivery_fee=computed_fee,
                 distance_km=computed_distance,
                 total_amount=computed_total,
-                payment_method="cod" if payment_method == "cod" else "gcash",
-                payment_status="cod_pending" if payment_method == "cod" else "pending_verification",
-                delivery_location=delivery_point,
-                delivery_address=address.address_line,
+                payment_method=payment_method,
+                payment_status=order_payment_status,
+                delivery_location=order_delivery_point,
+                delivery_address=order_delivery_address,
                 delivery_notes=delivery_notes,
                 requested_delivery_date=order_delivery_date,  # Phase 1: Per-store date
                 requested_delivery_time=order_delivery_time,  # Phase 1: Per-store time
-                customer_latitude=address.latitude,
-                customer_longitude=address.longitude,
-                mapbox_place_id=address.place_id,
+                customer_latitude=order_cust_lat,
+                customer_longitude=order_cust_lng,
+                mapbox_place_id=order_place_id,
             )
 
             payment_proof_url = order_data.get("payment_proof_url")
             payment_proof_public_id = order_data.get("payment_proof_public_id")
             if payment_method == "gcash" and not payment_proof_url:
                 return jsonify({"error": f"Payment proof is required for GCash on {store.name}"}), 400
-            if payment_method == "cod":
+            if payment_method in {"cod", "cop"}:
                 payment_proof_url = None
                 payment_proof_public_id = None
             if payment_proof_url:
@@ -1449,14 +1554,17 @@ def create_orders():
 
             db.session.flush()
 
+            if payment_method == "cod":
+                notif_msg = f'Order #{order.id} — ₱{float(order.total_amount):,.2f} was placed via Cash on Delivery.'
+            elif payment_method == "cop":
+                notif_msg = f'Order #{order.id} — ₱{float(order.total_amount):,.2f} was placed for Store Pickup (Cash on Pickup).'
+            else:
+                notif_msg = f'Order #{order.id} — ₱{float(order.total_amount):,.2f} is awaiting payment verification.'
+
             db.session.add(Notification(
                 user_id=store.seller_id,
                 title='New Order Received',
-                message=(
-                    f'Order #{order.id} — ₱{float(order.total_amount):,.2f} was placed via Cash on Delivery.'
-                    if payment_method == "cod"
-                    else f'Order #{order.id} — ₱{float(order.total_amount):,.2f} is awaiting payment verification.'
-                ),
+                message=notif_msg,
                 type='new_order',
                 reference_id=order.id,
             ))
@@ -2072,7 +2180,7 @@ def get_order_payment_status(order_id):
 @checkout_bp.route("/buy-now/validate", methods=["POST"])
 @customer_only
 def buy_now_validate():
-    """Validate delivery for a direct buy-now (no cart involved)."""
+    """Validate delivery or pickup for a direct buy-now (no cart involved)."""
     print("🔵🔵🔵 BUY NOW VALIDATE ROUTE WAS CALLED! 🔵🔵🔵")
     try:
         user_id = request.user_id
@@ -2081,33 +2189,32 @@ def buy_now_validate():
             return limit_error
 
         data = request.get_json() or {}
-        
         print(f"📨 Request data received: {data}")
+
+        fulfillment_type = str(data.get("fulfillment_type") or "delivery").strip().lower()
+        if fulfillment_type not in {"delivery", "pickup"}:
+            fulfillment_type = "delivery"
 
         product_id = data.get("product_id")
         variant_id = data.get("variant_id")
-        address_id = data.get("delivery_address_id")
-        
+        address_id = data.get("delivery_address_id") or data.get("address_id")
+
         try:
             quantity = int(data.get("quantity", 1))
         except (ValueError, TypeError) as e:
             print(f"❌ Quantity conversion error: {e}")
             return jsonify({"error": "quantity must be a valid integer"}), 400
-        
+
         print(f"🔍 Parsed values:")
         print(f"   product_id: {product_id} (type: {type(product_id)})")
         print(f"   variant_id: {variant_id} (type: {type(variant_id)})")
         print(f"   quantity: {quantity} (type: {type(quantity)})")
         print(f"   address_id: {address_id} (type: {type(address_id)})")
+        print(f"   fulfillment_type: {fulfillment_type}")
 
         if not product_id:
-            print(f"❌ product_id validation failed: {product_id}")
             return jsonify({"error": "product_id is required"}), 400
-        if not address_id:
-            print(f"❌ address_id validation failed: {address_id}")
-            return jsonify({"error": "delivery_address_id is required"}), 400
         if quantity < 1:
-            print(f"❌ quantity validation failed: {quantity}")
             return jsonify({"error": "Quantity must be at least 1"}), 400
 
         product = Product.query.get(product_id)
@@ -2115,6 +2222,33 @@ def buy_now_validate():
             return jsonify({"error": "Product not found"}), 404
         if not product.is_available:
             return jsonify({"error": f'"{product.name}" is no longer available'}), 400
+
+        store = Store.query.get(product.store_id)
+        if not store:
+            return jsonify({"error": "Store not found"}), 404
+
+        if fulfillment_type == "pickup" and not bool(getattr(store, "allow_pickup", True)):
+            return jsonify({
+                "success": False,
+                "error": "Cannot fulfill via in-store pickup.",
+                "undeliverable_stores": [{
+                    "store_id": store.id,
+                    "store_name": store.name,
+                    "reason": "This store does not offer in-store pickup.",
+                    "distance_km": None,
+                }],
+            }), 400
+
+        address = None
+        if fulfillment_type == "delivery":
+            if not address_id:
+                return jsonify({"error": "delivery_address_id is required for delivery"}), 400
+            address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
+            if not address:
+                return jsonify({"error": "Delivery address not found"}), 404
+        else:
+            if address_id:
+                address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
 
         variant = None
         item_price = Decimal(str(product.effective_price))
@@ -2130,14 +2264,6 @@ def buy_now_validate():
         else:
             if product.stock_quantity < quantity:
                 return jsonify({"error": f'Insufficient stock for "{product.name}". Available: {product.stock_quantity}'}), 400
-
-        address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
-        if not address:
-            return jsonify({"error": "Delivery address not found"}), 404
-
-        store = Store.query.get(product.store_id)
-        if not store:
-            return jsonify({"error": "Store not found"}), 404
 
         addon_lines, addon_err = _resolve_buy_now_addons(
             data.get("addons") or [],
@@ -2192,19 +2318,30 @@ def buy_now_validate():
                 "image_url": line["image_url"] or "",
             })
 
-        delivery_check = _check_store_delivery(store, address, subtotal)
-
-        if not delivery_check["can_deliver"]:
-            return jsonify({
-                "success": False,
-                "error": "Cannot deliver to this address.",
-                "undeliverable_stores": [{
-                    "store_id": store.id,
-                    "store_name": store.name,
-                    "reason": delivery_check["reason"],
-                    "distance_km": round(delivery_check["distance_km"], 2) if delivery_check["distance_km"] is not None else None,
-                }],
-            }), 400
+        if fulfillment_type == "pickup":
+            delivery_fee = 0.0
+            distance_km = None
+            free_delivery_info = {
+                "free_delivery_applied": False,
+                "original_delivery_fee": 0.0,
+                "free_delivery_threshold": None,
+            }
+        else:
+            delivery_check = _check_store_delivery(store, address, subtotal)
+            if not delivery_check["can_deliver"]:
+                return jsonify({
+                    "success": False,
+                    "error": "Cannot deliver to this address.",
+                    "undeliverable_stores": [{
+                        "store_id": store.id,
+                        "store_name": store.name,
+                        "reason": delivery_check["reason"],
+                        "distance_km": round(delivery_check["distance_km"], 2) if delivery_check["distance_km"] is not None else None,
+                    }],
+                }), 400
+            delivery_fee = float(delivery_check["delivery_fee"])
+            distance_km = delivery_check["distance_km"]
+            free_delivery_info = _free_delivery_fields(store, subtotal, delivery_check["delivery_fee"])
 
         return jsonify({
             "success": True,
@@ -2213,18 +2350,25 @@ def buy_now_validate():
                 "store_id": store.id,
                 "store_name": store.name,
                 "subtotal": float(subtotal),
-                "delivery_fee": float(delivery_check["delivery_fee"]),
-                "distance_km": delivery_check["distance_km"],
-                "total": float(subtotal + delivery_check["delivery_fee"]),
+                "delivery_fee": float(delivery_fee),
+                "distance_km": distance_km,
+                "total": float(subtotal + Decimal(str(delivery_fee))),
                 "items": order_items,
                 "gcash_qr_codes": [qr.to_dict() for qr in store.gcash_qr_images],
                 "gcash_instructions": store.gcash_instructions,
-                "allow_cod": _store_allows_cod(store.id),
+                "allow_cod": _store_allows_cod(store.id) if fulfillment_type == "delivery" else False,
+                "allow_cop": _store_allows_cop(store.id),
                 "allow_gcash": _store_allows_gcash(store.id),
+                "allow_pickup": bool(getattr(store, "allow_pickup", True)),
+                "fulfillment_type": fulfillment_type,
+                "store_address": store.usable_address or store.address,
+                "store_phone": store.contact_number or "",
+                "store_latitude": store.latitude,
+                "store_longitude": store.longitude,
                 "store_schedule": store.store_schedule,
-                **_free_delivery_fields(store, subtotal, delivery_check["delivery_fee"]),
+                **free_delivery_info,
             }],
-            "address": address.to_dict(),
+            "address": address.to_dict() if address else None,
         }), 200
 
     except Exception as e:
@@ -2249,10 +2393,14 @@ def buy_now_create_order():
         customer = User.query.get(user_id)
         customer_name = _customer_display_name(user_id, customer)
 
+        fulfillment_type = str(data.get("fulfillment_type") or "delivery").strip().lower()
+        if fulfillment_type not in {"delivery", "pickup"}:
+            fulfillment_type = "delivery"
+
         product_id = data.get("product_id")
         variant_id = data.get("variant_id")
         quantity = int(data.get("quantity", 1))
-        address_id = data.get("address_id")
+        address_id = data.get("address_id") or data.get("delivery_address_id")
         delivery_notes = data.get("delivery_notes", "")
         requested_delivery_date_str = data.get("requested_delivery_date")
         requested_delivery_time = _normalize_requested_delivery_time(data.get("requested_delivery_time"))
@@ -2262,12 +2410,17 @@ def buy_now_create_order():
 
         if not product_id:
             return jsonify({"error": "product_id is required"}), 400
-        if not address_id:
-            return jsonify({"error": "address_id is required"}), 400
         if quantity < 1:
             return jsonify({"error": "Quantity must be at least 1"}), 400
-        if payment_method not in {"gcash", "cod"}:
-            return jsonify({"error": "Invalid payment method"}), 400
+
+        if fulfillment_type == "pickup":
+            if payment_method not in {"gcash", "cop"}:
+                return jsonify({"error": "Invalid payment method for pickup. Must be 'gcash' or 'cop'."}), 400
+        else:
+            if payment_method not in {"gcash", "cod"}:
+                return jsonify({"error": "Invalid payment method for delivery. Must be 'gcash' or 'cod'."}), 400
+            if not address_id:
+                return jsonify({"error": "address_id is required for delivery"}), 400
 
         product = Product.query.get(product_id)
         if not product:
@@ -2290,20 +2443,30 @@ def buy_now_create_order():
             if product.stock_quantity < quantity:
                 return jsonify({"error": f'Insufficient stock for "{product.name}".'}), 400
 
-        address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
-        if not address:
-            return jsonify({"error": "Delivery address not found"}), 404
+        address = None
+        if address_id:
+            address = UserAddress.query.filter_by(id=address_id, user_id=user_id).first()
+            if not address and fulfillment_type == "delivery":
+                return jsonify({"error": "Delivery address not found"}), 404
+        elif fulfillment_type == "delivery":
+            return jsonify({"error": "Delivery address is required"}), 400
 
         store = Store.query.get(product.store_id)
         if not store:
             return jsonify({"error": "Store not found"}), 404
+
+        if fulfillment_type == "pickup" and not bool(getattr(store, "allow_pickup", True)):
+            return jsonify({"error": "In-store pickup is not enabled for this store"}), 400
+
+        if payment_method == "cop" and not _store_allows_cop(store.id):
+            return jsonify({"error": "Cash on Pickup is not enabled for this store"}), 400
         if payment_method == "cod" and not _store_allows_cod(store.id):
             return jsonify({"error": "Cash on Delivery is not enabled for this store"}), 400
         if payment_method == "gcash" and not _store_allows_gcash(store.id):
             return jsonify({"error": "GCash is not enabled for this store"}), 400
         if payment_method == "gcash" and not payment_proof_url:
             return jsonify({"error": "Payment proof is required for GCash"}), 400
-        if payment_method == "cod":
+        if payment_method in {"cod", "cop"}:
             payment_proof_url = None
             payment_proof_public_id = None
 
@@ -2328,14 +2491,25 @@ def buy_now_create_order():
         for line in addon_lines:
             subtotal += line["price"] * line["quantity"]
 
-        delivery_check = _check_store_delivery(store, address, subtotal)
-
-        if not delivery_check["can_deliver"]:
-            return jsonify({"error": delivery_check["reason"]}), 400
-
-        delivery_fee = delivery_check["delivery_fee"]
-        distance = delivery_check["distance_km"]
-        delivery_point = from_shape(Point(address.longitude, address.latitude), srid=4326)
+        if fulfillment_type == "pickup":
+            delivery_fee = Decimal("0.0")
+            distance = None
+            delivery_point = None
+            final_delivery_address = store.usable_address or store.address or f"Store Pickup - {store.name}"
+            cust_lat = store.latitude
+            cust_lng = store.longitude
+            place_id = None
+        else:
+            delivery_check = _check_store_delivery(store, address, subtotal)
+            if not delivery_check["can_deliver"]:
+                return jsonify({"error": delivery_check["reason"]}), 400
+            delivery_fee = Decimal(str(delivery_check["delivery_fee"]))
+            distance = delivery_check["distance_km"]
+            delivery_point = from_shape(Point(address.longitude, address.latitude), srid=4326)
+            final_delivery_address = address.address_line
+            cust_lat = address.latitude
+            cust_lng = address.longitude
+            place_id = address.place_id
 
         requested_delivery_date = None
         if requested_delivery_date_str:
@@ -2355,27 +2529,35 @@ def buy_now_create_order():
         if slot_error:
             return jsonify({"error": slot_error}), 400
 
+        if payment_method == "cop":
+            payment_status = "cop_pending"
+        elif payment_method == "cod":
+            payment_status = "cod_pending"
+        else:
+            payment_status = "pending_verification"
+
         order = Order(
             customer_id=int(user_id),
             store_id=int(store.id),
             order_type="online",
+            fulfillment_type=fulfillment_type,
             status="pending",
             subtotal_amount=float(subtotal),
             delivery_fee=float(delivery_fee),
             distance_km=float(distance) if distance else None,
             total_amount=float(subtotal + delivery_fee),
-            payment_method="cod" if payment_method == "cod" else "gcash",
-            payment_status="cod_pending" if payment_method == "cod" else "pending_verification",
+            payment_method=payment_method,
+            payment_status=payment_status,
             delivery_location=delivery_point,
             payment_proof_url=payment_proof_url,
             payment_proof_public_id=payment_proof_public_id,
-            delivery_address=address.address_line,
+            delivery_address=final_delivery_address,
             delivery_notes=delivery_notes,
             requested_delivery_date=requested_delivery_date,
             requested_delivery_time=requested_delivery_time,
-            customer_latitude=address.latitude,
-            customer_longitude=address.longitude,
-            mapbox_place_id=address.place_id,
+            customer_latitude=cust_lat,
+            customer_longitude=cust_lng,
+            mapbox_place_id=place_id,
         )
         db.session.add(order)
         db.session.flush()
@@ -2465,14 +2647,17 @@ def buy_now_create_order():
                 stock_after=int(addon_product.stock_quantity or 0),
             )
 
+        if payment_method == "cop":
+            notification_msg = f'Pickup Order #{order.id} — ₱{float(order.total_amount):,.2f} from {customer_name} was placed via Cash on Pickup.'
+        elif payment_method == "cod":
+            notification_msg = f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {customer_name} was placed via Cash on Delivery.'
+        else:
+            notification_msg = f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {customer_name} is awaiting payment verification.'
+
         db.session.add(Notification(
             user_id=store.seller_id,
             title='New Order Received',
-            message=(
-                f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {customer_name} was placed via Cash on Delivery.'
-                if payment_method == "cod"
-                else f'Order #{order.id} — ₱{float(order.total_amount):,.2f} from {customer_name} is awaiting payment verification.'
-            ),
+            message=notification_msg,
             type='new_order',
             reference_id=order.id,
         ))
@@ -2484,10 +2669,13 @@ def buy_now_create_order():
         order_dict["items"] = [oi.to_dict() for oi in order.items]
         order_dict["gcash_qr_codes"] = [qr.to_dict() for qr in store.gcash_qr_images]
         order_dict["gcash_instructions"] = store.gcash_instructions
-        order_dict["allow_cod"] = _store_allows_cod(store.id)
+        order_dict["allow_cod"] = _store_allows_cod(store.id) if fulfillment_type == "delivery" else False
+        order_dict["allow_cop"] = _store_allows_cop(store.id)
         order_dict["allow_gcash"] = _store_allows_gcash(store.id)
+        order_dict["allow_pickup"] = bool(getattr(store, "allow_pickup", True))
+        order_dict["fulfillment_type"] = fulfillment_type
         order_dict["distance_km"] = round(distance, 2) if distance is not None else None
-        order_dict["selected_address"] = address.to_dict()
+        order_dict["selected_address"] = address.to_dict() if address else None
 
         return jsonify({
             "success": True,

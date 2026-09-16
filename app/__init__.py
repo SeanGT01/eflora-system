@@ -118,10 +118,26 @@ def create_app(config_class='default'):
                     stmts.append("ALTER TABLE orders ADD COLUMN done_preparing_proof_url VARCHAR(500)")
                 if 'completed_at' not in cols:
                     stmts.append("ALTER TABLE orders ADD COLUMN completed_at TIMESTAMP")
+                if 'fulfillment_type' not in cols:
+                    stmts.append("ALTER TABLE orders ADD COLUMN fulfillment_type VARCHAR(20) DEFAULT 'delivery'")
                 for stmt in stmts:
                     db.session.execute(text(stmt))
                 if stmts:
                     db.session.commit()
+
+                # Ensure allow_cop on store_payment_settings
+                if 'store_payment_settings' in existing_tables:
+                    sps_cols = {c['name'] for c in inspect(db.engine).get_columns('store_payment_settings')}
+                    if 'allow_cop' not in sps_cols:
+                        db.session.execute(text("ALTER TABLE store_payment_settings ADD COLUMN allow_cop BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+
+                # Ensure allow_pickup on stores
+                if 'stores' in existing_tables:
+                    store_cols = {c['name'] for c in inspect(db.engine).get_columns('stores')}
+                    if 'allow_pickup' not in store_cols:
+                        db.session.execute(text("ALTER TABLE stores ADD COLUMN allow_pickup BOOLEAN DEFAULT TRUE"))
+                        db.session.commit()
         except Exception:
             db.session.rollback()
 

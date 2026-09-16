@@ -236,6 +236,7 @@ class StorePaymentSetting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id', ondelete='CASCADE'), nullable=False, unique=True, index=True)
     allow_cod = db.Column(db.Boolean, default=False, nullable=False)
+    allow_cop = db.Column(db.Boolean, default=False, nullable=False)
     allow_gcash = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -305,6 +306,7 @@ class Store(db.Model):
     delivery_rate_per_km = db.Column(db.Numeric(10, 2), default=20.00)
     free_delivery_minimum = db.Column(db.Numeric(10, 2), default=500.00)
     free_delivery_enabled = db.Column(db.Boolean, default=True, nullable=False, server_default='true')
+    allow_pickup = db.Column(db.Boolean, default=True, nullable=False, server_default='true')
     max_delivery_distance = db.Column(db.Float, default=15.0)
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
@@ -576,6 +578,7 @@ class Store(db.Model):
             # GCash fields
             'gcash_qr_codes': [qr.to_dict() for qr in self.gcash_qr_images],
             'gcash_instructions': self.gcash_instructions,
+            'allow_pickup': bool(getattr(self, 'allow_pickup', True)),
             # Store schedule
             'store_schedule': self.store_schedule
         }
@@ -1236,6 +1239,7 @@ class Product(db.Model):
             'id': self.id,
             'store_id': self.store_id,
             'store_name': self.store.name if self.store else 'Unknown Store',
+            'allow_pickup': bool(getattr(self.store, 'allow_pickup', True)) if self.store else True,
             'name': self.name,
             'description': self.description,
             'price': float(self.price) if self.price else 0,
@@ -1768,6 +1772,7 @@ class Order(db.Model):
     rider_id = db.Column(db.Integer, db.ForeignKey('riders.id'))
     
     order_type = db.Column(db.String(20), default='online')
+    fulfillment_type = db.Column(db.String(20), default='delivery', nullable=False)
     status = db.Column(db.String(20), default='pending')
     
     # Financial breakdown
@@ -1965,6 +1970,7 @@ class Order(db.Model):
             'store_id': self.store_id,
             'rider_id': self.rider_id,
             'order_type': self.order_type,
+            'fulfillment_type': getattr(self, 'fulfillment_type', 'delivery') or 'delivery',
             'status': self.status,
             'subtotal_amount': float(self.subtotal_amount or 0),
             'delivery_fee': float(self.delivery_fee or 0),
@@ -3343,7 +3349,10 @@ class CustomQuoteTicket(db.Model):
         if self.store:
             try:
                 from app.checkout_routes import _store_payment_flags
-                store_allows_gcash, store_allows_cod = _store_payment_flags(self.store_id)
+                flags = _store_payment_flags(self.store_id)
+                store_allows_gcash = flags[0]
+                store_allows_cod = flags[1]
+                store_allows_cop = flags[2] if len(flags) > 2 else False
             except Exception:
                 pass
 

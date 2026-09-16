@@ -178,7 +178,8 @@ def get_available_orders():
         .filter(
             Order.store_id == rider.store_id,
             Order.status.in_(['accepted', 'done_preparing']),
-            Order.rider_id.is_(None)
+            Order.rider_id.is_(None),
+            db.or_(Order.fulfillment_type == 'delivery', Order.fulfillment_type.is_(None))
         )
         .order_by(Order.created_at)
         .all()

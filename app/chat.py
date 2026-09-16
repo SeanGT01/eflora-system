@@ -1908,7 +1908,9 @@ def checkout_custom_ticket(ticket_id):
 
         # Verify payment method against store payment settings
         from app.checkout_routes import _store_payment_flags, _validate_requested_delivery_slot, _normalize_requested_delivery_time
-        allow_gcash, allow_cod = _store_payment_flags(ticket.store_id)
+        flags = _store_payment_flags(ticket.store_id)
+        allow_gcash, allow_cod = flags[0], flags[1]
+        allow_cop = flags[2] if len(flags) > 2 else False
         payment_method = (data.get('payment_method') or 'cod').strip().lower()
         if payment_method == 'gcash' and not allow_gcash:
             return jsonify({'error': 'GCash is disabled by this store. Please select another payment method.'}), 400
@@ -2140,9 +2142,10 @@ def cancel_cod_order(order_id):
     user = _current_user()
     order = Order.query.get_or_404(order_id)
 
-    # Verify order is COD and eligible for cancellation
-    if (order.payment_method or '').lower() != 'cod':
-        return jsonify({'error': 'Only COD orders can be cancelled directly. Prepaid orders require admin review.'}), 400
+    # Verify order is COD or COP and eligible for cancellation
+    pay_method = (order.payment_method or '').lower()
+    if pay_method not in ('cod', 'cop'):
+        return jsonify({'error': 'Only COD and COP orders can be cancelled directly. Prepaid orders require admin review.'}), 400
 
     if order.status in ('delivered', 'completed', 'cancelled'):
         return jsonify({'error': f'Order is already {order.status}'}), 400
@@ -2162,7 +2165,7 @@ def cancel_cod_order(order_id):
     # Cancel order
     order.status = 'cancelled'
     order.cancelled_at = datetime.utcnow()
-    order.cancellation_reason_code = 'seller_cancelled_cod'
+    order.cancellation_reason_code = f'seller_cancelled_{pay_method}'
     order.cancellation_reason = reason
 
     # Restore any attached add-on stock and log restock in StockReduction
@@ -2176,7 +2179,7 @@ def cancel_cod_order(order_id):
             if t.conversation_id:
                 convo = Conversation.query.get(t.conversation_id)
                 if convo:
-                    cancel_notice = f"🚫 Custom COD Order #{order.id} has been cancelled by the florist.\nReason: {reason}"
+                    cancel_notice = f"🚫 Custom {pay_method.upper()} Order #{order.id} has been cancelled by the florist.\nReason: {reason}"
                     db.session.add(ChatMessage(
                         conversation_id=convo.id,
                         sender_id=user.id,

@@ -2985,8 +2985,22 @@
                                         </div>
                                     </div>
 
-                                    <div style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 1rem;">
-                                        <div>
+                                    <!-- ALLOW SAME-DAY DELIVERY TOGGLE -->
+                                    <div style="margin-top: 1.25rem; padding-top: 0.85rem; border-top: 1px dashed var(--border);">
+                                        <label class="cod-toggle-row" for="allow-same-day-toggle" style="margin-bottom: 0.4rem;">
+                                            <span class="cod-toggle-copy">
+                                                <strong>Allow Same-Day Delivery</strong>
+                                                <small>Accept orders for delivery today within open hours and cutoff. Turn OFF to only accept pre-orders for tomorrow and future dates.</small>
+                                            </span>
+                                            <span class="cod-toggle-switch">
+                                                <input type="checkbox" id="allow-same-day-toggle" {% if store.store_schedule is none or store.store_schedule.allow_same_day is not defined or store.store_schedule.allow_same_day %}checked{% endif %}>
+                                                <span class="cod-toggle-slider"></span>
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    <div style="margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 1rem;" id="same-day-controls-row">
+                                        <div id="order-cutoff-container">
                                             <label class="form-label" style="margin-bottom: 0.35rem;">Same-day order
                                                 cutoff (Optional)</label>
                                             <input type="time" class="form-control" id="order-cutoff-time"
@@ -3157,6 +3171,21 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                <!-- IN-STORE PICKUP TOGGLE -->
+                                <div class="form-group form-group-full" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                                    <label class="form-label">In-Store Pickup</label>
+                                    <label class="cod-toggle-row" for="allowPickupToggle" style="margin-bottom: 0;">
+                                        <span class="cod-toggle-copy">
+                                            <strong>Allow In-Store Pickup</strong>
+                                            <small>Let customers order online and pick up directly at your flower shop.</small>
+                                        </span>
+                                        <span class="cod-toggle-switch">
+                                            <input type="checkbox" id="allowPickupToggle" {% if store.allow_pickup %}checked{% endif %}>
+                                            <span class="cod-toggle-slider"></span>
+                                        </span>
+                                    </label>
                                 </div>
 
                                 <script>
@@ -3353,6 +3382,16 @@
                                 {% endif %}
                             </div>
                         </div>
+                        <div class="summary-field">
+                            <div class="summary-label">Same-Day Delivery</div>
+                            <div class="summary-value" id="sum-same-day">
+                                {% if store.store_schedule and store.store_schedule.allow_same_day is sameas false %}
+                                <span style="color: var(--terracotta); font-weight: 600;"><i class="ri-close-circle-line"></i> Disabled (Next-day & advance pre-orders only)</span>
+                                {% else %}
+                                <span style="color: var(--deep-sage); font-weight: 600;"><i class="ri-checkbox-circle-line"></i> Enabled</span>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3439,6 +3478,20 @@
                                 </span>
                                 <span class="cod-toggle-switch">
                                     <input type="checkbox" id="allowCodToggle" {% if allow_cod %}checked{% endif %}>
+                                    <span class="cod-toggle-slider"></span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Cash on Pickup</label>
+                            <label class="cod-toggle-row" for="allowCopToggle">
+                                <span class="cod-toggle-copy">
+                                    <strong>Enable Cash on Pickup (COP)</strong>
+                                    <small>Let customers pay with cash when claiming their order at the store.</small>
+                                </span>
+                                <span class="cod-toggle-switch">
+                                    <input type="checkbox" id="allowCopToggle" {% if allow_cop %}checked{% endif %}>
                                     <span class="cod-toggle-slider"></span>
                                 </span>
                             </label>
@@ -3593,6 +3646,11 @@
                             </div>
                         </div>
                         <div class="summary-field">
+                            <div class="summary-label">Cash on Pickup</div>
+                            <div class="summary-value" id="sum-cop-enabled">{{ 'Enabled' if allow_cop else 'Disabled' }}
+                            </div>
+                        </div>
+                        <div class="summary-field">
                             <div class="summary-label">Free Delivery</div>
                             <div class="summary-value" id="sum-free-delivery">
                                 {% if store.free_delivery_enabled != false %}
@@ -3679,6 +3737,8 @@
     "gcash_qr_data": {{ gcash_qr_data|tojson if gcash_qr_data else '[]' }},
     "gcash_instructions": {{ store.gcash_instructions|tojson if store.gcash_instructions else 'null' }},
     "allow_cod": {{ (allow_cod or false)|tojson }},
+    "allow_cop": {{ (allow_cop or false)|tojson }},
+    "allow_pickup": {{ (store.allow_pickup if store.allow_pickup is defined else true)|tojson }},
     "allow_gcash": {{ (allow_gcash if allow_gcash is defined else true)|tojson }}
 }
 </script>
@@ -4681,6 +4741,7 @@
             deliveryCutoff: document.getElementById('delivery-cutoff-time')?.value || '',
             orderCutoff: document.getElementById('order-cutoff-time')?.value || '',
             leadTimeHours: document.getElementById('lead-time-hours')?.value || '',
+            allowSameDay: document.getElementById('allow-same-day-toggle')?.checked ?? true,
             schedule: (typeof scheduleEntries !== 'undefined')
                 ? JSON.parse(JSON.stringify(scheduleEntries || []))
                 : [],
@@ -5396,6 +5457,32 @@
     if (existingSchedule && existingSchedule.order_cutoff) {
         document.getElementById('order-cutoff-time').value = existingSchedule.order_cutoff;
     }
+    const allowSameDayToggle = document.getElementById('allow-same-day-toggle');
+    if (allowSameDayToggle && existingSchedule && existingSchedule.allow_same_day !== undefined) {
+        allowSameDayToggle.checked = Boolean(existingSchedule.allow_same_day);
+    }
+    function updateSameDayControlsUI() {
+        const isSameDayAllowed = allowSameDayToggle ? allowSameDayToggle.checked : true;
+        const cutoffContainer = document.getElementById('order-cutoff-container');
+        const cutoffInput = document.getElementById('order-cutoff-time');
+        const cutoffHint = document.getElementById('order-cutoff-hint');
+        if (cutoffContainer) {
+            cutoffContainer.style.opacity = isSameDayAllowed ? '1' : '0.5';
+            cutoffContainer.style.pointerEvents = isSameDayAllowed ? 'auto' : 'none';
+        }
+        if (cutoffInput) {
+            cutoffInput.disabled = !isSameDayAllowed;
+        }
+        if (cutoffHint) {
+            cutoffHint.textContent = isSameDayAllowed
+                ? 'Must be within store hours. After this time, customers cannot book same-day delivery.'
+                : 'Same-day delivery is turned off. Orders will be scheduled for tomorrow or future dates.';
+        }
+    }
+    if (allowSameDayToggle) {
+        allowSameDayToggle.addEventListener('change', updateSameDayControlsUI);
+        updateSameDayControlsUI();
+    }
     const leadHoursEl = document.getElementById('lead-time-hours');
     if (leadHoursEl) {
         const savedLead = existingSchedule && existingSchedule.lead_time_hours != null
@@ -5695,6 +5782,7 @@
         }
 
         const orderCutoff = (document.getElementById('order-cutoff-time')?.value || '').trim();
+        const allowSameDay = document.getElementById('allow-same-day-toggle')?.checked ?? true;
         const hoursErr = validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff);
         if (hoursErr) {
             showToast(hoursErr, 'error');
@@ -5709,7 +5797,8 @@
             delivery_start: deliveryStart || null,
             delivery_cutoff: deliveryCutoff || null,
             order_cutoff: orderCutoff || null,
-            lead_time_hours: leadTimeHours
+            lead_time_hours: leadTimeHours,
+            allow_same_day: allowSameDay
         };
     }
 
@@ -5903,6 +5992,8 @@
             formData.append('max_delivery_distance', document.getElementById('max-distance')?.value || 15);
             const zoneArea = document.getElementById('zone-delivery-area')?.value || '';
             if (zoneArea) formData.append('zone_delivery_area', zoneArea);
+            const allowPickup = document.getElementById('allowPickupToggle')?.checked ? '1' : '0';
+            formData.append('allow_pickup', allowPickup);
 
             if (deliveryMethod === 'zone') {
                 if (!zoneArea || !marker || typeof turf === 'undefined') {
@@ -6026,6 +6117,14 @@
                     sumSchedule.textContent = 'Not configured';
                 }
             }
+            const sumSameDay = document.getElementById('sum-same-day');
+            if (sumSameDay) {
+                if (scheduleData && scheduleData.allow_same_day === false) {
+                    sumSameDay.innerHTML = '<span style="color: var(--terracotta); font-weight: 600;"><i class="ri-close-circle-line"></i> Disabled (Next-day & advance pre-orders only)</span>';
+                } else {
+                    sumSameDay.innerHTML = '<span style="color: var(--deep-sage); font-weight: 600;"><i class="ri-checkbox-circle-line"></i> Enabled</span>';
+                }
+            }
 
             showToast('Store information saved successfully!', 'success');
             toggleBasicInfoSection(false);
@@ -6136,6 +6235,7 @@
             const formData = new FormData();
             formData.append('gcash_instructions', gcashInstructions);
             formData.append('allow_cod', allowCod);
+            formData.append('allow_cop', document.getElementById('allowCopToggle')?.checked ? '1' : '0');
             formData.append('allow_gcash', allowGcash);
 
             // Delivery fees (same formula for all coverage methods)

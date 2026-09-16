@@ -3320,17 +3320,47 @@
                 </div>
 
                 <div id="checkoutStep1" style="display: block;">
-                    <h4 style="font-size: 14px; margin-bottom: 12px; font-weight: 600;">Select Delivery Address</h4>
-                    <div id="checkoutAddressList" style="margin-bottom: 16px;"></div>
-                    <div id="checkoutAddressEmpty" style="display:none; padding: 12px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px;">
-                        <div style="font-weight: 600; margin-bottom: 4px;">No saved address yet</div>
-                        <div style="font-size: 13px; color: var(--muted);">Please add a customer address first before checking out.</div>
+                    <!-- Fulfillment Mode Toggle -->
+                    <div class="checkout-fulfillment-toggle" style="display: flex; gap: 8px; margin-bottom: 16px; background: var(--cream); padding: 4px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                        <button type="button" class="btn btn-sm checkout-fulfillment-btn active" id="fulfillmentDeliveryBtn" onclick="setCheckoutFulfillmentType('delivery')" style="flex: 1; border-radius: var(--radius-sm); font-weight: 600; padding: 8px 12px; border: none; background: white; color: var(--charcoal); box-shadow: 0 1px 3px rgba(0,0,0,0.08); transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i class="ri-truck-line"></i> Delivery
+                        </button>
+                        <button type="button" class="btn btn-sm checkout-fulfillment-btn" id="fulfillmentPickupBtn" onclick="if(!checkoutPickupAllowed){showToast('In-store pickup is not offered by this shop','error');return;}setCheckoutFulfillmentType('pickup')" style="flex: 1; border-radius: var(--radius-sm); font-weight: 600; padding: 8px 12px; border: none; background: transparent; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i class="ri-store-2-line"></i> Store Pickup
+                        </button>
                     </div>
-                    <div id="checkoutActiveOrderLimit" style="display:none; margin-bottom: 16px;"></div>
-                    <div id="checkoutDeliveryIssues" style="display:none; margin-bottom: 16px;"></div>
+
+                    <!-- Delivery Address Section -->
+                    <div id="checkoutAddressSection">
+                        <h4 style="font-size: 14px; margin-bottom: 12px; font-weight: 600;">Select Delivery Address</h4>
+                        <div id="checkoutAddressList" style="margin-bottom: 16px;"></div>
+                        <div id="checkoutAddressEmpty" style="display:none; padding: 12px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">No saved address yet</div>
+                            <div style="font-size: 13px; color: var(--muted);">Please add a customer address first before checking out for delivery.</div>
+                        </div>
+                        <div id="checkoutActiveOrderLimit" style="display:none; margin-bottom: 16px;"></div>
+                        <div id="checkoutDeliveryIssues" style="display:none; margin-bottom: 16px;"></div>
+                    </div>
+
+                    <!-- Store Pickup Section -->
+                    <div id="checkoutPickupSection" style="display: none; margin-bottom: 16px;">
+                        <div style="padding: 16px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-md);">
+                            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--charcoal); margin-bottom: 6px;">
+                                <i class="ri-store-2-line" style="font-size: 18px; color: var(--deep-rose);"></i>
+                                In-Store Pickup
+                            </div>
+                            <p style="font-size: 13px; color: var(--muted); margin: 0 0 10px; line-height: 1.5;">
+                                Collect your order directly at the florist shop. No delivery fee will be charged (₱0.00).
+                            </p>
+                            <div style="font-size: 12px; color: var(--charcoal); background: white; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                                <i class="ri-information-line" style="color: var(--deep-rose);"></i>
+                                Store address, contact details, and pickup schedule will be confirmed in the next steps.
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="checkout-delivery-card" style="margin-bottom: 0;">
-                        <h5 class="checkout-delivery-title">Special Notes (Optional)</h5>
+                        <h5 class="checkout-delivery-title" id="checkoutNotesTitle">Special Notes (Optional)</h5>
                         <textarea class="checkout-notes-input" id="deliveryNotes" rows="2" placeholder="Any special instructions for your order..."></textarea>
                     </div>
                 </div>
@@ -3717,6 +3747,79 @@ let checkoutModalCloseHandler = null;
 let isCreatingOrders = false;  // ADDED: Prevents duplicate order creation
 let buyNowMode = false;  // True when using Buy Now (skip cart)
 let buyNowItem = null;   // { product_id, variant_id, quantity, price, name, store_name, image_url, addons? }
+let checkoutFulfillmentType = 'delivery'; // 'delivery' or 'pickup'
+let checkoutPickupAllowed = true;
+
+function updateCheckoutFulfillmentOptions(allowPickup) {
+    checkoutPickupAllowed = (allowPickup !== false);
+    const pickupBtn = document.getElementById('fulfillmentPickupBtn');
+    if (!pickupBtn) return;
+
+    if (!checkoutPickupAllowed) {
+        pickupBtn.setAttribute('aria-disabled', 'true');
+        pickupBtn.style.opacity = '0.45';
+        pickupBtn.style.cursor = 'not-allowed';
+        pickupBtn.title = 'In-store pickup is not offered by this shop';
+        if (checkoutFulfillmentType === 'pickup') {
+            setCheckoutFulfillmentType('delivery');
+        }
+    } else {
+        pickupBtn.removeAttribute('aria-disabled');
+        pickupBtn.style.opacity = '';
+        pickupBtn.style.cursor = 'pointer';
+        pickupBtn.title = '';
+    }
+}
+
+function setCheckoutFulfillmentType(type) {
+    if (type === 'pickup' && !checkoutPickupAllowed) {
+        showToast('In-store pickup is not offered by this shop', 'error');
+        return;
+    }
+    checkoutFulfillmentType = type === 'pickup' ? 'pickup' : 'delivery';
+    const deliveryBtn = document.getElementById('fulfillmentDeliveryBtn');
+    const pickupBtn = document.getElementById('fulfillmentPickupBtn');
+    const addrSec = document.getElementById('checkoutAddressSection');
+    const pickupSec = document.getElementById('checkoutPickupSection');
+    const notesTitle = document.getElementById('checkoutNotesTitle');
+    const notesInput = document.getElementById('deliveryNotes');
+
+    if (checkoutFulfillmentType === 'pickup') {
+        if (deliveryBtn) {
+            deliveryBtn.style.background = 'transparent';
+            deliveryBtn.style.color = 'var(--muted)';
+            deliveryBtn.style.boxShadow = 'none';
+        }
+        if (pickupBtn) {
+            pickupBtn.style.background = 'white';
+            pickupBtn.style.color = 'var(--charcoal)';
+            pickupBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+        }
+        if (addrSec) addrSec.style.display = 'none';
+        if (pickupSec) pickupSec.style.display = 'block';
+        if (notesTitle) notesTitle.textContent = 'Special Notes / Pickup Instructions (Optional)';
+        if (notesInput) notesInput.placeholder = 'Any special instructions for store pickup...';
+        renderCheckoutDeliveryIssues([]);
+    } else {
+        if (pickupBtn) {
+            pickupBtn.style.background = 'transparent';
+            pickupBtn.style.color = 'var(--muted)';
+            pickupBtn.style.boxShadow = 'none';
+        }
+        if (deliveryBtn) {
+            deliveryBtn.style.background = 'white';
+            deliveryBtn.style.color = 'var(--charcoal)';
+            deliveryBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+        }
+        if (addrSec) addrSec.style.display = 'block';
+        if (pickupSec) pickupSec.style.display = 'none';
+        if (notesTitle) notesTitle.textContent = 'Special Notes (Optional)';
+        if (notesInput) notesInput.placeholder = 'Any special instructions for your order...';
+        if (selectedCheckoutAddressId && !isCheckoutAddressDeliverable(selectedCheckoutAddressId)) {
+            renderCheckoutDeliveryIssues(getCheckoutAddressDeliveryIssues(selectedCheckoutAddressId));
+        }
+    }
+}
 
 // ===== CHECKOUT SESSION MANAGEMENT =====
 function startCheckoutSession() {
@@ -3863,43 +3966,55 @@ function buildCheckoutEnabledDates(openDays, hasSchedule, today, maxDate) {
     return enabled;
 }
 
-function getFirstOpenCheckoutDate(scheduleOrOpenDays, preferredDateStr = null) {
+function getFirstOpenCheckoutDate(scheduleOrOpenDays, preferredDateStr = null, allowSameDay = true) {
     const { today, maxDate, todayStr } = getCheckoutDateLimitWindow();
 
     if (preferredDateStr) {
         const preferred = new Date(preferredDateStr + 'T00:00:00');
         preferred.setHours(0, 0, 0, 0);
         if (preferredDateStr >= todayStr && preferred >= today && preferred <= maxDate && isCheckoutStoreOpenOnDate(scheduleOrOpenDays, preferred)) {
-            return preferredDateStr;
+            if (allowSameDay || preferredDateStr !== todayStr) {
+                return preferredDateStr;
+            }
         }
     }
 
-    for (let i = 0; i <= 14; i++) {
+    const startOffset = allowSameDay ? 0 : 1;
+    for (let i = startOffset; i <= 14; i++) {
         const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
         if (d <= maxDate && isCheckoutStoreOpenOnDate(scheduleOrOpenDays, d)) {
             return formatDateISOLocal(d);
         }
     }
-    return todayStr;
+    return allowSameDay ? todayStr : formatDateISOLocal(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
 }
 
 async function fetchStoreOpenDays(storeId, scheduleHint = null) {
+    let hintAllowSameDay = true;
+    if (scheduleHint && scheduleHint.allow_same_day !== undefined) {
+        hintAllowSameDay = Boolean(scheduleHint.allow_same_day);
+    }
     const fromOrder = extractOpenDaysFromSchedule(scheduleHint);
     if (fromOrder.length) {
-        return { openDays: fromOrder, hasSchedule: true };
+        return { openDays: fromOrder, hasSchedule: true, allowSameDay: hintAllowSameDay };
     }
 
+    let allowSameDay = hintAllowSameDay;
     try {
         const resp = await fetch('/api/store/' + storeId + '/time-slots?date=' + getPhilippineTodayStr());
         const data = await resp.json();
+        if (data && data.allow_same_day !== undefined) {
+            allowSameDay = Boolean(data.allow_same_day);
+        }
         if (data && data.success && Array.isArray(data.open_days) && data.open_days.length) {
             return {
                 openDays: data.open_days.map(d => String(d).toLowerCase()),
                 hasSchedule: true,
+                allowSameDay: allowSameDay
             };
         }
         if (data && data.success && data.has_schedule === false) {
-            return { openDays: [], hasSchedule: false };
+            return { openDays: [], hasSchedule: false, allowSameDay: allowSameDay };
         }
     } catch (e) {
         console.warn('Could not fetch store open days summary:', e);
@@ -3961,12 +4076,14 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
     const fetched = await fetchStoreOpenDays(order.store_id, order.store_schedule || null);
     const openDays = fetched.openDays;
     const hasSchedule = fetched.hasSchedule;
+    const allowSameDay = fetched.allowSameDay !== false;
     order._openDays = openDays;
     order._hasSchedule = hasSchedule;
+    order._allowSameDay = allowSameDay;
 
     const scheduleKey = hasSchedule ? openDays : (order.store_schedule || openDays);
     const { today, maxDate, todayStr } = getCheckoutDateLimitWindow();
-    const resolvedDate = getFirstOpenCheckoutDate(scheduleKey, initialDateStr) || todayStr;
+    const resolvedDate = getFirstOpenCheckoutDate(scheduleKey, initialDateStr, allowSameDay) || (allowSameDay ? todayStr : getFirstOpenCheckoutDate(scheduleKey, null, false));
     const enabledDates = buildCheckoutEnabledDates(openDays, hasSchedule, today, maxDate);
 
     // Synchronize input value immediately to prevent stale past dates from sticking
@@ -3975,6 +4092,7 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
     console.log('Checkout calendar open days:', {
         storeId: order.store_id,
         hasSchedule: hasSchedule,
+        allowSameDay: allowSameDay,
         openDays: openDays,
         enabledCount: enabledDates.length,
         resolvedDate: resolvedDate,
@@ -4001,9 +4119,19 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
                 e.target.value = resolvedDate;
                 return;
             }
+            if (!allowSameDay && dateStr === todayStr) {
+                showToast('Same-day delivery is not offered by this store. Please pick another date.', 'error');
+                const fallback = getFirstOpenCheckoutDate(openDays, null, false);
+                if (fallback) {
+                    e.target.value = fallback;
+                    setStoreDeliveryPreference(order.temp_id, fallback, '');
+                    fetchCheckoutTimeSlots(order.store_id, order.temp_id, fallback);
+                }
+                return;
+            }
             if (hasSchedule && !isCheckoutStoreOpenOnDate(openDays, picked)) {
                 showToast('Store is closed on this day. Please pick another date.', 'error');
-                const fallback = getFirstOpenCheckoutDate(openDays) || todayStr;
+                const fallback = getFirstOpenCheckoutDate(openDays, null, allowSameDay) || todayStr;
                 if (fallback) {
                     e.target.value = fallback;
                     setStoreDeliveryPreference(order.temp_id, fallback, '');
@@ -4036,6 +4164,8 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
                 const dStr = formatDateISOLocal(date);
                 // Always lock past dates (strictly before today)
                 if (dStr < todayStr) return true;
+                // Lock today if store disables same day delivery
+                if (!allowSameDay && dStr === todayStr) return true;
                 // Always lock dates beyond 14-day window
                 if (date > maxDate) return true;
                 // Lock days when store is closed
@@ -4078,9 +4208,11 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
             const cellDate = dayElem.dateObj;
             const cellStr = cellDate ? formatDateISOLocal(cellDate) : '';
             const isPast = cellStr && cellStr < todayStr;
+            const isSameDayLocked = !allowSameDay && cellStr === todayStr;
             const isBeyond = cellDate && cellDate > maxDate;
             const isClosed = cellDate && hasSchedule && openDays.length > 0 && !isCheckoutStoreOpenOnDate(openDays, cellDate);
             const isDisabled = isPast
+                || isSameDayLocked
                 || isBeyond
                 || isClosed
                 || dayElem.classList.contains('flatpickr-disabled')
@@ -4088,7 +4220,7 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
 
             if (isDisabled) {
                 dayElem.classList.add('flatpickr-disabled', 'checkout-day-closed');
-                dayElem.title = isPast ? 'Past date (locked)' : (isClosed ? 'Store closed on this day' : 'Unavailable');
+                dayElem.title = isPast ? 'Past date (locked)' : (isSameDayLocked ? 'Same-day delivery is not offered by this store' : (isClosed ? 'Store closed on this day' : 'Unavailable'));
                 dayElem.setAttribute('aria-disabled', 'true');
                 dayElem.style.setProperty('color', '#a89a90', 'important');
                 dayElem.style.setProperty('background', '#e8e0d8', 'important');
@@ -4104,7 +4236,17 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
             picked.setHours(0, 0, 0, 0);
             if (dateStr < todayStr) {
                 showToast('Past dates cannot be selected.', 'error');
-                const fallback = getFirstOpenCheckoutDate(scheduleKey) || todayStr;
+                const fallback = getFirstOpenCheckoutDate(scheduleKey, null, allowSameDay) || todayStr;
+                if (fallback && input._flatpickr) {
+                    input._flatpickr.setDate(fallback, false);
+                    setStoreDeliveryPreference(order.temp_id, fallback, '');
+                    fetchCheckoutTimeSlots(order.store_id, order.temp_id, fallback);
+                }
+                return;
+            }
+            if (!allowSameDay && dateStr === todayStr) {
+                showToast('Same-day delivery is not offered by this store. Please pick another date.', 'error');
+                const fallback = getFirstOpenCheckoutDate(scheduleKey, null, false);
                 if (fallback && input._flatpickr) {
                     input._flatpickr.setDate(fallback, false);
                     setStoreDeliveryPreference(order.temp_id, fallback, '');
@@ -4114,7 +4256,7 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
             }
             if (hasSchedule && openDays.length && !isCheckoutStoreOpenOnDate(openDays, picked)) {
                 showToast('Store is closed on this day. Please pick another date.', 'error');
-                const fallback = getFirstOpenCheckoutDate(scheduleKey) || todayStr;
+                const fallback = getFirstOpenCheckoutDate(scheduleKey, null, allowSameDay) || todayStr;
                 if (fallback && input._flatpickr) {
                     input._flatpickr.setDate(fallback, false);
                     setStoreDeliveryPreference(order.temp_id, fallback, '');
@@ -4281,6 +4423,7 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
             const reason = data.block_reason || null;
             const reasonMessage = (code) => {
                 if (code === 'no_schedule') return '<i class="ri-alert-line"></i> This store has not set delivery hours yet.';
+                if (code === 'same_day_disabled') return '<i class="ri-time-line"></i> Same-day delivery is not offered by this store. Please choose tomorrow or a later date.';
                 if (code === 'order_cutoff') return '<i class="ri-time-line"></i> Same-day ordering is closed. Please choose another open day.';
                 if (code === 'lead_time') return '<i class="ri-time-line"></i> Remaining slots are inside the prep window. Please choose a later slot or another date.';
                 if (code === 'slots_passed') return '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another open day.';
@@ -4461,18 +4604,29 @@ function getProofState(tempId) {
 function getOrderPaymentMethod(order) {
     if (!order || !order.temp_id) return 'gcash';
     const selected = selectedPaymentMethods[order.temp_id];
+    const isPickup = order.fulfillment_type === 'pickup' || checkoutFulfillmentType === 'pickup';
     const gcashEnabled = order.allow_gcash !== false;
-    const codEnabled = order.allow_cod === true;
-    if (selected === 'cod' && codEnabled) return 'cod';
-    if (selected === 'gcash' && gcashEnabled) return 'gcash';
-    if (gcashEnabled) return 'gcash';
-    if (codEnabled) return 'cod';
-    return 'gcash';
+
+    if (isPickup) {
+        const copEnabled = order.allow_cop === true;
+        if (selected === 'cop' && copEnabled) return 'cop';
+        if (selected === 'gcash' && gcashEnabled) return 'gcash';
+        if (copEnabled) return 'cop';
+        if (gcashEnabled) return 'gcash';
+        return 'gcash';
+    } else {
+        const codEnabled = order.allow_cod === true;
+        if (selected === 'cod' && codEnabled) return 'cod';
+        if (selected === 'gcash' && gcashEnabled) return 'gcash';
+        if (gcashEnabled) return 'gcash';
+        if (codEnabled) return 'cod';
+        return 'gcash';
+    }
 }
 
 function setOrderPaymentMethod(tempId, method) {
     if (!tempId) return;
-    selectedPaymentMethods[tempId] = (method === 'cod') ? 'cod' : 'gcash';
+    selectedPaymentMethods[tempId] = (method === 'cod' || method === 'cop') ? method : 'gcash';
 }
 
 function updateCheckoutPaymentAction() {
@@ -4481,7 +4635,7 @@ function updateCheckoutPaymentAction() {
     if (!nextBtn || !order) return;
 
     const paymentMethod = getOrderPaymentMethod(order);
-    if (paymentMethod === 'cod') {
+    if (paymentMethod === 'cod' || paymentMethod === 'cop') {
         nextBtn.textContent = currentOrderIndex < checkoutOrders.length - 1 ? 'Next Order' : 'Complete';
         nextBtn.disabled = false;
         return;
@@ -4743,6 +4897,7 @@ function loadCart() {
                         stock_quantity: Number.isFinite(stockQty) ? stockQty : null,
                         cart_item_id: item.id || item.cart_item_id,
                         is_selected: item.is_selected !== false,
+                        allow_pickup: item.allow_pickup !== false && (item.product ? item.product.allow_pickup !== false : true),
                         addons: Array.isArray(item.addons) ? item.addons : [],
                         addons_total: parseFloat(item.addons_total || 0) || 0
                     };
@@ -5741,22 +5896,9 @@ async function buyNowDirect(item) {
     buyNowItem = item;
 
     try {
-        const addresses = await fetchCheckoutAddresses();
-        if (!addresses.length) {
-            showToast('Please add a delivery address before checkout');
-            setTimeout(() => {
-                window.location.href = "{{ url_for('templates.my_account') }}?page=profile";
-            }, 900);
-            buyNowMode = false;
-            buyNowItem = null;
-            return;
-        }
+        await fetchCheckoutAddresses();
     } catch (error) {
         console.error('Buy now address precheck error:', error);
-        showToast('Could not verify your saved addresses right now');
-        buyNowMode = false;
-        buyNowItem = null;
-        return;
     }
 
     const activeOrdersOk = await ensureCheckoutActiveOrderAllowed();
@@ -5796,6 +5938,8 @@ async function buyNowDirect(item) {
     document.getElementById('checkoutBackBtn').style.display = 'none';
     document.getElementById('checkoutNextBtn').textContent = '→ Continue';
     document.getElementById('checkoutNextBtn').disabled = false;
+    updateCheckoutFulfillmentOptions(item && item.allow_pickup !== false);
+    setCheckoutFulfillmentType('delivery');
     showCheckoutModal();
 
     if (checkoutModalCloseHandler) {
@@ -5839,13 +5983,10 @@ async function checkout() {
     });
 
     try {
-        const addresses = await fetchCheckoutAddresses();
-        if (!addresses.length) {
-            showToast('Please add a delivery address before checkout');
-            setTimeout(() => {
-                window.location.href = "{{ url_for('templates.my_account') }}?page=profile";
-            }, 900);
-            return;
+        try {
+            await fetchCheckoutAddresses();
+        } catch (err) {
+            console.warn('Checkout address precheck warning:', err);
         }
 
         const activeOrdersOk = await ensureCheckoutActiveOrderAllowed();
@@ -5891,6 +6032,9 @@ async function checkout() {
         // Phase 1: Initialize per-store delivery preferences
         storeDeliveryPreferences = {};
         
+        const allowPickup = selectedItems.every(item => item.allow_pickup !== false);
+        updateCheckoutFulfillmentOptions(allowPickup);
+        setCheckoutFulfillmentType('delivery');
         showCheckoutModal();
         
         if (checkoutModalCloseHandler) {
@@ -6059,6 +6203,10 @@ async function probeCheckoutAddressDelivery(addressId) {
         }
 
         const result = await response.json();
+        if (result.orders && Array.isArray(result.orders) && result.orders.length > 0) {
+            const canPickup = result.orders.every(o => o.allow_pickup !== false);
+            updateCheckoutFulfillmentOptions(canPickup);
+        }
         if (result.success) {
             return { canDeliver: true, issues: [] };
         }
@@ -6237,21 +6385,23 @@ function renderCheckoutDeliveryIssues(issues) {
 
 async function proceedCheckout() {
     if (checkoutStep === 1) {
-        if (!selectedCheckoutAddressId) {
-            showToast('Select a deliverable address');
-            return;
-        }
-        if (!isCheckoutAddressDeliverable(selectedCheckoutAddressId)) {
-            showDeliveryUnavailableModal({
-                reason: 'Outside delivery area',
-                tip: 'Choose a different saved address that falls within this shop’s delivery coverage.',
-            });
-            selectedCheckoutAddressId = pickDeliverableCheckoutAddress();
-            renderCheckoutAddresses();
-            renderCheckoutDeliveryIssues(getCheckoutAddressDeliveryIssues(
-                checkoutAddresses.find(address => !isCheckoutAddressDeliverable(address.id))?.id
-            ));
-            return;
+        if (checkoutFulfillmentType === 'delivery') {
+            if (!selectedCheckoutAddressId) {
+                showToast('Select a deliverable address');
+                return;
+            }
+            if (!isCheckoutAddressDeliverable(selectedCheckoutAddressId)) {
+                showDeliveryUnavailableModal({
+                    reason: 'Outside delivery area',
+                    tip: 'Choose a different saved address that falls within this shop’s delivery coverage.',
+                });
+                selectedCheckoutAddressId = pickDeliverableCheckoutAddress();
+                renderCheckoutAddresses();
+                renderCheckoutDeliveryIssues(getCheckoutAddressDeliveryIssues(
+                    checkoutAddresses.find(address => !isCheckoutAddressDeliverable(address.id))?.id
+                ));
+                return;
+            }
         }
 
         try {
@@ -6264,7 +6414,8 @@ async function proceedCheckout() {
                     product_id: buyNowItem.product_id,
                     variant_id: buyNowItem.variant_id || null,
                     quantity: buyNowItem.quantity || 1,
-                    delivery_address_id: selectedCheckoutAddressId,
+                    delivery_address_id: checkoutFulfillmentType === 'delivery' ? selectedCheckoutAddressId : (selectedCheckoutAddressId || null),
+                    fulfillment_type: checkoutFulfillmentType,
                     addons: Array.isArray(buyNowItem.addons) ? buyNowItem.addons : [],
                     addon_option_ids: Array.isArray(buyNowItem.addon_option_ids) ? buyNowItem.addon_option_ids : [],
                 };
@@ -6293,7 +6444,8 @@ async function proceedCheckout() {
                         'Authorization': 'Bearer ' + (await getAuthToken())
                     },
                     body: JSON.stringify({
-                        delivery_address_id: selectedCheckoutAddressId,
+                        delivery_address_id: checkoutFulfillmentType === 'delivery' ? selectedCheckoutAddressId : (selectedCheckoutAddressId || null),
+                        fulfillment_type: checkoutFulfillmentType,
                         delivery_notes: document.getElementById('deliveryNotes').value,
                         items: selectedItems.map(item => ({
                             item_id: item.cart_item_id,
@@ -6308,11 +6460,13 @@ async function proceedCheckout() {
             
             if (result.success && result.orders) {
                 checkoutOrders = result.orders;
+                const canPickup = checkoutOrders.every(o => o.allow_pickup !== false);
+                updateCheckoutFulfillmentOptions(canPickup);
                 uploadedProofs = {};
                 uploadedProofData = {};
                 selectedPaymentMethods = {};
                 checkoutOrders.forEach(order => {
-                    selectedPaymentMethods[order.temp_id] = 'gcash';
+                    selectedPaymentMethods[order.temp_id] = getOrderPaymentMethod(order);
                 });
                 displayOrderSummary();
                 
@@ -6485,7 +6639,7 @@ async function createOrders() {
         const addressId = selectedCheckoutAddressId;
         const deliveryNotes = document.getElementById('deliveryNotes').value;
         
-        if (!addressId) {
+        if (checkoutFulfillmentType === 'delivery' && !addressId) {
             showToast('Error: No delivery address selected', 'error');
             nextBtn.disabled = false;
             nextBtn.textContent = originalText;
@@ -6495,13 +6649,15 @@ async function createOrders() {
         
         // Phase 1: Collect per-store delivery preferences
         const ordersPayload = {
-            address_id: addressId,
+            address_id: addressId || null,
+            fulfillment_type: checkoutFulfillmentType,
             delivery_notes: deliveryNotes,
             orders: checkoutOrders.map(order => ({
                 temp_id: order.temp_id,
                 store_id: order.store_id,
                 store_name: order.store_name,
                 payment_method: getOrderPaymentMethod(order),
+                fulfillment_type: order.fulfillment_type || checkoutFulfillmentType,
                 subtotal: order.subtotal,
                 delivery_fee: order.delivery_fee,
                 distance_km: order.distance_km,
@@ -6536,7 +6692,8 @@ async function createOrders() {
                 product_id: buyNowItem.product_id,
                 variant_id: buyNowItem.variant_id || null,
                 quantity: buyNowItem.quantity || 1,
-                address_id: addressId,
+                address_id: addressId || null,
+                fulfillment_type: checkoutFulfillmentType,
                 delivery_notes: deliveryNotes,
                 payment_method: getOrderPaymentMethod(order),
                 requested_delivery_date: getStoreDeliveryDate(order.temp_id),
@@ -6750,13 +6907,17 @@ function displayOrderSummary() {
                         ${itemRows || '<li style="color:var(--muted);">No items found</li>'}
                     </ul>
                     <div class="checkout-review-meta">
-                        ${order.free_delivery_applied
-                            ? `<span>Delivery fee: <strong style="color:#27AE60;">FREE</strong><span style="display:block;font-size:12px;font-weight:500;color:#27AE60;margin-top:2px;">Your order qualifies for free delivery.</span></span>`
-                            : order.free_delivery_enabled && Number(order.amount_to_free_delivery || 0) > 0
-                                ? `<span>Delivery fee: <strong>₱${Number(order.delivery_fee || 0).toFixed(2)}</strong><span style="display:block;font-size:12px;font-weight:500;color:#9A5B00;margin-top:2px;">Add ₱${Number(order.amount_to_free_delivery).toFixed(2)} more to get free delivery (min ₱${Number(order.free_delivery_minimum || 0).toFixed(2)}).</span></span>`
-                                : `<span>Delivery fee: <strong>₱${Number(order.delivery_fee || 0).toFixed(2)}</strong></span>`
+                        ${order.fulfillment_type === 'pickup'
+                            ? `<span>Fulfillment: <strong style="color:var(--deep-rose);"><i class="ri-store-2-line"></i> Store Pickup</strong></span>
+                               <span>Pickup fee: <strong style="color:#27AE60;">FREE (₱0.00)</strong></span>
+                               ${order.store_address ? `<span>Pickup Location: <strong>${escHtml(order.store_address)}</strong></span>` : ''}`
+                            : (order.free_delivery_applied
+                                ? `<span>Delivery fee: <strong style="color:#27AE60;">FREE</strong><span style="display:block;font-size:12px;font-weight:500;color:#27AE60;margin-top:2px;">Your order qualifies for free delivery.</span></span>`
+                                : order.free_delivery_enabled && Number(order.amount_to_free_delivery || 0) > 0
+                                    ? `<span>Delivery fee: <strong>₱${Number(order.delivery_fee || 0).toFixed(2)}</strong><span style="display:block;font-size:12px;font-weight:500;color:#9A5B00;margin-top:2px;">Add ₱${Number(order.amount_to_free_delivery).toFixed(2)} more to get free delivery (min ₱${Number(order.free_delivery_minimum || 0).toFixed(2)}).</span></span>`
+                                    : `<span>Delivery fee: <strong>₱${Number(order.delivery_fee || 0).toFixed(2)}</strong></span>`) +
+                              `<span>Distance: <strong>${Number(order.distance_km || 0).toFixed(2)} km</strong></span>`
                         }
-                        <span>Distance: <strong>${Number(order.distance_km || 0).toFixed(2)} km</strong></span>
                     </div>
                 </div>
             `;
@@ -6867,19 +7028,32 @@ async function displayGCashPayment() {
             </ul>
         </div>
 
-        <!-- Phase 1: Per-store delivery date/time picker -->
+        <!-- Pickup Location Card (if pickup) -->
+        ${order.fulfillment_type === 'pickup' ? `
+        <div class="checkout-delivery-card" style="background:rgba(212,120,138,0.06); border-color:rgba(212,120,138,0.3);">
+            <div style="font-weight:600; font-size:13px; color:var(--deep-rose); margin-bottom:4px;">
+                <i class="ri-store-2-line"></i> In-Store Pickup Details
+            </div>
+            <div style="font-size:13px; color:var(--charcoal); line-height: 1.5;">
+                <strong>Store:</strong> ${escHtml(order.store_name || 'Store')}<br>
+                ${order.store_address ? `<strong>Address:</strong> ${escHtml(order.store_address)}<br>` : ''}
+                ${order.store_phone ? `<strong>Contact:</strong> ${escHtml(order.store_phone)}` : ''}
+            </div>
+        </div>` : ''}
+
+        <!-- Phase 1: Per-store delivery/pickup date/time picker -->
         <div class="checkout-delivery-card">
-            <h5 class="checkout-delivery-title">Requested Delivery</h5>
+            <h5 class="checkout-delivery-title">${order.fulfillment_type === 'pickup' ? '<i class="ri-store-2-line"></i> Preferred Pickup Schedule' : 'Requested Delivery'}</h5>
             <div id="storeClosedMsg_${order.temp_id}" style="display: none; padding: 10px; background: rgba(192,57,43,0.08); border: 1px solid rgba(192,57,43,0.2); border-radius: var(--radius-md); margin-bottom: 10px; color: #c0392b; font-size: 12px; font-weight: 600;">
                 <i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.
             </div>
             <div class="checkout-delivery-grid">
                 <div>
-                    <label class="checkout-delivery-label">Date</label>
+                    <label class="checkout-delivery-label">${order.fulfillment_type === 'pickup' ? 'Pickup Date' : 'Date'}</label>
                     <input type="text" id="storeDeliveryDate_${order.temp_id}" value="${deliveryDate}" class="checkout-delivery-input" placeholder="Select date" required readonly>
                 </div>
                 <div>
-                    <label class="checkout-delivery-label">Time Slot</label>
+                    <label class="checkout-delivery-label">${order.fulfillment_type === 'pickup' ? 'Pickup Time Slot' : 'Time Slot'}</label>
                     <select id="storeDeliveryTime_${order.temp_id}" class="checkout-delivery-input" required>
                         <option value="">Loading...</option>
                     </select>
@@ -6891,11 +7065,29 @@ async function displayGCashPayment() {
         </div>
     `;
 
+    const isPickup = order.fulfillment_type === 'pickup';
     const gcashEnabled = order.allow_gcash !== false;
-    const codEnabled = order.allow_cod === true;
-    const paymentSelector = `
-        <div class="checkout-payment-card">
-            <h5 class="checkout-delivery-title">Payment Method</h5>
+    const codEnabled = !isPickup && order.allow_cod === true;
+    const copEnabled = isPickup && order.allow_cop === true;
+
+    let paymentMethodsHtml = '';
+    if (isPickup) {
+        paymentMethodsHtml = `
+            <div class="checkout-payment-methods">
+                <label class="checkout-payment-method-option" style="cursor:${gcashEnabled ? 'pointer' : 'not-allowed'}; opacity:${gcashEnabled ? '1' : '.55'}; background:${paymentMethod === 'gcash' ? 'rgba(212,120,138,.12)' : '#fff'};">
+                    <input type="radio" name="checkoutPaymentMethod_${order.temp_id}" value="gcash" ${paymentMethod === 'gcash' ? 'checked' : ''} ${gcashEnabled ? '' : 'disabled'} onchange="onCheckoutPaymentMethodChange('${order.temp_id}', this.value)" />
+                    <span style="font-size:13px;">GCash</span>
+                </label>
+                <label class="checkout-payment-method-option" style="cursor:${copEnabled ? 'pointer' : 'not-allowed'}; opacity:${copEnabled ? '1' : '.55'}; background:${paymentMethod === 'cop' ? 'rgba(212,120,138,.12)' : '#fff'};">
+                    <input type="radio" name="checkoutPaymentMethod_${order.temp_id}" value="cop" ${paymentMethod === 'cop' ? 'checked' : ''} ${copEnabled ? '' : 'disabled'} onchange="onCheckoutPaymentMethodChange('${order.temp_id}', this.value)" />
+                    <span style="font-size:13px;">Cash on Pickup</span>
+                </label>
+            </div>
+            ${gcashEnabled ? '' : '<div style="font-size:12px; color:var(--muted); margin-top:8px;">GCash is currently disabled by this store.</div>'}
+            ${copEnabled ? '' : '<div style="font-size:12px; color:var(--muted); margin-top:8px;"><i class="ri-information-line"></i> Cash on Pickup is disabled for this store. Please pay in advance via GCash.</div>'}
+        `;
+    } else {
+        paymentMethodsHtml = `
             <div class="checkout-payment-methods">
                 <label class="checkout-payment-method-option" style="cursor:${gcashEnabled ? 'pointer' : 'not-allowed'}; opacity:${gcashEnabled ? '1' : '.55'}; background:${paymentMethod === 'gcash' ? 'rgba(212,120,138,.12)' : '#fff'};">
                     <input type="radio" name="checkoutPaymentMethod_${order.temp_id}" value="gcash" ${paymentMethod === 'gcash' ? 'checked' : ''} ${gcashEnabled ? '' : 'disabled'} onchange="onCheckoutPaymentMethodChange('${order.temp_id}', this.value)" />
@@ -6908,6 +7100,13 @@ async function displayGCashPayment() {
             </div>
             ${gcashEnabled ? '' : '<div style="font-size:12px; color:var(--muted); margin-top:8px;">GCash is currently disabled by this store.</div>'}
             ${codEnabled ? '' : '<div style="font-size:12px; color:var(--muted); margin-top:8px;">Cash on Delivery is currently disabled by this store.</div>'}
+        `;
+    }
+
+    const paymentSelector = `
+        <div class="checkout-payment-card">
+            <h5 class="checkout-delivery-title">Payment Method</h5>
+            ${paymentMethodsHtml}
         </div>`;
     html += paymentSelector;
 
@@ -6957,6 +7156,13 @@ async function displayGCashPayment() {
             <div id="uploadStatus_${order.temp_id}" class="checkout-proof-status">
                 ${proofState.hasUploaded ? '<span style="color: var(--sage);">Receipt uploaded</span>' : proofState.hasPending ? '<span style="color: var(--muted);">Image selected. Use the button below to upload.</span>' : ''}
             </div>
+        </div>
+    `;
+    } else if (paymentMethod === 'cop') {
+    html += `
+        <div class="checkout-payment-card">
+            <div style="font-weight:600; margin-bottom:4px; color:var(--charcoal);"><i class="ri-store-2-line"></i> Cash on Pickup selected</div>
+            <div style="font-size:12px; color:var(--muted);">No payment receipt required. Please pay when claiming your order at the store.</div>
         </div>
     `;
     } else {

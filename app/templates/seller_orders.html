@@ -511,8 +511,8 @@
 
     .payment-pending { background: rgba(148, 163, 184, 0.14); color: #475569; }
     .payment-pending_verification { background: rgba(245, 158, 11, 0.14); color: #9a6700; }
-    .payment-cod_pending { background: rgba(59, 130, 246, 0.14); color: #1d4ed8; }
-    .payment-cod_approved { background: rgba(16, 185, 129, 0.14); color: #047857; }
+    .payment-cod_pending, .payment-cop_pending { background: rgba(59, 130, 246, 0.14); color: #1d4ed8; }
+    .payment-cod_approved, .payment-cop_approved { background: rgba(16, 185, 129, 0.14); color: #047857; }
     .payment-verified { background: rgba(16, 185, 129, 0.14); color: #047857; }
 
     .orders-table select {
@@ -1215,6 +1215,7 @@
                         data-status="{{ order.status }}"
                         data-payment-status="{{ order.payment_status }}"
                         data-payment-method="{{ (order.payment_method or '')|lower }}"
+                        data-fulfillment-type="{{ (order.fulfillment_type or 'delivery')|lower }}"
                         data-order-date="{{ order.date_formatted }}"
                         data-is-today="{{ 'true' if order.date_formatted == today_str else 'false' }}"
                         data-total-amount="{{ order.display_total if order.display_total is defined else (order.total_amount or 0) }}"
@@ -1243,6 +1244,9 @@
                                 {% if order.order_type == 'custom_chat' or order.custom_ticket_id %}
                                 <span class="badge" style="background:#b5445a;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;">CUSTOM</span>
                                 {% endif %}
+                                {% if (order.fulfillment_type or '')|lower == 'pickup' %}
+                                <span class="badge" style="background:#6a4a9a;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;"><i class="ri-store-2-line"></i> PICKUP</span>
+                                {% endif %}
                             </div>
                             <div class="order-subline">{{ order.datetime_formatted or order.created_at }}</div>
                         </td>
@@ -1257,9 +1261,9 @@
                                 {% set pay_status_label = 'Verified' %}
                             {% elif pay_status == 'pending_verification' %}
                                 {% set pay_status_label = 'Pending' %}
-                            {% elif pay_status == 'cod_pending' %}
+                            {% elif pay_status == 'cod_pending' or pay_status == 'cop_pending' %}
                                 {% set pay_status_label = 'Pending' %}
-                            {% elif pay_status == 'cod_approved' %}
+                            {% elif pay_status == 'cod_approved' or pay_status == 'cop_approved' %}
                                 {% set pay_status_label = 'Approved' %}
                             {% else %}
                                 {% set pay_status_label = pay_status.replace('_', ' ')|title %}
@@ -1270,7 +1274,13 @@
                         </td>
                         <td data-label="Status">
                             <span class="status-pill status-{{ order.status }}">
-                                {{ order.status.replace('_', ' ')|title }}
+                                {% if (order.fulfillment_type or '')|lower == 'pickup' and order.status == 'done_preparing' %}
+                                    Ready for Pickup
+                                {% elif (order.fulfillment_type or '')|lower == 'pickup' and order.status == 'completed' %}
+                                    Picked Up
+                                {% else %}
+                                    {{ order.status.replace('_', ' ')|title }}
+                                {% endif %}
                             </span>
                         </td>
                         <td data-label="Summary">
@@ -1331,25 +1341,33 @@
                                     <span class="btn-label">Done</span>
                                 </button>
                                 {% endif %}
-                                {% if order.payment_method == 'cod' and order.status in ['pending', 'accepted'] %}
+                                {% if order.status == 'done_preparing' and (order.fulfillment_type or '')|lower == 'pickup' %}
+                                <button type="button" class="orders-action-btn success seller-complete-pickup" data-order-id="{{ order.id }}" title="Mark as Picked Up" aria-label="Mark as Picked Up">
+                                    <i class="ri-checkbox-circle-line"></i>
+                                    <span class="btn-label">Picked Up</span>
+                                </button>
+                                {% endif %}
+                                {% if (order.payment_method or '')|lower in ['cod', 'cop'] and order.status in ['pending', 'accepted'] %}
                                 <button type="button"
                                         class="orders-action-btn success seller-approve-cod"
                                         data-order-id="{{ order.id }}"
-                                        title="Approve COD"
-                                        aria-label="Approve cash on delivery">
+                                        data-pay-method="{{ (order.payment_method or '')|lower }}"
+                                        title="Approve {{ order.payment_method|upper }}"
+                                        aria-label="Approve {{ order.payment_method|upper }}">
                                     <i class="ri-check-double-line"></i>
-                                    <span class="btn-label">Approve COD</span>
+                                    <span class="btn-label">Approve {{ order.payment_method|upper }}</span>
                                 </button>
                                 {% endif %}
-                                {% if order.payment_method == 'cod' and order.status in ['pending', 'accepted', 'preparing'] %}
+                                {% if (order.payment_method or '')|lower in ['cod', 'cop'] and order.status in ['pending', 'accepted', 'preparing'] %}
                                 <button type="button"
                                         class="orders-action-btn danger seller-cancel-cod"
                                         data-order-id="{{ order.id }}"
-                                        title="Cancel COD Order"
-                                        aria-label="Cancel COD Order"
+                                        data-pay-method="{{ (order.payment_method or '')|lower }}"
+                                        title="Cancel {{ order.payment_method|upper }} Order"
+                                        aria-label="Cancel {{ order.payment_method|upper }} Order"
                                         style="background:rgba(220,53,69,0.1);color:#dc3545;border-color:rgba(220,53,69,0.3);">
                                     <i class="ri-close-circle-line"></i>
-                                    <span class="btn-label">Cancel COD</span>
+                                    <span class="btn-label">Cancel {{ order.payment_method|upper }}</span>
                                 </button>
                                 {% endif %}
                             </div>
@@ -1510,6 +1528,7 @@
         const statusKey = String(status || '').toLowerCase();
         const methodLabel = methodKey === 'gcash' ? 'GCash'
             : methodKey === 'cod' ? 'COD'
+            : methodKey === 'cop' ? 'COP'
             : titleCaseStatus(method);
         const statusLabel = {
             verified: 'Verified',
@@ -1517,6 +1536,8 @@
             pending: 'Pending',
             cod_pending: 'Pending',
             cod_approved: 'Approved',
+            cop_pending: 'Pending',
+            cop_approved: 'Approved',
         }[statusKey] || titleCaseStatus(status);
         return [statusLabel, methodLabel].filter(Boolean).join(' ').trim() || '—';
     }
@@ -1790,7 +1811,11 @@
         const isCustomOrder = (order.order_type === 'custom_chat') || !!order.custom_ticket_id;
         const needsReview = payStatus === 'pending_verification' || (isCustomOrder && payStatus === 'paid');
         const proofUrl = order.payment_proof_url || '';
-        const canApproveCod = payMethod === 'cod' && (status === 'pending' || status === 'accepted');
+        const fulfillmentType = String(order.fulfillment_type || 'delivery').toLowerCase();
+        const isPickup = fulfillmentType === 'pickup';
+        const isPayOnFulfillment = payMethod === 'cod' || payMethod === 'cop';
+        const payLabel = payMethod === 'cop' ? 'COP' : 'COD';
+        const canApprovePayLater = isPayOnFulfillment && (status === 'pending' || status === 'accepted');
         const checkbox = status === 'preparing'
             ? `<input type="checkbox" class="order-checkbox batch-order-checkbox" data-order-id="${id}" value="${id}"${selectedOrderIds.has(Number(id)) ? ' checked' : ''}>`
             : '';
@@ -1818,23 +1843,31 @@
                </button>`
             : '';
 
-        const approveBtn = canApproveCod
-            ? `<button type="button" class="orders-action-btn success seller-approve-cod" data-order-id="${id}" title="Approve COD" aria-label="Approve cash on delivery">
-                    <i class="ri-check-double-line"></i><span class="btn-label">Approve COD</span>
+        const pickupDoneBtn = (status === 'done_preparing' && isPickup)
+            ? `<button type="button" class="orders-action-btn success seller-complete-pickup" data-order-id="${id}" title="Mark as Picked Up" aria-label="Mark as Picked Up">
+                    <i class="ri-checkbox-circle-line"></i><span class="btn-label">Picked Up</span>
                </button>`
             : '';
-        const canCancelCod = payMethod === 'cod' && (status === 'pending' || status === 'accepted' || status === 'preparing');
-        const cancelCodBtn = canCancelCod
-            ? `<button type="button" class="orders-action-btn danger seller-cancel-cod" data-order-id="${id}" title="Cancel COD Order" aria-label="Cancel COD Order" style="background:rgba(220,53,69,0.1);color:#dc3545;border-color:rgba(220,53,69,0.3);">
-                    <i class="ri-close-circle-line"></i><span class="btn-label">Cancel COD</span>
+
+        const approveBtn = canApprovePayLater
+            ? `<button type="button" class="orders-action-btn success seller-approve-cod" data-order-id="${id}" data-pay-method="${escapeAttr(payMethod)}" title="Approve ${payLabel}" aria-label="Approve ${payLabel}">
+                    <i class="ri-check-double-line"></i><span class="btn-label">Approve ${payLabel}</span>
+               </button>`
+            : '';
+        const canCancelPayLater = isPayOnFulfillment && (status === 'pending' || status === 'accepted' || status === 'preparing');
+        const cancelCodBtn = canCancelPayLater
+            ? `<button type="button" class="orders-action-btn danger seller-cancel-cod" data-order-id="${id}" data-pay-method="${escapeAttr(payMethod)}" title="Cancel ${payLabel} Order" aria-label="Cancel ${payLabel} Order" style="background:rgba(220,53,69,0.1);color:#dc3545;border-color:rgba(220,53,69,0.3);">
+                    <i class="ri-close-circle-line"></i><span class="btn-label">Cancel ${payLabel}</span>
                </button>`
             : '';
         const customBadge = isCustomOrder ? ' <span class="badge" style="background:#b5445a;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;">CUSTOM</span>' : '';
+        const pickupBadge = isPickup ? ' <span class="badge" style="background:#6a4a9a;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;"><i class="ri-store-2-line"></i> PICKUP</span>' : '';
         return `<tr class="seller-order-row"
             data-order-id="${id}"
             data-status="${escapeAttr(status)}"
             data-payment-status="${escapeAttr(payStatus)}"
             data-payment-method="${escapeAttr(payMethod)}"
+            data-fulfillment-type="${escapeAttr(fulfillmentType)}"
             data-order-date="${escapeAttr(dateFormatted)}"
             data-is-today="${dateFormatted === todayStr ? 'true' : 'false'}"
             data-total-amount="${total}"
@@ -1842,7 +1875,7 @@
             <td style="width: 36px; text-align: center;">${checkbox}</td>
             <td data-label="Order">
                 <div class="order-code">#${id}</div>
-                <div class="order-subline">${escapeHtml(titleCaseStatus(order.order_type || ''))}${customBadge}</div>
+                <div class="order-subline">${escapeHtml(titleCaseStatus(order.order_type || ''))}${customBadge}${pickupBadge}</div>
                 <div class="order-subline">${escapeHtml(order.datetime_formatted || order.created_at || '')}</div>
             </td>
             <td data-label="Customer">
@@ -1853,7 +1886,10 @@
                 <span class="payment-pill payment-combined payment-${escapeAttr(payStatus)}">${escapeHtml(formatPaymentCombined(payMethod, payStatus))}</span>
             </td>
             <td data-label="Status">
-                <span class="status-pill status-${escapeAttr(status)}">${escapeHtml(titleCaseStatus(status))}</span>
+                <span class="status-pill status-${escapeAttr(status)}">${escapeHtml(
+                    isPickup && status === 'done_preparing' ? 'Ready for Pickup' :
+                    (isPickup && status === 'completed' ? 'Picked Up' : titleCaseStatus(status))
+                )}</span>
             </td>
             <td data-label="Summary">
                 <div class="order-code" style="font-size:15px;">Php ${formatAmount(total)}</div>
@@ -1865,7 +1901,7 @@
                     <button type="button" class="orders-action-btn seller-view-order" data-order-id="${id}" title="View" aria-label="View order details">
                         <i class="ri-eye-line"></i><span class="btn-label">View</span>
                     </button>
-                    ${receiptBtn}${doneBtn}${approveBtn}${cancelCodBtn}
+                    ${receiptBtn}${doneBtn}${pickupDoneBtn}${approveBtn}${cancelCodBtn}
                 </div>
             </td>
         </tr>`;
@@ -2023,12 +2059,40 @@
             markTableOrderDonePreparing(doneBtn);
             return;
         }
+        const pickupCompleteBtn = e.target.closest('.seller-complete-pickup');
+        if (pickupCompleteBtn) {
+            (async function () {
+                const orderId = pickupCompleteBtn.dataset.orderId;
+                if (!orderId) return;
+                if (!await window.openConfirmModal('Mark this store pickup order as Picked Up / Completed?')) return;
+                pickupCompleteBtn.disabled = true;
+                try {
+                    const response = await sellerFetch(`/api/seller/orders/${orderId}/status`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'completed' })
+                    });
+                    const data = await response.json();
+                    if (!response.ok || !data.success) throw new Error(data.error || 'Failed to complete order');
+                    showSellerAlert('success', 'Order marked as Picked Up / Completed.');
+                    await reloadSellerOrdersTable({ highlightNew: false });
+                } catch (err) {
+                    showSellerAlert('danger', err.message || 'Could not complete pickup order.');
+                } finally {
+                    pickupCompleteBtn.disabled = false;
+                }
+            })();
+            return;
+        }
         const approveBtn = e.target.closest('.seller-approve-cod');
         if (approveBtn) {
             (async function () {
                 const orderId = approveBtn.dataset.orderId;
                 if (!orderId) return;
-                if (!await window.openConfirmModal('Approve this COD order and move it to Preparing?')) return;
+                const row = approveBtn.closest('tr');
+                const payMethod = (approveBtn.dataset.payMethod || row?.dataset.paymentMethod || '').toLowerCase();
+                const payLabel = payMethod === 'cop' ? 'COP' : (payMethod === 'cod' ? 'COD' : 'order');
+                if (!await window.openConfirmModal(`Approve this ${payLabel} order and move it to Preparing?`)) return;
                 await verifyPayment(orderId);
             })();
             return;
@@ -2038,10 +2102,13 @@
             (async function () {
                 const orderId = cancelCodBtn.dataset.orderId;
                 if (!orderId) return;
+                const row = cancelCodBtn.closest('tr');
+                const payMethod = (cancelCodBtn.dataset.payMethod || row?.dataset.paymentMethod || '').toLowerCase();
+                const payLabel = payMethod === 'cop' ? 'COP' : 'COD';
                 const reason = await window.openPromptModal(
-                    'Please enter the reason for cancelling this COD order:',
+                    `Please enter the reason for cancelling this ${payLabel} order:`,
                     {
-                        title: 'Cancel COD Order',
+                        title: `Cancel ${payLabel} Order`,
                         defaultValue: 'Customer requested cancellation via chat',
                         placeholder: 'e.g. customer requested in chat',
                         confirmText: 'Cancel Order',
@@ -2060,10 +2127,10 @@
                     if (!response.ok || !data.success) {
                         throw new Error(data.error || 'Failed to cancel order');
                     }
-                    showSellerAlert('success', data.message || 'COD order cancelled successfully and inventory restored.');
+                    showSellerAlert('success', data.message || `${payLabel} order cancelled successfully and inventory restored.`);
                     await reloadSellerOrdersTable({ highlightNew: false });
                 } catch (err) {
-                    showSellerAlert('danger', err.message || 'Could not cancel COD order.');
+                    showSellerAlert('danger', err.message || `Could not cancel ${payLabel} order.`);
                 } finally {
                     cancelCodBtn.disabled = false;
                 }
@@ -2151,6 +2218,10 @@
             if (mt) mt.textContent = `Order #${order.id}`;
 
             const isCancelled = String(order.status || '').toLowerCase() === 'cancelled';
+            const isPickup = String(order.fulfillment_type || '').toLowerCase() === 'pickup';
+            const statusLabel = isPickup && order.status === 'done_preparing'
+                ? 'Ready for Pickup'
+                : (isPickup && order.status === 'completed' ? 'Picked Up' : titleCaseStatus(order.status));
             const cancelReason = (order.cancellation_reason || '').trim();
             const cancelRows = isCancelled ? `
                                     <div class="sdm-row"><span class="sdm-k">Reason</span><span class="sdm-v">${escapeHtml(cancelReason) || 'No reason provided'}</span></div>
@@ -2161,9 +2232,9 @@
                         <header class="sdm-topbar">
                             <div class="sdm-topbar-left">
                                 <span class="sdm-oid">#${order.id}</span>
-                                <span class="status-pill status-${order.status}">${titleCaseStatus(order.status)}</span>
+                                <span class="status-pill status-${order.status}">${statusLabel}</span>
                             </div>
-                            <span class="sdm-when">${formatDateTime(order.created_at)} · ${titleCaseStatus(order.order_type)}</span>
+                            <span class="sdm-when">${formatDateTime(order.created_at)} · ${isPickup ? 'Store Pickup' : titleCaseStatus(order.order_type)}</span>
                         </header>
 
                         <div class="sdm-grid">
@@ -2179,10 +2250,19 @@
                                 <div class="sdm-rows">
                                     <div class="sdm-row"><span class="sdm-k">Payment</span><span class="sdm-v">${escapeHtml(formatPaymentCombined(order.payment_method, order.payment_status))}</span></div>
                                     <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">₱${formatAmount(displaySubtotal)}</span></div>
-                                    <div class="sdm-row"><span class="sdm-k">Delivery</span><span class="sdm-v">₱${formatAmount(deliveryFee)}</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Delivery</span><span class="sdm-v">${isPickup ? 'Free (Pickup)' : `₱${formatAmount(deliveryFee)}`}</span></div>
                                     <div class="sdm-row"><span class="sdm-k">Total</span><span class="sdm-v" style="font-weight:600;color:var(--charcoal);">₱${formatAmount(displayTotal)}</span></div>
                                 </div>
                             </section>
+                            ${isPickup ? `
+                            <section class="sdm-block">
+                                <h4>Fulfillment</h4>
+                                <div class="sdm-rows">
+                                    <div class="sdm-row"><span class="sdm-k">Type</span><span class="sdm-v" style="font-weight:600;color:var(--rose);">Store Pickup</span></div>
+                                    <div class="sdm-row"><span class="sdm-k">Rider</span><span class="sdm-v">None (In-Store Pickup)</span></div>
+                                </div>
+                            </section>
+                            ` : `
                             <section class="sdm-block">
                                 <h4>Rider</h4>
                                 <div class="sdm-rows">
@@ -2190,6 +2270,7 @@
                                     <div class="sdm-row"><span class="sdm-k">Vehicle</span><span class="sdm-v">${escapeHtml(order.rider_vehicle) || '—'}</span></div>
                                 </div>
                             </section>
+                            `}
                             <section class="sdm-block">
                                 <h4>Schedule</h4>
                                 <div class="sdm-rows">
@@ -2200,7 +2281,17 @@
                             </section>
                         </div>
 
-                            <section class="sdm-block sdm-block--full">
+                        ${isPickup ? `
+                        <section class="sdm-block sdm-block--full">
+                            <h4>Pickup Details</h4>
+                            <div class="sdm-rows">
+                                <div class="sdm-row"><span class="sdm-k">Location</span><span class="sdm-v">Your Flower Shop (Store Counter)</span></div>
+                                <div class="sdm-row"><span class="sdm-k">Notes</span><span class="sdm-v">${escapeHtml(order.delivery_notes) || '—'}</span></div>
+                                ${cancelRows}
+                            </div>
+                        </section>
+                        ` : `
+                        <section class="sdm-block sdm-block--full">
                             <h4>Delivery</h4>
                             <div class="sdm-rows">
                                 <div class="sdm-row"><span class="sdm-k">Address</span><span class="sdm-v">${escapeHtml(order.delivery_address) || '—'}</span></div>
@@ -2208,6 +2299,7 @@
                                 ${cancelRows}
                             </div>
                         </section>
+                        `}
 
                         <section class="sdm-block sdm-block--full">
                             <h4>Line items</h4>
@@ -2246,6 +2338,37 @@
                         <button type="button" class="btn btn-success" id="markDonePreparingBtn"><i class="ri-checkbox-line"></i> Mark as Done Preparing</button>
                     `;
                     document.getElementById('markDonePreparingBtn').addEventListener('click', () => markOrderDonePreparing(loadedOrder.id));
+                } else if (loadedOrder && loadedOrder.status === 'done_preparing' && (loadedOrder.fulfillment_type || '').toLowerCase() === 'pickup') {
+                    footer.innerHTML = `
+                        <button type="button" class="btn btn-success" id="markPickedUpModalBtn"><i class="ri-checkbox-circle-line"></i> Mark as Picked Up</button>
+                    `;
+                    document.getElementById('markPickedUpModalBtn').addEventListener('click', async () => {
+                        if (!await window.openConfirmModal('Mark this store pickup order as Picked Up / Completed?')) return;
+                        closeModal(sellerOrderDetailsModal);
+                        try {
+                            const response = await sellerFetch(`/api/seller/orders/${loadedOrder.id}/status`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'completed' })
+                            });
+                            const data = await response.json();
+                            if (!response.ok || !data.success) throw new Error(data.error || 'Failed to complete order');
+                            showSellerAlert('success', 'Order marked as Picked Up / Completed.');
+                            await reloadSellerOrdersTable({ highlightNew: false });
+                        } catch (err) {
+                            showSellerAlert('danger', err.message || 'Could not complete pickup order.');
+                        }
+                    });
+                } else if (loadedOrder && (loadedOrder.payment_method === 'cod' || loadedOrder.payment_method === 'cop') && (loadedOrder.status === 'pending' || loadedOrder.status === 'accepted')) {
+                    const payMethodUpper = (loadedOrder.payment_method || '').toUpperCase();
+                    footer.innerHTML = `
+                        <button type="button" class="btn btn-success" id="approvePayLaterModalBtn"><i class="ri-check-double-line"></i> Approve ${payMethodUpper}</button>
+                    `;
+                    document.getElementById('approvePayLaterModalBtn').addEventListener('click', async () => {
+                        if (!await window.openConfirmModal(`Approve this ${payMethodUpper} order and move it to Preparing?`)) return;
+                        closeModal(sellerOrderDetailsModal);
+                        await verifyPayment(loadedOrder.id);
+                    });
                 } else {
                     footer.innerHTML = '';
                 }

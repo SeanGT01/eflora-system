@@ -551,6 +551,12 @@ def _serialize_customer_order(
         'id': order.id,
         'order_number': f'ORD-{order.id:05d}',
         'order_type': order.order_type,
+        'fulfillment_type': (
+            getattr(order, 'fulfillment_type', None)
+            or ('pickup' if (getattr(order, 'payment_method', '') or '').lower() == 'cop'
+                or (getattr(order, 'delivery_address', '') or '').lower().startswith('store pickup')
+                else 'delivery')
+        ),
         'custom_ticket_id': order.custom_ticket_id,
         'status': order.status,
         'payment_method': order.payment_method,
@@ -4029,7 +4035,10 @@ def order_details(order_id):
 
     order_dict = _serialize_customer_order(order)
     order_dict['date'] = order_dict['created_at']
-    return jsonify(order_dict)
+    resp = jsonify(order_dict)
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 
 @templates_bp.route('/api/account/orders/<int:order_id>/tracking', methods=['GET'])
@@ -8657,7 +8666,7 @@ def seller_order_status_api(order_id):
     else:
         data = request.get_json() or {}
     new_status = data.get('status')
-    allowed_statuses = {'pending', 'accepted', 'preparing', 'done_preparing', 'on_delivery', 'delivered', 'cancelled'}
+    allowed_statuses = {'pending', 'accepted', 'preparing', 'done_preparing', 'on_delivery', 'delivered', 'completed', 'cancelled'}
 
     if new_status not in allowed_statuses:
         return jsonify({'error': 'Invalid status'}), 400
@@ -8689,6 +8698,8 @@ def seller_order_status_api(order_id):
         order.restore_stock_on_cancel(session['user_id'])
 
     order.set_status(new_status)
+    if new_status == 'completed' and getattr(order, 'fulfillment_type', '') == 'pickup' and order.payment_status in ('cop_pending', 'cop_approved', 'pending'):
+        order.payment_status = 'paid'
     db.session.commit()
 
     return jsonify({
@@ -8712,11 +8723,12 @@ def seller_order_verify_payment_api(order_id):
         return jsonify({'error': 'Order not found'}), 404
 
     payment_status = (order.payment_status or '').lower()
+    pay_method = (order.payment_method or '').lower()
     # Some older custom quotes were saved as `verified` rather than
-    # `cod_pending`. The payment method is authoritative for COD approval.
-    if (order.payment_method or '').lower() == 'cod':
-        # COD approval flow: no receipt required, seller confirms and moves to preparing.
-        order.payment_status = 'cod_approved'
+    # `cod_pending`. The payment method is authoritative for COD/COP approval.
+    if pay_method in ('cod', 'cop'):
+        # COD / COP approval flow: no receipt required, seller confirms and moves to preparing.
+        order.payment_status = 'cop_approved' if pay_method == 'cop' else 'cod_approved'
         order.set_status('preparing')
     else:
         if not order.payment_proof_url:
@@ -8727,11 +8739,11 @@ def seller_order_verify_payment_api(order_id):
         order.set_status('preparing')
     db.session.commit()
 
-    current_app.logger.info(f"Order #{order_id} payment/COD approved, status changed to preparing")
+    current_app.logger.info(f"Order #{order_id} payment/{pay_method.upper()} approved, status changed to preparing")
 
     return jsonify({
         'success': True,
-        'message': 'Order approved. Status changed to Preparing.',
+        'message': f'Order approved ({pay_method.upper() if pay_method in ("cod", "cop") else "Payment"}). Status changed to Preparing.',
         'order': _serialize_seller_order_for_template(order)
     }), 200
 
@@ -8747,7 +8759,7 @@ def seller_order_update_status(order_id):
         return jsonify({'error': 'Invalid request'}), 400
 
     new_status = data.get('status', '').strip()
-    valid_statuses = ['preparing', 'on_delivery', 'delivered', 'cancelled']
+    valid_statuses = ['preparing', 'on_delivery', 'delivered', 'completed', 'cancelled']
     
     if new_status not in valid_statuses:
         return jsonify({'error': 'Invalid status'}), 400
@@ -8773,6 +8785,8 @@ def seller_order_update_status(order_id):
     
     # Log status update
     order.set_status(new_status)
+    if new_status == 'completed' and getattr(order, 'fulfillment_type', '') == 'pickup' and order.payment_status in ('cop_pending', 'cop_approved', 'pending'):
+        order.payment_status = 'paid'
     db.session.commit()
 
     current_app.logger.info(f"Order #{order_id} status updated: {current_status} → {new_status}")
@@ -11149,6 +11163,7 @@ def get_cart():
                 'is_selected': item.is_selected,
                 'product': product_dict,  # Full product dict with all image data
                 'store_name': product.store.name if product.store else None,
+                'allow_pickup': bool(getattr(product.store, 'allow_pickup', True)) if product.store else True,
                 'price': price,
                 'original_price': original_price,
                 'discount_pct': discount_pct,
@@ -12029,8 +12044,9 @@ def store_settings():
         
         payment_setting = StorePaymentSetting.query.filter_by(store_id=store.id).first()
         allow_cod = bool(payment_setting.allow_cod) if payment_setting else False
+        allow_cop = bool(getattr(payment_setting, 'allow_cop', False)) if payment_setting else False
         allow_gcash = True if not payment_setting else bool(getattr(payment_setting, 'allow_gcash', True))
-        if not allow_gcash and not allow_cod:
+        if not allow_gcash and not allow_cod and not allow_cop:
             allow_gcash = True
 
         return render_template('store_settings.html', 
@@ -12039,6 +12055,7 @@ def store_settings():
                              get_barangays=get_barangays,
                              gcash_qr_data=gcash_qr_data,
                              allow_cod=allow_cod,
+                             allow_cop=allow_cop,
                              allow_gcash=allow_gcash)
     
     except Exception as e:
@@ -12570,7 +12587,7 @@ def update_store_settings():
             store.gcash_instructions = data['gcash_instructions']
 
         # Store-level payment options
-        if 'allow_cod' in data or 'allow_gcash' in data:
+        if 'allow_cod' in data or 'allow_gcash' in data or 'allow_cop' in data:
             def _flag(key, fallback):
                 if key not in data:
                     return fallback
@@ -12582,15 +12599,21 @@ def update_store_settings():
                 db.session.add(payment_setting)
                 db.session.flush()
             current_cod = bool(payment_setting.allow_cod)
+            current_cop = bool(getattr(payment_setting, 'allow_cop', False))
             current_gcash = True if getattr(payment_setting, 'allow_gcash', None) is None else bool(payment_setting.allow_gcash)
             allow_cod = _flag('allow_cod', current_cod)
+            allow_cop = _flag('allow_cop', current_cop)
             allow_gcash = _flag('allow_gcash', current_gcash)
-            if not allow_cod and not allow_gcash:
+            if not allow_cod and not allow_gcash and not allow_cop:
                 return jsonify({
-                    'error': 'Keep at least one payment method enabled (GCash or Cash on Delivery).'
+                    'error': 'Keep at least one payment method enabled (GCash, Cash on Delivery, or Cash on Pickup).'
                 }), 400
             payment_setting.allow_cod = allow_cod
+            payment_setting.allow_cop = allow_cop
             payment_setting.allow_gcash = allow_gcash
+
+        if 'allow_pickup' in data:
+            store.allow_pickup = str(data.get('allow_pickup', '')).strip().lower() in {'1', 'true', 'yes', 'on'}
         
         store.updated_at = datetime.utcnow()
         db.session.commit()
@@ -13724,6 +13747,7 @@ def get_store_gcash_qrs(store_id):
             'qr_codes': qr_codes,
             'instructions': store.gcash_instructions,
             'allow_cod': bool(payment_setting.allow_cod) if payment_setting else False,
+            'allow_cop': bool(getattr(payment_setting, 'allow_cop', False)) if payment_setting else False,
             'allow_gcash': True if not payment_setting else bool(getattr(payment_setting, 'allow_gcash', True)),
         })
         

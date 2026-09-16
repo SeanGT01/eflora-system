@@ -2826,6 +2826,11 @@
                             {% set sorted_days.list = sorted_days.list + [d] %}
                         {% endfor %}
 
+                        {% if store_sched and store_sched.allow_same_day is sameas false %}
+                        <p><strong>Advance Orders Only</strong><br>
+                        Same-day delivery is not offered by this store. Please place your order for tomorrow or a future open day.
+                        </p>
+                        {% else %}
                         <p><strong>Same-Day Delivery</strong><br>
                         {% if delivery_start and delivery_cutoff %}
                             Same-day delivery is available from
@@ -2849,6 +2854,7 @@
                             Same-day delivery may be available depending on remaining delivery slots for today.
                         {% endif %}
                         </p>
+                        {% endif %}
                         <p><strong>Delivery Radius</strong><br>
                         We deliver within a {{ product.store.delivery_radius_km if product.store and product.store.delivery_radius_km else 5 }}km radius from our partner store.
                         {% if product.store %} Located at {{ product.store.address }}.{% endif %}</p>
@@ -3523,6 +3529,7 @@ const mainProduct = {
     stock: {{ product.stock_quantity }},
     store_id: {{ product.store_id }},
     store_name: {{ (product.store.name if product.store else "Flower Shop") | tojson }},
+    allow_pickup: {{ 'true' if not product.store or product.store.allow_pickup else 'false' }},
     image_url: "{{ product.images[0].image_url if product.images and product.images[0] else '' }}",
      main_category_id: {{ product.main_category_id if product.main_category_id else 'null' }},
     main_category_name: {{ product.main_category.name | tojson if product.main_category else 'null' }},
@@ -4566,6 +4573,9 @@ function buildTimeOptions() {
         if (reason === 'no_schedule') {
             return '<p class="time-slot-notice" style="color: var(--orange);"><i class="ri-alert-line"></i> This store has not set delivery hours yet.</p>';
         }
+        if (reason === 'same_day_disabled') {
+            return '<p class="time-slot-notice" style="color: var(--terracotta);"><i class="ri-time-line"></i> Same-day delivery is not offered by this store. Please choose tomorrow or a later date.</p>';
+        }
         if (reason === 'order_cutoff') {
             return '<p class="time-slot-notice" style="color: var(--terracotta);"><i class="ri-time-line"></i> Same-day ordering is closed. Please choose another open day.</p>';
         }
@@ -5284,6 +5294,7 @@ async function addToCartWithVariant() {
             ? selectedVariant.name + ' ' + mainProduct.name
             : mainProduct.name,
         store_name: mainProduct.store_name,
+        allow_pickup: mainProduct.allow_pickup !== false,
         image_url: selectedVariant && selectedVariant.image_url
             ? selectedVariant.image_url
             : mainProduct.image_url,

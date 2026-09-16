@@ -154,6 +154,12 @@ def sanitize_store_schedule(payload):
     delivery_start = parse_hhmm(payload.get('delivery_start'))
     delivery_cutoff = parse_hhmm(payload.get('delivery_cutoff'))
     order_cutoff = parse_hhmm(payload.get('order_cutoff'))
+    allow_same_day = payload.get('allow_same_day')
+    if allow_same_day is None:
+        allow_same_day = True
+    else:
+        allow_same_day = bool(allow_same_day)
+
     if (delivery_start and not delivery_cutoff) or (delivery_cutoff and not delivery_start):
         delivery_start = delivery_cutoff = None
     if delivery_start and delivery_cutoff and delivery_start >= delivery_cutoff:
@@ -171,6 +177,7 @@ def sanitize_store_schedule(payload):
             f'{order_cutoff[0]:02d}:{order_cutoff[1]:02d}' if order_cutoff else None
         ),
         'lead_time_hours': lead_hours,
+        'allow_same_day': allow_same_day,
     }
 
 
@@ -324,6 +331,7 @@ def build_store_time_slots(store, target_date=None):
         'delivery_cutoff': delivery_cutoff,
         'order_cutoff': schedule.get('order_cutoff'),
         'lead_time_hours': lead_hours,
+        'allow_same_day': bool(schedule.get('allow_same_day', True) if schedule.get('allow_same_day') is not None else True),
         'block_reason': None,
     }
 
@@ -340,6 +348,11 @@ def build_store_time_slots(store, target_date=None):
         return result
 
     result['is_open'] = True
+
+    if is_today and not result['allow_same_day']:
+        result['time_slots'] = []
+        result['block_reason'] = 'same_day_disabled'
+        return result
 
     if is_today and order_cutoff:
         cutoff_at = _combine_pht(today, order_cutoff[0], order_cutoff[1])
@@ -396,6 +409,8 @@ def validate_delivery_slot(store, requested_date, requested_time):
 
     if not result.get('has_schedule'):
         return f'{store_name} has not configured delivery hours yet.'
+    if reason == 'same_day_disabled':
+        return f'{store_name} does not offer same-day delivery. Please choose another delivery date.'
     if reason == 'order_cutoff':
         cutoff_label = format_hhmm_value(result.get('order_cutoff')) or 'the cutoff'
         return (

@@ -2181,6 +2181,27 @@ const PROGRESS_STEPS = [
     { key: 'delivered',   label: 'Delivered',      icon: 'ri-checkbox-circle-line' },
 ];
 
+const PROGRESS_STEPS_PICKUP = [
+    { key: 'pending',        label: 'Order\nPlaced',     icon: 'ri-shopping-bag-line' },
+    { key: 'preparing',      label: 'Preparing',         icon: 'ri-box-1-line' },
+    { key: 'done_preparing', label: 'Ready for\nPickup', icon: 'ri-store-2-line' },
+    { key: 'delivered',      label: 'Picked Up',         icon: 'ri-checkbox-circle-line' },
+];
+
+function isPickupOrder(order) {
+    if (!order) return false;
+    const ft = String(order.fulfillment_type || '').trim().toLowerCase();
+    if (ft === 'pickup') return true;
+    if (ft === 'delivery') return false;
+    const pm = String(order.payment_method || '').trim().toLowerCase();
+    if (pm === 'cop') return true;
+    const ps = String(order.payment_status || '').trim().toLowerCase();
+    if (ps.startsWith('cop_')) return true;
+    const addr = String(order.delivery_address || '').trim().toLowerCase();
+    if (addr.startsWith('store pickup') || addr.includes('store pickup:')) return true;
+    return false;
+}
+
 /* ═══════════════════════════════════════
    INIT
 ═══════════════════════════════════════ */
@@ -2598,6 +2619,7 @@ function renderOrderCard(order) {
                 <span><i class="ri-file-list-3-line"></i> ${esc(orderId)}</span>
                 <span><i class="ri-calendar-line"></i> ${dateStr}</span>
                 <span><i class="ri-wallet-3-line"></i> ${esc(paymentMethodLabel)}</span>
+                ${isPickupOrder(order) ? '<span style="color:#b5445a;font-weight:600;"><i class="ri-store-2-line"></i> Store Pickup</span>' : ''}
             </div>
 
             <!-- Items -->
@@ -2700,15 +2722,16 @@ function buildCTAButtons(order) {
     const display = getDisplayState(order);
     const paymentStatus = order.payment_status || '';
     const paymentMethod = String(order.payment_method || '').trim().toLowerCase();
-    const isCodPending = paymentMethod === 'cod' && (paymentStatus === 'cod_pending' || order.status === 'pending');
+    const isPayLaterPending = (paymentMethod === 'cod' || paymentMethod === 'cop') &&
+        (paymentStatus === 'cod_pending' || paymentStatus === 'cop_pending' || order.status === 'pending');
     let btns = `<button class="btn-order-action" onclick="viewOrderDetail(${id})">View Details</button>`;
 
     if (display.key === 'pending') {
         btns += `<button class="btn-order-action primary" onclick="payOrder(${id})"><i class="ri-bank-card-line"></i> Pay Now</button>`;
         btns += `<button class="btn-order-action danger" onclick="cancelOrderFromCard(${id})">Cancel</button>`;
     }
-    // COD awaiting seller confirmation — allow cancel, never show Pay Now
-    if (isCodPending && display.key === 'processing') {
+    // COD / COP awaiting seller confirmation — allow cancel, never show Pay Now
+    if (isPayLaterPending && display.key === 'processing') {
         btns += `<button class="btn-order-action danger" onclick="cancelOrderFromCard(${id})">Cancel</button>`;
     }
     if (display.key === 'delivered') {
@@ -3151,7 +3174,10 @@ async function viewOrderDetail(orderId) {
     LiveOrderMap.stop();
 
     try {
-        const res   = await fetch(`/api/account/orders/${orderId}`);
+        const res   = await fetch(`/api/account/orders/${orderId}?_=${Date.now()}`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
         const order = await res.json();
 
         title.textContent = `Order #${order.order_number || String(orderId).padStart(4,'0')}`;
@@ -3338,18 +3364,29 @@ function buildOrderDetailHTML(order) {
     const items    = order.items || [];
     const orderId  = order.order_number || `ORD-${String(order.id).padStart(4,'0')}`;
 
+    const isPickup = isPickupOrder(order);
+
     let progressHtml = '';
     if (display.key !== 'cancelled') {
-        const currentStep = cfg.progress;
+        const steps = isPickup ? PROGRESS_STEPS_PICKUP : PROGRESS_STEPS;
+
+        let currentStep = cfg.progress;
+        if (isPickup) {
+            if (progressState === 'pending') currentStep = 0;
+            else if (progressState === 'preparing' || progressState === 'processing') currentStep = 1;
+            else if (progressState === 'done_preparing' || progressState === 'on_delivery') currentStep = 2;
+            else if (progressState === 'delivered' || progressState === 'completed') currentStep = 3;
+        }
+
         progressHtml = `
             <section class="sdm-block sdm-block--full">
                 <h4>Progress</h4>
                 <div class="order-progress">
-                    ${PROGRESS_STEPS.map((step, idx) => {
+                    ${steps.map((step, idx) => {
                         const isDone   = currentStep > idx;
                         const isActive = currentStep === idx;
                         const cls      = isDone ? 'done' : isActive ? 'active' : '';
-                        const connector = idx < PROGRESS_STEPS.length - 1
+                        const connector = idx < steps.length - 1
                             ? `<div class="progress-connector ${isDone ? 'done' : ''}"></div>`
                             : '';
                         return `
@@ -3419,7 +3456,18 @@ function buildOrderDetailHTML(order) {
                 ${order.cancellation_reason ? `<div class="sdm-row"><span class="sdm-k">Reason</span><span class="sdm-v">${esc(order.cancellation_reason)}</span></div>` : ''}
                 ${order.cancelled_at ? `<div class="sdm-row"><span class="sdm-k">Cancelled</span><span class="sdm-v">${formatDateTimePH(order.cancelled_at)}</span></div>` : ''}` : '';
 
-    const deliverySection = (order.delivery_address || order.delivery_notes || cancelReasonRows) ? `
+    const cleanStoreAddress = String(order.delivery_address || '').replace(/^Store Pickup:\s*/i, '').trim();
+    const deliverySection = isPickup ? `
+        <section class="sdm-block sdm-block--full">
+            <h4>Fulfillment</h4>
+            <div class="sdm-rows">
+                <div class="sdm-row"><span class="sdm-k">Method</span><span class="sdm-v" style="font-weight:600;color:var(--rose);">Store Pickup</span></div>
+                <div class="sdm-row"><span class="sdm-k">Pickup at</span><span class="sdm-v">${esc(order.store_name || 'Flower Shop')}</span></div>
+                ${cleanStoreAddress ? `<div class="sdm-row"><span class="sdm-k">Store Address</span><span class="sdm-v">${esc(cleanStoreAddress)}</span></div>` : ''}
+                ${order.delivery_notes ? `<div class="sdm-row"><span class="sdm-k">Customer Notes</span><span class="sdm-v">${esc(order.delivery_notes)}</span></div>` : ''}
+                ${cancelReasonRows}
+            </div>
+        </section>` : ((order.delivery_address || order.delivery_notes || cancelReasonRows) ? `
         <section class="sdm-block sdm-block--full">
             <h4>Delivery</h4>
             <div class="sdm-rows">
@@ -3427,10 +3475,10 @@ function buildOrderDetailHTML(order) {
                 ${order.delivery_notes ? `<div class="sdm-row"><span class="sdm-k">Notes</span><span class="sdm-v">${esc(order.delivery_notes)}</span></div>` : ''}
                 ${cancelReasonRows}
             </div>
-        </section>` : '';
+        </section>` : '');
 
-    const riderAssigned = !!(order.rider_name || order.rider_id);
-    const showLiveMap = order.status === 'on_delivery' && riderAssigned;
+    const riderAssigned = !isPickup && !!(order.rider_name || order.rider_id);
+    const showLiveMap = !isPickup && order.status === 'on_delivery' && riderAssigned;
     const liveMapHtml = showLiveMap ? `
         <section class="sdm-block sdm-block--full">
             <h4>Live delivery</h4>
@@ -3450,7 +3498,7 @@ function buildOrderDetailHTML(order) {
             </div>
         </section>` : '';
 
-    const riderSection = `
+    const riderSection = isPickup ? '' : `
         <section class="sdm-block sdm-block--full">
             <h4>Rider</h4>
             <div class="sdm-rows">
@@ -3505,7 +3553,7 @@ function buildOrderDetailHTML(order) {
                 <h4>Summary</h4>
                 <div class="sdm-rows">
                     <div class="sdm-row"><span class="sdm-k">Subtotal</span><span class="sdm-v">${formatPeso(sub)}</span></div>
-                    <div class="sdm-row"><span class="sdm-k">Delivery fee</span><span class="sdm-v">${formatPeso(delivery)}</span></div>
+                    <div class="sdm-row"><span class="sdm-k">Delivery fee</span><span class="sdm-v">${isPickup ? 'Free (Pickup)' : formatPeso(delivery)}</span></div>
                     <div class="sdm-row sdm-row--total"><span class="sdm-k">Total</span><span class="sdm-v">${formatPeso(total)}</span></div>
                 </div>
             </section>
@@ -4513,6 +4561,7 @@ function formatPaymentMethod(method) {
     const normalized = String(method || '').trim().toLowerCase();
     if (!normalized || normalized === 'gcash') return 'GCash';
     if (normalized === 'cod') return 'COD';
+    if (normalized === 'cop') return 'COP (Cash on Pickup)';
     if (normalized === 'cash') return 'Cash';
     return capitalise(normalized);
 }
@@ -4521,8 +4570,11 @@ function getDisplayState(order) {
     const status = order.status || 'pending';
     const paymentStatus = order.payment_status || 'pending';
     const paymentMethod = String(order.payment_method || '').trim().toLowerCase();
+    const isPickup = isPickupOrder(order);
     const isCustomOrder = order.order_type === 'custom_chat' || !!order.custom_ticket_id;
     const isCod = paymentMethod === 'cod' || paymentStatus === 'cod_pending' || paymentStatus === 'cod_approved';
+    const isCop = paymentMethod === 'cop' || paymentStatus === 'cop_pending' || paymentStatus === 'cop_approved';
+    const isPayLater = isCod || isCop;
     const isLegacyCustomQuoteReview = (order.order_type === 'custom_chat' || order.custom_ticket_id) &&
         paymentStatus === 'paid' && !!order.payment_proof_url;
 
@@ -4530,26 +4582,29 @@ function getDisplayState(order) {
         return { key: 'cancelled', label: 'Cancelled', progressKey: 'cancelled' };
     }
     if (status === 'delivered') {
-        return { key: 'delivered', label: 'Delivered', progressKey: 'delivered' };
+        return { key: 'delivered', label: isPickup ? 'Picked Up' : 'Delivered', progressKey: 'delivered' };
     }
     if (status === 'completed') {
-        return { key: 'completed', label: 'Completed', progressKey: 'delivered' };
+        return { key: 'completed', label: isPickup ? 'Picked Up' : 'Completed', progressKey: 'delivered' };
     }
     if (status === 'on_delivery') {
-        return { key: 'on_delivery', label: 'In Transit', progressKey: 'on_delivery' };
+        return { key: 'on_delivery', label: isPickup ? 'Ready for Pickup' : 'In Transit', progressKey: 'on_delivery' };
     }
     if (status === 'done_preparing') {
+        if (isPickup) {
+            return { key: 'on_delivery', label: 'Ready for Pickup', progressKey: 'done_preparing' };
+        }
         return { key: 'processing', label: 'Ready', progressKey: 'done_preparing' };
     }
 
-    // COD: no online payment step — show under To Ship while awaiting seller / preparing.
-    if (isCustomOrder && isCod && status === 'pending') {
+    // COD / COP: no online payment step — show under To Ship while awaiting seller / preparing.
+    if (isCustomOrder && isPayLater && status === 'pending') {
         return { key: 'processing', label: 'Pending', progressKey: 'pending' };
     }
-    if (isCod && (status === 'pending' || paymentStatus === 'cod_pending')) {
+    if (isPayLater && (status === 'pending' || paymentStatus === 'cod_pending' || paymentStatus === 'cop_pending')) {
         return { key: 'processing', label: 'Awaiting Confirmation', progressKey: 'pending' };
     }
-    if (isCod && (paymentStatus === 'cod_approved' || status === 'accepted' || status === 'preparing')) {
+    if (isPayLater && (paymentStatus === 'cod_approved' || paymentStatus === 'cop_approved' || status === 'accepted' || status === 'preparing')) {
         return { key: 'processing', label: 'Preparing', progressKey: 'processing' };
     }
 
