@@ -192,10 +192,50 @@
 {% endblock %}
 
 {% block content %}
-{% set inv_total = products|length if products else 0 %}
-{% set inv_in = products|selectattr('stock_quantity','gt',10)|list|length if products else 0 %}
-{% set inv_low = products|selectattr('stock_quantity','gt',0)|selectattr('stock_quantity','le',10)|list|length if products else 0 %}
-{% set inv_oos = products|selectattr('stock_quantity','le',0)|list|length if products else 0 %}
+{% if inv_stats %}
+  {% set inv_total = inv_stats.total %}
+  {% set inv_in = inv_stats.in_stock %}
+  {% set inv_low = inv_stats.low_stock %}
+  {% set inv_oos = inv_stats.out_of_stock %}
+  {% set inv_products_count = inv_stats.products_count %}
+  {% set inv_variants_count = inv_stats.variants_count %}
+  {% set inv_addons_count = inv_stats.addons_count %}
+{% else %}
+  {% set ns = namespace(total=0, in_stock=0, low=0, oos=0, products=0, variants=0, addons=0) %}
+  {% for p in (products or []) %}
+    {% set ns.products = ns.products + 1 %}
+    {% set ns.total = ns.total + 1 %}
+    {% set p_stock = p.stock_quantity|default(0)|int %}
+    {% if p_stock > 10 %}{% set ns.in_stock = ns.in_stock + 1 %}
+    {% elif p_stock > 0 %}{% set ns.low = ns.low + 1 %}
+    {% else %}{% set ns.oos = ns.oos + 1 %}{% endif %}
+    {% for v in (p.variants or []) %}
+      {% set ns.variants = ns.variants + 1 %}
+      {% set ns.total = ns.total + 1 %}
+      {% set v_stock = v.stock_quantity|default(0)|int %}
+      {% if v_stock > 10 %}{% set ns.in_stock = ns.in_stock + 1 %}
+      {% elif v_stock > 0 %}{% set ns.low = ns.low + 1 %}
+      {% else %}{% set ns.oos = ns.oos + 1 %}{% endif %}
+    {% endfor %}
+    {% for g in (p.addon_groups or []) %}
+      {% for opt in (g.options or []) %}
+        {% set ns.addons = ns.addons + 1 %}
+        {% set ns.total = ns.total + 1 %}
+        {% set o_stock = opt.stock_quantity|default(0)|int %}
+        {% if o_stock > 10 %}{% set ns.in_stock = ns.in_stock + 1 %}
+        {% elif o_stock > 0 %}{% set ns.low = ns.low + 1 %}
+        {% else %}{% set ns.oos = ns.oos + 1 %}{% endif %}
+      {% endfor %}
+    {% endfor %}
+  {% endfor %}
+  {% set inv_total = ns.total %}
+  {% set inv_in = ns.in_stock %}
+  {% set inv_low = ns.low %}
+  {% set inv_oos = ns.oos %}
+  {% set inv_products_count = ns.products %}
+  {% set inv_variants_count = ns.variants %}
+  {% set inv_addons_count = ns.addons %}
+{% endif %}
 <div class="dash">
   <div class="dash-header">
     <div>
@@ -209,25 +249,27 @@
   </div>
 
   <div class="kpi-row">
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-label">Total Products</div><div class="kpi-icon"><i class="ri-stack-line"></i></div></div>
+    <div class="kpi-card" onclick="filterByKpi('')" style="cursor:pointer;" title="Show all inventory items">
+      <div class="kpi-top"><div class="kpi-label">Total Items</div><div class="kpi-icon"><i class="ri-stack-line"></i></div></div>
       <div class="kpi-value">{{ inv_total }}</div>
-      <div class="kpi-sub">Listed items</div>
+      <div class="kpi-sub">
+        {{ inv_products_count }} products{% if inv_variants_count > 0 %} · {{ inv_variants_count }} variants{% endif %}{% if inv_addons_count > 0 %} · {{ inv_addons_count }} add-ons{% endif %}
+      </div>
     </div>
-    <div class="kpi-card green">
+    <div class="kpi-card green" onclick="filterByKpi('in')" style="cursor:pointer;" title="Filter by In Stock">
       <div class="kpi-top"><div class="kpi-label">In Stock</div><div class="kpi-icon"><i class="ri-checkbox-circle-line"></i></div></div>
       <div class="kpi-value">{{ inv_in }}</div>
-      <div class="kpi-sub">Healthy inventory</div>
+      <div class="kpi-sub">Healthy inventory (>10 qty)</div>
     </div>
-    <div class="kpi-card terra">
+    <div class="kpi-card terra" onclick="filterByKpi('low')" style="cursor:pointer;" title="Filter by Low Stock">
       <div class="kpi-top"><div class="kpi-label">Low Stock</div><div class="kpi-icon"><i class="ri-alarm-warning-line"></i></div></div>
       <div class="kpi-value">{{ inv_low }}</div>
-      <div class="kpi-sub">Needs restocking</div>
+      <div class="kpi-sub">Needs restocking (1–10 qty)</div>
     </div>
-    <div class="kpi-card bark">
+    <div class="kpi-card bark" onclick="filterByKpi('out')" style="cursor:pointer;" title="Filter by Out of Stock">
       <div class="kpi-top"><div class="kpi-label">Out of Stock</div><div class="kpi-icon"><i class="ri-close-circle-line"></i></div></div>
       <div class="kpi-value">{{ inv_oos }}</div>
-      <div class="kpi-sub">Unavailable items</div>
+      <div class="kpi-sub">Unavailable items (0 qty)</div>
     </div>
   </div>
 
@@ -908,6 +950,15 @@
     }
     window.filterInventory = filterInventory;
     window.filterInventoryByCategory = filterInventory;
+
+    function filterByKpi(stockVal) {
+        const stockSelect = document.getElementById('invStockFilter');
+        if (stockSelect) {
+            stockSelect.value = stockVal;
+            filterInventory();
+        }
+    }
+    window.filterByKpi = filterByKpi;
 
     function resetInventoryFilters() {
         const search = document.getElementById('invSearchInput');

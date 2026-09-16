@@ -684,12 +684,38 @@ table.dash-table {
   min-height: 0;
 }
 
+.panel-qa,
+.panel-perf {
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-qa .quick-actions-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: .55rem;
+  padding: 0.85rem 1rem;
+}
+
+.panel-qa .qa-btn {
+  justify-content: center;
+}
+
+.panel-inventory,
+.panel-store-info,
 .dash-col > .panel:last-child {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 34rem;
+  min-height: 0;
   overflow: hidden;
+}
+
+.panel-inventory {
+  height: 0;
+  min-height: 100%;
 }
 
 .alert-list,
@@ -704,11 +730,27 @@ table.dash-table {
   overflow-y: auto;
 }
 
+.alert-list::-webkit-scrollbar {
+  width: 5px;
+}
+.alert-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.alert-list::-webkit-scrollbar-thumb {
+  background: rgba(181, 68, 90, 0.2);
+  border-radius: 10px;
+}
+.alert-list::-webkit-scrollbar-thumb:hover {
+  background: var(--deep-rose);
+}
+
+.panel-inventory .empty-panel,
 .dash-col > .panel:last-child .empty-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
 }
 
 /* ─── Quick Actions ─────────────────────────────────────── */
@@ -1229,7 +1271,10 @@ table.dash-table {
   .dash { padding: 0; }
   .kpi-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
   .dash-bottom { grid-template-columns: 1fr; }
-  .dash-col > .panel:last-child { min-height: 0; }
+  .dash-col > .panel:last-child,
+  .panel-inventory,
+  .panel-store-info { min-height: 0; }
+  .panel-inventory { height: auto !important; }
   .quick-actions-grid { grid-template-columns: 1fr 1fr; }
   .panel-head { padding: 1rem 1.25rem .875rem; }
   .chart-wrap { padding: 1.1rem 1.25rem; }
@@ -1434,6 +1479,11 @@ table.dash-table {
   .dash .dash-bottom { grid-template-columns: 1fr; }
   .dash .analytics-grid,
   .dash .analytics-grid-ratings { grid-template-columns: 1fr; }
+  .dash .panel-inventory {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: 440px;
+  }
 }
 
 @media (max-width: 991px) {
@@ -1451,7 +1501,9 @@ table.dash-table {
   .dash .apply-btn { min-height: 44px; }
   .dash .period-btn,
   .dash .custom-btn { min-height: 36px; }
-  .dash .dash-col > .panel:last-child { min-height: 0; }
+  .dash .dash-col > .panel:last-child,
+  .dash .panel-inventory,
+  .dash .panel-store-info { min-height: 0; }
   .dash .info-row {
     flex-wrap: wrap;
     align-items: flex-start;
@@ -1812,234 +1864,229 @@ table.dash-table {
   <!-- ─── Bottom Row ──────────────────────────────────────── -->
   <div class="dash-bottom">
 
-    <div class="dash-col">
-
-      <!-- Quick Actions -->
-      <div class="panel">
-        <div class="panel-head">
-          <span class="panel-title">Quick Actions</span>
-        </div>
-        <div class="quick-actions-grid">
-          <a href="{{ url_for('templates.seller_products') }}" class="qa-btn">
-            <div class="qa-icon rose"><i class="ri-add-circle-line"></i></div>
-            <div class="qa-label">Add Product</div>
-            <div class="qa-desc">List a new bloom or plant</div>
-          </a>
-          <a href="{{ url_for('templates.seller_orders') }}" class="qa-btn">
-            <div class="qa-icon sage"><i class="ri-shopping-bag-3-line"></i></div>
-            <div class="qa-label">View Orders</div>
-            <div class="qa-desc">{{ pending_orders }} pending</div>
-          </a>
-          <a href="{{ url_for('templates.seller_riders') }}" class="qa-btn">
-            <div class="qa-icon terra"><i class="ri-motorbike-line"></i></div>
-            <div class="qa-label">Riders</div>
-            <div class="qa-desc">{{ active_riders }}/{{ total_riders }} active</div>
-          </a>
-          <a href="{{ url_for('templates.seller_pos') }}" class="qa-btn">
-            <div class="qa-icon bark"><i class="ri-store-2-line"></i></div>
-            <div class="qa-label">POS System</div>
-            <div class="qa-desc">₱{{ '{:,.2f}'.format(pos_revenue_today) }} today ({{ pos_orders_today }} sales)</div>
-          </a>
-        </div>
+    <!-- Quick Actions -->
+    <div class="panel panel-qa">
+      <div class="panel-head">
+        <span class="panel-title">Quick Actions</span>
       </div>
-
-      <!-- Inventory Alerts -->
-      <div class="panel">
-        <div class="panel-head">
-          <span class="panel-title">Inventory Alerts</span>
-          <a href="{{ url_for('templates.seller_products') }}" class="panel-action">
-            Products <i class="ri-arrow-right-line"></i>
-          </a>
-        </div>
-        {% if low_stock_products or out_of_stock > 0 %}
-        <div class="alert-list">
-          {% for product in out_of_stock_products %}
-          <div class="alert-item">
-            <div class="alert-thumb out">
-              {% if product.thumbnail_url or product.image_url %}
-              <img src="{{ product.thumbnail_url or product.image_url }}" alt="{{ product.name }}" loading="lazy">
-              {% else %}
-              <i class="ri-image-line"></i>
-              {% endif %}
-            </div>
-            <div class="alert-info">
-              <div class="alert-name">{{ product.name }}</div>
-              <div class="alert-detail">Out of stock — restock needed</div>
-            </div>
-            <div class="alert-stock out">0 left</div>
-          </div>
-          {% endfor %}
-          {% for product in low_stock_products %}
-          <div class="alert-item">
-            <div class="alert-thumb low">
-              {% if product.thumbnail_url or product.image_url %}
-              <img src="{{ product.thumbnail_url or product.image_url }}" alt="{{ product.name }}" loading="lazy">
-              {% else %}
-              <i class="ri-image-line"></i>
-              {% endif %}
-            </div>
-            <div class="alert-info">
-              <div class="alert-name">{{ product.name }}</div>
-              <div class="alert-detail">Low stock — restock soon</div>
-            </div>
-            <div class="alert-stock low">{{ product.stock_quantity }} left</div>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-          <div class="empty-panel">
-            {% if (total_products|default(0)) == 0 %}
-            <i class="ri-inbox-line"></i>
-            No products in this store yet
-            {% else %}
-            <i class="ri-checkbox-circle-line"></i>
-            All {{ total_products }} products are well-stocked!
-            {% endif %}
-          </div>
-        {% endif %}
+      <div class="quick-actions-grid">
+        <a href="{{ url_for('templates.seller_products') }}" class="qa-btn">
+          <div class="qa-icon rose"><i class="ri-add-circle-line"></i></div>
+          <div class="qa-label">Add Product</div>
+          <div class="qa-desc">List a new bloom or plant</div>
+        </a>
+        <a href="{{ url_for('templates.seller_orders') }}" class="qa-btn">
+          <div class="qa-icon sage"><i class="ri-shopping-bag-3-line"></i></div>
+          <div class="qa-label">View Orders</div>
+          <div class="qa-desc">{{ pending_orders }} pending</div>
+        </a>
+        <a href="{{ url_for('templates.seller_riders') }}" class="qa-btn">
+          <div class="qa-icon terra"><i class="ri-motorbike-line"></i></div>
+          <div class="qa-label">Riders</div>
+          <div class="qa-desc">{{ active_riders }}/{{ total_riders }} active</div>
+        </a>
+        <a href="{{ url_for('templates.seller_pos') }}" class="qa-btn">
+          <div class="qa-icon bark"><i class="ri-store-2-line"></i></div>
+          <div class="qa-label">POS System</div>
+          <div class="qa-desc">₱{{ '{:,.2f}'.format(pos_revenue_today) }} today ({{ pos_orders_today }} sales)</div>
+        </a>
       </div>
     </div>
 
-    <div class="dash-col">
-
-      <!-- Store Performance -->
-      <div class="panel">
-        <div class="panel-head">
-          <span class="panel-title">Performance</span>
-        </div>
-        <div class="perf-body">
-          <div class="perf-item">
-            <div class="perf-meta">
-              <span class="perf-name"><i class="ri-star-line"></i> Product ratings</span>
-              <span class="perf-val">{{ avg_rating }}/5</span>
-            </div>
-            <div class="perf-track">
-              <div class="perf-fill fill-rose" style="width:{{ (avg_rating / 5 * 100)|round }}%"></div>
-            </div>
-            <div class="perf-note">Based on {{ total_reviews }} product review{{ 's' if total_reviews != 1 else '' }}</div>
-          </div>
-
-          <div class="perf-item">
-            <div class="perf-meta">
-              <span class="perf-name"><i class="ri-store-2-line"></i> Store experience</span>
-              <span class="perf-val">{{ store_avg_rating }}/5</span>
-            </div>
-            <div class="perf-track">
-              <div class="perf-fill fill-terra" style="width:{{ (store_avg_rating / 5 * 100)|round }}%"></div>
-            </div>
-            <div class="perf-note">Based on {{ store_total_reviews }} shop review{{ 's' if store_total_reviews != 1 else '' }}</div>
-          </div>
-
-          <div class="perf-item">
-            <div class="perf-meta">
-              <span class="perf-name"><i class="ri-leaf-line"></i> Active Products</span>
-              <span class="perf-val">{{ total_products }}</span>
-            </div>
-            <div class="perf-track">
-              <div class="perf-fill fill-sage" style="width:{{ [total_products, 100]|min }}%"></div>
-            </div>
-            <div class="perf-note">{{ out_of_stock }} out of stock · {{ low_stock_products|length }} low stock</div>
-          </div>
-
-          <div class="perf-item">
-            <div class="perf-meta">
-              <span class="perf-name"><i class="ri-truck-line"></i> Delivery Success</span>
-              <span class="perf-val">{% if delivery_rate is not none %}{{ delivery_rate }}%{% else %}—{% endif %}</span>
-            </div>
-            <div class="perf-track">
-              <div class="perf-fill fill-terra" style="width:{{ delivery_rate if delivery_rate is not none else 0 }}%"></div>
-            </div>
-            <div class="perf-note">Delivered / active (excl. cancelled) · {{ period_label or 'selected period' }}</div>
-          </div>
-        </div>
+    <!-- Store Performance -->
+    <div class="panel panel-perf">
+      <div class="panel-head">
+        <span class="panel-title">Performance</span>
       </div>
+      <div class="perf-body">
+        <div class="perf-item">
+          <div class="perf-meta">
+            <span class="perf-name"><i class="ri-star-line"></i> Product ratings</span>
+            <span class="perf-val">{{ avg_rating }}/5</span>
+          </div>
+          <div class="perf-track">
+            <div class="perf-fill fill-rose" style="width:{{ (avg_rating / 5 * 100)|round }}%"></div>
+          </div>
+          <div class="perf-note">Based on {{ total_reviews }} product review{{ 's' if total_reviews != 1 else '' }}</div>
+        </div>
 
-      <!-- Store Info Summary -->
-      <div class="panel">
-        <div class="panel-head">
-          <span class="panel-title">Store Info</span>
-          <a href="{{ url_for('templates.store_settings') }}" class="panel-action">
-            Settings <i class="ri-settings-4-line"></i>
-          </a>
+        <div class="perf-item">
+          <div class="perf-meta">
+            <span class="perf-name"><i class="ri-store-2-line"></i> Store experience</span>
+            <span class="perf-val">{{ store_avg_rating }}/5</span>
+          </div>
+          <div class="perf-track">
+            <div class="perf-fill fill-terra" style="width:{{ (store_avg_rating / 5 * 100)|round }}%"></div>
+          </div>
+          <div class="perf-note">Based on {{ store_total_reviews }} shop review{{ 's' if store_total_reviews != 1 else '' }}</div>
         </div>
-        {% set loc = store.public_location_label or store.formatted_address or store.usable_address %}
-        {% set method = store.delivery_method or 'radius' %}
-        {% if method == 'radius' %}
-          {% set coverage = (store.delivery_radius_km or 5)|round(1)|string ~ ' km radius' %}
-        {% elif method == 'municipality' %}
-          {% set muni = store.selected_municipalities or [] %}
-          {% set coverage = (muni|length) ~ ' municipalities' %}
-        {% else %}
-          {% set coverage = 'Custom zone' %}
-        {% endif %}
-        {% set hours = store_hours_parts or {} %}
-        {% set qr_n = store.gcash_qr_images|length %}
-        <div class="info-store-head">
-          <div class="rank-thumb">
-            {% if store.logo_url %}
-            <img src="{{ store.logo_url }}" alt="{{ store.name }}" loading="lazy">
-            {% else %}
-            <i class="ri-store-2-line"></i>
-            {% endif %}
+
+        <div class="perf-item">
+          <div class="perf-meta">
+            <span class="perf-name"><i class="ri-leaf-line"></i> Active Products</span>
+            <span class="perf-val">{{ total_products }}</span>
           </div>
-          <div class="rank-info">
-            <div class="rank-name">{{ store.name }}</div>
-            <div class="rank-store">{{ loc if loc else 'Add your store location' }}</div>
+          <div class="perf-track">
+            <div class="perf-fill fill-sage" style="width:{{ [total_products, 100]|min }}%"></div>
           </div>
-          <span class="info-status {{ store.status or 'pending' }}">{{ (store.status or 'pending')|replace('_',' ')|title }}</span>
+          <div class="perf-note">{{ out_of_stock }} out of stock · {{ low_stock_products|length }} low stock</div>
         </div>
-        <div class="info-list">
-          <div class="info-row">
-            <span class="info-label"><i class="ri-phone-line"></i> Contact</span>
-            <span class="info-value">{{ store.contact_number or 'Not set' }}</span>
+
+        <div class="perf-item">
+          <div class="perf-meta">
+            <span class="perf-name"><i class="ri-truck-line"></i> Delivery Success</span>
+            <span class="perf-val">{% if delivery_rate is not none %}{{ delivery_rate }}%{% else %}—{% endif %}</span>
           </div>
-          <div class="info-row">
-            <span class="info-label"><i class="ri-map-pin-line"></i> Coverage</span>
-            <span class="info-value">{{ method|replace('_',' ')|title }} · {{ coverage }}</span>
+          <div class="perf-track">
+            <div class="perf-fill fill-terra" style="width:{{ delivery_rate if delivery_rate is not none else 0 }}%"></div>
           </div>
-          <div class="info-row">
-            <span class="info-label"><i class="ri-truck-line"></i> Delivery fee</span>
-            <span class="info-value">₱{{ '{:,.2f}'.format(store.base_delivery_fee or 0) }} + ₱{{ '{:,.2f}'.format(store.delivery_rate_per_km or 0) }}/km</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label"><i class="ri-gift-line"></i> Free delivery</span>
-            <span class="info-value">
-              {% if store.free_delivery_enabled %}
-                Over ₱{{ '{:,.2f}'.format(store.free_delivery_minimum or 0) }}
-              {% else %}
-                Off
-              {% endif %}
-            </span>
-          </div>
-          <div class="info-row">
-            <span class="info-label"><i class="ri-time-line"></i> Hours</span>
-            <span class="info-value info-hours">
-              {% if hours.open %}
-              <span class="info-hours-line"><span class="info-hours-kind">Store open</span> {{ hours.open }}</span>
-              {% endif %}
-              {% if hours.delivery %}
-              <span class="info-hours-line"><span class="info-hours-kind">Delivery</span> {{ hours.delivery }}</span>
-              {% endif %}
-              {% if not hours.open and not hours.delivery %}
-              Not set
-              {% endif %}
-            </span>
-          </div>
-          <div class="info-row">
-            <span class="info-label"><i class="ri-qr-code-line"></i> GCash QR</span>
-            <span class="info-value">{% if qr_n %}{{ qr_n }} uploaded{% else %}Not uploaded{% endif %}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label"><i class="ri-motorbike-line"></i> Riders</span>
-            <span class="info-value">{{ active_riders }}/{{ total_riders }} active</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label"><i class="ri-store-3-line"></i> POS today</span>
-            <span class="info-value">₱{{ '{:,.2f}'.format(pos_revenue_today) }} · {{ pos_orders_today }} sale{{ 's' if pos_orders_today != 1 else '' }}</span>
-          </div>
+          <div class="perf-note">Delivered / active (excl. cancelled) · {{ period_label or 'selected period' }}</div>
         </div>
       </div>
     </div>
+
+    <!-- Inventory Alerts -->
+    <div class="panel panel-inventory">
+      <div class="panel-head">
+        <span class="panel-title">Inventory Alerts</span>
+        <a href="{{ url_for('templates.seller_inventory') }}" class="panel-action">
+          Inventory <i class="ri-arrow-right-line"></i>
+        </a>
+      </div>
+      {% if low_stock_products or out_of_stock > 0 %}
+      <div class="alert-list">
+        {% for product in out_of_stock_products %}
+        <div class="alert-item">
+          <div class="alert-thumb out">
+            {% if product.thumbnail_url or product.image_url %}
+            <img src="{{ product.thumbnail_url or product.image_url }}" alt="{{ product.name }}" loading="lazy">
+            {% else %}
+            <i class="ri-image-line"></i>
+            {% endif %}
+          </div>
+          <div class="alert-info">
+            <div class="alert-name">{{ product.name }}</div>
+            <div class="alert-detail">Out of stock — restock needed</div>
+          </div>
+          <div class="alert-stock out">0 left</div>
+        </div>
+        {% endfor %}
+        {% for product in low_stock_products %}
+        <div class="alert-item">
+          <div class="alert-thumb low">
+            {% if product.thumbnail_url or product.image_url %}
+            <img src="{{ product.thumbnail_url or product.image_url }}" alt="{{ product.name }}" loading="lazy">
+            {% else %}
+            <i class="ri-image-line"></i>
+            {% endif %}
+          </div>
+          <div class="alert-info">
+            <div class="alert-name">{{ product.name }}</div>
+            <div class="alert-detail">Low stock — restock soon</div>
+          </div>
+          <div class="alert-stock low">{{ product.stock_quantity }} left</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+        <div class="empty-panel">
+          {% if (total_products|default(0)) == 0 %}
+          <i class="ri-inbox-line"></i>
+          No products in this store yet
+          {% else %}
+          <i class="ri-checkbox-circle-line"></i>
+          All {{ total_products }} products are well-stocked!
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Store Info Summary -->
+    <div class="panel panel-store-info">
+      <div class="panel-head">
+        <span class="panel-title">Store Info</span>
+        <a href="{{ url_for('templates.store_settings') }}" class="panel-action">
+          Settings <i class="ri-settings-4-line"></i>
+        </a>
+      </div>
+      {% set loc = store.public_location_label or store.formatted_address or store.usable_address %}
+      {% set method = store.delivery_method or 'radius' %}
+      {% if method == 'radius' %}
+        {% set coverage = (store.delivery_radius_km or 5)|round(1)|string ~ ' km radius' %}
+      {% elif method == 'municipality' %}
+        {% set muni = store.selected_municipalities or [] %}
+        {% set coverage = (muni|length) ~ ' municipalities' %}
+      {% else %}
+        {% set coverage = 'Custom zone' %}
+      {% endif %}
+      {% set hours = store_hours_parts or {} %}
+      {% set qr_n = store.gcash_qr_images|length %}
+      <div class="info-store-head">
+        <div class="rank-thumb">
+          {% if store.logo_url %}
+          <img src="{{ store.logo_url }}" alt="{{ store.name }}" loading="lazy">
+          {% else %}
+          <i class="ri-store-2-line"></i>
+          {% endif %}
+        </div>
+        <div class="rank-info">
+          <div class="rank-name">{{ store.name }}</div>
+          <div class="rank-store">{{ loc if loc else 'Add your store location' }}</div>
+        </div>
+        <span class="info-status {{ store.status or 'pending' }}">{{ (store.status or 'pending')|replace('_',' ')|title }}</span>
+      </div>
+      <div class="info-list">
+        <div class="info-row">
+          <span class="info-label"><i class="ri-phone-line"></i> Contact</span>
+          <span class="info-value">{{ store.contact_number or 'Not set' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="ri-map-pin-line"></i> Coverage</span>
+          <span class="info-value">{{ method|replace('_',' ')|title }} · {{ coverage }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="ri-truck-line"></i> Delivery fee</span>
+          <span class="info-value">₱{{ '{:,.2f}'.format(store.base_delivery_fee or 0) }} + ₱{{ '{:,.2f}'.format(store.delivery_rate_per_km or 0) }}/km</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="ri-gift-line"></i> Free delivery</span>
+          <span class="info-value">
+            {% if store.free_delivery_enabled %}
+              Over ₱{{ '{:,.2f}'.format(store.free_delivery_minimum or 0) }}
+            {% else %}
+              Off
+            {% endif %}
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="ri-time-line"></i> Hours</span>
+          <span class="info-value info-hours">
+            {% if hours.open %}
+            <span class="info-hours-line"><span class="info-hours-kind">Store open</span> {{ hours.open }}</span>
+            {% endif %}
+            {% if hours.delivery %}
+            <span class="info-hours-line"><span class="info-hours-kind">Delivery</span> {{ hours.delivery }}</span>
+            {% endif %}
+            {% if not hours.open and not hours.delivery %}
+            Not set
+            {% endif %}
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="ri-qr-code-line"></i> GCash QR</span>
+          <span class="info-value">{% if qr_n %}{{ qr_n }} uploaded{% else %}Not uploaded{% endif %}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="ri-motorbike-line"></i> Riders</span>
+          <span class="info-value">{{ active_riders }}/{{ total_riders }} active</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="ri-store-3-line"></i> POS today</span>
+          <span class="info-value">₱{{ '{:,.2f}'.format(pos_revenue_today) }} · {{ pos_orders_today }} sale{{ 's' if pos_orders_today != 1 else '' }}</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ════════════════════════════════════════════════════════
@@ -2331,10 +2378,35 @@ function applyCustomRange() {
   window.location.href = url.toString();
 }
 
+function syncInventoryHeight() {
+  const invPanel = document.querySelector('.panel-inventory');
+  const storeInfo = document.querySelector('.panel-store-info');
+  if (!invPanel || !storeInfo) return;
+
+  if (window.innerWidth > 1100) {
+    const targetHeight = storeInfo.offsetHeight;
+    if (targetHeight > 0) {
+      invPanel.style.height = targetHeight + 'px';
+    }
+  } else {
+    invPanel.style.height = '';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof bindLinkedDatePickers === 'function') {
     bindLinkedDatePickers('#fromDate', '#toDate');
   }
+
+  // Synchronize Inventory Alerts height to Store Info section
+  syncInventoryHeight();
+  const storeInfo = document.querySelector('.panel-store-info');
+  if (storeInfo && window.ResizeObserver) {
+    new ResizeObserver(() => {
+      syncInventoryHeight();
+    }).observe(storeInfo);
+  }
+  window.addEventListener('resize', syncInventoryHeight);
 });
 
 /* ── Chart data from backend ──────────────────────────── */

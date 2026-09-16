@@ -6740,7 +6740,59 @@ def seller_inventory():
 
     product_list = [product.to_dict(include_inactive_addons=True) for product in products]
     categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order.asc(), Category.name.asc()).all()
-    return render_template('seller_inventory.html', products=product_list, categories=categories)
+
+    inv_total = 0
+    inv_in = 0
+    inv_low = 0
+    inv_oos = 0
+    inv_products_count = len(product_list)
+    inv_variants_count = 0
+    inv_addons_count = 0
+
+    for p in product_list:
+        inv_total += 1
+        p_qty = p.get('stock_quantity') or 0
+        if p_qty > 10:
+            inv_in += 1
+        elif p_qty > 0:
+            inv_low += 1
+        else:
+            inv_oos += 1
+
+        for v in (p.get('variants') or []):
+            inv_variants_count += 1
+            inv_total += 1
+            v_qty = v.get('stock_quantity') or 0
+            if v_qty > 10:
+                inv_in += 1
+            elif v_qty > 0:
+                inv_low += 1
+            else:
+                inv_oos += 1
+
+        for g in (p.get('addon_groups') or []):
+            for opt in (g.get('options') or []):
+                inv_addons_count += 1
+                inv_total += 1
+                opt_qty = opt.get('stock_quantity') or 0
+                if opt_qty > 10:
+                    inv_in += 1
+                elif opt_qty > 0:
+                    inv_low += 1
+                else:
+                    inv_oos += 1
+
+    inv_stats = {
+        'total': inv_total,
+        'in_stock': inv_in,
+        'low_stock': inv_low,
+        'out_of_stock': inv_oos,
+        'products_count': inv_products_count,
+        'variants_count': inv_variants_count,
+        'addons_count': inv_addons_count,
+    }
+
+    return render_template('seller_inventory.html', products=product_list, categories=categories, inv_stats=inv_stats)
 
 def generate_short_filename(original_filename, product_id, index):
     """Generate a short, safe filename for images"""
