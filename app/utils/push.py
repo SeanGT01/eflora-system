@@ -56,6 +56,67 @@ _ORDER_COPY = {
     ),
 }
 
+_ORDER_COPY_PICKUP = {
+    'accepted': (
+        'Order confirmed',
+        'Your store pickup order has been confirmed.',
+    ),
+    'preparing': (
+        'Order being prepared',
+        'Your pickup order is being prepared.',
+    ),
+    'done_preparing': (
+        'Ready for pickup',
+        'Your order is ready for pickup.',
+    ),
+    'on_delivery': (
+        'Ready for pickup',
+        'Your order is ready for pickup.',
+    ),
+    'delivered': (
+        'Order picked up',
+        'Your order has been picked up.',
+    ),
+    'completed': (
+        'Order picked up',
+        'Your order has been picked up. Thank you!',
+    ),
+    'cancelled': (
+        'Order cancelled',
+        'Your pickup order has been cancelled.',
+    ),
+    'rejected': (
+        'Order rejected',
+        'Your pickup order has been rejected.',
+    ),
+    'refunded': (
+        'Order refunded',
+        'Your pickup order has been refunded.',
+    ),
+}
+
+
+def is_order_pickup(order) -> bool:
+    """Determine whether an order is store pickup."""
+    if not order:
+        return False
+    fulfillment = str(getattr(order, 'fulfillment_type', '') or '').strip().lower()
+    if fulfillment == 'pickup':
+        return True
+    if fulfillment == 'delivery':
+        return False
+    payment_method = str(getattr(order, 'payment_method', '') or '').strip().lower()
+    if payment_method == 'cop':
+        return True
+    payment_status = str(getattr(order, 'payment_status', '') or '').strip().lower()
+    if payment_status.startswith('cop_'):
+        return True
+    delivery_address = str(getattr(order, 'delivery_address', '') or '').strip().lower()
+    if delivery_address.startswith('store pickup') or 'store pickup:' in delivery_address:
+        return True
+    return False
+
+
 
 def _parse_service_account(raw):
     raw = (raw or '').strip().lstrip('\ufeff')
@@ -260,38 +321,57 @@ def queue_push(session, job: dict):
 def queue_order_status_push(order, new_status: str, previous_status: Optional[str] = None):
     if not order:
         return
+    is_pickup = is_order_pickup(order)
+    copy_map = _ORDER_COPY_PICKUP if is_pickup else _ORDER_COPY
+
     statuses = []
     if new_status == 'preparing' and previous_status not in ('accepted', 'preparing'):
         statuses.append('accepted')
         statuses.append('preparing')
-    elif new_status in _ORDER_COPY:
+    elif new_status in copy_map or new_status in _ORDER_COPY:
         statuses.append(new_status)
     try:
         sess = object_session(order)
+        store_name = order.store.name if getattr(order, 'store', None) else None
+
         for status in statuses:
-            copy = _ORDER_COPY.get(status)
-            if copy and order.customer_id and sess is not None:
+            copy = copy_map.get(status) or _ORDER_COPY.get(status)
+            if copy:
                 title, body = copy
-                try:
-                    from app.models import Notification
-                    notif = Notification(
-                        user_id=order.customer_id,
-                        title=f"{title} (#{order.id})" if order.id else title,
-                        message=f"{body} Order #{order.id}." if order.id else body,
-                        type='order_status',
-                        reference_id=order.id,
-                        is_read=False,
-                    )
-                    sess.add(notif)
-                except Exception:
-                    logger.debug('Failed to create in-app notification', exc_info=True)
-            queue_push(sess, {
-                'kind': 'order',
-                'order_id': order.id,
-                'customer_id': order.customer_id,
-                'status': status,
-            })
-        if new_status == 'done_preparing' and not order.rider_id and order.store_id:
+                # Enhance store pickup message when ready
+                if is_pickup and status in ('done_preparing', 'on_delivery'):
+                    if store_name:
+                        body = f"Your order is ready for pickup at {store_name}."
+                    else:
+                        body = "Your order is ready for pickup."
+
+                if order.customer_id and sess is not None:
+                    try:
+                        from app.models import Notification
+                        notif = Notification(
+                            user_id=order.customer_id,
+                            title=f"{title} (#{order.id})" if order.id else title,
+                            message=f"{body} Order #{order.id}." if order.id else body,
+                            type='order_status',
+                            reference_id=order.id,
+                            is_read=False,
+                        )
+                        sess.add(notif)
+                    except Exception:
+                        logger.debug('Failed to create in-app notification', exc_info=True)
+
+                queue_push(sess, {
+                    'kind': 'order',
+                    'order_id': order.id,
+                    'customer_id': order.customer_id,
+                    'status': status,
+                    'title': title,
+                    'body': body,
+                    'fulfillment_type': 'pickup' if is_pickup else 'delivery',
+                })
+
+        # Only notify store riders if this is a DELIVERY order. Store pickup orders don't need a rider.
+        if new_status == 'done_preparing' and not is_pickup and not order.rider_id and order.store_id:
             queue_push(sess, {
                 'kind': 'rider_ready',
                 'order_id': order.id,
@@ -336,10 +416,15 @@ def _deliver_jobs(app, jobs):
                 kind = job.get('kind')
                 if kind == 'order':
                     status = job.get('status')
-                    copy = _ORDER_COPY.get(status)
-                    if not copy:
-                        continue
-                    title, body = copy
+                    title = job.get('title')
+                    body = job.get('body')
+                    if not title or not body:
+                        is_pickup = job.get('fulfillment_type') == 'pickup'
+                        copy_map = _ORDER_COPY_PICKUP if is_pickup else _ORDER_COPY
+                        copy = copy_map.get(status) or _ORDER_COPY.get(status)
+                        if not copy:
+                            continue
+                        title, body = copy
                     send_to_user_id(
                         job.get('customer_id'),
                         title,
@@ -348,6 +433,7 @@ def _deliver_jobs(app, jobs):
                             'type': 'order_status',
                             'order_id': job.get('order_id'),
                             'status': status,
+                            'fulfillment_type': job.get('fulfillment_type', 'delivery'),
                         },
                     )
                 elif kind == 'rider_ready':

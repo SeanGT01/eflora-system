@@ -1213,12 +1213,15 @@ def complete_order(order_id):
         if order.status != 'delivered':
             return jsonify({'success': False, 'message': 'Only delivered orders can be marked as completed.'}), 400
 
+        from app.utils.push import is_order_pickup
+        is_pickup = is_order_pickup(order)
         order.set_status('completed')
         from app.utils.seller_notifications import notify_store_seller
+        action_text = 'pickup' if is_pickup else 'delivery'
         notify_store_seller(
             store_id=order.store_id,
             title='Order completed',
-            message=f'Customer confirmed delivery for Order #{order.id}.',
+            message=f'Customer confirmed {action_text} for Order #{order.id}.',
             type='order_completed',
             reference_id=order.id,
         )
