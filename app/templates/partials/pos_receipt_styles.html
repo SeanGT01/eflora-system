@@ -2,76 +2,92 @@
     position: fixed; inset: 0; z-index: 510;
     background: rgba(42,35,30,0.62); backdrop-filter: blur(5px);
     display: flex; align-items: center; justify-content: center;
-    padding: 1.5rem; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    padding: 1rem; opacity: 0; pointer-events: none; transition: opacity 0.25s;
 }
 .receipt-overlay.active { opacity: 1; pointer-events: all; }
 
 .receipt-card {
     background: #fff;
     border-radius: 8px;
-    width: 100%; max-width: 320px;
+    width: 100%; max-width: 300px;
     box-shadow: var(--shadow-deep);
     overflow: hidden;
 }
 
 .receipt-paper {
-    font-family: "Courier New", Courier, ui-monospace, monospace;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
     color: #111;
     background: #fff;
-    padding: 1.1rem 1rem 1.25rem;
-    font-size: 12px;
-    line-height: 1.35;
-    max-height: min(70vh, 620px);
+    padding: 1rem 0.9rem 1.15rem;
+    font-size: 11.5px;
+    line-height: 1.3;
+    max-height: min(72vh, 600px);
     overflow-y: auto;
 }
 .rcpt-center { text-align: center; }
 .rcpt-store {
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
     text-transform: uppercase;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
-.rcpt-muted { font-size: 11px; color: #333; }
+.rcpt-muted { font-size: 10px; color: #444; line-height: 1.25; }
 .rcpt-dash {
-    margin: 8px 0;
+    margin: 6px 0;
     border: 0;
     border-top: 1px dashed #111;
 }
 .rcpt-title {
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    margin: 2px 0 8px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    margin: 3px 0 5px;
+    font-size: 11.5px;
 }
-.rcpt-row { display: flex; justify-content: space-between; gap: 8px; }
-.rcpt-row span:last-child { text-align: right; flex-shrink: 0; }
+.rcpt-row { display: flex; justify-content: space-between; gap: 4px; font-size: 11px; margin: 1.5px 0; }
+.rcpt-row span:first-child { color: #333; }
+.rcpt-row span:last-child { text-align: right; flex-shrink: 0; font-weight: 600; color: #111; }
 .rcpt-item { margin: 4px 0 6px; }
-.rcpt-item-top { display: flex; justify-content: space-between; gap: 8px; }
-.rcpt-item-name { min-width: 0; word-break: break-word; }
+.rcpt-item-top { display: flex; justify-content: space-between; gap: 4px; }
+.rcpt-item-name { min-width: 0; word-break: break-word; font-weight: 600; }
 .rcpt-item-amt { flex-shrink: 0; font-weight: 700; }
-.rcpt-addon { padding-left: 1rem; font-size: 11px; color: #333; }
-.rcpt-tot { font-weight: 700; font-size: 13px; margin-top: 2px; }
-.rcpt-thanks { margin-top: 8px; font-size: 11px; }
+.rcpt-addon { padding-left: 0.65rem; font-size: 10px; color: #444; margin-top: 1px; }
+.rcpt-tot { font-weight: 800; font-size: 13px; margin-top: 3px; }
+.rcpt-tot span:last-child { font-size: 13px; font-weight: 800; }
+.rcpt-thanks { margin-top: 6px; font-size: 10.5px; font-weight: 600; }
 
-.receipt-ftr { padding: 0.85rem 1rem 1.1rem; display: flex; gap: 0.5rem; background: #faf6f0; border-top: 1px solid #eee; }
+.receipt-ftr { padding: 0.75rem 0.9rem 0.95rem; display: flex; gap: 0.5rem; background: #faf6f0; border-top: 1px solid #eee; }
 
 @media print {
-    @page { margin: 8mm; }
+    @page {
+        margin: 0;
+        size: 58mm 210mm;
+    }
     html, body {
         background: #fff !important;
+        color: #000 !important;
         height: auto !important;
         overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 58mm !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
     body::before,
     .sidebar,
     .topbar,
+    .dashboard-footer,
     .toast-stack,
     #toast-container,
     #sidebarOverlay,
     .pos-shell,
+    .dash,
     .variant-modal,
     .orders-container,
-    .receipt-ftr {
+    .receipt-ftr,
+    .receipt-overlay:not(.active) {
         display: none !important;
     }
     .app-shell,
@@ -82,31 +98,150 @@
         padding: 0 !important;
         height: auto !important;
         overflow: visible !important;
-        width: 100% !important;
+        width: 58mm !important;
+        max-width: 58mm !important;
         background: #fff !important;
+        border: none !important;
     }
-    .receipt-overlay {
+    .receipt-overlay.active {
         display: block !important;
         position: static !important;
         inset: auto !important;
         background: none !important;
         backdrop-filter: none !important;
         padding: 0 !important;
+        margin: 0 auto !important;
         opacity: 1 !important;
         pointer-events: all !important;
+        width: 58mm !important;
+        max-width: 58mm !important;
     }
     .receipt-card {
         box-shadow: none !important;
-        max-width: 80mm !important;
-        width: 80mm !important;
+        max-width: 58mm !important;
+        width: 58mm !important;
         margin: 0 auto !important;
+        padding: 0 !important;
         border-radius: 0 !important;
+        border: none !important;
         overflow: visible !important;
+        background: #fff !important;
     }
     .receipt-paper {
         max-height: none !important;
         overflow: visible !important;
-        padding: 0 !important;
+        width: 58mm !important;
+        max-width: 58mm !important;
+        box-sizing: border-box !important;
+        padding: 2mm 3mm 6mm !important;
+        color: #000 !important;
+        background: #fff !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+        font-variant-numeric: tabular-nums !important;
+        font-size: 11px !important;
+        line-height: 1.3 !important;
+    }
+    .rcpt-center { text-align: center !important; }
+    .rcpt-store {
+        font-size: 14px !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.02em !important;
+        text-transform: uppercase !important;
+        margin-bottom: 2px !important;
+        color: #000 !important;
+    }
+    .rcpt-muted {
+        font-size: 9.5px !important;
+        color: #111 !important;
+        line-height: 1.25 !important;
+    }
+    .rcpt-dash {
+        margin: 5px 0 !important;
+        border: 0 !important;
+        border-top: 1px dashed #000 !important;
+    }
+    .rcpt-title {
+        font-weight: 800 !important;
+        font-size: 11.5px !important;
+        letter-spacing: 0.08em !important;
+        margin: 3px 0 4px !important;
+        color: #000 !important;
+    }
+    .rcpt-row {
+        display: flex !important;
+        justify-content: space-between !important;
+        gap: 4px !important;
+        font-size: 11px !important;
+        color: #000 !important;
+        margin: 1.5px 0 !important;
+    }
+    .rcpt-row span:first-child {
+        color: #222 !important;
+    }
+    .rcpt-row span:last-child {
+        text-align: right !important;
+        flex-shrink: 0 !important;
+        font-weight: 600 !important;
+        color: #000 !important;
+    }
+    .rcpt-item {
+        margin: 4px 0 5px !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+    .rcpt-item-top {
+        display: flex !important;
+        justify-content: space-between !important;
+        gap: 4px !important;
+    }
+    .rcpt-item-name {
+        min-width: 0 !important;
+        word-break: break-word !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #000 !important;
+    }
+    .rcpt-item-amt {
+        flex-shrink: 0 !important;
+        font-weight: 700 !important;
+        font-size: 11px !important;
+        color: #000 !important;
+    }
+    .rcpt-addon {
+        padding-left: 0.5rem !important;
+        font-size: 9.5px !important;
+        color: #333 !important;
+        margin-top: 1px !important;
+    }
+    .rcpt-tot {
+        font-weight: 800 !important;
+        font-size: 13px !important;
+        margin-top: 3px !important;
+        color: #000 !important;
+    }
+    .rcpt-tot span:last-child {
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        color: #000 !important;
+    }
+    .rcpt-thanks {
+        margin-top: 6px !important;
+        font-size: 10px !important;
+        font-weight: 600 !important;
+        color: #000 !important;
+    }
+    #receiptDedicationBlock,
+    .rcpt-dedication-block {
+        background: #fff !important;
+        border: 1px dashed #000 !important;
+        border-radius: 0 !important;
+        padding: 2mm 1.5mm !important;
+        margin: 4px 0 !important;
+        font-size: 9.5px !important;
+        color: #000 !important;
+    }
+    #receiptDedicationBlock *,
+    .rcpt-dedication-block * {
         color: #000 !important;
     }
 }

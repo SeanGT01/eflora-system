@@ -479,8 +479,11 @@ function renderOrders(orders) {
                     </span>
                 </td>
                 <td data-label="Actions">
-                    <button class="action-btn" onclick="viewOrder(${order.id})" title="View" aria-label="View">
+                    <button class="action-btn" onclick="viewOrder(${order.id})" title="View Receipt" aria-label="View Receipt">
                         <i class="ri-eye-line"></i>
+                    </button>
+                    <button class="action-btn" onclick="quickPrintPosOrder(${order.id})" title="Print Receipt" aria-label="Print Receipt" style="margin-left:4px;">
+                        <i class="ri-printer-line"></i>
                     </button>
                 </td>
             </tr>`;
@@ -704,13 +707,28 @@ function renderOrderModal(order) {
     modal.classList.add('active');
 }
 
+{% include 'partials/pos_receipt_print.html' %}
+
 function printPosOrder() {
     const modal = document.getElementById('orderModal');
     if (!modal || !modal.classList.contains('active')) {
         showToast('Open an order first, then print.', 'error');
         return;
     }
-    window.print();
+    printReceiptPaperDirect('receiptPaper');
+}
+
+async function quickPrintPosOrder(orderId) {
+    try {
+        const response = await fetch(`/api/seller/pos/orders/${orderId}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+        renderOrderModal(data);
+        printReceiptPaperDirect('receiptPaper');
+    } catch (error) {
+        showToast('Failed to print receipt: ' + error.message, 'error');
+    }
 }
 
 function handleOrderOverlayClick(e) {

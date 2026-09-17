@@ -1,0 +1,184 @@
+function printReceiptPaperDirect(elementId) {
+    const paper = document.getElementById(elementId || 'receiptPaper');
+    if (!paper) {
+        window.print();
+        return;
+    }
+
+    let iframe = document.getElementById('posReceiptPrintFrame');
+    if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'posReceiptPrintFrame';
+        iframe.setAttribute('style', 'position:fixed;right:0;bottom:0;width:58mm;height:0;border:0;visibility:hidden;');
+        document.body.appendChild(iframe);
+    }
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Sales Receipt</title>
+            <style id="baseStyles">
+                * {
+                    box-sizing: border-box;
+                    margin: 0;
+                    padding: 0;
+                }
+                html, body {
+                    background: #fff;
+                    color: #000;
+                    margin: 0;
+                    padding: 0;
+                    width: 58mm;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    font-size: 11px;
+                    line-height: 1.3;
+                    font-variant-numeric: tabular-nums;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .receipt-paper {
+                    width: 58mm;
+                    max-width: 58mm;
+                    margin: 0 auto;
+                    padding: 2mm 3mm 6mm;
+                    background: #fff;
+                    color: #000;
+                    box-sizing: border-box;
+                }
+                .rcpt-center { text-align: center; }
+                .rcpt-store {
+                    font-size: 14px;
+                    font-weight: 800;
+                    letter-spacing: 0.02em;
+                    text-transform: uppercase;
+                    margin-bottom: 2px;
+                    color: #000;
+                }
+                .rcpt-muted {
+                    font-size: 9.5px;
+                    color: #111;
+                    line-height: 1.25;
+                }
+                .rcpt-dash {
+                    margin: 5px 0;
+                    border: 0;
+                    border-top: 1px dashed #000;
+                }
+                .rcpt-title {
+                    font-weight: 800;
+                    font-size: 11.5px;
+                    letter-spacing: 0.08em;
+                    margin: 3px 0 4px;
+                    color: #000;
+                }
+                .rcpt-row {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 4px;
+                    font-size: 11px;
+                    color: #000;
+                    margin: 1.5px 0;
+                }
+                .rcpt-row span:first-child {
+                    color: #222;
+                }
+                .rcpt-row span:last-child {
+                    text-align: right;
+                    flex-shrink: 0;
+                    font-weight: 600;
+                    color: #000;
+                }
+                .rcpt-item {
+                    margin: 4px 0 5px;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }
+                .rcpt-item-top {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 4px;
+                }
+                .rcpt-item-name {
+                    min-width: 0;
+                    word-break: break-word;
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: #000;
+                }
+                .rcpt-item-amt {
+                    flex-shrink: 0;
+                    font-weight: 700;
+                    font-size: 11px;
+                    color: #000;
+                }
+                .rcpt-addon {
+                    padding-left: 0.5rem;
+                    font-size: 9.5px;
+                    color: #333;
+                    margin-top: 1px;
+                }
+                .rcpt-tot {
+                    font-weight: 800;
+                    font-size: 13px;
+                    margin-top: 3px;
+                    color: #000;
+                }
+                .rcpt-tot span:last-child {
+                    font-size: 13px;
+                    font-weight: 800;
+                    color: #000;
+                }
+                .rcpt-thanks {
+                    margin-top: 6px;
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: #000;
+                }
+                #receiptDedicationBlock,
+                .rcpt-dedication-block {
+                    background: #fff !important;
+                    border: 1px dashed #000 !important;
+                    border-radius: 0 !important;
+                    padding: 2mm 1.5mm !important;
+                    margin: 4px 0 !important;
+                    font-size: 9.5px !important;
+                    color: #000 !important;
+                }
+                #receiptDedicationBlock *,
+                .rcpt-dedication-block * {
+                    color: #000 !important;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="receipt-paper">
+                ${paper.innerHTML}
+            </div>
+        </body>
+        </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+        try {
+            const paperEl = doc.querySelector('.receipt-paper') || doc.body;
+            const scrollH = Math.max(paperEl.scrollHeight, paperEl.offsetHeight);
+            // 1 px at 96 DPI = 0.264583 mm. Add 6mm margin for cutter/tear gap
+            const heightMm = Math.max(65, Math.ceil(scrollH * 0.265) + 6);
+
+            const pageStyle = doc.createElement('style');
+            pageStyle.id = 'thermalPageStyle';
+            pageStyle.textContent = `@page { size: 58mm ${heightMm}mm; margin: 0; }`;
+            doc.head.appendChild(pageStyle);
+
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        } catch (_) {
+            window.print();
+        }
+    }, 150);
+}
