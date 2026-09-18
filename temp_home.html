@@ -3474,6 +3474,7 @@
         max-width: 300px;
         margin-top: 1.25rem;
         font-family: var(--font-sans);
+        min-height: 4.8em;
     }
 
     /* Thumbnail strip */
@@ -3512,38 +3513,51 @@
 
     .hero-actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 0.75rem;
         align-items: center;
-        margin-top: 1.5rem;
+        margin-top: clamp(1rem, 2.2vw, 1.5rem);
+    }
+
+    .hero-actions .btn-hero-primary,
+    .hero-actions .btn-hero-ghost {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 42px;
+        padding: 0 clamp(1.1rem, 1.6vw, 1.5rem);
+        box-sizing: border-box;
+        border-radius: var(--radius-pill);
+        font-size: clamp(12px, 1vw, 13px);
+        line-height: 1;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s, color 0.2s;
     }
 
     .hero-actions .btn-hero-primary {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 0.7rem 1.5rem;
         background: rgba(255, 255, 255, 0.92);
         color: #1a1a1a;
-        border-radius: var(--radius-pill);
-        font-size: 13px;
         font-weight: 700;
-        text-decoration: none;
         letter-spacing: 0.04em;
         transition: transform 0.2s, box-shadow 0.2s;
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
         border: 1px solid rgba(255,255,255,0.7);
     }
+    .hero-actions .btn-hero-primary i {
+        font-size: 15px;
+        line-height: 1;
+        display: inline-block;
+    }
     .hero-actions .btn-hero-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(181,68,90,0.28); }
 
     .hero-actions .btn-hero-ghost {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 0.7rem 1.5rem;
         background: rgba(255,255,255,0.1);
         color: rgba(255,255,255,0.85);
         border: 1px solid rgba(255,255,255,0.35);
-        border-radius: var(--radius-pill);
-        font-size: 13px;
         font-weight: 600;
-        text-decoration: none;
         transition: border-color 0.2s, color 0.2s, background 0.2s;
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
@@ -3713,6 +3727,7 @@
     /* Left panel text animation */
     .hero-text-slot {
         overflow: hidden;
+        min-height: clamp(185px, 18vw, 225px);
     }
     .hero-text-inner {
         transition: transform 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.55s ease;
@@ -3749,12 +3764,39 @@
         100% { transform: translateY(520px) rotate(360deg); opacity: 0; }
     }
 
-    /* Responsive Hero */
+    /* Laptops & compact two-column screens */
+    @media (min-width: 901px) and (max-width: 1200px) {
+        .hero-left {
+            padding: 2.25rem 1.75rem 1.5rem;
+        }
+        .hero-actions {
+            gap: 0.5rem;
+        }
+        .hero-actions .btn-hero-primary,
+        .hero-actions .btn-hero-ghost {
+            height: 40px;
+            padding: 0 1.1rem;
+            font-size: 12px;
+        }
+    }
+
+    /* Responsive Hero - Tablets */
     @media (max-width: 900px) {
         .hero-section { grid-template-columns: 1fr; min-height: auto; }
         .hero-right { height: 300px; }
         .hero-left { padding: 2rem 2rem 1.5rem; }
         .hero-title { font-size: clamp(30px, 7vw, 52px); }
+        .hero-text-slot { min-height: clamp(155px, 20vw, 195px); }
+
+        .hero-actions {
+            gap: 0.65rem;
+        }
+        .hero-actions .btn-hero-primary,
+        .hero-actions .btn-hero-ghost {
+            height: 42px;
+            padding: 0 1.25rem;
+            font-size: 13px;
+        }
 
         .hero-slide-label {
             top: 0.85rem;
@@ -3767,12 +3809,30 @@
             right: 0.85rem;
         }
     }
-    @media (max-width: 600px) {
+
+    /* Responsive Hero - Mobile */
+    @media (max-width: 640px) {
         .hero-right { height: 240px; }
         .hero-left { padding: 1.5rem 1.25rem 1.25rem; }
         .hero-title { font-size: clamp(26px, 8vw, 44px); }
+        .hero-text-slot { min-height: clamp(135px, 28vw, 170px); }
         .hero-thumbs { gap: 7px; }
         .hero-thumb { width: 50px; height: 50px; }
+
+        .hero-actions {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.65rem;
+            width: 100%;
+        }
+        .hero-actions .btn-hero-primary,
+        .hero-actions .btn-hero-ghost {
+            width: 100%;
+            height: 44px;
+            justify-content: center;
+            font-size: 13.5px;
+            padding: 0 1rem;
+        }
 
         .hero-nav-btn { width: 32px; height: 32px; font-size: 16px; }
 
@@ -6929,13 +6989,13 @@
                 <div class="hero-text-inner" id="heroTitleInner">
                     <h1 class="hero-title" id="heroTitle">The New<br><em>Must Haves</em></h1>
                     <p class="hero-subtitle" id="heroSubtitle">Roses, tulips, lilies & more — handpicked from local farms, delivered fresh to your door.</p>
-                    <div class="hero-actions">
-                        <a href="#featured-products" class="btn-hero-primary" id="heroShopBtn">
-                            <i class="ri-shopping-bag-line"></i> Shop Now
-                        </a>
-                        <a href="/stores" class="btn-hero-ghost">Browse Stores</a>
-                    </div>
                 </div>
+            </div>
+            <div class="hero-actions">
+                <a href="#featured-products" class="btn-hero-primary" id="heroShopBtn">
+                    <i class="ri-shopping-bag-line"></i> Shop Now
+                </a>
+                <a href="/stores" class="btn-hero-ghost">Browse Stores</a>
             </div>
         </div>
 

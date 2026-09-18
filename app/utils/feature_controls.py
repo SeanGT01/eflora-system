@@ -8,11 +8,13 @@ from app.extensions import db
 KEY_PHONE_BIND_OTP = 'phone_bind_otp'
 KEY_SMS_SMS8 = 'sms_provider_sms8'
 KEY_SMS_IPROG = 'sms_provider_iprog'
+KEY_PHONE_REGISTRATION = 'phone_registration'
 
 DEFAULTS = {
     KEY_PHONE_BIND_OTP: False,
     KEY_SMS_SMS8: True,
     KEY_SMS_IPROG: True,
+    KEY_PHONE_REGISTRATION: True,
 }
 
 
@@ -57,6 +59,7 @@ def public_flags():
         KEY_PHONE_BIND_OTP: flags[KEY_PHONE_BIND_OTP],
         KEY_SMS_SMS8: flags[KEY_SMS_SMS8],
         KEY_SMS_IPROG: flags[KEY_SMS_IPROG],
+        KEY_PHONE_REGISTRATION: flags[KEY_PHONE_REGISTRATION],
         'sms_priority': 'sms8 then iprog' if flags[KEY_SMS_SMS8] and flags[KEY_SMS_IPROG] else (
             'sms8' if flags[KEY_SMS_SMS8] else ('iprog' if flags[KEY_SMS_IPROG] else 'none')
         ),
@@ -75,6 +78,10 @@ def iprog_enabled() -> bool:
     return bool(get_feature_controls().get(KEY_SMS_IPROG))
 
 
+def phone_registration_enabled() -> bool:
+    return bool(get_feature_controls().get(KEY_PHONE_REGISTRATION, True))
+
+
 def set_feature_controls(payload):
     from app.models import SystemControl
 
@@ -84,6 +91,7 @@ def set_feature_controls(payload):
         KEY_PHONE_BIND_OTP: data.get(KEY_PHONE_BIND_OTP),
         KEY_SMS_SMS8: data.get(KEY_SMS_SMS8),
         KEY_SMS_IPROG: data.get(KEY_SMS_IPROG),
+        KEY_PHONE_REGISTRATION: data.get(KEY_PHONE_REGISTRATION),
     }
     for key, value in mapping.items():
         if value is None:

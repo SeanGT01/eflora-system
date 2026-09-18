@@ -1898,6 +1898,7 @@ def inject_user():
             except Exception:
                 chat_unread_count = 0
     from app.utils.store_admin_perms import current_store_admin_permissions, default_permissions
+    from app.utils.feature_controls import phone_registration_enabled
     store_admin_perms = (
         current_store_admin_permissions()
         if session.get('role') == 'store_admin'
@@ -1910,6 +1911,7 @@ def inject_user():
         chat_unread_count=chat_unread_count,
         store_admin_perms=store_admin_perms,
         current_year=datetime.utcnow().year,
+        phone_registration_enabled=phone_registration_enabled(),
     )
 
 
@@ -3076,6 +3078,9 @@ def register():
                 display_login_id,
             )
 
+            from app.utils.feature_controls import phone_registration_enabled
+            allow_phone_reg = phone_registration_enabled()
+
             email = None
             phone = None
             channel = 'email'
@@ -3084,18 +3089,24 @@ def register():
                 if is_synthetic_account_email(email) or '@' not in email or '.' not in email.split('@')[-1]:
                     return render_template(
                         'register.html',
-                        error='Enter a valid email address or Philippine mobile number.',
+                        error='Enter a valid email address.' if not allow_phone_reg else 'Enter a valid email address or Philippine mobile number.',
                         form_data=request.form,
                     )
                 channel = 'email'
             elif is_valid_ph_mobile(identifier):
+                if not allow_phone_reg:
+                    return render_template(
+                        'register.html',
+                        error='Phone number registration is currently disabled. Please register using an email address.',
+                        form_data=request.form,
+                    )
                 phone = normalize_ph_mobile(identifier)
                 email = phone_to_account_email(phone)
                 channel = 'sms'
             else:
                 return render_template(
                     'register.html',
-                    error='Enter a valid email address or Philippine mobile number (e.g. 09171234567).',
+                    error='Enter a valid email address.' if not allow_phone_reg else 'Enter a valid email address or Philippine mobile number (e.g. 09171234567).',
                     form_data=request.form,
                 )
 
@@ -3583,6 +3594,9 @@ def seller_signup_start():
             )
 
         # Same identifier rules as customer registration: email OR PH mobile.
+        from app.utils.feature_controls import phone_registration_enabled
+        allow_phone_reg = phone_registration_enabled()
+
         email = None
         phone = None
         channel = 'email'
@@ -3591,18 +3605,24 @@ def seller_signup_start():
             if is_synthetic_account_email(email) or '@' not in email or '.' not in email.split('@')[-1]:
                 return render_template(
                     'seller_signup_landing.html',
-                    error='Enter a valid email address or Philippine mobile number.',
+                    error='Enter a valid email address.' if not allow_phone_reg else 'Enter a valid email address or Philippine mobile number.',
                     form_data=request.form,
                 )
             channel = 'email'
         elif is_valid_ph_mobile(identifier):
+            if not allow_phone_reg:
+                return render_template(
+                    'seller_signup_landing.html',
+                    error='Phone number registration is currently disabled. Please register using an email address.',
+                    form_data=request.form,
+                )
             phone = normalize_ph_mobile(identifier)
             email = phone_to_account_email(phone)
             channel = 'sms'
         else:
             return render_template(
                 'seller_signup_landing.html',
-                error='Enter a valid email address or Philippine mobile number (e.g. 09171234567).',
+                error='Enter a valid email address.' if not allow_phone_reg else 'Enter a valid email address or Philippine mobile number (e.g. 09171234567).',
                 form_data=request.form,
             )
 

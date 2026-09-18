@@ -710,13 +710,12 @@
             margin: 0.35rem 0 0.6rem;
         }
         .terms-scroll-track {
-            position: sticky;
-            bottom: 0;
-            left: 0;
-            right: 0;
             height: 3px;
-            background: rgba(107,76,59,0.1);
-            margin: 0.75rem -1.35rem -1.25rem;
+            width: 100%;
+            background: var(--border);
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
         }
         .terms-scroll-bar {
             height: 100%;
@@ -725,7 +724,7 @@
             transition: width 0.1s ease;
         }
         .terms-modal-footer {
-            border-top: 1px solid var(--border);
+            border-top: none;
             padding: 1rem 1.25rem 1.15rem;
             background: rgba(250, 246, 240, 0.7);
             display: flex;
@@ -1072,14 +1071,22 @@
                 <div class="step-num">1</div>
                 <div class="step-text">
                     <strong>Fill in the form</strong>
+                    {% if phone_registration_enabled %}
                     Enter your name, email or phone, and a secure password.
+                    {% else %}
+                    Enter your name, email, and a secure password.
+                    {% endif %}
                 </div>
             </div>
             <div class="step-item">
                 <div class="step-num">2</div>
                 <div class="step-text">
                     <strong>Verify your account</strong>
+                    {% if phone_registration_enabled %}
                     We'll send a 6-digit code to your email or phone — enter it to confirm.
+                    {% else %}
+                    We'll send a 6-digit code to your email — enter it to confirm.
+                    {% endif %}
                 </div>
             </div>
             <div class="step-item">
@@ -1132,7 +1139,11 @@
             <i class="ri-shield-check-line"></i>
             <div>
                 <strong>Verification code</strong>
+                {% if phone_registration_enabled %}
                 We’ll text a 6-digit code if you register with a mobile number; otherwise we email it.
+                {% else %}
+                We’ll send a 6-digit verification code to your email address.
+                {% endif %}
             </div>
         </div>
 
@@ -1162,13 +1173,13 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label">Email or Mobile Number</label>
+                <label class="form-label">{% if phone_registration_enabled %}Email or Mobile Number{% else %}Email Address{% endif %}</label>
                 <div class="input-wrap">
-                    <i class="ri-user-line input-icon"></i>
-                    <input class="form-control" type="text" name="identifier"
+                    <i class="ri-{% if phone_registration_enabled %}user{% else %}mail{% endif %}-line input-icon"></i>
+                    <input class="form-control" type="{% if phone_registration_enabled %}text{% else %}email{% endif %}" name="identifier"
                            id="identifierInput"
-                           placeholder="you@email.com or 09171234567" required
-                           autocomplete="username"
+                           placeholder="{% if phone_registration_enabled %}you@email.com or 09171234567{% else %}you@email.com{% endif %}" required
+                           autocomplete="{% if phone_registration_enabled %}username{% else %}email{% endif %}"
                            value="{{ form_data.identifier if form_data and form_data.identifier is defined else (form_data.email if form_data else '') }}">
                 </div>
             </div>
@@ -1312,9 +1323,9 @@
                     <a href="{{ url_for('templates.returns') }}" target="_blank" rel="noopener">Returns</a>.
                 </p>
             </div>
-            <div class="terms-scroll-track" aria-hidden="true">
-                <div class="terms-scroll-bar" id="termsScrollBar"></div>
-            </div>
+        </div>
+        <div class="terms-scroll-track" aria-hidden="true">
+            <div class="terms-scroll-bar" id="termsScrollBar"></div>
         </div>
         <div class="terms-modal-footer">
             <div class="terms-modal-check">
@@ -1449,11 +1460,16 @@
         if (fullNameInput.value.length - selected + incoming > 81) e.preventDefault();
     });
 
+    const phoneRegistrationEnabled = {{ 'true' if phone_registration_enabled else 'false' }};
+
     function isValidIdentifier(value) {
         const v = (value || '').trim();
         if (!v) return false;
         if (v.includes('@')) {
             return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.toLowerCase());
+        }
+        if (!phoneRegistrationEnabled) {
+            return false;
         }
         const compact = v.replace(/[\s\-()]/g, '');
         let n = compact;
@@ -1616,7 +1632,7 @@
 
         if (!isValidIdentifier(idVal)) {
             e.preventDefault();
-            identifierInput.setCustomValidity('Enter a valid email or PH mobile (e.g. 09171234567).');
+            identifierInput.setCustomValidity(phoneRegistrationEnabled ? 'Enter a valid email or PH mobile (e.g. 09171234567).' : 'Enter a valid email address.');
             identifierInput.reportValidity();
             identifierInput.focus();
             return false;

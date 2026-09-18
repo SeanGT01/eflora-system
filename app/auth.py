@@ -231,6 +231,8 @@ def _validate_registration_payload(data, require_password=True):
         normalize_ph_mobile,
         phone_to_account_email,
     )
+    from app.utils.feature_controls import phone_registration_enabled
+    allow_phone_reg = phone_registration_enabled()
 
     full_name = (data.get('full_name') or '').strip()
     password = data.get('password') or ''
@@ -246,6 +248,11 @@ def _validate_registration_payload(data, require_password=True):
                 400,
             )
         if legacy_phone and not legacy_email:
+            if not allow_phone_reg:
+                return None, (
+                    'Phone number registration is currently disabled. Please register using an email address.',
+                    400,
+                )
             raw_id = legacy_phone
         else:
             raw_id = legacy_email or ''
@@ -258,6 +265,8 @@ def _validate_registration_payload(data, require_password=True):
     if name_err:
         return None, (name_err, 400)
     if not raw_id:
+        if not allow_phone_reg:
+            return None, ('Enter your email address.', 400)
         return None, ('Enter your email address or Philippine mobile number.', 400)
     if require_password:
         if not password:
@@ -277,6 +286,12 @@ def _validate_registration_payload(data, require_password=True):
             'phone': None,
             'otp_channel': 'email',
         }, None
+
+    if not allow_phone_reg:
+        return None, (
+            'Phone number registration is currently disabled. Please register using an email address.',
+            400,
+        )
 
     if not is_valid_ph_mobile(raw_id):
         return None, (

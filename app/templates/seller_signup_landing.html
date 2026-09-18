@@ -748,14 +748,22 @@
                 <div class="step-num">1</div>
                 <div class="step-text">
                     <strong>Account &amp; verification</strong>
+                    {% if phone_registration_enabled %}
                     Email or mobile number, password — then verify with a code.
+                    {% else %}
+                    Email address and password — then verify with a code.
+                    {% endif %}
                 </div>
             </div>
             <div class="step-item">
                 <div class="step-num">2</div>
                 <div class="step-text">
                     <strong>Verify your contact</strong>
+                    {% if phone_registration_enabled %}
                     We text a 6-digit code for mobile signup; otherwise we email it.
+                    {% else %}
+                    We'll email a 6-digit verification code to confirm your email.
+                    {% endif %}
                 </div>
             </div>
             <div class="step-item">
@@ -791,7 +799,7 @@
         <div class="form-heading">
             <div class="form-eyebrow">Seller registration</div>
             <h2 class="form-title">Create your seller login</h2>
-            <p class="form-subtitle">Enter your name, email or phone, and a secure password.</p>
+            <p class="form-subtitle">{% if phone_registration_enabled %}Enter your name, email or phone, and a secure password.{% else %}Enter your name, email, and a secure password.{% endif %}</p>
         </div>
 
         <!-- Info box -->
@@ -799,7 +807,11 @@
             <i class="ri-shield-check-line"></i>
             <div>
                 <strong>Verification code</strong>
+                {% if phone_registration_enabled %}
                 We’ll text a 6-digit code if you register with a mobile number; otherwise we email it.
+                {% else %}
+                We’ll send a 6-digit verification code to your email address.
+                {% endif %}
             </div>
         </div>
 
@@ -825,13 +837,13 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label">Email or Mobile Number</label>
+                <label class="form-label">{% if phone_registration_enabled %}Email or Mobile Number{% else %}Email Address{% endif %}</label>
                 <div class="input-wrap">
-                    <i class="ri-user-line input-icon"></i>
-                    <input class="form-control" type="text" name="identifier"
+                    <i class="ri-{% if phone_registration_enabled %}user{% else %}mail{% endif %}-line input-icon"></i>
+                    <input class="form-control" type="{% if phone_registration_enabled %}text{% else %}email{% endif %}" name="identifier"
                            id="identifierInput"
-                           placeholder="you@email.com or 09171234567" required
-                           autocomplete="username"
+                           placeholder="{% if phone_registration_enabled %}you@email.com or 09171234567{% else %}you@email.com{% endif %}" required
+                           autocomplete="{% if phone_registration_enabled %}username{% else %}email{% endif %}"
                            value="{{ form_data.identifier if form_data and form_data.identifier is defined else (form_data.email if form_data else '') }}">
                 </div>
             </div>
@@ -998,11 +1010,16 @@
         return /^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmed);
     }
 
+    const phoneRegistrationEnabled = {{ 'true' if phone_registration_enabled else 'false' }};
+
     function isValidIdentifier(value) {
         const v = (value || '').trim();
         if (!v) return false;
         if (v.includes('@')) {
             return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.toLowerCase());
+        }
+        if (!phoneRegistrationEnabled) {
+            return false;
         }
         const compact = v.replace(/[\s\-()]/g, '');
         let n = compact;
@@ -1050,7 +1067,7 @@
 
         if (!isValidIdentifier(idVal)) {
             e.preventDefault();
-            identifierInput.setCustomValidity('Enter a valid email or PH mobile (e.g. 09171234567).');
+            identifierInput.setCustomValidity(phoneRegistrationEnabled ? 'Enter a valid email or PH mobile (e.g. 09171234567).' : 'Enter a valid email address.');
             identifierInput.reportValidity();
             identifierInput.focus();
             return false;

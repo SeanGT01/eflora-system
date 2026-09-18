@@ -145,6 +145,25 @@
         <p id="smsPriorityNote" style="margin: 0.75rem 0 0; font-size: 13px; color: var(--muted);"></p>
     </div>
 
+    <div class="card control-card">
+        <div class="section-eyebrow">Registration</div>
+        <h3 class="section-title" style="font-size: 1.35rem; margin-top: 0.2rem;">Account registration methods</h3>
+        <p style="color: var(--muted); font-size: 13px; margin: 0 0 0.35rem;">
+            Controls whether new accounts can be registered using a mobile phone number.
+        </p>
+        <div class="control-row">
+            <div class="control-copy">
+                <h3>Allow registration with mobile number</h3>
+                <p>When on, new customers (web and mobile app) and sellers (web) can register using either an email address or Philippine mobile number. When off, registration is restricted to email only.</p>
+                <span class="status-chip" id="chipPhoneRegistration">…</span>
+            </div>
+            <label class="toggle-wrap">
+                <input type="checkbox" class="toggle-input" id="flagPhoneRegistration">
+                <span class="toggle-track"></span>
+            </label>
+        </div>
+    </div>
+
     <div class="card control-card save-bar">
         <span id="controlsHint" style="color: var(--muted); font-size: 13px;">No unsaved changes</span>
         <button type="button" class="btn btn-rose" id="saveControlsBtn" onclick="saveFeatureControls()" disabled>
@@ -180,6 +199,7 @@ let savedFlags = {
     phone_bind_otp: false,
     sms_provider_sms8: true,
     sms_provider_iprog: true,
+    phone_registration: true,
 };
 
 function currentFlags() {
@@ -187,6 +207,7 @@ function currentFlags() {
         phone_bind_otp: document.getElementById('flagPhoneBindOtp').checked,
         sms_provider_sms8: document.getElementById('flagSms8').checked,
         sms_provider_iprog: document.getElementById('flagIprog').checked,
+        phone_registration: document.getElementById('flagPhoneRegistration').checked,
     };
 }
 
@@ -194,7 +215,8 @@ function flagsDirty() {
     const now = currentFlags();
     return now.phone_bind_otp !== !!savedFlags.phone_bind_otp
         || now.sms_provider_sms8 !== !!savedFlags.sms_provider_sms8
-        || now.sms_provider_iprog !== !!savedFlags.sms_provider_iprog;
+        || now.sms_provider_iprog !== !!savedFlags.sms_provider_iprog
+        || now.phone_registration !== !!savedFlags.phone_registration;
 }
 
 function syncSaveButton() {
@@ -210,13 +232,16 @@ function applyFlags(flags) {
         phone_bind_otp: !!flags.phone_bind_otp,
         sms_provider_sms8: !!flags.sms_provider_sms8,
         sms_provider_iprog: !!flags.sms_provider_iprog,
+        phone_registration: flags.phone_registration !== false,
     };
     document.getElementById('flagPhoneBindOtp').checked = savedFlags.phone_bind_otp;
     document.getElementById('flagSms8').checked = savedFlags.sms_provider_sms8;
     document.getElementById('flagIprog').checked = savedFlags.sms_provider_iprog;
+    document.getElementById('flagPhoneRegistration').checked = savedFlags.phone_registration;
     setChip('chipPhoneOtp', savedFlags.phone_bind_otp);
     setChip('chipSms8', savedFlags.sms_provider_sms8);
     setChip('chipIprog', savedFlags.sms_provider_iprog);
+    setChip('chipPhoneRegistration', savedFlags.phone_registration);
     refreshPriorityNote();
     syncSaveButton();
 }
@@ -264,11 +289,12 @@ async function saveFeatureControls() {
     }
 }
 
-['flagPhoneBindOtp', 'flagSms8', 'flagIprog'].forEach((id) => {
+['flagPhoneBindOtp', 'flagSms8', 'flagIprog', 'flagPhoneRegistration'].forEach((id) => {
     document.getElementById(id).addEventListener('change', () => {
         setChip('chipPhoneOtp', document.getElementById('flagPhoneBindOtp').checked);
         setChip('chipSms8', document.getElementById('flagSms8').checked);
         setChip('chipIprog', document.getElementById('flagIprog').checked);
+        setChip('chipPhoneRegistration', document.getElementById('flagPhoneRegistration').checked);
         refreshPriorityNote();
         syncSaveButton();
     });
