@@ -1295,6 +1295,67 @@ def _store_delivery_match(store, address):
         return {'can_deliver': False, 'reason': 'Could not validate delivery coverage right now.'}
 
 
+def _build_store_map_data(store, store_data=None):
+    """Build standardized map & coverage data payload for storefront delivery map modals."""
+    if not store:
+        return None
+    if store_data is None:
+        store_data = store.to_dict()
+
+    delivery_method = (store.delivery_method or 'radius').strip().casefold()
+    geometry_key = {
+        'radius': 'radius_geojson',
+        'zone': 'zone_geojson',
+        'municipality': 'municipality_geojson',
+    }.get(delivery_method, 'current_delivery_geojson')
+    coverage_geometry = store_data.get(geometry_key) or store_data.get('current_delivery_geojson')
+    if isinstance(coverage_geometry, str):
+        try:
+            coverage_geometry = json.loads(coverage_geometry)
+        except (TypeError, ValueError):
+            coverage_geometry = None
+
+    is_customer = session.get('role') == 'customer' and session.get('user_id')
+    default_address = _get_default_customer_address(session.get('user_id')) if is_customer else None
+    delivery_match = _store_delivery_match(store, default_address) if default_address else {
+        'can_deliver': False,
+        'reason': 'Set your default address to check delivery coverage.',
+    }
+    customer_map_location = None
+    if default_address and default_address.latitude is not None and default_address.longitude is not None:
+        customer_map_location = {
+            'latitude': default_address.latitude,
+            'longitude': default_address.longitude,
+            'label': default_address.address_label or 'Default address',
+        }
+
+    logo_url = store_data.get('logo_url')
+    if not logo_url and getattr(store, 'seller_application', None):
+        if store.seller_application.store_logo_url:
+            logo_url = store.seller_application.store_logo_url
+        elif store.seller_application.store_logo_path:
+            logo_url = f'/static/uploads/seller_logos/{store.seller_application.store_logo_path}'
+
+    return {
+        'store': {
+            'name': store.name,
+            'address': store.formatted_address or store.address,
+            'latitude': store.latitude,
+            'longitude': store.longitude,
+            'logo_url': logo_url,
+        },
+        'customer': customer_map_location,
+        'coverage': {
+            'method': delivery_method,
+            'radius_km': store.delivery_radius_km,
+            'municipalities': store.selected_municipalities or [],
+            'geometry': coverage_geometry,
+        },
+        'delivery': delivery_match,
+        'is_customer': bool(is_customer),
+    }
+
+
 @templates_bp.route('/googlea5dba4f15d616309.html')
 def google_site_verification():
     """Google Search Console HTML-file ownership check (keep after verify)."""
@@ -10857,6 +10918,8 @@ def product_details(product_id):
         total_sold = int(online_sold) + int(pos_sold)
         product_dict['total_sold'] = total_sold
 
+        store_map_data = _build_store_map_data(store, product_dict.get('store')) if store else None
+
         return render_template(
             'product_details.html',
             product=product_dict,
@@ -10868,6 +10931,7 @@ def product_details(product_id):
             total_ratings=total_ratings,
             variant_ratings=variant_ratings,
             total_sold=total_sold,
+            store_map_data=store_map_data,
         )
         
     except Exception as e:
@@ -11936,51 +12000,7 @@ def store_detail(store_id):
 
         # Delivery map data is intentionally scoped to this store.  A customer's
         # default-address coordinates are only exposed back to that same customer.
-        delivery_method = (store.delivery_method or 'radius').strip().casefold()
-        geometry_key = {
-            'radius': 'radius_geojson',
-            'zone': 'zone_geojson',
-            'municipality': 'municipality_geojson',
-        }.get(delivery_method, 'current_delivery_geojson')
-        coverage_geometry = store_data.get(geometry_key) or store_data.get('current_delivery_geojson')
-        if isinstance(coverage_geometry, str):
-            try:
-                coverage_geometry = json.loads(coverage_geometry)
-            except (TypeError, ValueError):
-                coverage_geometry = None
-
-        is_customer = session.get('role') == 'customer' and session.get('user_id')
-        default_address = _get_default_customer_address(session.get('user_id')) if is_customer else None
-        delivery_match = _store_delivery_match(store, default_address) if default_address else {
-            'can_deliver': False,
-            'reason': 'Set your default address to check delivery coverage.',
-        }
-        customer_map_location = None
-        if default_address and default_address.latitude is not None and default_address.longitude is not None:
-            customer_map_location = {
-                'latitude': default_address.latitude,
-                'longitude': default_address.longitude,
-                'label': default_address.address_label or 'Default address',
-            }
-
-        store_map_data = {
-            'store': {
-                'name': store.name,
-                'address': store.formatted_address or store.address,
-                'latitude': store.latitude,
-                'longitude': store.longitude,
-                'logo_url': store_data.get('logo_url'),
-            },
-            'customer': customer_map_location,
-            'coverage': {
-                'method': delivery_method,
-                'radius_km': store.delivery_radius_km,
-                'municipalities': store.selected_municipalities or [],
-                'geometry': coverage_geometry,
-            },
-            'delivery': delivery_match,
-            'is_customer': bool(is_customer),
-        }
+        store_map_data = _build_store_map_data(store, store_data)
 
         # Real store ratings from post-order StoreRating (not legacy testimonials)
         store_avg_row = db.session.query(
@@ -12013,12 +12033,63 @@ def store_detail(store_id):
                 total_reviews = len(reviews)
                 avg_rating = round(sum(t['rating'] for t in reviews) / len(reviews), 1)
 
+        # Build category & subcategory breakdown for storefront filtering
+        cat_map = {}
+        all_subcats_map = {}
+        for p in product_list:
+            cat_id = p.get('main_category_id') or 0
+            cat_name = p.get('main_category_name') or 'Uncategorized'
+            cat_slug = p.get('main_category_slug') or (p.get('main_category', {}).get('slug') if isinstance(p.get('main_category'), dict) else 'uncategorized')
+
+            if cat_id not in cat_map:
+                cat_map[cat_id] = {
+                    'id': cat_id,
+                    'name': cat_name,
+                    'slug': cat_slug,
+                    'count': 0,
+                    'subcategories': {}
+                }
+            cat_map[cat_id]['count'] += 1
+
+            sub_id = p.get('store_category_id')
+            if sub_id:
+                sub_name = p.get('store_category_name') or 'Other'
+                sub_slug = p.get('store_category_slug') or (p.get('store_category', {}).get('slug') if isinstance(p.get('store_category'), dict) else f'sub-{sub_id}')
+                if sub_id not in cat_map[cat_id]['subcategories']:
+                    cat_map[cat_id]['subcategories'][sub_id] = {
+                        'id': sub_id,
+                        'name': sub_name,
+                        'slug': sub_slug,
+                        'count': 0
+                    }
+                cat_map[cat_id]['subcategories'][sub_id]['count'] += 1
+
+                if sub_id not in all_subcats_map:
+                    all_subcats_map[sub_id] = {
+                        'id': sub_id,
+                        'name': sub_name,
+                        'slug': sub_slug,
+                        'main_category_id': cat_id,
+                        'main_category_slug': cat_slug,
+                        'count': 0
+                    }
+                all_subcats_map[sub_id]['count'] += 1
+
+        categories_tree = []
+        for c in sorted(cat_map.values(), key=lambda x: x['name']):
+            c['subcategories'] = sorted(c['subcategories'].values(), key=lambda s: s['name'])
+            categories_tree.append(c)
+
+        all_subcategories = sorted(all_subcats_map.values(), key=lambda s: s['name'])
+
         now = datetime.utcnow()
 
         return render_template(
             'store_detail.html',
             store=store_data,
             products=product_list,
+            categories_tree=categories_tree,
+            all_subcategories=all_subcategories,
             reviews=reviews,
             testimonials=reviews,
             avg_rating=avg_rating,

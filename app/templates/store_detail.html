@@ -252,19 +252,22 @@
         height: 112px;
         padding: 0;
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.58);
+        border: 1px solid rgba(255, 255, 255, 0.35);
         border-radius: 16px;
-        background: rgba(255, 255, 255, 0.17);
+        background: rgba(18, 24, 20, 0.52);
         color: #fff;
         cursor: pointer;
-        box-shadow: 0 10px 24px rgba(67, 27, 53, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.38);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 10px 24px rgba(10, 14, 12, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
 
     .store-map-preview:hover,
     .store-map-preview:focus-visible {
         transform: translateY(-2px);
-        box-shadow: 0 14px 28px rgba(67, 27, 53, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        border-color: rgba(255, 255, 255, 0.55);
+        box-shadow: 0 14px 28px rgba(10, 14, 12, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.45);
         outline: none;
     }
 
@@ -273,28 +276,83 @@
         height: 100%;
         display: block;
         object-fit: cover;
-        opacity: 0.9;
+        opacity: 0.92;
+        filter: saturate(0.85) contrast(1.05) brightness(0.88);
+        transition: filter 0.25s ease, transform 0.25s ease, opacity 0.25s ease;
+    }
+
+    .store-map-preview:hover img,
+    .store-map-preview:focus-visible img {
+        opacity: 0.98;
+        filter: saturate(0.95) contrast(1.08) brightness(0.94);
+        transform: scale(1.03);
     }
 
     .store-map-preview::after {
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(180deg, transparent 25%, rgba(42, 25, 39, 0.65));
+        background: linear-gradient(
+            180deg,
+            rgba(18, 24, 20, 0.12) 0%,
+            rgba(14, 20, 16, 0.38) 45%,
+            rgba(10, 14, 12, 0.85) 100%
+        );
         pointer-events: none;
+        transition: background 0.25s ease;
+    }
+
+    .store-map-preview:hover::after,
+    .store-map-preview:focus-visible::after {
+        background: linear-gradient(
+            180deg,
+            rgba(18, 24, 20, 0.06) 0%,
+            rgba(14, 20, 16, 0.25) 45%,
+            rgba(10, 14, 12, 0.76) 100%
+        );
     }
 
     .store-map-preview-label {
         position: absolute;
-        z-index: 1;
-        right: 0.6rem;
-        bottom: 0.55rem;
-        display: inline-flex;
+        z-index: 2;
+        left: 0.5rem;
+        right: 0.5rem;
+        bottom: 0.5rem;
+        display: flex;
         align-items: center;
-        gap: 0.3rem;
+        justify-content: center;
+        gap: 0.35rem;
+        padding: 0.32rem 0.65rem;
+        background: rgba(14, 20, 16, 0.78);
+        backdrop-filter: blur(8px) saturate(1.2);
+        -webkit-backdrop-filter: blur(8px) saturate(1.2);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: var(--radius-pill, 999px);
         font-size: 11px;
         font-weight: 600;
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+        color: #fff;
+        letter-spacing: 0.01em;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+        transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+
+    .store-map-preview:hover .store-map-preview-label,
+    .store-map-preview:focus-visible .store-map-preview-label {
+        background: rgba(20, 30, 24, 0.92);
+        border-color: rgba(255, 255, 255, 0.45);
+        color: #fff;
+    }
+
+    .store-map-preview-label i {
+        font-size: 12px;
+        color: #7ab887;
+        transition: transform 0.2s ease, color 0.2s ease;
+    }
+
+    .store-map-preview:hover .store-map-preview-label i,
+    .store-map-preview:focus-visible .store-map-preview-label i {
+        transform: scale(1.1);
+        color: #a3e0b2;
     }
 
     .delivery-map-modal[hidden] { display: none; }
@@ -726,96 +784,372 @@
     .store-main-col {
         min-width: 0;
         width: 100%;
+        margin-top: 0;
+        padding-top: 0;
     }
 
-    .store-toolbar {
+    /* ─── Store Filters (Category & Subcategory) ─── */
+    .store-filter-wrapper {
+        background: rgba(255, 255, 255, 0.65);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.25rem;
+        margin-top: 0;
+        margin-bottom: 2rem;
+        box-shadow:
+            0 4px 18px rgba(181, 68, 90, 0.04),
+            inset 0 1px 0 rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        margin-bottom: 1.5rem;
-        flex-wrap: wrap;
+        flex-direction: column;
+        gap: 0.85rem;
+        box-sizing: border-box;
     }
 
-    .store-toolbar-count {
-        font-size: 13px;
-        color: var(--muted);
-    }
-
-    /* ─── Filter Bar ─── */
     .filter-bar {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 1.75rem;
+        gap: 0.85rem;
         flex-wrap: wrap;
+    }
+
+    .filter-label-wrap {
+        display: flex;
+        align-items: center;
+        min-width: 110px;
+        flex-shrink: 0;
     }
 
     .filter-label {
         font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.1em;
+        font-weight: 700;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--muted);
+        color: var(--charcoal);
         font-family: var(--font-sans);
-        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        opacity: 0.85;
+    }
+
+    .filter-label i {
+        font-size: 14px;
+        color: var(--deep-rose);
+    }
+
+    .filter-label-sub {
+        color: var(--muted);
+    }
+
+    .filter-label-sub i {
+        color: var(--dusty-rose);
     }
 
     .filter-pills {
         display: flex;
-        gap: 0.5rem;
+        gap: 0.45rem;
         flex-wrap: wrap;
         flex: 1;
         min-width: 0;
     }
 
     .filter-pill {
-        padding: 0.45rem 1rem;
+        padding: 0.45rem 0.9rem;
         border: 1px solid var(--border);
         border-radius: var(--radius-pill);
-        font-size: 12px;
+        font-size: 12.5px;
         font-weight: 600;
-        color: var(--muted);
-        background: rgba(255, 255, 255, 0.55);
+        color: var(--charcoal);
+        background: rgba(255, 255, 255, 0.7);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
         cursor: pointer;
         transition: var(--transition);
         font-family: var(--font-sans);
-        letter-spacing: 0.02em;
+        letter-spacing: 0.01em;
         white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
     }
 
-    .filter-pill:hover {
-        border-color: rgba(194, 78, 104, 0.4);
-        color: var(--deep-rose);
-        background: rgba(255, 255, 255, 0.8);
+    .filter-count,
+    .filter-pill i {
+        pointer-events: none;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+        .filter-pill:hover {
+            border-color: rgba(194, 78, 104, 0.4);
+            color: var(--deep-rose);
+            background: #fff;
+            transform: translateY(-1px);
+        }
+    }
+
+    .filter-pill:active {
+        transform: scale(0.96);
     }
 
     .filter-pill.active {
         border-color: #c24e68;
         color: #fff;
         background: linear-gradient(135deg, #c24e68 0%, #d878a0 55%, #b070c8 100%);
-        box-shadow: 0 6px 16px rgba(181, 68, 90, 0.25);
+        box-shadow: 0 4px 14px rgba(181, 68, 90, 0.28);
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
+        transform: translateY(-1px);
     }
 
     .filter-pill.active .filter-count {
         background: rgba(255, 255, 255, 0.3);
+        color: #fff;
     }
 
     .filter-count {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 16px;
-        height: 16px;
-        background: var(--deep-rose);
-        color: white;
+        padding: 0 6px;
+        min-width: 17px;
+        height: 17px;
+        background: rgba(194, 78, 104, 0.12);
+        color: var(--deep-rose);
+        border-radius: var(--radius-pill);
+        font-size: 10px;
+        font-weight: 700;
+        margin-left: 2px;
+        transition: var(--transition);
+    }
+
+    /* Secondary Filter Row: Subcategory Dropdown + Real-Time Search */
+    .filter-bar-secondary {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        flex-wrap: wrap;
+        padding-top: 0.75rem;
+        border-top: 1px dashed rgba(194, 78, 104, 0.15);
+    }
+
+    .filter-subcat-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex: 0 1 auto;
+    }
+
+    .filter-select-wrapper {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .filter-select {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        padding: 0.45rem 2.1rem 0.45rem 0.95rem;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--charcoal);
+        font-family: var(--font-sans);
+        cursor: pointer;
+        transition: var(--transition);
+        outline: none;
+        min-width: 175px;
+        max-width: 240px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+
+    .filter-select:hover {
+        border-color: rgba(194, 78, 104, 0.4);
+        background: #fff;
+    }
+
+    .filter-select:focus {
+        border-color: #c24e68;
+        box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.15);
+        background: #fff;
+    }
+
+    .filter-select:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        background: rgba(245, 245, 245, 0.6);
+    }
+
+    .filter-select-arrow {
+        position: absolute;
+        right: 0.75rem;
+        pointer-events: none;
+        font-size: 14px;
+        color: var(--muted);
+        transition: var(--transition);
+    }
+
+    .filter-select:focus ~ .filter-select-arrow {
+        color: var(--deep-rose);
+        transform: rotate(180deg);
+    }
+
+    /* Real-Time Search Bar */
+    .filter-search-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        flex: 1 1 200px;
+        min-width: 160px;
+    }
+
+    .filter-search-icon {
+        position: absolute;
+        left: 0.85rem;
+        font-size: 14px;
+        color: var(--muted);
+        pointer-events: none;
+        transition: var(--transition);
+    }
+
+    .filter-search-input {
+        width: 100%;
+        height: 35px;
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        padding: 0.45rem 2.2rem 0.45rem 2.25rem;
+        font-size: 12.5px;
+        font-family: var(--font-sans);
+        color: var(--charcoal);
+        outline: none;
+        transition: var(--transition);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+
+    .filter-search-input::placeholder {
+        color: var(--muted);
+        opacity: 0.85;
+    }
+
+    .filter-search-input:hover {
+        border-color: rgba(194, 78, 104, 0.4);
+        background: #fff;
+    }
+
+    .filter-search-input:focus {
+        border-color: #c24e68;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(194, 78, 104, 0.15);
+    }
+
+    .filter-search-input:focus ~ .filter-search-icon {
+        color: var(--deep-rose);
+    }
+
+    .filter-search-clear {
+        position: absolute;
+        right: 0.5rem;
+        background: none;
+        border: none;
+        color: var(--muted);
+        font-size: 16px;
+        cursor: pointer;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
         border-radius: 50%;
-        font-size: 9px;
-        margin-left: 4px;
+        transition: var(--transition);
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        z-index: 2;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+        .filter-search-clear:hover {
+            color: var(--charcoal);
+            background: rgba(44, 37, 32, 0.08);
+        }
+    }
+
+    .filter-search-clear:active {
+        transform: scale(0.92);
+        background: rgba(44, 37, 32, 0.14);
+    }
+
+    .filter-pill-stock {
+        margin-left: auto;
+        color: #3b7a57;
+        border-color: rgba(59, 122, 87, 0.25);
+        background: rgba(59, 122, 87, 0.05);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+        .filter-pill-stock:hover {
+            border-color: #3b7a57;
+            color: #3b7a57;
+            background: rgba(59, 122, 87, 0.12);
+        }
+    }
+
+    .filter-pill-stock:active {
+        transform: scale(0.96);
+    }
+
+    .filter-pill-stock.active {
+        background: linear-gradient(135deg, #3b7a57 0%, #529b72 100%);
+        border-color: #3b7a57;
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(59, 122, 87, 0.25);
+    }
+
+    /* Empty state for filtered products */
+    .filter-empty-state {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 3.5rem 1.5rem;
+        background: rgba(255, 255, 255, 0.5);
+        border: 1px dashed var(--border-strong);
+        border-radius: var(--radius-lg);
+        margin: 1rem 0;
+    }
+    .filter-empty-icon {
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        background: rgba(194, 78, 104, 0.08);
+        color: var(--deep-rose);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        margin: 0 auto 1rem;
+    }
+    .filter-empty-state h4 {
+        font-family: var(--font-display);
+        font-size: 1.35rem;
+        color: var(--charcoal);
+        margin-bottom: 0.4rem;
+    }
+    .filter-empty-state p {
+        font-size: 13.5px;
+        color: var(--muted);
+        margin-bottom: 1.25rem;
     }
 
     /* ─── Products Grid ───
@@ -875,7 +1209,7 @@
 
     .product-image {
         width: 100%;
-        aspect-ratio: 1 / 1;
+        aspect-ratio: 4 / 5;
         height: auto;
         background:
             radial-gradient(ellipse at 30% 30%, #f8d0dc, transparent 60%),
@@ -886,10 +1220,11 @@
 
     .product-image img {
         width: 100%; height: 100%; object-fit: cover;
+        object-position: center 25%;
         transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .product-card:hover .product-image img { transform: scale(1.07); }
+    .product-card:hover .product-image img { transform: scale(1.03); }
 
     .product-overlay {
         position: absolute;
@@ -1072,13 +1407,24 @@
     }
 
     .sidebar-icon {
-        width: 32px; height: 32px;
-        border-radius: var(--radius-md);
-        background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 180, 205, 0.55));
-        display: flex; align-items: center; justify-content: center;
-        font-size: 15px; color: var(--deep-rose);
+        width: 34px;
+        height: 34px;
+        border-radius: var(--radius-md, 12px);
+        background: linear-gradient(135deg, #c24e68 0%, #d878a0 55%, #b070c8 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        color: #ffffff;
         flex-shrink: 0;
-        border: 1px solid rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 0 6px 16px rgba(194, 78, 104, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .sidebar-card:hover .sidebar-icon {
+        transform: scale(1.06);
+        box-shadow: 0 8px 22px rgba(194, 78, 104, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.55);
     }
 
     .sidebar-card-title {
@@ -1242,6 +1588,71 @@
 
     body.reviews-modal-open { overflow: hidden; }
 
+    /* ─── Store Delivery Fee & Calculation Breakdown ─── */
+    .store-delivery-calc-wrap {
+        margin-top: 0.25rem;
+    }
+
+    .store-delivery-fee-formula {
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--charcoal);
+        line-height: 1.35;
+    }
+
+    .store-delivery-fee-desc {
+        font-size: 11.5px;
+        color: var(--muted);
+        margin-top: 0.2rem;
+        line-height: 1.4;
+    }
+
+    .store-delivery-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.45rem;
+    }
+
+    .store-delivery-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        background: rgba(194, 65, 117, 0.08);
+        color: var(--deep-rose);
+        border: 1px solid rgba(194, 65, 117, 0.22);
+        border-radius: 6px;
+        padding: 0.2rem 0.5rem;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+
+    .store-delivery-chip i {
+        font-size: 11.5px;
+        color: var(--deep-rose);
+    }
+
+    .store-free-delivery-badge {
+        margin-top: 0.5rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: #E8F5E9;
+        color: #2E7D32;
+        border: 1px solid #A5D6A7;
+        border-radius: 6px;
+        padding: 0.25rem 0.6rem;
+        font-size: 11.5px;
+        font-weight: 600;
+        line-height: 1.25;
+    }
+
+    .store-free-delivery-badge i {
+        font-size: 12px;
+        color: #2E7D32;
+    }
+
     button.stat-cell:hover { background: rgba(255,190,210,.18); }
 
     .empty-products {
@@ -1313,6 +1724,13 @@
         .store-map-preview { width: min(200px, 100%); height: 100px; }
         .sidebar-card-header,
         .sidebar-card-body { padding-left: 1.15rem; padding-right: 1.15rem; }
+
+        .store-filter-wrapper {
+            padding: 0.95rem 1.15rem;
+            margin-bottom: 1.75rem;
+        }
+        .filter-label-wrap { min-width: 85px; }
+        .filter-select { min-width: 150px; max-width: 220px; }
     }
 
     @media (max-width: 900px) {
@@ -1402,26 +1820,122 @@
             gap: 0.75rem;
         }
 
-        .filter-bar {
+        .store-filter-wrapper {
+            padding: 0.85rem 0.95rem;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            border-radius: 16px;
+            gap: 0.75rem;
+        }
+
+        .filter-bar-main {
             flex-direction: column;
             align-items: stretch;
-            gap: 0.5rem;
-            margin-bottom: 1.25rem;
+            gap: 0.45rem;
+        }
+
+        .filter-bar-main .filter-label-wrap {
+            min-width: 0;
+            width: 100%;
         }
 
         .filter-pills {
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
-            padding-bottom: 0.15rem;
-            margin: 0 -0.15rem;
-            padding-left: 0.15rem;
-            padding-right: 0.15rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow-x: visible;
         }
 
-        .filter-pills::-webkit-scrollbar { display: none; }
-        .filter-pill { flex: 0 0 auto; }
+        .filter-pill {
+            flex: 0 0 auto;
+            min-height: 38px;
+            padding: 0.42rem 0.85rem;
+            font-size: 12.5px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .filter-pill-stock {
+            margin-left: 0;
+        }
+
+        .filter-bar-secondary {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.65rem;
+            padding-top: 0.65rem;
+            margin-top: 0;
+        }
+
+        .filter-subcat-group {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
+        }
+
+        .filter-subcat-group .filter-label-sub {
+            min-width: 0;
+            width: auto;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .filter-select-wrapper {
+            width: 100%;
+            position: relative;
+            display: block;
+        }
+
+        .filter-select {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            height: 42px;
+            min-height: 42px;
+            font-size: 13.5px;
+            padding: 0.45rem 2.2rem 0.45rem 0.95rem;
+            border-radius: var(--radius-pill);
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .filter-select-arrow {
+            right: 0.85rem;
+            font-size: 15px;
+        }
+
+        .filter-search-wrap {
+            width: 100%;
+            min-width: 0;
+            flex: 1 1 100%;
+            position: relative;
+        }
+
+        .filter-search-input {
+            width: 100%;
+            height: 42px;
+            min-height: 42px;
+            font-size: 13.5px;
+            padding-left: 2.3rem;
+            padding-right: 2.6rem;
+            border-radius: var(--radius-pill);
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .filter-search-clear {
+            width: 34px;
+            height: 34px;
+            right: 0.4rem;
+            font-size: 17px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
 
         .store-sidebar { grid-template-columns: 1fr; }
         .product-card .product-title,
@@ -1512,6 +2026,50 @@
         .empty-products { padding: 2.5rem 1.25rem; }
         .empty-products i { font-size: 40px; }
         .empty-products p { font-size: 17px; }
+
+        .store-filter-wrapper {
+            padding: 0.8rem 0.85rem;
+            border-radius: 14px;
+            gap: 0.65rem;
+        }
+
+        .filter-pills {
+            gap: 0.4rem;
+        }
+
+        .filter-pill {
+            min-height: 36px;
+            padding: 0.38rem 0.75rem;
+            font-size: 12px;
+        }
+
+        .filter-subcat-group {
+            gap: 0.3rem;
+        }
+
+        .filter-subcat-group .filter-label-sub {
+            font-size: 10.5px;
+        }
+
+        .filter-select {
+            height: 40px;
+            min-height: 40px;
+            font-size: 13px;
+            padding: 0.4rem 2rem 0.4rem 0.85rem;
+        }
+
+        .filter-search-input {
+            height: 40px;
+            min-height: 40px;
+            font-size: 13px;
+        }
+
+        .filter-search-clear {
+            width: 32px;
+            height: 32px;
+            right: 0.35rem;
+            font-size: 16px;
+        }
     }
 
     @media (max-width: 420px) {
@@ -1524,6 +2082,42 @@
         .product-price,
         .product-price .ep-price__sale,
         .product-price .ep-price__regular { font-size: 17px; font-weight: 800; color: #8b1832; font-family: var(--font-sans); }
+
+        .store-filter-wrapper {
+            padding: 0.7rem 0.75rem;
+            gap: 0.6rem;
+            border-radius: 13px;
+        }
+
+        .filter-pills {
+            gap: 0.35rem;
+        }
+
+        .filter-pill {
+            min-height: 34px;
+            padding: 0.35rem 0.65rem;
+            font-size: 11.5px;
+        }
+
+        .filter-count {
+            min-width: 16px;
+            height: 16px;
+            font-size: 9.5px;
+            padding: 0 5px;
+        }
+
+        .filter-select {
+            height: 38px;
+            min-height: 38px;
+            font-size: 12.5px;
+            padding: 0.35rem 1.8rem 0.35rem 0.75rem;
+        }
+
+        .filter-search-input {
+            height: 38px;
+            min-height: 38px;
+            font-size: 12.5px;
+        }
     }
 
     /* Match landing page: overlay actions only on hover (not always-on for touch) */
@@ -1576,6 +2170,15 @@
                     <span class="store-tag" style="color:rgba(72,187,120,0.9); border-color:rgba(72,187,120,0.2);">
                         <i class="ri-checkbox-circle-line" style="color:#48bb78;"></i> Verified Store
                     </span>
+                    {% if store.free_delivery_enabled and store.free_delivery_minimum and store.free_delivery_minimum|float > 0 %}
+                    <span class="store-tag" style="color:#2E7D32; border-color:rgba(46,125,50,0.3); background:rgba(232,245,233,0.18);">
+                        <i class="ri-gift-line" style="color:#2E7D32;"></i> Free delivery &ge; ₱{{ "%.0f"|format(store.free_delivery_minimum|float) }}
+                    </span>
+                    {% elif store.base_delivery_fee|float == 0 and store.delivery_rate_per_km|float == 0 %}
+                    <span class="store-tag" style="color:#2E7D32; border-color:rgba(46,125,50,0.3); background:rgba(232,245,233,0.18);">
+                        <i class="ri-gift-line" style="color:#2E7D32;"></i> Free delivery
+                    </span>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -1585,7 +2188,7 @@
             {% if store.latitude is not none and store.longitude is not none and mapbox_public_token %}
             <button class="store-map-preview" type="button" onclick="openStoreDeliveryMap()" aria-label="View {{ store.name }} delivery map">
                 <img
-                    src="https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+b5445a({{ store.longitude }},{{ store.latitude }})/{{ store.longitude }},{{ store.latitude }},12/440x224?access_token={{ mapbox_public_token }}"
+                    src="https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-s+2e7d32({{ store.longitude }},{{ store.latitude }})/{{ store.longitude }},{{ store.latitude }},12/440x224?access_token={{ mapbox_public_token }}"
                     alt=""
                     loading="lazy">
                 <span class="store-map-preview-label"><i class="ri-map-2-line"></i> View delivery map</span>
@@ -1663,27 +2266,69 @@
 
     <!-- ─── Products Column ─── -->
     <div class="store-main-col">
-        <div class="store-toolbar">
-            <div class="store-toolbar-count">
-                <span id="visibleCount">{{ products|length }}</span> items
+        <!-- Store Filters (Category & Subcategory) -->
+        <div class="store-filter-wrapper" id="storeFilterWrapper">
+            <!-- Row 1: Main Category Pills -->
+            <div class="filter-bar filter-bar-main">
+                <div class="filter-label-wrap">
+                    <span class="filter-label"><i class="ri-apps-2-line"></i> Category</span>
+                </div>
+                <div class="filter-pills" id="mainCategoryPills">
+                    <button type="button" class="filter-pill active" data-cat-slug="all" onclick="selectMainCategory('all', this)">
+                        All <span class="filter-count">{{ products|length }}</span>
+                    </button>
+                    {% for cat in categories_tree %}
+                    <button type="button" class="filter-pill" data-cat-id="{{ cat.id }}" data-cat-slug="{{ cat.slug }}" onclick="selectMainCategory(this.dataset.catSlug, this)">
+                        {{ cat.name }} <span class="filter-count">{{ cat.count }}</span>
+                    </button>
+                    {% endfor %}
+                    <button type="button" class="filter-pill filter-pill-stock" id="inStockToggleBtn" onclick="toggleInStockFilter(this)" aria-label="Filter products in stock">
+                        <i class="ri-checkbox-circle-line"></i> In Stock
+                    </button>
+                </div>
             </div>
-        </div>
 
-        <!-- Filter Bar -->
-        <div class="filter-bar">
-            <span class="filter-label">Filter:</span>
-            <div class="filter-pills">
-                <button class="filter-pill active" onclick="filterProducts('all', this)">
-                    All <span class="filter-count">{{ products|length }}</span>
-                </button>
-                {% set categories = products | map(attribute='category') | select | unique | list %}
-                {% for cat in categories %}
-                {% set cat_count = products | selectattr('category', 'equalto', cat) | list | length %}
-                <button class="filter-pill" onclick="filterProducts('{{ cat }}', this)">
-                    {{ cat|title }} <span class="filter-count">{{ cat_count }}</span>
-                </button>
-                {% endfor %}
-                <button class="filter-pill" onclick="filterProducts('available', this)">In Stock</button>
+            <!-- Row 2: Subcategory Dropdown + Real-time Search -->
+            <div class="filter-bar filter-bar-secondary" id="secondaryFilterRow">
+                <!-- Subcategory Dropdown -->
+                <div class="filter-subcat-group" id="subcatGroup">
+                    <label for="subcategorySelect" class="filter-label filter-label-sub">
+                        <i class="ri-node-tree"></i> Subcategory
+                    </label>
+                    <div class="filter-select-wrapper">
+                        <select id="subcategorySelect" class="filter-select" onchange="onSubcategorySelectChange(this)" aria-label="Filter by subcategory">
+                            <option value="all">All Subcategories ({{ products|length }})</option>
+                            {% for subcat in all_subcategories %}
+                            <option value="{{ subcat.slug }}"
+                                    data-parent-slug="{{ subcat.main_category_slug }}"
+                                    data-count="{{ subcat.count }}">
+                                {{ subcat.name }} ({{ subcat.count }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <i class="ri-arrow-down-s-line filter-select-arrow" aria-hidden="true"></i>
+                    </div>
+                </div>
+
+                <!-- Real-time Search (takes remaining space on right side) -->
+                <div class="filter-search-wrap">
+                    <i class="ri-search-line filter-search-icon" aria-hidden="true"></i>
+                    <input type="text"
+                           id="storeProductSearch"
+                           class="filter-search-input"
+                           placeholder="Search products in this store..."
+                           aria-label="Search products in this store"
+                           autocomplete="off"
+                           oninput="onProductSearchInput(this)">
+                    <button type="button"
+                            class="filter-search-clear"
+                            id="searchClearBtn"
+                            style="display: none;"
+                            onclick="clearProductSearch()"
+                            aria-label="Clear product search">
+                        <i class="ri-close-line"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -1692,7 +2337,11 @@
             {% if products and products|length > 0 %}
                 {% for product in products %}
                 <div class="product-card"
-                     data-category="{{ product.category or 'uncategorized' }}"
+                     data-category-id="{{ product.main_category_id or '' }}"
+                     data-category-slug="{{ product.main_category_slug or 'uncategorized' }}"
+                     data-subcategory-id="{{ product.store_category_id or '' }}"
+                     data-subcategory-slug="{{ product.store_category_slug or '' }}"
+                     data-product-name="{{ (product.name or '')|lower }}"
                      data-available="{{ 'true' if product.is_available and product.stock_quantity > 0 else 'false' }}">
 
                     {% if not product.is_available or product.stock_quantity == 0 %}
@@ -1747,6 +2396,15 @@
                     </div>
                 </div>
                 {% endfor %}
+                <!-- Filter Empty State (shown when filter matches 0 products) -->
+                <div class="filter-empty-state" id="filterEmptyState" style="display: none;">
+                    <div class="filter-empty-icon"><i class="ri-filter-off-line"></i></div>
+                    <h4>No products match your filter</h4>
+                    <p>Try selecting a different category, clearing your subcategory filter, or showing out-of-stock items.</p>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="resetAllFilters()" style="padding: 0.5rem 1.25rem; font-size: 13px; border-radius: var(--radius-pill); cursor: pointer;">
+                        <i class="ri-refresh-line"></i> Reset Filters
+                    </button>
+                </div>
             {% else %}
             <div class="empty-products">
                 <i class="ri-store-line"></i>
@@ -1763,7 +2421,7 @@
     <aside class="store-sidebar">
 
         <!-- Store Info -->
-        <div class="sidebar-card">
+        <div class="sidebar-card" id="storeInfoSidebarCard">
             <div class="sidebar-card-header">
                 <div class="sidebar-icon"><i class="ri-store-2-line"></i></div>
                 <div class="sidebar-card-title">Store Info</div>
@@ -1795,6 +2453,62 @@
                     <div>
                         <div class="info-row-label">Same-day Order Cutoff</div>
                         <div class="info-row-value" id="storeOrderCutoffValue"></div>
+                    </div>
+                </div>
+                <div class="info-row" id="storeDeliveryFeeRow">
+                    <i class="ri-money-dollar-circle-line"></i>
+                    <div>
+                        <div class="info-row-label">Delivery Fee & Calculation</div>
+                        <div class="info-row-value" id="storeDeliveryFeeValue">
+                            {% set base_fee = store.base_delivery_fee|float if store.base_delivery_fee is not none else 0 %}
+                            {% set km_rate = store.delivery_rate_per_km|float if store.delivery_rate_per_km is not none else 0 %}
+                            {% set free_min = store.free_delivery_minimum|float if store.free_delivery_minimum is not none else 0 %}
+                            {% set has_free = store.free_delivery_enabled and free_min > 0 %}
+                            {% set is_always_free = base_fee == 0 and km_rate == 0 %}
+
+                            <div class="store-delivery-calc-wrap">
+                                {% if is_always_free %}
+                                    <div class="store-delivery-fee-formula" style="color:#2E7D32;">Free delivery for all orders</div>
+                                    <div class="store-delivery-fee-desc">This store offers free delivery on all orders.</div>
+                                {% else %}
+                                    <div class="store-delivery-fee-formula">
+                                        {% if base_fee > 0 and km_rate > 0 %}
+                                            ₱{{ "%.2f"|format(base_fee) }} base + ₱{{ "%.2f"|format(km_rate) }} / km
+                                        {% elif base_fee > 0 %}
+                                            ₱{{ "%.2f"|format(base_fee) }} flat delivery fee
+                                        {% elif km_rate > 0 %}
+                                            ₱{{ "%.2f"|format(km_rate) }} / km distance rate
+                                        {% else %}
+                                            Free delivery
+                                        {% endif %}
+                                    </div>
+                                    <div class="store-delivery-fee-desc">
+                                        {% if km_rate > 0 %}
+                                            Calculated based on actual road distance from the store to your delivery address.
+                                        {% else %}
+                                            Flat delivery fee applies to all deliveries within the coverage area.
+                                        {% endif %}
+                                    </div>
+                                    <div class="store-delivery-chips">
+                                        {% if base_fee > 0 %}
+                                        <span class="store-delivery-chip">
+                                            <i class="ri-store-2-line"></i> Base fee: ₱{{ "%.2f"|format(base_fee) }}
+                                        </span>
+                                        {% endif %}
+                                        {% if km_rate > 0 %}
+                                        <span class="store-delivery-chip">
+                                            <i class="ri-route-line"></i> Distance rate: +₱{{ "%.2f"|format(km_rate) }} / km
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                                {% if has_free %}
+                                <div class="store-free-delivery-badge">
+                                    <i class="ri-gift-line"></i> Free delivery on orders ₱{{ "%.2f"|format(free_min) }}+
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="info-row">
@@ -2205,25 +2919,335 @@
         }
     });
 
-    function filterProducts(category, btn) {
-        document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
+    /* ── Product Multi-dimensional Filter Engine ────────── */
+    const storeCategoriesTree = {{ categories_tree | tojson if categories_tree else '[]' }};
+    const storeAllSubcategories = {{ all_subcategories | tojson if all_subcategories else '[]' }};
 
+    let activeFilter = {
+        category: 'all',      // slug or 'all'
+        subcategory: 'all',   // slug or 'all'
+        inStockOnly: false,
+        searchQuery: ''
+    };
+
+    let _syncUrlTimer = null;
+
+    function selectMainCategory(catSlug, btn) {
+        // Update main category buttons
+        document.querySelectorAll('#mainCategoryPills .filter-pill:not(.filter-pill-stock)').forEach(p => {
+            p.classList.remove('active');
+            p.setAttribute('aria-pressed', 'false');
+        });
+        if (btn) {
+            btn.classList.add('active');
+            btn.setAttribute('aria-pressed', 'true');
+        } else {
+            let matchBtn = null;
+            try {
+                if (window.CSS && CSS.escape) {
+                    matchBtn = document.querySelector(`#mainCategoryPills [data-cat-slug="${CSS.escape(catSlug)}"]`);
+                }
+            } catch (e) {}
+            if (!matchBtn) {
+                const allPills = document.querySelectorAll('#mainCategoryPills .filter-pill:not(.filter-pill-stock)');
+                for (const p of allPills) {
+                    if (p.dataset.catSlug === catSlug) {
+                        matchBtn = p;
+                        break;
+                    }
+                }
+            }
+            if (!matchBtn) {
+                matchBtn = document.querySelector('#mainCategoryPills [data-cat-slug="all"]');
+            }
+            if (matchBtn) {
+                matchBtn.classList.add('active');
+                matchBtn.setAttribute('aria-pressed', 'true');
+            }
+        }
+
+        activeFilter.category = catSlug || 'all';
+        activeFilter.subcategory = 'all'; // reset subcategory on category change
+
+        updateSubcategoryDropdown(activeFilter.category);
+        applyProductFilters();
+        syncFilterUrl();
+    }
+
+    function updateSubcategoryDropdown(parentSlug) {
+        const selectEl = document.getElementById('subcategorySelect');
+        if (!selectEl) return;
+
+        let optionsHtml = '';
+
+        if (parentSlug === 'all') {
+            const totalProducts = document.querySelectorAll('#productsGrid .product-card').length;
+            optionsHtml += `<option value="all">All Subcategories (${totalProducts})</option>`;
+            
+            storeAllSubcategories.forEach(subcat => {
+                optionsHtml += `<option value="${subcat.slug}" data-parent-slug="${subcat.main_category_slug || ''}">${subcat.name} (${subcat.count})</option>`;
+            });
+
+            selectEl.innerHTML = optionsHtml;
+            selectEl.disabled = (storeAllSubcategories.length === 0);
+            selectEl.value = 'all';
+        } else {
+            const catData = storeCategoriesTree.find(c => c.slug === parentSlug);
+            const subcats = catData ? (catData.subcategories || []) : [];
+
+            if (subcats.length === 0) {
+                optionsHtml = `<option value="all">No subcategories</option>`;
+                selectEl.innerHTML = optionsHtml;
+                selectEl.disabled = true;
+                selectEl.value = 'all';
+            } else {
+                optionsHtml = `<option value="all">All Subcategories (${catData ? catData.count : 0})</option>`;
+                subcats.forEach(subcat => {
+                    optionsHtml += `<option value="${subcat.slug}" data-parent-slug="${parentSlug}">${subcat.name} (${subcat.count})</option>`;
+                });
+                selectEl.innerHTML = optionsHtml;
+                selectEl.disabled = false;
+                selectEl.value = 'all';
+            }
+        }
+        activeFilter.subcategory = 'all';
+    }
+
+    function onSubcategorySelectChange(selectEl) {
+        activeFilter.subcategory = selectEl.value || 'all';
+        applyProductFilters();
+        syncFilterUrl();
+    }
+
+    function selectSubcategory(subcatSlug) {
+        const selectEl = document.getElementById('subcategorySelect');
+        if (selectEl) {
+            selectEl.value = subcatSlug || 'all';
+        }
+        activeFilter.subcategory = subcatSlug || 'all';
+        applyProductFilters();
+        syncFilterUrl();
+    }
+
+    function onProductSearchInput(inputEl) {
+        const val = (inputEl.value || '').trim().toLowerCase();
+        activeFilter.searchQuery = val;
+
+        const clearBtn = document.getElementById('searchClearBtn');
+        if (clearBtn) {
+            clearBtn.style.display = val.length > 0 ? 'inline-flex' : 'none';
+        }
+
+        applyProductFilters();
+
+        clearTimeout(_syncUrlTimer);
+        _syncUrlTimer = setTimeout(() => {
+            syncFilterUrl();
+        }, 300);
+    }
+
+    function clearProductSearch() {
+        const inputEl = document.getElementById('storeProductSearch');
+        if (inputEl) {
+            inputEl.value = '';
+            inputEl.focus();
+        }
+        activeFilter.searchQuery = '';
+
+        const clearBtn = document.getElementById('searchClearBtn');
+        if (clearBtn) {
+            clearBtn.style.display = 'none';
+        }
+
+        applyProductFilters();
+        syncFilterUrl();
+    }
+
+    function toggleInStockFilter(btn) {
+        activeFilter.inStockOnly = !activeFilter.inStockOnly;
+        const stockBtn = btn || document.getElementById('inStockToggleBtn');
+        if (stockBtn) {
+            stockBtn.classList.toggle('active', activeFilter.inStockOnly);
+            stockBtn.setAttribute('aria-pressed', activeFilter.inStockOnly ? 'true' : 'false');
+            const icon = stockBtn.querySelector('i');
+            if (icon) {
+                icon.className = activeFilter.inStockOnly ? 'ri-checkbox-circle-fill' : 'ri-checkbox-circle-line';
+            }
+        }
+        applyProductFilters();
+        syncFilterUrl();
+    }
+
+    function applyProductFilters() {
         const cards = document.querySelectorAll('#productsGrid .product-card');
+        const emptyState = document.getElementById('filterEmptyState');
+        const visibleCountEl = document.getElementById('visibleCount');
+
         let visible = 0;
         cards.forEach(card => {
-            let show = false;
-            if (category === 'all') {
-                show = true;
-            } else if (category === 'available') {
-                show = card.dataset.available === 'true';
-            } else {
-                show = card.dataset.category === category;
+            const cardCatSlug = card.dataset.categorySlug || '';
+            const cardSubcatSlug = card.dataset.subcategorySlug || '';
+            const cardAvailable = card.dataset.available === 'true';
+            const cardName = (card.dataset.productName || card.querySelector('.product-title')?.textContent || '').toLowerCase();
+
+            let matchCategory = true;
+            if (activeFilter.category !== 'all') {
+                matchCategory = (cardCatSlug === activeFilter.category);
             }
+
+            let matchSubcat = true;
+            if (activeFilter.subcategory !== 'all') {
+                matchSubcat = (cardSubcatSlug === activeFilter.subcategory);
+            }
+
+            let matchStock = true;
+            if (activeFilter.inStockOnly) {
+                matchStock = cardAvailable;
+            }
+
+            let matchSearch = true;
+            if (activeFilter.searchQuery) {
+                matchSearch = cardName.includes(activeFilter.searchQuery) ||
+                              cardCatSlug.includes(activeFilter.searchQuery) ||
+                              cardSubcatSlug.includes(activeFilter.searchQuery);
+            }
+
+            const show = matchCategory && matchSubcat && matchStock && matchSearch;
             card.style.display = show ? '' : 'none';
             if (show) visible++;
         });
-        document.getElementById('visibleCount').textContent = visible;
+
+        if (visibleCountEl) {
+            visibleCountEl.textContent = visible;
+        }
+
+        if (emptyState) {
+            emptyState.style.display = (visible === 0 && cards.length > 0) ? 'block' : 'none';
+        }
+    }
+
+    function resetAllFilters() {
+        activeFilter.category = 'all';
+        activeFilter.subcategory = 'all';
+        activeFilter.inStockOnly = false;
+        activeFilter.searchQuery = '';
+
+        const searchInput = document.getElementById('storeProductSearch');
+        if (searchInput) searchInput.value = '';
+        const clearBtn = document.getElementById('searchClearBtn');
+        if (clearBtn) clearBtn.style.display = 'none';
+
+        const stockBtn = document.getElementById('inStockToggleBtn');
+        if (stockBtn) {
+            stockBtn.classList.remove('active');
+            stockBtn.setAttribute('aria-pressed', 'false');
+            const icon = stockBtn.querySelector('i');
+            if (icon) icon.className = 'ri-checkbox-circle-line';
+        }
+
+        document.querySelectorAll('#mainCategoryPills .filter-pill:not(.filter-pill-stock)').forEach(p => {
+            const isAll = (p.dataset.catSlug === 'all');
+            p.classList.toggle('active', isAll);
+            p.setAttribute('aria-pressed', isAll ? 'true' : 'false');
+        });
+
+        updateSubcategoryDropdown('all');
+        applyProductFilters();
+        syncFilterUrl();
+    }
+
+    function syncFilterUrl() {
+        try {
+            const url = new URL(window.location.href);
+            if (activeFilter.category && activeFilter.category !== 'all') {
+                url.searchParams.set('category', activeFilter.category);
+            } else {
+                url.searchParams.delete('category');
+            }
+
+            if (activeFilter.subcategory && activeFilter.subcategory !== 'all') {
+                url.searchParams.set('subcategory', activeFilter.subcategory);
+            } else {
+                url.searchParams.delete('subcategory');
+            }
+
+            if (activeFilter.inStockOnly) {
+                url.searchParams.set('stock', '1');
+            } else {
+                url.searchParams.delete('stock');
+            }
+
+            if (activeFilter.searchQuery) {
+                url.searchParams.set('search', activeFilter.searchQuery);
+            } else {
+                url.searchParams.delete('search');
+            }
+
+            window.history.replaceState({}, '', url.toString());
+        } catch (e) {
+            // Safe fallback if history API is restricted
+        }
+    }
+
+    function initFiltersFromUrl() {
+        try {
+            const url = new URL(window.location.href);
+            const catParam = url.searchParams.get('category');
+            const subcatParam = url.searchParams.get('subcategory');
+            const stockParam = url.searchParams.get('stock');
+            const searchParam = url.searchParams.get('search');
+
+            if (stockParam === '1' || stockParam === 'true') {
+                activeFilter.inStockOnly = true;
+                const stockBtn = document.getElementById('inStockToggleBtn');
+                if (stockBtn) {
+                    stockBtn.classList.add('active');
+                    stockBtn.setAttribute('aria-pressed', 'true');
+                    const icon = stockBtn.querySelector('i');
+                    if (icon) icon.className = 'ri-checkbox-circle-fill';
+                }
+            }
+
+            if (searchParam) {
+                activeFilter.searchQuery = searchParam.trim().toLowerCase();
+                const searchInput = document.getElementById('storeProductSearch');
+                if (searchInput) {
+                    searchInput.value = searchParam;
+                }
+                const clearBtn = document.getElementById('searchClearBtn');
+                if (clearBtn) clearBtn.style.display = 'inline-flex';
+            }
+
+            if (catParam) {
+                const targetBtn = document.querySelector(`#mainCategoryPills [data-cat-slug="${catParam}"]`);
+                if (targetBtn) {
+                    selectMainCategory(catParam, targetBtn);
+                }
+            } else {
+                updateSubcategoryDropdown('all');
+            }
+
+            if (subcatParam) {
+                const selectEl = document.getElementById('subcategorySelect');
+                if (selectEl) {
+                    selectEl.value = subcatParam;
+                    activeFilter.subcategory = subcatParam;
+                }
+            }
+
+            applyProductFilters();
+        } catch (e) {
+            applyProductFilters();
+        }
+    }
+
+    // Backward compatibility wrapper
+    function filterProducts(category, btn) {
+        if (category === 'available') {
+            toggleInStockFilter(btn);
+        } else {
+            selectMainCategory(category, btn);
+        }
     }
 
 function viewProduct(productId) {
@@ -2263,6 +3287,9 @@ function viewProduct(productId) {
         if (typeof window.updateCartCount === 'function') {
             window.updateCartCount();
         }
+
+        // Initialize product category/subcategory filters
+        initFiltersFromUrl();
 
         // Check store status on load
         checkStoreStatus();
@@ -2431,13 +3458,29 @@ function viewProduct(productId) {
             windowValue,
             (start && end) ? `${formatTime12Hour(start)} – ${formatTime12Hour(end)}` : ''
         );
-        showRow(
-            cutoffRow,
-            cutoffValue,
-            schedule.order_cutoff
-                ? `Order by ${formatTime12Hour(schedule.order_cutoff)} for same-day`
-                : ''
-        );
+        if (schedule.allow_same_day === false) {
+            showRow(
+                cutoffRow,
+                cutoffValue,
+                'Disabled (Advance pre-orders only)'
+            );
+            const cutoffLabel = cutoffRow.querySelector('.info-row-label');
+            if (cutoffLabel) cutoffLabel.textContent = 'Same-day Delivery';
+            const cutoffIcon = cutoffRow.querySelector('i');
+            if (cutoffIcon) cutoffIcon.className = 'ri-calendar-close-line';
+        } else {
+            showRow(
+                cutoffRow,
+                cutoffValue,
+                schedule.order_cutoff
+                    ? `Order by ${formatTime12Hour(schedule.order_cutoff)} for same-day`
+                    : ''
+            );
+            const cutoffLabel = cutoffRow.querySelector('.info-row-label');
+            if (cutoffLabel) cutoffLabel.textContent = 'Same-day Order Cutoff';
+            const cutoffIcon = cutoffRow.querySelector('i');
+            if (cutoffIcon) cutoffIcon.className = 'ri-alarm-line';
+        }
     }
 </script>
 <script type="application/json" id="storeDeliveryMapData">{{ store_map_data|tojson }}</script>

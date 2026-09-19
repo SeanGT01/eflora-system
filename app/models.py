@@ -540,6 +540,17 @@ class Store(db.Model):
             except:
                 pass
         
+        # Normalize selected_municipalities to a Python list
+        muni_data = self.selected_municipalities
+        if isinstance(muni_data, str):
+            try:
+                import json
+                muni_data = json.loads(muni_data)
+            except Exception:
+                muni_data = [m.strip() for m in muni_data.split(',') if m.strip()]
+        elif not isinstance(muni_data, list):
+            muni_data = [] if muni_data is None else list(muni_data)
+
         return {
             'id': self.id,
             'name': self.name,
@@ -558,7 +569,7 @@ class Store(db.Model):
             'barangay': self.barangay,
             'street': self.street,
             'delivery_method': self.delivery_method,
-            'selected_municipalities': self.selected_municipalities,
+            'selected_municipalities': muni_data,
             'base_delivery_fee': float(self.base_delivery_fee or 0),
             'delivery_rate_per_km': float(self.delivery_rate_per_km or 0),
             'free_delivery_minimum': float(self.free_delivery_minimum or 0),
