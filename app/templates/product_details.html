@@ -3767,7 +3767,9 @@
                 ({{ total_ratings }} review{{ 's' if total_ratings != 1 else '' }})
             </button>
             <span class="rating-divider"></span>
-            <span class="sold-count">{{ total_sold|default(0) }} sold</span>
+            {% set active_variants = product.variants | selectattr('is_available') | list if product.variants else [] %}
+            {% set current_sold = (variant_sold.get('main', 0) if (variant_sold and active_variants and active_variants|length > 0) else total_sold)|default(0) %}
+            <span class="sold-count">{{ '{:,}'.format(current_sold|int) }} sold</span>
             {% if product.store %}
             <span class="rating-divider"></span>
             <a href="{{ url_for('templates.store_detail', store_id=product.store_id) }}" class="store-link">
@@ -4495,6 +4497,10 @@ const variants = [
 const variantRatings = {{ variant_ratings | tojson }};
 const overallRating = { avg: {{ avg_rating }}, count: {{ total_ratings }} };
 let productReviewsCache = null;
+
+/* Per-variant sold aggregates (key "main" = standard product) */
+const variantSold = {{ (variant_sold or {}) | tojson }};
+const overallSold = {{ total_sold | default(0) }};
  
 
     /* ════════════════════════════════
@@ -4615,6 +4621,7 @@ function setGalleryImages(nextImages) {
         
         // Update rating display for main product
         updateRatingDisplay('main');
+        updateSoldCount('main');
         
         // Restore the full product gallery
         setGalleryImages(images);
@@ -4647,6 +4654,7 @@ function setGalleryImages(nextImages) {
         
         // Update rating display for this variant
         updateRatingDisplay(variantId);
+        updateSoldCount(variantId);
         
         // Update price display
         updatePriceDisplay(variantPrice, selectedVariant.special_price, selectedVariant.discount_pct);
@@ -4706,6 +4714,18 @@ function setGalleryImages(nextImages) {
         ratingRow.querySelector('.rating-score').textContent = avg;
         const countEl = ratingRow.querySelector('.rating-count');
         countEl.textContent = '(' + count + ' review' + (count !== 1 ? 's' : '') + ')';
+    }
+
+    /* ════════════════════════════════
+       SOLD COUNT DISPLAY UPDATE
+    ════════════════════════════════ */
+    function updateSoldCount(variantKey) {
+        const key = String(variantKey);
+        const soldQty = Number(variantSold[key]) || 0;
+        const soldEl = document.querySelector('.rating-row .sold-count');
+        if (soldEl) {
+            soldEl.textContent = soldQty.toLocaleString() + ' sold';
+        }
     }
 
 function closeReviewsModal() {
@@ -6686,6 +6706,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setGalleryImages(images);
     updateTotal();
     updateRatingDisplay('main');  // Show main product rating by default
+    updateSoldCount('main');       // Show main product sold count by default
     
     // Ensure main product button is active
     const mainBtn = document.querySelector('.variant-btn[data-variant-id="main"]');

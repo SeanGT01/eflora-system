@@ -4796,86 +4796,9 @@ def products():
 
 @templates_bp.route('/product/<int:product_id>')
 def product_detail(product_id):
-    """Product detail page with category support"""
-    try:
-        product = Product.query.get_or_404(product_id)
-        store = Store.query.get(product.store_id)
-        
-        # Allow anyone (including sellers) to view public product pages
-        # This is NOT a seller-only page
-        
-        # Get all main categories for the navigation
-        from app.models import Category
-        main_categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order).all()
-        
-        # Get related products - same main category
-        related_products = Product.query.filter(
-            Product.main_category_id == product.main_category_id,
-            Product.store_id == product.store_id,
-            Product.id != product_id,
-            Product.is_available == True,
-            Product.is_archived == False,
-            _public_storefront_sellable_filter()
-        ).limit(4).all()
-        
-        # Get add-on products - different main category but same store
-        addon_products = []
-        if product.main_category_id:
-            addon_products = Product.query.filter(
-                Product.store_id == product.store_id,
-                Product.main_category_id != product.main_category_id,
-                Product.id != product_id,
-                Product.is_available == True,
-                Product.is_archived == False,
-                _public_storefront_sellable_filter()
-            ).limit(8).all()
-        
-        # Convert products to dict format
-        product_dict = product.to_dict()
-        store_dict = store.to_dict() if store else None
-        
-        # Add main_category and store_category info to product_dict for template
-        if product.main_category:
-            product_dict['main_category'] = {
-                'id': product.main_category.id,
-                'name': product.main_category.name,
-                'slug': product.main_category.slug
-            }
-        
-        if product.store_category:
-            product_dict['store_category'] = {
-                'id': product.store_category.id,
-                'name': product.store_category.name,
-                'slug': product.store_category.slug,
-                'filter_key': _subcategory_filter_key(product.store_category.name, product.store_category.slug)
-            }
-        
-        # Debug print
-        print(f"\n🔍 PRODUCT DETAIL - ID: {product_id}")
-        print(f"  Name: {product.name}")
-        print(f"  Main Category: {product.main_category.name if product.main_category else 'None'}")
-        print(f"  Store Category: {product.store_category.name if product.store_category else 'None'}")
-        print(f"  Categories for nav: {len(main_categories)}")
-        print(f"  Related products: {len(related_products)}")
-        print(f"  Add-on products: {len(addon_products)}")
-        print(f"  User role: {session.get('role', 'guest')}")
-        print(f"  ✅ Rendering product_detail.html (public page accessible to all)")
-        
-        return render_template(
-            'product_detail.html',
-            product=product_dict,
-            store=store_dict,
-            main_categories=main_categories,  # Pass to base.html for navigation
-            related_products=[p.to_dict() for p in related_products],
-            addon_products=[p.to_dict() for p in addon_products]
-        )
-        
-    except Exception as e:
-        print(f"❌ Error loading product {product_id}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        flash('Product not found', 'error')
-        return redirect(url_for('templates.browse_products'))
+    """Legacy redirect to /products/<product_id>"""
+    return redirect(url_for('templates.product_details', product_id=product_id))
+
     
 @templates_bp.route('/dashboard')
 def dashboard():
@@ -10886,22 +10809,32 @@ def product_details(product_id):
                 'count': row.count or 0,
             }
 
-        # Calculate total units sold (completed online orders + POS orders)
+        # Calculate units sold per variant and overall (completed online orders + POS orders)
         from app.utils.report_service import COMPLETED_ORDER_STATUSES
-        online_sold = db.session.query(
-            sa_func.coalesce(sa_func.sum(OrderItem.quantity), 0)
+        variant_sold = {'main': 0}
+
+        online_sold_rows = db.session.query(
+            OrderItem.variant_id,
+            sa_func.coalesce(sa_func.sum(OrderItem.quantity), 0).label('qty')
         ).join(Order, Order.id == OrderItem.order_id).filter(
             OrderItem.product_id == product_id,
             Order.status.in_(COMPLETED_ORDER_STATUSES),
-        ).scalar() or 0
+        ).group_by(OrderItem.variant_id).all()
+        for r in online_sold_rows:
+            key = str(r.variant_id) if r.variant_id else 'main'
+            variant_sold[key] = variant_sold.get(key, 0) + int(r.qty or 0)
 
-        pos_sold = db.session.query(
-            sa_func.coalesce(sa_func.sum(POSOrderItem.quantity), 0)
+        pos_sold_rows = db.session.query(
+            POSOrderItem.variant_id,
+            sa_func.coalesce(sa_func.sum(POSOrderItem.quantity), 0).label('qty')
         ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id).filter(
             POSOrderItem.product_id == product_id,
-        ).scalar() or 0
+        ).group_by(POSOrderItem.variant_id).all()
+        for r in pos_sold_rows:
+            key = str(r.variant_id) if r.variant_id else 'main'
+            variant_sold[key] = variant_sold.get(key, 0) + int(r.qty or 0)
 
-        total_sold = int(online_sold) + int(pos_sold)
+        total_sold = sum(variant_sold.values())
         product_dict['total_sold'] = total_sold
 
         store_map_data = _build_store_map_data(store, product_dict.get('store')) if store else None
@@ -10916,6 +10849,7 @@ def product_details(product_id):
             avg_rating=avg_rating,
             total_ratings=total_ratings,
             variant_ratings=variant_ratings,
+            variant_sold=variant_sold,
             total_sold=total_sold,
             store_map_data=store_map_data,
         )
