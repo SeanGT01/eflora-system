@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from datetime import timedelta
 from urllib.parse import parse_qs, unquote, urlparse
@@ -9,28 +10,48 @@ load_dotenv()
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
+_POSTGRES_SCHEME_RE = re.compile(r'^postgres(ql)?(\+[a-zA-Z0-9_-]+)?://', re.IGNORECASE)
+
 
 def _is_postgres_url(url) -> bool:
-    return bool(url) and str(url).startswith(('postgres://', 'postgresql://'))
+    if not url:
+        return False
+    return bool(_POSTGRES_SCHEME_RE.match(str(url).strip()))
 
 
 def _normalize_postgres_uri(url: str) -> str:
-    if str(url).startswith('postgres://'):
-        return 'postgresql://' + str(url)[len('postgres://'):]
-    return str(url)
+    """Normalize any Postgres URL scheme to postgresql:// and use psycopg2.
+
+    Handles:
+      - postgres://...
+      - postgresql://...
+      - postgresql+psycopg://...
+      - postgresql+psycopg2://...
+      - postgresql+asyncpg://...
+      - postgres+...://...
+    Ensures SQLAlchemy and psycopg2 connect without requiring the 'psycopg' (psycopg3) module.
+    """
+    if not url:
+        return str(url) if url is not None else ''
+    u = str(url).strip()
+    return _POSTGRES_SCHEME_RE.sub('postgresql://', u, count=1)
 
 
 def _psycopg2_connect_kwargs(url: str) -> dict:
     parsed = urlparse(_normalize_postgres_uri(url))
     qs = parse_qs(parsed.query or '')
     dbname = unquote((parsed.path or '/').lstrip('/'))
+    try:
+        connect_timeout = int((qs.get('connect_timeout') or ['10'])[0])
+    except (ValueError, TypeError):
+        connect_timeout = 10
     kwargs = {
         'host': parsed.hostname,
         'port': parsed.port or 5432,
         'user': unquote(parsed.username) if parsed.username else None,
         'password': unquote(parsed.password) if parsed.password else None,
         'dbname': dbname,
-        'connect_timeout': int((qs.get('connect_timeout') or ['10'])[0]),
+        'connect_timeout': connect_timeout,
         'sslmode': (qs.get('sslmode') or ['require'])[0],
         'keepalives': 1,
         'keepalives_idle': 30,
@@ -93,6 +114,10 @@ class Config:
     # Database
     # =============================
     DATABASE_URL = os.getenv("DATABASE_URL")
+    if DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.strip().strip('"').strip("'")
+        if _is_postgres_url(DATABASE_URL):
+            DATABASE_URL = _normalize_postgres_uri(DATABASE_URL)
 
     if _is_postgres_url(DATABASE_URL):
         SQLALCHEMY_DATABASE_URI = _normalize_postgres_uri(DATABASE_URL)
