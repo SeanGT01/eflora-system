@@ -20,7 +20,7 @@ def _is_postgres_url(url) -> bool:
 
 
 def _normalize_postgres_uri(url: str) -> str:
-    """Normalize any Postgres URL scheme to postgresql:// and use psycopg2.
+    """Normalize any Postgres URL scheme to postgresql+psycopg2://.
 
     Handles:
       - postgres://...
@@ -29,12 +29,13 @@ def _normalize_postgres_uri(url: str) -> str:
       - postgresql+psycopg2://...
       - postgresql+asyncpg://...
       - postgres+...://...
-    Ensures SQLAlchemy and psycopg2 connect without requiring the 'psycopg' (psycopg3) module.
+    Ensures SQLAlchemy explicitly uses the installed psycopg2 driver instead of failing
+    with 'No module named psycopg'.
     """
     if not url:
         return str(url) if url is not None else ''
     u = str(url).strip()
-    return _POSTGRES_SCHEME_RE.sub('postgresql://', u, count=1)
+    return _POSTGRES_SCHEME_RE.sub('postgresql+psycopg2://', u, count=1)
 
 
 def _psycopg2_connect_kwargs(url: str) -> dict:
