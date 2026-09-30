@@ -5232,6 +5232,7 @@ def seller_dashboard():
         _pht_date,
         _iter_pht_days,
         _new_customer_count,
+        _customer_metrics,
         _to_pht,
         _peak_hours,
     )
@@ -5334,24 +5335,12 @@ def seller_dashboard():
     if orders_prev_month > 0:
         orders_change = round(((orders_this_month - orders_prev_month) / orders_prev_month) * 100, 1)
 
-    # ── KPI: Unique customers with completed online orders in period ──
-    customers_this_month = db.session.query(
-        func.count(func.distinct(Order.customer_id))
-    ).filter(
-        Order.store_id == store.id,
-        Order.status.in_(COMPLETED_ORDER_STATUSES),
-        Order.created_at >= range_start,
-        Order.created_at < range_end,
-    ).scalar() or 0
+    # ── KPI: Unique customers with completed orders in period (Online + POS) ──
+    curr_cust_metrics = _customer_metrics(store.id, range_start, range_end)
+    customers_this_month = curr_cust_metrics['total_unique']
 
-    customers_prev_month = db.session.query(
-        func.count(func.distinct(Order.customer_id))
-    ).filter(
-        Order.store_id == store.id,
-        Order.status.in_(COMPLETED_ORDER_STATUSES),
-        Order.created_at >= prev_start,
-        Order.created_at < prev_end,
-    ).scalar() or 0
+    prev_cust_metrics = _customer_metrics(store.id, prev_start, prev_end)
+    customers_prev_month = prev_cust_metrics['total_unique']
 
     customers_change = 0
     if customers_prev_month > 0:
@@ -5601,6 +5590,14 @@ def seller_dashboard():
     ).group_by(Order.status).all()
     order_status_dist = {row[0]: row[1] for row in status_dist_query}
 
+    pos_count_in_period = POSOrder.query.filter(
+        POSOrder.store_id == store.id,
+        POSOrder.created_at >= range_start,
+        POSOrder.created_at < range_end,
+    ).count()
+    if pos_count_in_period > 0:
+        order_status_dist['completed'] = order_status_dist.get('completed', 0) + pos_count_in_period
+
     # ── Analytics: Revenue by payment method (online completed + POS) ──
     payment_method_query = db.session.query(
         Order.payment_method,
@@ -5792,21 +5789,10 @@ def seller_dashboard():
         aov_trend['values'].append(round(rev / cnt, 2))
         aov_trend['counts'].append(cnt)
 
-    # ── Analytics: Customer retention (repeat vs one-time vs first-time) ──
-    all_customers = db.session.query(
-        Order.customer_id,
-        func.count(Order.id).label('order_count')
-    ).filter(
-        Order.store_id == store.id,
-        Order.status.in_(COMPLETED_ORDER_STATUSES),
-        Order.created_at >= range_start,
-        Order.created_at < range_end,
-    ).group_by(Order.customer_id).all()
-
-    repeat_customers = sum(1 for cust in all_customers if cust.order_count > 1)
-    total_unique_customers = len(all_customers)
-    # True first-time buyers at this store (lifetime first order falls in period)
-    new_customers = _new_customer_count(store.id, range_start, range_end)
+    # ── Analytics: Customer retention (repeat vs one-time vs first-time, ONLINE + POS) ──
+    total_unique_customers = curr_cust_metrics['total_unique']
+    repeat_customers = curr_cust_metrics['repeat']
+    new_customers = curr_cust_metrics['new_customers']
 
     from app.utils.store_schedule import format_store_hours_parts
     store_hours_parts = format_store_hours_parts(store.store_schedule)

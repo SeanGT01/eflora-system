@@ -635,20 +635,109 @@ def _pos_order_count(store_id, start, end) -> int:
     ).scalar() or 0
 
 
-def _new_customer_count(store_id, start, end) -> int:
-    """Customers whose *first* completed order at this store falls in the period."""
-    first_orders = db.session.query(
-        Order.customer_id,
-        func.min(Order.created_at).label('first_order'),
-    ).filter(
-        Order.store_id == store_id,
-        _paid_order_status_filter(),
-    ).group_by(Order.customer_id).subquery()
+def _is_anonymous_walk_in(name: Optional[str]) -> bool:
+    """Return True if the customer name represents an anonymous walk-in POS customer."""
+    if not name:
+        return True
+    s = name.strip().lower()
+    if s in {'walk in', 'walk-in', 'walk in cash', 'walk-in cash', 'walkin', 'cash', 'anonymous', 'guest', 'n/a', 'none'}:
+        return True
+    if s.startswith(('walk in', 'walk-in')):
+        return True
+    return False
 
-    return db.session.query(func.count(first_orders.c.customer_id)).filter(
-        first_orders.c.first_order >= start,
-        first_orders.c.first_order < end,
-    ).scalar() or 0
+
+def _customer_metrics(store_id: Optional[int] = None, start: Optional[datetime] = None, end: Optional[datetime] = None) -> dict:
+    """Computes unified customer metrics across completed Online Orders and POS Orders.
+    
+    Returns a dict with:
+      - total_unique: count of distinct customers who ordered in [start, end)
+      - repeat: count of customers in [start, end) who have >= 2 lifetime completed orders
+      - one_time: total_unique - repeat
+      - new_customers: count of customers whose first completed order falls in [start, end)
+    """
+    if start is None:
+        start = datetime.min
+    if end is None:
+        end = datetime.max
+
+    # 1. Fetch completed online orders up to end
+    q_online = db.session.query(
+        Order.id,
+        Order.customer_id,
+        User.full_name,
+        Order.created_at,
+    ).outerjoin(User, User.id == Order.customer_id).filter(
+        _paid_order_status_filter(),
+        Order.created_at < end,
+    )
+    if store_id is not None:
+        q_online = q_online.filter(Order.store_id == store_id)
+
+    # 2. Fetch POS orders up to end
+    q_pos = db.session.query(
+        POSOrder.id,
+        POSOrder.customer_name,
+        POSOrder.customer_contact,
+        POSOrder.created_at,
+    ).filter(
+        POSOrder.created_at < end,
+    )
+    if store_id is not None:
+        q_pos = q_pos.filter(POSOrder.store_id == store_id)
+
+    customer_orders = defaultdict(list)
+
+    for o_id, cust_id, full_name, created_at in q_online.all():
+        if not created_at:
+            continue
+        key = f"name_{full_name.strip().lower()}" if (full_name and full_name.strip()) else f"user_{cust_id}"
+        customer_orders[key].append(created_at)
+
+    for p_id, cname, ccontact, created_at in q_pos.all():
+        if not created_at:
+            continue
+        name = (cname or '').strip()
+        if _is_anonymous_walk_in(name):
+            key = f"pos_walkin_{p_id}"
+        else:
+            key = f"name_{name.lower()}"
+        customer_orders[key].append(created_at)
+
+    total_unique = 0
+    repeat = 0
+    new_customers = 0
+
+    for key, timestamps in customer_orders.items():
+        valid_ts = [t for t in timestamps if t < end]
+        if not valid_ts:
+            continue
+        valid_ts.sort()
+        in_period = [t for t in valid_ts if t >= start]
+        if in_period:
+            total_unique += 1
+            if len(valid_ts) > 1:
+                repeat += 1
+            first_order = valid_ts[0]
+            if first_order >= start:
+                new_customers += 1
+
+    return {
+        'total_unique': total_unique,
+        'repeat': repeat,
+        'one_time': max(0, total_unique - repeat),
+        'new_customers': new_customers,
+    }
+
+
+def _all_time_customer_count(store_id: Optional[int] = None) -> int:
+    """Return all-time unique customer count across completed online and POS orders."""
+    return _customer_metrics(store_id=store_id, start=datetime.min, end=datetime.max)['total_unique']
+
+
+def _new_customer_count(store_id, start, end) -> int:
+    """Customers whose *first* completed order at this store falls in the period (Online + POS)."""
+    return _customer_metrics(store_id=store_id, start=start, end=end)['new_customers']
 
 
 def _top_products(store_id, start, end, limit=5):
@@ -1168,9 +1257,7 @@ def compute_analytics(
         return round(((now - before) / before) * 100, 1)
 
     # Totals (NOT period-scoped — for the bottom-of-page summary numbers)
-    total_customers = db.session.query(func.count(func.distinct(Order.customer_id))).filter(
-        Order.store_id == store.id
-    ).scalar() or 0
+    total_customers = _all_time_customer_count(store.id)
     total_products = db.session.query(func.count(Product.id)).filter(
         Product.store_id == store.id, Product.is_archived.is_(False)
     ).scalar() or 0
@@ -1359,7 +1446,7 @@ def _orders_section(store_id, start, end):
 
 
 def _customers_section(store_id, start, end):
-    rows = db.session.query(
+    online_rows = db.session.query(
         User.id,
         User.full_name,
         User.email,
@@ -1372,17 +1459,66 @@ def _customers_section(store_id, start, end):
              Order.created_at >= start,
              Order.created_at < end) \
      .group_by(User.id, User.full_name, User.email) \
-     .order_by(func.sum(Order.total_amount).desc()).all()
+     .all()
+
+    pos_rows = db.session.query(
+        POSOrder.id,
+        POSOrder.customer_name,
+        POSOrder.customer_contact,
+        POSOrder.total_amount,
+        POSOrder.created_at,
+    ).filter(
+        POSOrder.store_id == store_id,
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).all()
+
+    cust_map = {}
+    for r in online_rows:
+        name = r.full_name or f"User #{r.id}"
+        key = f"name_{name.strip().lower()}"
+        cust_map[key] = {
+            'name': name,
+            'email': _report_email(r.email),
+            'order_count': int(r.order_count or 0),
+            'total_spent': float(r.total_spent or 0),
+            'last_order': r.last_order,
+        }
+
+    for p in pos_rows:
+        raw_name = (p.customer_name or '').strip()
+        is_walkin = _is_anonymous_walk_in(raw_name)
+        if is_walkin:
+            display_name = f"Walk-in (POS #{p.id})"
+            key = f"pos_walkin_{p.id}"
+        else:
+            display_name = raw_name
+            key = f"name_{raw_name.lower()}"
+
+        if key not in cust_map:
+            cust_map[key] = {
+                'name': display_name,
+                'email': '—',
+                'order_count': 0,
+                'total_spent': 0.0,
+                'last_order': p.created_at,
+            }
+        cust_map[key]['order_count'] += 1
+        cust_map[key]['total_spent'] += float(p.total_amount or 0)
+        if p.created_at and (not cust_map[key]['last_order'] or p.created_at > cust_map[key]['last_order']):
+            cust_map[key]['last_order'] = p.created_at
 
     out_rows = []
-    for r in rows:
+    for c in cust_map.values():
         out_rows.append([
-            r.full_name,
-            _report_email(r.email),
-            int(r.order_count or 0),
-            float(r.total_spent or 0),
-            _format_pht_date(r.last_order),
+            c['name'],
+            c['email'],
+            c['order_count'],
+            c['total_spent'],
+            _format_pht_date(c['last_order']),
         ])
+    out_rows.sort(key=lambda x: x[3], reverse=True)
+
     new_count = _new_customer_count(store_id, start, end)
     summary = [
         ('Customers in Period', f"{len(out_rows):,}"),
@@ -2653,18 +2789,8 @@ def _platform_pos_order_count(start, end) -> int:
 
 
 def _platform_new_customer_count(start, end) -> int:
-    """Customers whose *very first* completed online order falls in the period."""
-    first_orders = db.session.query(
-        Order.customer_id,
-        func.min(Order.created_at).label('first_order'),
-    ).filter(
-        _paid_order_status_filter(),
-    ).group_by(Order.customer_id).subquery()
-
-    return db.session.query(func.count(first_orders.c.customer_id)).filter(
-        first_orders.c.first_order >= start,
-        first_orders.c.first_order < end,
-    ).scalar() or 0
+    """Customers whose *very first* completed order falls in the period (Online + POS)."""
+    return _customer_metrics(store_id=None, start=start, end=end)['new_customers']
 
 
 def _platform_top_products(start, end, limit=5):
@@ -3370,7 +3496,7 @@ def _admin_orders_section(start, end):
 
 
 def _admin_customers_section(start, end):
-    rows = db.session.query(
+    online_rows = db.session.query(
         User.id,
         User.full_name,
         User.email,
@@ -3382,17 +3508,65 @@ def _admin_customers_section(start, end):
              Order.created_at >= start,
              Order.created_at < end) \
      .group_by(User.id, User.full_name, User.email) \
-     .order_by(func.sum(Order.total_amount).desc()).all()
+     .all()
+
+    pos_rows = db.session.query(
+        POSOrder.id,
+        POSOrder.customer_name,
+        POSOrder.customer_contact,
+        POSOrder.total_amount,
+        POSOrder.created_at,
+    ).filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    ).all()
+
+    cust_map = {}
+    for r in online_rows:
+        name = r.full_name or f"User #{r.id}"
+        key = f"name_{name.strip().lower()}"
+        cust_map[key] = {
+            'name': name,
+            'email': _report_email(r.email),
+            'order_count': int(r.order_count or 0),
+            'total_spent': float(r.total_spent or 0),
+            'last_order': r.last_order,
+        }
+
+    for p in pos_rows:
+        raw_name = (p.customer_name or '').strip()
+        is_walkin = _is_anonymous_walk_in(raw_name)
+        if is_walkin:
+            display_name = f"Walk-in (POS #{p.id})"
+            key = f"pos_walkin_{p.id}"
+        else:
+            display_name = raw_name
+            key = f"name_{raw_name.lower()}"
+
+        if key not in cust_map:
+            cust_map[key] = {
+                'name': display_name,
+                'email': '—',
+                'order_count': 0,
+                'total_spent': 0.0,
+                'last_order': p.created_at,
+            }
+        cust_map[key]['order_count'] += 1
+        cust_map[key]['total_spent'] += float(p.total_amount or 0)
+        if p.created_at and (not cust_map[key]['last_order'] or p.created_at > cust_map[key]['last_order']):
+            cust_map[key]['last_order'] = p.created_at
 
     out_rows = []
-    for r in rows:
+    for c in cust_map.values():
         out_rows.append([
-            r.full_name,
-            _report_email(r.email),
-            int(r.order_count or 0),
-            float(r.total_spent or 0),
-            _format_pht_date(r.last_order),
+            c['name'],
+            c['email'],
+            c['order_count'],
+            c['total_spent'],
+            _format_pht_date(c['last_order']),
         ])
+    out_rows.sort(key=lambda x: x[3], reverse=True)
+
     new_count = _platform_new_customer_count(start, end)
     summary = [
         ('Customers in Period', f"{len(out_rows):,}"),
