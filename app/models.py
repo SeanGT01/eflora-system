@@ -551,6 +551,8 @@ class Store(db.Model):
         elif not isinstance(muni_data, list):
             muni_data = [] if muni_data is None else list(muni_data)
 
+        from app.utils.cloudinary_helper import optimize_cloudinary_url
+
         return {
             'id': self.id,
             'name': self.name,
