@@ -9,7 +9,7 @@ import os
 from werkzeug.utils import secure_filename
 from functools import wraps
 from decimal import Decimal
-from sqlalchemy import or_, inspect, text
+from sqlalchemy import or_, inspect, text, func
 from sqlalchemy.exc import ProgrammingError, OperationalError, IntegrityError
 import uuid
 import time
@@ -4216,6 +4216,7 @@ def cancel_order(order_id):
         _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(user_id)
         order.status = 'cancelled'
+        order.payment_status = 'cancelled'
         order.cancellation_reason_code = reason_code
         order.cancellation_reason = reason_text
         order.cancelled_at = datetime.utcnow()
@@ -5523,26 +5524,26 @@ def seller_dashboard():
 
     # ── Analytics: Revenue by payment method (online completed + POS) ──
     payment_method_query = db.session.query(
-        Order.payment_method,
+        func.lower(Order.payment_method),
         func.coalesce(func.sum(Order.total_amount), 0)
     ).filter(
         Order.store_id == store.id,
         Order.status.in_(COMPLETED_ORDER_STATUSES),
         Order.created_at >= range_start,
         Order.created_at < range_end,
-    ).group_by(Order.payment_method).all()
-    revenue_by_payment = {row[0] or 'unknown': float(row[1]) for row in payment_method_query}
+    ).group_by(func.lower(Order.payment_method)).all()
+    revenue_by_payment = {str(row[0] or 'unknown').lower(): float(row[1]) for row in payment_method_query}
 
     pos_payment_query = db.session.query(
-        POSOrder.payment_method,
+        func.lower(POSOrder.payment_method),
         func.coalesce(func.sum(POSOrder.total_amount), 0)
     ).filter(
         POSOrder.store_id == store.id,
         POSOrder.created_at >= range_start,
         POSOrder.created_at < range_end,
-    ).group_by(POSOrder.payment_method).all()
+    ).group_by(func.lower(POSOrder.payment_method)).all()
     for method, amount in pos_payment_query:
-        key = method or 'cash'
+        key = (method or 'cash').strip().lower()
         # Tag POS methods so they don't silently collide with online labels.
         label = f"pos_{key}"
         revenue_by_payment[label] = revenue_by_payment.get(label, 0.0) + float(amount or 0)
@@ -5716,6 +5717,11 @@ def seller_dashboard():
     total_unique_customers = curr_cust_metrics['total_unique']
     repeat_customers = curr_cust_metrics['repeat']
     new_customers = curr_cust_metrics['new_customers']
+    repeat_customers_list = curr_cust_metrics.get('repeat_list', [])
+    repeat_customers_is_all_time = False
+    if not repeat_customers_list and curr_cust_metrics.get('all_time_repeat_list'):
+        repeat_customers_list = curr_cust_metrics.get('all_time_repeat_list', [])
+        repeat_customers_is_all_time = True
 
     from app.utils.store_schedule import format_store_hours_parts
     store_hours_parts = format_store_hours_parts(store.store_schedule)
@@ -5762,6 +5768,8 @@ def seller_dashboard():
         new_customers=new_customers,
         repeat_customers=repeat_customers,
         total_unique_customers=total_unique_customers,
+        repeat_customers_list=repeat_customers_list,
+        repeat_customers_is_all_time=repeat_customers_is_all_time,
     )
 
 @templates_bp.route('/admin/users')
@@ -8425,7 +8433,7 @@ def _load_seller_orders_page_data(store, include_riders=True):
             if order.created_at and _fmt_pht(order.created_at, '%Y-%m-%d') == today_str
         ),
         'pending': sum(1 for order in orders if order.status == 'pending'),
-        'payment_review': sum(1 for order in orders if order.payment_status == 'pending_verification'),
+        'payment_review': sum(1 for order in orders if order.payment_status == 'pending_verification' and order.status != 'cancelled'),
         'preparing': sum(1 for order in orders if order.status in ['accepted', 'preparing']),
         'on_delivery': sum(1 for order in orders if order.status == 'on_delivery'),
         'delivered': sum(1 for order in orders if order.status == 'delivered'),
@@ -8739,10 +8747,17 @@ def seller_order_status_api(order_id):
         order.done_preparing_proof_url = upload_result.get('url')
 
     previous_status = order.status
+    if previous_status == 'cancelled' and new_status != 'cancelled':
+        return jsonify({'error': 'This order has already been cancelled and cannot change status.'}), 400
+
     if new_status == 'cancelled' and previous_status != 'cancelled':
         # Ensure add-on rows are loaded before stock restore / history audit
         _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(session['user_id'])
+        order.cancelled_at = datetime.utcnow()
+        order.cancellation_reason_code = f"seller_cancelled_{(order.payment_method or '').lower()}"
+        order.cancellation_reason = data.get('reason') or 'Cancelled by seller'
+        order.payment_status = 'cancelled'
 
     order.set_status(new_status)
     if new_status == 'completed' and getattr(order, 'fulfillment_type', '') == 'pickup' and order.payment_status in ('cop_pending', 'cop_approved', 'pending'):
@@ -8768,6 +8783,11 @@ def seller_order_verify_payment_api(order_id):
     order = Order.query.filter_by(id=order_id, store_id=store.id).first()
     if not order:
         return jsonify({'error': 'Order not found'}), 404
+
+    if order.status == 'cancelled':
+        return jsonify({'error': 'Cannot verify payment for a cancelled order.'}), 400
+    if order.status in ('delivered', 'completed'):
+        return jsonify({'error': f'Order is already {order.status}.'}), 400
 
     payment_status = (order.payment_status or '').lower()
     pay_method = (order.payment_method or '').lower()
@@ -8898,7 +8918,10 @@ def seller_riders_api():
     riders_data = []
     for rider in riders:
         rider_dict = rider.to_dict()
-        total_deliveries = Order.query.filter_by(rider_id=rider.id, status='delivered').count()
+        total_deliveries = Order.query.filter(
+            Order.rider_id == rider.id,
+            Order.status.in_(['delivered', 'completed'])
+        ).count()
         active_delivery = Order.query.filter(
             Order.rider_id == rider.id,
             Order.status.in_(['on_delivery', 'accepted', 'preparing'])
@@ -9256,7 +9279,10 @@ def seller_rider_detail_api(rider_id):
         return jsonify({'error': 'Rider not found'}), 404
 
     rider_dict = rider.to_dict()
-    total_deliveries = Order.query.filter_by(rider_id=rider.id, status='delivered').count()
+    total_deliveries = Order.query.filter(
+        Order.rider_id == rider.id,
+        Order.status.in_(['delivered', 'completed'])
+    ).count()
     recent_orders = Order.query.filter_by(rider_id=rider.id).order_by(Order.created_at.desc()).limit(10).all()
 
     rider_dict['total_deliveries'] = total_deliveries
@@ -10015,9 +10041,9 @@ def pos_orders():
         'total_orders': POSOrder.query.filter_by(store_id=store.id).count(),
         'total_revenue': float(db.session.query(db.func.sum(POSOrder.total_amount))
             .filter(POSOrder.store_id == store.id).scalar() or 0),
-        'cash_orders': POSOrder.query.filter_by(store_id=store.id, payment_method='cash').count(),
-        'gcash_orders': POSOrder.query.filter_by(store_id=store.id, payment_method='gcash').count(),
-        'card_orders': POSOrder.query.filter_by(store_id=store.id, payment_method='card').count(),
+        'cash_orders': POSOrder.query.filter(POSOrder.store_id == store.id, db.func.lower(POSOrder.payment_method) == 'cash').count(),
+        'gcash_orders': POSOrder.query.filter(POSOrder.store_id == store.id, db.func.lower(POSOrder.payment_method) == 'gcash').count(),
+        'card_orders': POSOrder.query.filter(POSOrder.store_id == store.id, db.func.lower(POSOrder.payment_method) == 'card').count(),
     }
 
     today_sales = float(db.session.query(db.func.sum(POSOrder.total_amount))
@@ -10158,7 +10184,7 @@ def pos_statistics():
     ).all()
 
     payment_breakdown = db.session.query(
-        POSOrder.payment_method,
+        func.lower(POSOrder.payment_method).label('payment_method'),
         db.func.count(POSOrder.id).label('count'),
         db.func.sum(POSOrder.total_amount).label('total')
     ).filter(
@@ -10166,7 +10192,7 @@ def pos_statistics():
         POSOrder.created_at >= range_start,
         POSOrder.created_at < range_end,
     ).group_by(
-        POSOrder.payment_method
+        func.lower(POSOrder.payment_method)
     ).all()
     
     # Get top products

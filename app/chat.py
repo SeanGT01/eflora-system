@@ -2130,22 +2130,30 @@ def checkout_custom_ticket(ticket_id):
         return jsonify({'error': f'Checkout failed: {str(_checkout_err)}'}), 500
 
 
+@chat_bp.route('/orders/<int:order_id>/cancel', methods=['POST'])
 @chat_bp.route('/orders/<int:order_id>/cancel-cod', methods=['POST'])
 @chat_auth_required
 def cancel_cod_order(order_id):
     """
+    POST /api/v1/chat/orders/<id>/cancel
     POST /api/v1/chat/orders/<id>/cancel-cod
-    Only the Seller or Seller Admin can cancel a COD order.
-    Restores any attached add-on stock, writes to StockReduction audit log,
+    Only the Seller or Seller Admin can cancel an order.
+    - COD and COP orders can be cancelled while pending, accepted, or preparing.
+    - Online (GCash) orders can be cancelled while status is still pending.
+    Restores product, variant, and add-on stock, writes to StockReduction audit log,
     marks order and ticket cancelled, and posts cancellation notice in chat.
     """
     user = _current_user()
     order = Order.query.get_or_404(order_id)
 
-    # Verify order is COD or COP and eligible for cancellation
-    pay_method = (order.payment_method or '').lower()
-    if pay_method not in ('cod', 'cop'):
-        return jsonify({'error': 'Only COD and COP orders can be cancelled directly. Prepaid orders require admin review.'}), 400
+    # Verify role: must be seller or seller admin of this store
+    is_seller = (order.store and order.store.seller_id == user.id)
+    is_admin = (user.role in ('admin', 'seller_admin', 'store_admin'))
+    if not (is_seller or is_admin):
+        from app.models import StoreAdmin
+        staff = StoreAdmin.query.filter_by(user_id=user.id, store_id=order.store_id, is_active=True, is_archived=False).first()
+        if not staff:
+            return jsonify({'error': 'Only the seller or store admin can cancel this order'}), 403
 
     if order.status in ('delivered', 'completed', 'cancelled'):
         return jsonify({'error': f'Order is already {order.status}'}), 400
@@ -2153,22 +2161,29 @@ def cancel_cod_order(order_id):
     if order.status in ('on_delivery', 'out_for_delivery', 'picked_up'):
         return jsonify({'error': 'Order cannot be cancelled because the rider is already delivering.'}), 400
 
-    # Verify role: must be seller or seller admin of this store
-    is_seller = (order.store.seller_id == user.id)
-    is_admin = (user.role in ('admin', 'seller_admin'))
-    if not (is_seller or is_admin):
-        return jsonify({'error': 'Only the seller or store admin can cancel this order'}), 403
+    # Verify order is eligible for cancellation
+    pay_method = (order.payment_method or '').lower()
+    is_pay_later = pay_method in ('cod', 'cop')
+
+    # Online / prepaid orders can only be cancelled while still pending
+    if not is_pay_later and order.status != 'pending':
+        return jsonify({'error': 'Online orders can only be cancelled while the status is still pending.'}), 400
 
     data = request.get_json(silent=True) or {}
-    reason = (data.get('reason') or data.get('reason_notes') or 'Customer requested cancellation in chat').strip()
+    reason = (data.get('reason') or data.get('reason_notes') or 'Cancelled by seller').strip()
 
     # Cancel order
+    previous_status = order.status
     order.status = 'cancelled'
+    order.payment_status = 'cancelled'
     order.cancelled_at = datetime.utcnow()
     order.cancellation_reason_code = f'seller_cancelled_{pay_method}'
     order.cancellation_reason = reason
+    if hasattr(order, 'updated_at'):
+        order.updated_at = datetime.utcnow()
 
-    # Restore any attached add-on stock and log restock in StockReduction
+    # Restore product, variant, and attached add-on stock and log restock in StockReduction
+    _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
     order.restore_stock_on_cancel(user.id)
 
     # Cancel linked custom ticket if present
@@ -2179,7 +2194,7 @@ def cancel_cod_order(order_id):
             if t.conversation_id:
                 convo = Conversation.query.get(t.conversation_id)
                 if convo:
-                    cancel_notice = f"🚫 Custom {pay_method.upper()} Order #{order.id} has been cancelled by the florist.\nReason: {reason}"
+                    cancel_notice = f"🚫 Order #{order.id} ({pay_method.upper()}) has been cancelled by the florist.\nReason: {reason}"
                     db.session.add(ChatMessage(
                         conversation_id=convo.id,
                         sender_id=user.id,
@@ -2190,11 +2205,18 @@ def cancel_cod_order(order_id):
                     convo.last_message_at = pht_now()
                     _bump_other_unread(convo, user.id)
 
+    try:
+        from app.utils.push import queue_order_status_push
+        queue_order_status_push(order, 'cancelled', previous_status)
+    except Exception:
+        pass
+
     db.session.commit()
 
     return jsonify({
+        'success': True,
         'status': 'ok',
-        'message': f'Order #{order.id} cancelled successfully and add-on inventory restored.',
+        'message': f'Order #{order.id} cancelled successfully and inventory restored.',
         'order_id': order.id,
     }), 200
 

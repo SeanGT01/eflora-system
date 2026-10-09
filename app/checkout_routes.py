@@ -12,7 +12,18 @@ from functools import wraps
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
+import threading
+
+# Per-user checkout locks to prevent race conditions during rapid double-clicks
+_checkout_user_locks = {}
+_checkout_lock_registry_lock = threading.Lock()
+
+def _get_user_checkout_lock(user_id):
+    with _checkout_lock_registry_lock:
+        if user_id not in _checkout_user_locks:
+            _checkout_user_locks[user_id] = threading.Lock()
+        return _checkout_user_locks[user_id]
 
 from flask import Blueprint, jsonify, request, session
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
@@ -1300,11 +1311,13 @@ def upload_proof_temp():
 def create_orders():
     """Create orders after payment proof has been uploaded."""
     print("🔵🔵🔵 CREATE ORDERS ROUTE WAS CALLED! 🔵🔵🔵")
+    user_lock = None
     try:
         user_id = request.user_id
-        limit_error = _active_order_limit_error_response(user_id)
-        if limit_error:
-            return limit_error
+
+        user_lock = _get_user_checkout_lock(user_id)
+        if not user_lock.acquire(blocking=True, timeout=15):
+            return jsonify({"error": "Order submission in progress, please wait..."}), 429
 
         data = request.get_json() or {}
         customer = User.query.get(user_id)
@@ -1322,6 +1335,54 @@ def create_orders():
 
         if not orders_data:
             return jsonify({"error": "No orders data provided"}), 400
+
+        # --- IDEMPOTENCY / DUPLICATE ORDER GUARD (prevents double creation within 45s) ---
+        cutoff = datetime.utcnow() - timedelta(seconds=45)
+        recent_orders = Order.query.filter(
+            Order.customer_id == user_id,
+            Order.status == "pending",
+            Order.created_at >= cutoff
+        ).order_by(Order.id.desc()).all()
+
+        if recent_orders and orders_data:
+            matched_orders = []
+            for od in orders_data:
+                od_store_id = od.get("store_id")
+                od_proof_url = od.get("payment_proof_url")
+                od_method = str(od.get("payment_method") or "gcash").strip().lower()
+                od_items = od.get("items") or []
+                od_prod_ids = sorted([int(it.get("product_id")) for it in od_items if it.get("product_id")])
+
+                for ro in recent_orders:
+                    if ro.id in [m.id for m in matched_orders]:
+                        continue
+                    if ro.store_id == od_store_id and ro.payment_method == od_method:
+                        if od_proof_url:
+                            if ro.payment_proof_url == od_proof_url:
+                                matched_orders.append(ro)
+                                break
+                        else:
+                            # For COD/COP, verify the items match or match store if items not specified
+                            ro_prod_ids = sorted([int(oi.product_id) for oi in ro.items if oi.product_id])
+                            if od_prod_ids:
+                                if ro_prod_ids == od_prod_ids:
+                                    matched_orders.append(ro)
+                                    break
+                            else:
+                                matched_orders.append(ro)
+                                break
+
+            if len(matched_orders) == len(orders_data) and len(matched_orders) > 0:
+                print(f"⚠️ Caught duplicate create_orders request for user {user_id}. Returning existing {len(matched_orders)} order(s).")
+                return jsonify({
+                    "success": True,
+                    "message": f"Retrieved {len(matched_orders)} existing order(s) (duplicate prevented)",
+                    "orders": [o.to_dict() for o in matched_orders]
+                }), 200
+
+        limit_error = _active_order_limit_error_response(user_id)
+        if limit_error:
+            return limit_error
 
         needs_delivery = any(
             str(od.get("fulfillment_type") or data.get("fulfillment_type") or "delivery").strip().lower() != "pickup"
@@ -1602,6 +1663,12 @@ def create_orders():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+    finally:
+        if user_lock:
+            try:
+                user_lock.release()
+            except RuntimeError:
+                pass
 
 
 @checkout_bp.route("/cart/items/<int:item_id>/toggle", methods=["PUT"])
@@ -2383,11 +2450,13 @@ def buy_now_validate():
 def buy_now_create_order():
     """Create an order directly from product data (no cart involved)."""
     print("🔵🔵🔵 BUY NOW CREATE ORDER ROUTE WAS CALLED! 🔵🔵🔵")
+    user_lock = None
     try:
         user_id = request.user_id
-        limit_error = _active_order_limit_error_response(user_id)
-        if limit_error:
-            return limit_error
+
+        user_lock = _get_user_checkout_lock(user_id)
+        if not user_lock.acquire(blocking=True, timeout=15):
+            return jsonify({"error": "Order submission in progress, please wait..."}), 429
 
         data = request.get_json() or {}
         customer = User.query.get(user_id)
@@ -2407,6 +2476,49 @@ def buy_now_create_order():
         payment_proof_url = data.get("payment_proof_url")
         payment_proof_public_id = data.get("payment_proof_public_id")
         payment_method = str(data.get("payment_method") or "gcash").strip().lower()
+
+        # --- IDEMPOTENCY / DUPLICATE BUY NOW ORDER GUARD ---
+        cutoff = datetime.utcnow() - timedelta(seconds=45)
+        recent_orders = Order.query.filter(
+            Order.customer_id == int(user_id),
+            Order.status == "pending",
+            Order.created_at >= cutoff
+        ).order_by(Order.id.desc()).all()
+
+        product_obj = Product.query.get(product_id) if product_id else None
+        if product_obj and recent_orders:
+            for ro in recent_orders:
+                if ro.store_id == product_obj.store_id and ro.payment_method == payment_method:
+                    is_match = False
+                    if payment_proof_url and ro.payment_proof_url == payment_proof_url:
+                        is_match = True
+                    else:
+                        for oi in ro.items:
+                            if oi.product_id == int(product_id) and (not variant_id or oi.variant_id == int(variant_id)):
+                                is_match = True
+                                break
+                    if is_match:
+                        print(f"⚠️ Caught duplicate buy_now_create_order request for user {user_id}. Returning existing order #{ro.id}.")
+                        st = ro.store
+                        order_dict = ro.to_dict()
+                        order_dict["items"] = [oi.to_dict() for oi in ro.items]
+                        order_dict["gcash_qr_codes"] = [qr.to_dict() for qr in st.gcash_qr_images] if st else []
+                        order_dict["gcash_instructions"] = st.gcash_instructions if st else ""
+                        order_dict["allow_cod"] = _store_allows_cod(st.id) if ro.fulfillment_type == "delivery" else False
+                        order_dict["allow_cop"] = _store_allows_cop(st.id) if st else False
+                        order_dict["allow_gcash"] = _store_allows_gcash(st.id) if st else False
+                        order_dict["allow_pickup"] = bool(getattr(st, "allow_pickup", True)) if st else True
+                        order_dict["fulfillment_type"] = ro.fulfillment_type
+                        order_dict["distance_km"] = round(ro.distance_km, 2) if ro.distance_km is not None else None
+                        return jsonify({
+                            "success": True,
+                            "message": f"Order #{ro.id} retrieved (duplicate prevented)",
+                            "orders": [order_dict]
+                        }), 200
+
+        limit_error = _active_order_limit_error_response(user_id)
+        if limit_error:
+            return limit_error
 
         if not product_id:
             return jsonify({"error": "product_id is required"}), 400
@@ -2689,6 +2801,12 @@ def buy_now_create_order():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+    finally:
+        if user_lock:
+            try:
+                user_lock.release()
+            except RuntimeError:
+                pass
 
 
 print("checkout_routes.py loaded successfully")

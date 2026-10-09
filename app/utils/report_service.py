@@ -667,6 +667,7 @@ def _customer_metrics(store_id: Optional[int] = None, start: Optional[datetime] 
         Order.customer_id,
         User.full_name,
         Order.created_at,
+        Order.total_amount,
     ).outerjoin(User, User.id == Order.customer_id).filter(
         _paid_order_status_filter(),
         Order.created_at < end,
@@ -680,40 +681,95 @@ def _customer_metrics(store_id: Optional[int] = None, start: Optional[datetime] 
         POSOrder.customer_name,
         POSOrder.customer_contact,
         POSOrder.created_at,
+        POSOrder.total_amount,
     ).filter(
         POSOrder.created_at < end,
     )
     if store_id is not None:
         q_pos = q_pos.filter(POSOrder.store_id == store_id)
 
-    customer_orders = defaultdict(list)
+    customer_data = defaultdict(lambda: {
+        'name': '',
+        'timestamps': [],
+        'online_orders': [],
+        'pos_orders': [],
+    })
 
-    for o_id, cust_id, full_name, created_at in q_online.all():
+    for o_id, cust_id, full_name, created_at, total_amount in q_online.all():
         if not created_at:
             continue
-        key = f"name_{full_name.strip().lower()}" if (full_name and full_name.strip()) else f"user_{cust_id}"
-        customer_orders[key].append(created_at)
+        cname = (full_name or '').strip()
+        key = f"name_{cname.lower()}" if cname else f"user_{cust_id}"
+        if not customer_data[key]['name']:
+            customer_data[key]['name'] = cname or f"Customer #{cust_id}"
+        customer_data[key]['timestamps'].append(created_at)
+        customer_data[key]['online_orders'].append({
+            'id': o_id, 'created_at': created_at, 'amount': float(total_amount or 0)
+        })
 
-    for p_id, cname, ccontact, created_at in q_pos.all():
+    for p_id, cname, ccontact, created_at, total_amount in q_pos.all():
         if not created_at:
             continue
         name = (cname or '').strip()
         if _is_anonymous_walk_in(name):
             key = f"pos_walkin_{p_id}"
+            disp_name = name or 'Walk-in'
         else:
             key = f"name_{name.lower()}"
-        customer_orders[key].append(created_at)
+            disp_name = name
+        if not customer_data[key]['name']:
+            customer_data[key]['name'] = disp_name
+        customer_data[key]['timestamps'].append(created_at)
+        customer_data[key]['pos_orders'].append({
+            'id': p_id, 'created_at': created_at, 'amount': float(total_amount or 0)
+        })
 
     total_unique = 0
     repeat = 0
     new_customers = 0
+    repeat_list = []
+    all_time_repeat_list = []
 
-    for key, timestamps in customer_orders.items():
-        valid_ts = [t for t in timestamps if t < end]
+    for key, cinfo in customer_data.items():
+        valid_ts = [t for t in cinfo['timestamps'] if t < end]
         if not valid_ts:
             continue
         valid_ts.sort()
         in_period = [t for t in valid_ts if t >= start]
+
+        is_repeat_lifetime = len(valid_ts) > 1 and not key.startswith('pos_walkin_')
+
+        if is_repeat_lifetime:
+            online_cnt = len(cinfo['online_orders'])
+            pos_cnt = len(cinfo['pos_orders'])
+            online_spent = sum(o['amount'] for o in cinfo['online_orders'])
+            pos_spent = sum(p['amount'] for p in cinfo['pos_orders'])
+            total_spent = online_spent + pos_spent
+            latest_dt = max(valid_ts)
+
+            if online_cnt > 0 and pos_cnt > 0:
+                channel = 'both'
+            elif online_cnt > 0:
+                channel = 'online'
+            else:
+                channel = 'pos'
+
+            item = {
+                'name': cinfo['name'],
+                'initial': (cinfo['name'][0].upper() if cinfo['name'] else 'C'),
+                'online_orders': online_cnt,
+                'pos_orders': pos_cnt,
+                'total_orders': len(valid_ts),
+                'online_spent': online_spent,
+                'pos_spent': pos_spent,
+                'total_spent': total_spent,
+                'latest_date': latest_dt.strftime('%b %d, %Y') if latest_dt else '',
+                'channel': channel,
+            }
+            all_time_repeat_list.append(item)
+            if in_period:
+                repeat_list.append(item)
+
         if in_period:
             total_unique += 1
             if len(valid_ts) > 1:
@@ -722,11 +778,16 @@ def _customer_metrics(store_id: Optional[int] = None, start: Optional[datetime] 
             if first_order >= start:
                 new_customers += 1
 
+    repeat_list.sort(key=lambda x: (x['total_orders'], x['total_spent']), reverse=True)
+    all_time_repeat_list.sort(key=lambda x: (x['total_orders'], x['total_spent']), reverse=True)
+
     return {
         'total_unique': total_unique,
         'repeat': repeat,
         'one_time': max(0, total_unique - repeat),
         'new_customers': new_customers,
+        'repeat_list': repeat_list,
+        'all_time_repeat_list': all_time_repeat_list,
     }
 
 

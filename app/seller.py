@@ -238,9 +238,16 @@ def update_order_status(order_id):
         return jsonify({'error': 'Invalid status'}), 400
 
     previous_status = order.status
+    if previous_status == 'cancelled' and new_status != 'cancelled':
+        return jsonify({'error': 'This order has already been cancelled and cannot change status.'}), 400
+
     if new_status == 'cancelled' and previous_status != 'cancelled':
         _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(user_id)
+        order.cancelled_at = datetime.utcnow()
+        order.cancellation_reason_code = f"seller_cancelled_{(order.payment_method or '').lower()}"
+        order.cancellation_reason = data.get('reason') or 'Cancelled by seller'
+        order.payment_status = 'cancelled'
     
     order.set_status(new_status)
     if new_status == 'completed' and getattr(order, 'fulfillment_type', '') == 'pickup' and order.payment_status in ('cop_pending', 'cop_approved', 'pending'):
@@ -264,6 +271,11 @@ def verify_order_payment(order_id):
         return jsonify({'error': 'No active store found'}), 404
     
     order = Order.query.filter_by(id=order_id, store_id=store.id).first_or_404()
+
+    if order.status == 'cancelled':
+        return jsonify({'error': 'Cannot verify payment for a cancelled order.'}), 400
+    if order.status in ('delivered', 'completed'):
+        return jsonify({'error': f'Order is already {order.status}.'}), 400
     pay_method = (order.payment_method or '').lower()
     is_pay_on_fulfillment = pay_method in ('cod', 'cop')
     if not is_pay_on_fulfillment and not order.payment_proof_url:
@@ -305,8 +317,9 @@ def get_riders():
     riders_data = []
     for rider in riders:
         rider_dict = rider.to_dict()
-        total_deliveries = Order.query.filter_by(
-            rider_id=rider.id, status='delivered'
+        total_deliveries = Order.query.filter(
+            Order.rider_id == rider.id,
+            Order.status.in_(['delivered', 'completed'])
         ).count()
         active_delivery = Order.query.filter(
             Order.rider_id == rider.id,
@@ -644,7 +657,10 @@ def get_rider(rider_id):
     rider = Rider.query.filter_by(id=rider_id, store_id=store.id).first_or_404()
     rider_dict = rider.to_dict()
     
-    total_deliveries = Order.query.filter_by(rider_id=rider.id, status='delivered').count()
+    total_deliveries = Order.query.filter(
+        Order.rider_id == rider.id,
+        Order.status.in_(['delivered', 'completed'])
+    ).count()
     recent_orders = Order.query.filter_by(rider_id=rider.id).order_by(
         Order.created_at.desc()
     ).limit(10).all()

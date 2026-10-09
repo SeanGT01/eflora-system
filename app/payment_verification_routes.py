@@ -143,12 +143,17 @@ def verify_payment(order_id):
         
         # Get order
         order = Order.query.get_or_404(order_id)
-        
+
         # Verify seller owns this store
         store = Store.query.filter_by(id=order.store_id, seller_id=user_id).first()
         if not store:
             return jsonify({'error': 'Unauthorized - You do not own this store'}), 403
-        
+
+        if order.status == 'cancelled':
+            return jsonify({'error': 'Cannot verify payment for a cancelled order.'}), 400
+        if order.status in ('delivered', 'completed'):
+            return jsonify({'error': f'Order is already {order.status}.'}), 400
+
         # Verify order has pending payment
         if order.payment_status != 'pending_verification':
             return jsonify({

@@ -1257,6 +1257,7 @@ def cancel_order(order_id):
         _ = [(item.addons, item.product, item.variant) for item in (order.items or [])]
         order.restore_stock_on_cancel(user_id)
         order.status = 'cancelled'
+        order.payment_status = 'cancelled'
         order.cancellation_reason_code = reason_code
         order.cancellation_reason = reason_text
         order.cancelled_at = datetime.utcnow()

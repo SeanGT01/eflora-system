@@ -1674,13 +1674,51 @@
             max-width: 320px;
         }
 
-        .checkout-proof-preview img {
+        .checkout-proof-img-container {
+            position: relative;
+            cursor: zoom-in;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .checkout-proof-img-container img {
             width: 100%;
             height: 200px;
             object-fit: cover;
             border-radius: var(--radius-md);
-            border: 1px solid var(--border);
             display: block;
+            transition: transform 0.2s ease;
+        }
+
+        .checkout-proof-img-container:hover img {
+            transform: scale(1.02);
+        }
+
+        .checkout-proof-zoom-badge {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(18, 14, 16, 0.85);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            pointer-events: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+            transition: background 0.2s ease;
+        }
+
+        .checkout-proof-img-container:hover .checkout-proof-zoom-badge {
+            background: var(--deep-rose);
+            border-color: rgba(255, 255, 255, 0.4);
         }
 
         .checkout-proof-preview .checkout-proof-clear-btn {
@@ -1694,6 +1732,231 @@
             font-size: 12px;
             font-weight: 600;
             color: var(--charcoal);
+            transition: all 0.2s ease;
+        }
+
+        .checkout-proof-preview .checkout-proof-clear-btn:hover {
+            background: #fff0f2;
+            color: #d63031;
+            border-color: rgba(214, 48, 49, 0.3);
+        }
+
+        /* ─── Checkout Receipt Zoom Lightbox Modal ─── */
+        .receipt-zoom-modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10500;
+            display: flex;
+            flex-direction: column;
+            background: rgba(14, 10, 13, 0.96);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.25s ease, visibility 0.25s ease;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .receipt-zoom-modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        .receipt-zoom-backdrop {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
+
+        .receipt-zoom-toolbar {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.85rem 1.4rem;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 100%);
+            color: #fff;
+            gap: 1rem;
+        }
+
+        .receipt-zoom-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: 0;
+        }
+
+        .receipt-zoom-badge {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            padding: 0.25rem 0.65rem;
+            border-radius: 999px;
+            background: rgba(0, 125, 252, 0.2);
+            color: #4da3ff;
+            border: 1px solid rgba(77, 163, 255, 0.35);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+
+        .receipt-zoom-title {
+            font-family: var(--font-sans);
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 260px;
+        }
+
+        .receipt-zoom-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            flex-shrink: 0;
+        }
+
+        .receipt-zoom-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .receipt-zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.45);
+            transform: scale(1.05);
+        }
+
+        .receipt-zoom-btn:active {
+            transform: scale(0.95);
+        }
+
+        .receipt-zoom-level {
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            min-width: 44px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .receipt-zoom-close-btn {
+            background: rgba(212, 120, 138, 0.25);
+            border-color: rgba(212, 120, 138, 0.5);
+            color: #fff;
+            margin-left: 0.35rem;
+        }
+
+        .receipt-zoom-close-btn:hover {
+            background: var(--deep-rose);
+            border-color: var(--deep-rose);
+        }
+
+        .receipt-zoom-viewport {
+            position: relative;
+            z-index: 2;
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: zoom-in;
+            touch-action: none;
+        }
+
+        .receipt-zoom-viewport.is-zoomed {
+            cursor: grab;
+        }
+
+        .receipt-zoom-viewport.is-dragging {
+            cursor: grabbing;
+        }
+
+        .receipt-zoom-stage {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 90vw;
+            max-height: 82vh;
+            transform-origin: center center;
+            will-change: transform;
+            transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .receipt-zoom-stage.no-transition {
+            transition: none !important;
+        }
+
+        .receipt-zoom-img {
+            max-width: min(90vw, 560px);
+            max-height: 80vh;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        .receipt-zoom-footer-hint {
+            position: relative;
+            z-index: 10;
+            padding: 0.6rem 1rem 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.65);
+            background: linear-gradient(0deg, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 100%);
+            text-align: center;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 600px) {
+            .receipt-zoom-toolbar {
+                padding: 0.6rem 0.8rem;
+            }
+            .receipt-zoom-title {
+                max-width: 140px;
+                font-size: 0.85rem;
+            }
+            .receipt-zoom-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+            .receipt-zoom-level {
+                min-width: 36px;
+                font-size: 11px;
+            }
+            .receipt-zoom-footer-hint {
+                font-size: 10px;
+                gap: 0.4rem;
+                padding-bottom: 0.6rem;
+            }
         }
 
         .checkout-proof-choose-btn {
@@ -2051,9 +2314,11 @@
                 max-width: 100%;
             }
 
-            #checkoutModal .checkout-proof-preview img {
+            #checkoutModal .checkout-proof-preview img,
+            #checkoutModal .checkout-proof-img-container img {
                 height: auto;
                 max-height: 180px;
+                object-fit: cover;
             }
 
             #checkoutModal .checkout-proof-choose-btn {
@@ -3390,6 +3655,48 @@
         </div>
     </div>
 
+    <!-- GCash Payment Proof Zoom Lightbox Modal -->
+    <div class="receipt-zoom-modal-overlay" id="checkoutReceiptZoomModal" role="dialog" aria-modal="true" aria-label="GCash Payment Receipt Zoom" tabindex="-1">
+        <div class="receipt-zoom-backdrop" onclick="closeReceiptZoomModal()"></div>
+        
+        <div class="receipt-zoom-toolbar">
+            <div class="receipt-zoom-info">
+                <span class="receipt-zoom-badge"><i class="ri-shield-check-line"></i> GCash Receipt</span>
+                <span class="receipt-zoom-title" id="receiptZoomStoreName">Payment Proof</span>
+            </div>
+            
+            <div class="receipt-zoom-actions">
+                <button type="button" class="receipt-zoom-btn" onclick="zoomReceiptStep(-0.5)" title="Zoom Out (-)" aria-label="Zoom Out">
+                    <i class="ri-zoom-out-line"></i>
+                </button>
+                <span class="receipt-zoom-level" id="receiptZoomLevel">100%</span>
+                <button type="button" class="receipt-zoom-btn" onclick="zoomReceiptStep(0.5)" title="Zoom In (+)" aria-label="Zoom In">
+                    <i class="ri-zoom-in-line"></i>
+                </button>
+                <button type="button" class="receipt-zoom-btn" onclick="resetReceiptZoom()" title="Reset Zoom (0)" aria-label="Reset Zoom">
+                    <i class="ri-refresh-line"></i>
+                </button>
+                <button type="button" class="receipt-zoom-btn receipt-zoom-close-btn" onclick="closeReceiptZoomModal()" title="Close (Esc)" aria-label="Close">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="receipt-zoom-viewport" id="receiptZoomViewport">
+            <div class="receipt-zoom-stage" id="receiptZoomStage">
+                <img class="receipt-zoom-img" id="receiptZoomImg" src="" alt="GCash Payment Receipt" draggable="false">
+            </div>
+        </div>
+
+        <div class="receipt-zoom-footer-hint">
+            <span><i class="ri-drag-move-line"></i> Drag to pan when zoomed</span>
+            <span>•</span>
+            <span><i class="ri-mouse-line"></i> Scroll / Pinch to zoom</span>
+            <span>•</span>
+            <span><i class="ri-cursor-line"></i> Double-click / Double-tap to toggle zoom</span>
+        </div>
+    </div>
+
     <div class="aol-overlay" id="activeOrderLimitModal" role="presentation">
         <div class="aol-card" role="dialog" aria-modal="true" aria-labelledby="aolTitle">
             <div class="aol-icon" aria-hidden="true"><i class="ri-shopping-bag-3-line"></i></div>
@@ -4630,6 +4937,11 @@ function updateCheckoutPaymentAction() {
     const nextBtn = document.getElementById('checkoutNextBtn');
     const order = checkoutOrders[currentOrderIndex];
     if (!nextBtn || !order) return;
+
+    // Do NOT re-enable or overwrite button if checkout submission or receipt upload is in progress
+    if (isCreatingOrders || nextBtn.dataset.submitting === 'true') {
+        return;
+    }
 
     const paymentMethod = getOrderPaymentMethod(order);
     if (paymentMethod === 'cod' || paymentMethod === 'cop') {
@@ -6095,6 +6407,9 @@ async function closeCheckout() {
         cancelCheckout(true);
         isCreatingOrders = false;
     }
+    if (typeof closeReceiptZoomModal === 'function') {
+        closeReceiptZoomModal();
+    }
     document.getElementById('checkoutModal').classList.remove('active');
     cancelCheckout();
     buyNowMode = false;
@@ -6103,6 +6418,13 @@ async function closeCheckout() {
 }
 
 function goBackCheckout() {
+    isCreatingOrders = false;
+    const nextBtn = document.getElementById('checkoutNextBtn');
+    if (nextBtn) {
+        delete nextBtn.dataset.submitting;
+        nextBtn.style.pointerEvents = 'auto';
+    }
+
     if (checkoutStep === 3) {
         checkoutStep = 2;
         updateProgressIndicator(2);
@@ -6110,8 +6432,10 @@ function goBackCheckout() {
         document.getElementById('checkoutStep2').style.display = 'block';
         document.getElementById('checkoutBackBtn').style.display = 'inline-block';
         document.getElementById('checkoutBackBtn').textContent = 'Back';
-        document.getElementById('checkoutNextBtn').disabled = false;
-        document.getElementById('checkoutNextBtn').textContent = '→ Proceed to Payment';
+        if (nextBtn) {
+            nextBtn.disabled = false;
+            nextBtn.textContent = '→ Proceed to Payment';
+        }
         return;
     }
 
@@ -6516,6 +6840,13 @@ async function proceedCheckout() {
     }
     else if (checkoutStep === 3) {
         const nextBtn = document.getElementById('checkoutNextBtn');
+
+        // Prevent double click or concurrent execution
+        if (isCreatingOrders || (nextBtn && (nextBtn.disabled || nextBtn.dataset.submitting === 'true'))) {
+            console.log('⚠️ Checkout Step 3 action already in progress, ignoring duplicate click');
+            return;
+        }
+
         const currentOrder = checkoutOrders[currentOrderIndex];
         const paymentMethod = getOrderPaymentMethod(currentOrder);
         const proofState = getProofState(currentOrder.temp_id);
@@ -6587,28 +6918,54 @@ async function proceedCheckout() {
             return;
         }
 
+        // Lock button immediately before any async network operations (uploadProof or createOrders)
+        const originalBtnText = nextBtn ? nextBtn.innerHTML : '';
+        if (nextBtn) {
+            nextBtn.disabled = true;
+            nextBtn.style.pointerEvents = 'none';
+            nextBtn.dataset.submitting = 'true';
+        }
+
         if (paymentMethod === 'gcash' && !proofState.hasUploaded) {
             if (!proofState.hasPending) {
                 showToast('Please choose a payment proof for this order first', 'error');
+                if (nextBtn) {
+                    nextBtn.disabled = false;
+                    nextBtn.style.pointerEvents = 'auto';
+                    delete nextBtn.dataset.submitting;
+                    nextBtn.innerHTML = originalBtnText;
+                }
                 return;
+            }
+
+            if (nextBtn) {
+                nextBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading receipt...';
             }
 
             const uploaded = await uploadProof(currentOrder.temp_id);
             if (!uploaded) {
+                if (nextBtn) {
+                    nextBtn.disabled = false;
+                    nextBtn.style.pointerEvents = 'auto';
+                    delete nextBtn.dataset.submitting;
+                    nextBtn.innerHTML = originalBtnText;
+                }
                 return;
             }
         }
         
         if (currentOrderIndex < checkoutOrders.length - 1) {
+            if (nextBtn) {
+                delete nextBtn.dataset.submitting;
+                nextBtn.disabled = false;
+                nextBtn.style.pointerEvents = 'auto';
+            }
             currentOrderIndex++;
             displayGCashPayment();
         } else {
-            // Prevent double click
-            if (nextBtn.disabled) return;
-            
-            nextBtn.disabled = true;
-            nextBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
-            
+            if (nextBtn) {
+                nextBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Placing order...';
+            }
             await createOrders();
         }
     }
@@ -6622,10 +6979,14 @@ async function createOrders() {
     }
     
     const nextBtn = document.getElementById('checkoutNextBtn');
-    const originalText = nextBtn.textContent;
+    const originalText = nextBtn ? (nextBtn.dataset.originalText || nextBtn.textContent) : 'Complete';
     
-    nextBtn.disabled = true;
-    nextBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+    if (nextBtn) {
+        nextBtn.disabled = true;
+        nextBtn.style.pointerEvents = 'none';
+        nextBtn.dataset.submitting = 'true';
+        nextBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+    }
     
     isCreatingOrders = true;
     
@@ -6733,15 +7094,23 @@ async function createOrders() {
             } else {
                 showToast('Error creating orders: ' + (result.error || 'Unknown error'), 'error');
             }
-            nextBtn.disabled = false;
-            nextBtn.textContent = originalText;
+            if (nextBtn) {
+                nextBtn.disabled = false;
+                nextBtn.style.pointerEvents = 'auto';
+                delete nextBtn.dataset.submitting;
+                nextBtn.textContent = originalText;
+            }
             isCreatingOrders = false;
         }
     } catch (error) {
         console.error('Error creating orders:', error);
         showToast('Error creating orders. Please try again.', 'error');
-        nextBtn.disabled = false;
-        nextBtn.textContent = originalText;
+        if (nextBtn) {
+            nextBtn.disabled = false;
+            nextBtn.style.pointerEvents = 'auto';
+            delete nextBtn.dataset.submitting;
+            nextBtn.textContent = originalText;
+        }
         isCreatingOrders = false;
     }
 }
@@ -6775,10 +7144,14 @@ async function completeCheckout() {
         checkoutModalCloseHandler = null;
     }
     
-    // Reset button state
-    nextBtn.disabled = false;
-    nextBtn.textContent = '✓ Complete';
-    isCreatingOrders = false;
+    // Keep button disabled and submitting state locked during redirect
+    if (nextBtn) {
+        nextBtn.disabled = true;
+        nextBtn.style.pointerEvents = 'none';
+        nextBtn.dataset.submitting = 'true';
+        nextBtn.textContent = '✓ Order Placed';
+    }
+    // Note: Do not reset isCreatingOrders to false to prevent double clicks during redirect
     
     // Redirect to orders page after a short delay
     setTimeout(() => {
@@ -7139,7 +7512,12 @@ async function displayGCashPayment() {
             <div class="checkout-proof-title">Upload Payment Receipt</div>
             <div class="checkout-proof-upload-zone">
                 <div id="proofPreview_${order.temp_id}" class="checkout-proof-preview" style="display: ${hasPreview ? 'block' : 'none'};">
-                    <img id="previewImg_${order.temp_id}" ${previewSrc ? `src="${previewSrc}"` : ''}>
+                    <div class="checkout-proof-img-container" onclick="openReceiptZoomModal('${order.temp_id}')" title="Click to zoom receipt">
+                        <img id="previewImg_${order.temp_id}" ${previewSrc ? `src="${previewSrc}"` : ''} alt="GCash Payment Receipt">
+                        <div class="checkout-proof-zoom-badge">
+                            <i class="ri-zoom-in-line"></i> Tap to zoom
+                        </div>
+                    </div>
                     <button type="button" class="checkout-proof-clear-btn" onclick="clearProof('${order.temp_id}')">
                         ${proofState.hasUploaded ? 'Remove Image' : 'Clear Image'}
                     </button>
@@ -7303,7 +7681,288 @@ function searchProducts(event) {
     if (query) window.location.href = "{{ url_for('templates.search') }}?q=" + encodeURIComponent(query);
 }
 
+// ===== GCASH RECEIPT ZOOM LIGHTBOX VIEWER =====
+let currentZoomTempId = null;
+let receiptZoomScale = 1.0;
+let receiptZoomPanX = 0;
+let receiptZoomPanY = 0;
+let isDraggingReceiptZoom = false;
+let receiptDragStartX = 0;
+let receiptDragStartY = 0;
+let receiptTouchStartDist = 0;
+let receiptLastTouchTime = 0;
+let receiptInteractionsInitialized = false;
+
+function openReceiptZoomModal(tempId) {
+    let previewSrc = '';
+    if (typeof getProofState === 'function') {
+        const proofState = getProofState(tempId);
+        previewSrc = proofState?.previewSrc || '';
+    }
+
+    if (!previewSrc) {
+        const previewImg = document.getElementById(`previewImg_${tempId}`);
+        if (previewImg && previewImg.src && !previewImg.src.endsWith('#')) {
+            previewSrc = previewImg.src;
+        }
+    }
+
+    if (!previewSrc && typeof uploadedProofData !== 'undefined' && uploadedProofData[tempId]) {
+        previewSrc = uploadedProofData[tempId].preview || uploadedProofData[tempId].url || '';
+    }
+
+    if (!previewSrc) {
+        showToast('No receipt image available to zoom', 'info');
+        return;
+    }
+
+    currentZoomTempId = tempId;
+
+    const storeTitleEl = document.getElementById('receiptZoomStoreName');
+    if (storeTitleEl) {
+        let storeName = 'Payment Proof';
+        if (Array.isArray(checkoutOrders)) {
+            const order = checkoutOrders.find(o => o && o.temp_id === tempId);
+            if (order && order.store_name) {
+                storeName = order.store_name + ' Receipt';
+            }
+        }
+        storeTitleEl.textContent = storeName;
+    }
+
+    const zoomImg = document.getElementById('receiptZoomImg');
+    if (zoomImg) {
+        zoomImg.src = previewSrc;
+    }
+
+    receiptZoomScale = 1.0;
+    receiptZoomPanX = 0;
+    receiptZoomPanY = 0;
+    applyReceiptZoomTransform(false);
+
+    const modal = document.getElementById('checkoutReceiptZoomModal');
+    if (modal) {
+        modal.classList.add('active');
+        initReceiptZoomInteractions();
+        try { modal.focus(); } catch (e) {}
+    }
+}
+
+function closeReceiptZoomModal() {
+    const modal = document.getElementById('checkoutReceiptZoomModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+    currentZoomTempId = null;
+    receiptZoomScale = 1.0;
+    receiptZoomPanX = 0;
+    receiptZoomPanY = 0;
+    applyReceiptZoomTransform(false);
+
+    const zoomImg = document.getElementById('receiptZoomImg');
+    if (zoomImg) {
+        zoomImg.removeAttribute('src');
+    }
+}
+
+function applyReceiptZoomTransform(animate = true) {
+    receiptZoomScale = Math.max(0.75, Math.min(receiptZoomScale, 5.0));
+
+    if (receiptZoomScale <= 1.02) {
+        receiptZoomPanX = 0;
+        receiptZoomPanY = 0;
+    } else {
+        const viewport = document.getElementById('receiptZoomViewport');
+        if (viewport) {
+            const maxPanX = Math.max(0, (viewport.clientWidth * (receiptZoomScale - 1)) / 2 + 120);
+            const maxPanY = Math.max(0, (viewport.clientHeight * (receiptZoomScale - 1)) / 2 + 120);
+            receiptZoomPanX = Math.max(-maxPanX, Math.min(maxPanX, receiptZoomPanX));
+            receiptZoomPanY = Math.max(-maxPanY, Math.min(maxPanY, receiptZoomPanY));
+        }
+    }
+
+    const zoomImg = document.getElementById('receiptZoomImg');
+    if (zoomImg) {
+        zoomImg.style.transition = animate ? 'transform 0.16s cubic-bezier(0.2, 0, 0, 1)' : 'none';
+        zoomImg.style.transform = `translate3d(${receiptZoomPanX}px, ${receiptZoomPanY}px, 0) scale(${receiptZoomScale})`;
+    }
+
+    const levelEl = document.getElementById('receiptZoomLevel');
+    if (levelEl) {
+        levelEl.textContent = Math.round(receiptZoomScale * 100) + '%';
+    }
+
+    const stage = document.getElementById('receiptZoomStage');
+    if (stage) {
+        if (receiptZoomScale > 1.05) {
+            stage.style.cursor = isDraggingReceiptZoom ? 'grabbing' : 'grab';
+        } else {
+            stage.style.cursor = 'zoom-in';
+        }
+    }
+}
+
+function zoomReceiptStep(delta) {
+    const nextScale = Math.round((receiptZoomScale + delta) * 10) / 10;
+    receiptZoomScale = Math.max(0.75, Math.min(nextScale, 5.0));
+    applyReceiptZoomTransform(true);
+}
+
+function resetReceiptZoom() {
+    receiptZoomScale = 1.0;
+    receiptZoomPanX = 0;
+    receiptZoomPanY = 0;
+    applyReceiptZoomTransform(true);
+}
+
+function toggleReceiptZoom() {
+    if (receiptZoomScale > 1.25) {
+        resetReceiptZoom();
+    } else {
+        receiptZoomScale = 2.2;
+        applyReceiptZoomTransform(true);
+    }
+}
+
+function initReceiptZoomInteractions() {
+    if (receiptInteractionsInitialized) return;
+    receiptInteractionsInitialized = true;
+
+    window.addEventListener('keydown', (e) => {
+        const modal = document.getElementById('checkoutReceiptZoomModal');
+        if (!modal || !modal.classList.contains('active')) return;
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            closeReceiptZoomModal();
+        } else if (e.key === '+' || e.key === '=') {
+            e.preventDefault();
+            zoomReceiptStep(0.5);
+        } else if (e.key === '-' || e.key === '_') {
+            e.preventDefault();
+            zoomReceiptStep(-0.5);
+        } else if (e.key === '0') {
+            e.preventDefault();
+            resetReceiptZoom();
+        }
+    }, true);
+
+    const viewport = document.getElementById('receiptZoomViewport');
+    if (viewport) {
+        viewport.addEventListener('wheel', (e) => {
+            const modal = document.getElementById('checkoutReceiptZoomModal');
+            if (!modal || !modal.classList.contains('active')) return;
+            e.preventDefault();
+            const delta = e.deltaY < 0 ? 0.3 : -0.3;
+            zoomReceiptStep(delta);
+        }, { passive: false });
+    }
+
+    const stage = document.getElementById('receiptZoomStage');
+    if (stage) {
+        stage.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            toggleReceiptZoom();
+        });
+
+        stage.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (receiptZoomScale > 1.02) {
+                isDraggingReceiptZoom = true;
+                receiptDragStartX = e.clientX - receiptZoomPanX;
+                receiptDragStartY = e.clientY - receiptZoomPanY;
+                stage.style.cursor = 'grabbing';
+                e.preventDefault();
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDraggingReceiptZoom) return;
+            receiptZoomPanX = e.clientX - receiptDragStartX;
+            receiptZoomPanY = e.clientY - receiptDragStartY;
+            applyReceiptZoomTransform(false);
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDraggingReceiptZoom) {
+                isDraggingReceiptZoom = false;
+                applyReceiptZoomTransform(false);
+            }
+        });
+
+        stage.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                const now = Date.now();
+                if (now - receiptLastTouchTime < 320) {
+                    e.preventDefault();
+                    toggleReceiptZoom();
+                    receiptLastTouchTime = 0;
+                    return;
+                }
+                receiptLastTouchTime = now;
+
+                if (receiptZoomScale > 1.02) {
+                    isDraggingReceiptZoom = true;
+                    receiptDragStartX = e.touches[0].clientX - receiptZoomPanX;
+                    receiptDragStartY = e.touches[0].clientY - receiptZoomPanY;
+                }
+            } else if (e.touches.length === 2) {
+                isDraggingReceiptZoom = false;
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                receiptTouchStartDist = Math.hypot(dx, dy);
+            }
+        }, { passive: false });
+
+        stage.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1 && isDraggingReceiptZoom) {
+                e.preventDefault();
+                receiptZoomPanX = e.touches[0].clientX - receiptDragStartX;
+                receiptZoomPanY = e.touches[0].clientY - receiptDragStartY;
+                applyReceiptZoomTransform(false);
+            } else if (e.touches.length === 2 && receiptTouchStartDist > 0) {
+                e.preventDefault();
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.hypot(dx, dy);
+                const factor = dist / receiptTouchStartDist;
+                receiptZoomScale = Math.max(0.75, Math.min(receiptZoomScale * factor, 5.0));
+                receiptTouchStartDist = dist;
+                applyReceiptZoomTransform(false);
+            }
+        }, { passive: false });
+
+        stage.addEventListener('touchend', (e) => {
+            if (e.touches.length === 0) {
+                isDraggingReceiptZoom = false;
+                receiptTouchStartDist = 0;
+            } else if (e.touches.length === 1) {
+                receiptTouchStartDist = 0;
+                if (receiptZoomScale > 1.02) {
+                    isDraggingReceiptZoom = true;
+                    receiptDragStartX = e.touches[0].clientX - receiptZoomPanX;
+                    receiptDragStartY = e.touches[0].clientY - receiptZoomPanY;
+                }
+            }
+        });
+    }
+}
+
+// Auto initialize interactions once script evaluates
+if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initReceiptZoomInteractions);
+    } else {
+        initReceiptZoomInteractions();
+    }
+}
+
 function clearProof(tempId) {
+    if (currentZoomTempId === tempId) {
+        closeReceiptZoomModal();
+    }
+
     const input = document.getElementById(`proofInput_${tempId}`);
     if (input) {
         input.value = '';

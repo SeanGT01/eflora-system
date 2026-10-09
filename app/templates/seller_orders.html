@@ -609,6 +609,18 @@
         color: #fff;
     }
 
+    .orders-action-btn.receipt-cancelled {
+        background: #fff1f2;
+        border-color: #fda4af;
+        color: #e11d48;
+    }
+
+    .orders-action-btn.receipt-cancelled:hover {
+        background: #e11d48;
+        border-color: #e11d48;
+        color: #fff;
+    }
+
     .orders-action-btn.danger:hover {
         color: #c0392b;
         border-color: #c0392b;
@@ -1084,7 +1096,7 @@
     <div class="dash-header">
         <div>
             <div class="dash-greeting-label">Manage your store</div>
-            <h1 class="dash-title">Orders, <em>in bloom</em></h1>
+            <h1 class="dash-title">Orders</h1>
         </div>
         <div class="dash-header-actions">
             <div class="dash-date"><i class="ri-calendar-line"></i>{{ today_str }}</div>
@@ -1321,9 +1333,26 @@
                                     <span class="btn-label">View</span>
                                 </button>
                                 {% if order.payment_proof_url %}
-                                {% set needs_receipt_review = (order.payment_status or '')|lower == 'pending_verification' or ((order.order_type == 'custom_chat' or order.custom_ticket_id) and (order.payment_status or '')|lower == 'paid') %}
+                                {% set is_order_cancelled = (order.status or '')|lower == 'cancelled' or (order.payment_status or '')|lower == 'cancelled' %}
+                                {% set needs_receipt_review = not is_order_cancelled and ((order.payment_status or '')|lower == 'pending_verification' or ((order.order_type == 'custom_chat' or order.custom_ticket_id) and (order.payment_status or '')|lower == 'paid')) %}
+                                {% if is_order_cancelled %}
+                                    {% set receipt_btn_class = 'receipt-cancelled' %}
+                                    {% set receipt_icon = 'ri-close-circle-line' %}
+                                    {% set receipt_label = 'Receipt (Void)' %}
+                                    {% set receipt_title = 'View cancelled payment receipt' %}
+                                {% elif needs_receipt_review %}
+                                    {% set receipt_btn_class = 'warning' %}
+                                    {% set receipt_icon = 'ri-error-warning-line' %}
+                                    {% set receipt_label = 'Review' %}
+                                    {% set receipt_title = 'Review receipt' %}
+                                {% else %}
+                                    {% set receipt_btn_class = 'receipt-ok' %}
+                                    {% set receipt_icon = 'ri-checkbox-circle-line' %}
+                                    {% set receipt_label = 'Receipt' %}
+                                    {% set receipt_title = 'View receipt' %}
+                                {% endif %}
                                 <button type="button"
-                                        class="orders-action-btn seller-view-payment {{ 'warning' if needs_receipt_review else 'receipt-ok' }}"
+                                        class="orders-action-btn seller-view-payment {{ receipt_btn_class }}"
                                         data-order-id="{{ order.id }}"
                                         data-proof-url="{{ order.payment_proof_url }}"
                                         data-customer-name="{{ order.customer_name or '' }}"
@@ -1331,16 +1360,12 @@
                                         data-customer-contact-label="{{ order.customer_contact_label or 'Contact' }}"
                                         data-order-total="{{ '%.2f'|format(order.display_total if order.display_total is defined else (order.total_amount or 0)) }}"
                                         data-payment-method="{{ order.payment_method or '' }}"
+                                        data-order-status="{{ (order.status or '')|lower }}"
                                         data-needs-review="{{ 'true' if needs_receipt_review else 'false' }}"
-                                        title="{{ 'Review receipt' if needs_receipt_review else 'View receipt' }}"
-                                        aria-label="{{ 'Review unverified payment receipt' if needs_receipt_review else 'View verified payment receipt' }}">
-                                    {% if needs_receipt_review %}
-                                    <i class="ri-error-warning-line" aria-hidden="true"></i>
-                                    <span class="btn-label">Review</span>
-                                    {% else %}
-                                    <i class="ri-checkbox-circle-line" aria-hidden="true"></i>
-                                    <span class="btn-label">Receipt</span>
-                                    {% endif %}
+                                        title="{{ receipt_title }}"
+                                        aria-label="{{ receipt_title }}">
+                                    <i class="{{ receipt_icon }}" aria-hidden="true"></i>
+                                    <span class="btn-label">{{ receipt_label }}</span>
                                 </button>
                                 {% endif %}
                                 {% if order.status == 'preparing' %}
@@ -1376,6 +1401,17 @@
                                         style="background:rgba(220,53,69,0.1);color:#dc3545;border-color:rgba(220,53,69,0.3);">
                                     <i class="ri-close-circle-line"></i>
                                     <span class="btn-label">Cancel {{ order.payment_method|upper }}</span>
+                                </button>
+                                {% elif (order.payment_method or '')|lower not in ['cod', 'cop'] and order.status == 'pending' %}
+                                <button type="button"
+                                        class="orders-action-btn danger seller-cancel-cod"
+                                        data-order-id="{{ order.id }}"
+                                        data-pay-method="{{ (order.payment_method or '')|lower }}"
+                                        title="Cancel Order"
+                                        aria-label="Cancel Order"
+                                        style="background:rgba(220,53,69,0.1);color:#dc3545;border-color:rgba(220,53,69,0.3);">
+                                    <i class="ri-close-circle-line"></i>
+                                    <span class="btn-label">Cancel Order</span>
                                 </button>
                                 {% endif %}
                             </div>
@@ -1462,6 +1498,10 @@
         </div>
         <div class="custom-modal-foot">
             <button type="button" class="btn btn-outline-secondary" data-close-modal="sellerPaymentProofModal">Close</button>
+            <button type="button" class="btn btn-outline-danger" id="sellerRejectPaymentBtn" style="display:none;">
+                <i class="ri-close-circle-line"></i>
+                Cancel Order
+            </button>
             <button type="button" class="btn btn-rose" id="sellerVerifyPaymentBtn">
                 <i class="ri-check-double-line"></i>
                 Verify Payment
@@ -1548,6 +1588,8 @@
             cop_approved: 'Approved',
             paid: 'Paid',
             completed: 'Paid',
+            cancelled: 'Cancelled',
+            failed: 'Failed',
         }[statusKey] || titleCaseStatus(status);
         if (methodLabel && statusLabel) {
             return `${methodLabel} · ${statusLabel}`;
@@ -1677,7 +1719,7 @@
         setSellerStatValue('today', rows.filter(row => row.dataset.isToday === 'true').length);
         setSellerStatValue(
             'payment_review',
-            rows.filter(row => row.dataset.paymentStatus === 'pending_verification').length
+            rows.filter(row => row.dataset.paymentStatus === 'pending_verification' && row.dataset.status !== 'cancelled').length
         );
         setSellerStatValue(
             'preparing',
@@ -1824,7 +1866,8 @@
         }).join('');
         const more = items.length > 2 ? `<div class="order-item-more">+${items.length - 2} more items</div>` : '';
         const isCustomOrder = (order.order_type === 'custom_chat') || !!order.custom_ticket_id;
-        const needsReview = payStatus === 'pending_verification' || (isCustomOrder && payStatus === 'paid');
+        const isOrderCancelled = status === 'cancelled' || payStatus === 'cancelled';
+        const needsReview = !isOrderCancelled && (payStatus === 'pending_verification' || (isCustomOrder && payStatus === 'paid'));
         const proofUrl = order.payment_proof_url || '';
         const fulfillmentType = String(order.fulfillment_type || 'delivery').toLowerCase();
         const isPickup = fulfillmentType === 'pickup';
@@ -1836,8 +1879,23 @@
             : '';
         let receiptBtn = '';
         if (proofUrl) {
+            let receiptBtnClass = 'receipt-ok';
+            let receiptIcon = 'ri-checkbox-circle-line';
+            let receiptLabel = 'Receipt';
+            let receiptTitle = 'View receipt';
+            if (isOrderCancelled) {
+                receiptBtnClass = 'receipt-cancelled';
+                receiptIcon = 'ri-close-circle-line';
+                receiptLabel = 'Receipt (Void)';
+                receiptTitle = 'View cancelled payment receipt';
+            } else if (needsReview) {
+                receiptBtnClass = 'warning';
+                receiptIcon = 'ri-error-warning-line';
+                receiptLabel = 'Review';
+                receiptTitle = 'Review receipt';
+            }
             receiptBtn = `<button type="button"
-                class="orders-action-btn seller-view-payment ${needsReview ? 'warning' : 'receipt-ok'}"
+                class="orders-action-btn seller-view-payment ${receiptBtnClass}"
                 data-order-id="${id}"
                 data-proof-url="${escapeAttr(proofUrl)}"
                 data-customer-name="${escapeAttr(customerName)}"
@@ -1845,11 +1903,12 @@
                 data-customer-contact-label="${escapeAttr(order.customer_contact_label || 'Contact')}"
                 data-order-total="${total.toFixed(2)}"
                 data-payment-method="${escapeAttr(order.payment_method || '')}"
+                data-order-status="${escapeAttr(status)}"
                 data-needs-review="${needsReview ? 'true' : 'false'}"
-                title="${needsReview ? 'Review receipt' : 'View receipt'}"
-                aria-label="${needsReview ? 'Review unverified payment receipt' : 'View verified payment receipt'}">
-                <i class="${needsReview ? 'ri-error-warning-line' : 'ri-checkbox-circle-line'}" aria-hidden="true"></i>
-                <span class="btn-label">${needsReview ? 'Review' : 'Receipt'}</span>
+                title="${receiptTitle}"
+                aria-label="${receiptTitle}">
+                <i class="${receiptIcon}" aria-hidden="true"></i>
+                <span class="btn-label">${receiptLabel}</span>
             </button>`;
         }
         const doneBtn = status === 'preparing'
@@ -1870,11 +1929,17 @@
                </button>`
             : '';
         const canCancelPayLater = isPayOnFulfillment && (status === 'pending' || status === 'accepted' || status === 'preparing');
-        const cancelCodBtn = canCancelPayLater
-            ? `<button type="button" class="orders-action-btn danger seller-cancel-cod" data-order-id="${id}" data-pay-method="${escapeAttr(payMethod)}" title="Cancel ${payLabel} Order" aria-label="Cancel ${payLabel} Order" style="background:rgba(220,53,69,0.1);color:#dc3545;border-color:rgba(220,53,69,0.3);">
+        const canCancelOnline = !isPayOnFulfillment && status === 'pending';
+        let cancelBtn = '';
+        if (canCancelPayLater) {
+            cancelBtn = `<button type="button" class="orders-action-btn danger seller-cancel-cod" data-order-id="${id}" data-pay-method="${escapeAttr(payMethod)}" title="Cancel ${payLabel} Order" aria-label="Cancel ${payLabel} Order" style="background:rgba(220,53,69,0.1);color:#dc3545;border-color:rgba(220,53,69,0.3);">
                     <i class="ri-close-circle-line"></i><span class="btn-label">Cancel ${payLabel}</span>
-               </button>`
-            : '';
+               </button>`;
+        } else if (canCancelOnline) {
+            cancelBtn = `<button type="button" class="orders-action-btn danger seller-cancel-cod" data-order-id="${id}" data-pay-method="${escapeAttr(payMethod)}" title="Cancel Order" aria-label="Cancel Order" style="background:rgba(220,53,69,0.1);color:#dc3545;border-color:rgba(220,53,69,0.3);">
+                    <i class="ri-close-circle-line"></i><span class="btn-label">Cancel Order</span>
+               </button>`;
+        }
         const customBadge = isCustomOrder ? ' <span class="badge" style="background:#b5445a;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;">CUSTOM</span>' : '';
         const pickupBadge = isPickup ? ' <span class="badge" style="background:#6a4a9a;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;font-weight:600;"><i class="ri-store-2-line"></i> PICKUP</span>' : '';
         return `<tr class="seller-order-row"
@@ -1916,7 +1981,7 @@
                     <button type="button" class="orders-action-btn seller-view-order" data-order-id="${id}" title="View" aria-label="View order details">
                         <i class="ri-eye-line"></i><span class="btn-label">View</span>
                     </button>
-                    ${receiptBtn}${doneBtn}${pickupDoneBtn}${approveBtn}${cancelCodBtn}
+                    ${receiptBtn}${doneBtn}${pickupDoneBtn}${approveBtn}${cancelBtn}
                 </div>
             </td>
         </tr>`;
@@ -2058,6 +2123,53 @@
         });
     });
 
+    async function promptCancelOrder(orderId, payMethodRaw) {
+        if (!orderId) return false;
+        const payMethod = (payMethodRaw || '').toLowerCase();
+        const isPayLater = payMethod === 'cop' || payMethod === 'cod';
+        const payLabel = payMethod === 'cop' ? 'COP' : (payMethod === 'cod' ? 'COD' : 'Order');
+        const promptTitle = isPayLater ? `Cancel ${payLabel} Order` : `Cancel Order #${orderId}`;
+        const promptMessage = isPayLater
+            ? `Please enter the reason for cancelling this ${payLabel} order:`
+            : `Please enter the reason for cancelling this pending order:`;
+        const promptDefault = isPayLater
+            ? 'Customer requested cancellation via chat'
+            : 'Unable to fulfill order';
+
+        const reason = await window.openPromptModal(
+            promptMessage,
+            {
+                title: promptTitle,
+                defaultValue: promptDefault,
+                placeholder: 'e.g. out of stock, customer requested in chat, invalid payment',
+                confirmText: 'Cancel Order',
+                cancelText: 'Go Back',
+            }
+        );
+        if (reason === null) return false; // cancelled prompt
+        try {
+            const response = await fetch(`/api/v1/chat/orders/${orderId}/cancel-cod`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: reason.trim() || 'Cancelled by seller upon customer request' })
+            });
+            const data = await response.json();
+            if (!response.ok || !(data.success || data.status === 'ok')) {
+                throw new Error(data.error || data.message || 'Failed to cancel order');
+            }
+            showSellerAlert('success', data.message || `Order #${orderId} cancelled successfully and inventory restored.`);
+            if (typeof closeModal === 'function') {
+                if (typeof sellerOrderDetailsModal !== 'undefined' && sellerOrderDetailsModal) closeModal(sellerOrderDetailsModal);
+                if (typeof sellerPaymentProofModal !== 'undefined' && sellerPaymentProofModal) closeModal(sellerPaymentProofModal);
+            }
+            await reloadSellerOrdersTable({ highlightNew: false });
+            return true;
+        } catch (err) {
+            showSellerAlert('danger', err.message || `Could not cancel order.`);
+            return false;
+        }
+    }
+
     if (sellerOrdersTbody) {
     sellerOrdersTbody.addEventListener('click', function (e) {
         const viewBtn = e.target.closest('.seller-view-order');
@@ -2113,6 +2225,7 @@
             })();
             return;
         }
+
         const cancelCodBtn = e.target.closest('.seller-cancel-cod');
         if (cancelCodBtn) {
             (async function () {
@@ -2120,33 +2233,9 @@
                 if (!orderId) return;
                 const row = cancelCodBtn.closest('tr');
                 const payMethod = (cancelCodBtn.dataset.payMethod || row?.dataset.paymentMethod || '').toLowerCase();
-                const payLabel = payMethod === 'cop' ? 'COP' : 'COD';
-                const reason = await window.openPromptModal(
-                    `Please enter the reason for cancelling this ${payLabel} order:`,
-                    {
-                        title: `Cancel ${payLabel} Order`,
-                        defaultValue: 'Customer requested cancellation via chat',
-                        placeholder: 'e.g. customer requested in chat',
-                        confirmText: 'Cancel Order',
-                        cancelText: 'Go Back',
-                    }
-                );
-                if (reason === null) return; // cancelled prompt
                 cancelCodBtn.disabled = true;
                 try {
-                    const response = await fetch(`/api/v1/chat/orders/${orderId}/cancel-cod`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ reason: reason.trim() || 'Cancelled by seller upon customer request' })
-                    });
-                    const data = await response.json();
-                    if (!response.ok || !data.success) {
-                        throw new Error(data.error || 'Failed to cancel order');
-                    }
-                    showSellerAlert('success', data.message || `${payLabel} order cancelled successfully and inventory restored.`);
-                    await reloadSellerOrdersTable({ highlightNew: false });
-                } catch (err) {
-                    showSellerAlert('danger', err.message || `Could not cancel ${payLabel} order.`);
+                    await promptCancelOrder(orderId, payMethod);
                 } finally {
                     cancelCodBtn.disabled = false;
                 }
@@ -2378,12 +2467,23 @@
                 } else if (loadedOrder && (loadedOrder.payment_method === 'cod' || loadedOrder.payment_method === 'cop') && (loadedOrder.status === 'pending' || loadedOrder.status === 'accepted')) {
                     const payMethodUpper = (loadedOrder.payment_method || '').toUpperCase();
                     footer.innerHTML = `
+                        <button type="button" class="btn btn-outline-danger" id="cancelPayLaterModalBtn"><i class="ri-close-circle-line"></i> Cancel ${payMethodUpper}</button>
                         <button type="button" class="btn btn-success" id="approvePayLaterModalBtn"><i class="ri-check-double-line"></i> Approve ${payMethodUpper}</button>
                     `;
                     document.getElementById('approvePayLaterModalBtn').addEventListener('click', async () => {
                         if (!await window.openConfirmModal(`Approve this ${payMethodUpper} order and move it to Preparing?`)) return;
                         closeModal(sellerOrderDetailsModal);
                         await verifyPayment(loadedOrder.id);
+                    });
+                    document.getElementById('cancelPayLaterModalBtn').addEventListener('click', () => {
+                        promptCancelOrder(loadedOrder.id, loadedOrder.payment_method);
+                    });
+                } else if (loadedOrder && loadedOrder.status === 'pending') {
+                    footer.innerHTML = `
+                        <button type="button" class="btn btn-outline-danger" id="cancelOnlineOrderModalBtn"><i class="ri-close-circle-line"></i> Cancel Order</button>
+                    `;
+                    document.getElementById('cancelOnlineOrderModalBtn').addEventListener('click', () => {
+                        promptCancelOrder(loadedOrder.id, loadedOrder.payment_method);
                     });
                 } else {
                     footer.innerHTML = '';
@@ -2587,8 +2687,23 @@
         proofEmpty.style.display = 'none';
         proofImage.style.display = 'block';
         proofImage.src = button.dataset.proofUrl;
+        const row = button.closest('tr');
+        const orderStatus = (button.dataset.orderStatus || row?.dataset.status || '').toLowerCase();
+        const payStatus = String(row?.dataset.paymentStatus || '').toLowerCase();
+        const isCancelled = orderStatus === 'cancelled' || payStatus === 'cancelled';
+        const canReview = button.dataset.needsReview === 'true' && !isCancelled;
+
+        const modalTitle = document.querySelector('#sellerPaymentProofModal .modal-title');
+        if (modalTitle) {
+            modalTitle.textContent = isCancelled ? 'Payment Receipt (Cancelled Order)' : 'Payment Receipt';
+        }
+
+        const rejectBtn = document.getElementById('sellerRejectPaymentBtn');
+        if (rejectBtn) {
+            rejectBtn.style.display = canReview ? 'inline-flex' : 'none';
+        }
         document.getElementById('sellerVerifyPaymentBtn').style.display =
-            button.dataset.needsReview === 'true' ? 'inline-flex' : 'none';
+            canReview ? 'inline-flex' : 'none';
         openModal(sellerPaymentProofModal);
     }
 
@@ -2608,6 +2723,13 @@
     document.getElementById('sellerVerifyPaymentBtn').addEventListener('click', () => {
         if (activePaymentOrderId) verifyPayment(activePaymentOrderId);
     });
+
+    const sellerRejectPaymentBtn = document.getElementById('sellerRejectPaymentBtn');
+    if (sellerRejectPaymentBtn) {
+        sellerRejectPaymentBtn.addEventListener('click', () => {
+            if (activePaymentOrderId) promptCancelOrder(activePaymentOrderId, 'gcash');
+        });
+    }
 
     const proofImage = document.getElementById('sellerPaymentProofImage');
     const proofEmpty = document.getElementById('sellerPaymentProofEmpty');
