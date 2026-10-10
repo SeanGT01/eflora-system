@@ -9564,6 +9564,72 @@ def seller_pos():
             subcategories_by_main[sc.main_category_id] = []
         subcategories_by_main[sc.main_category_id].append(sc.to_dict())
 
+    # Familiar customers (ONLY customers who actually bought from this store, online or in-store)
+    familiar_customers = []
+    seen_cust_names = set()
+    try:
+        from app.models import Order
+        online_rows = (
+            db.session.query(User.full_name, User.phone)
+            .join(Order, Order.customer_id == User.id)
+            .filter(
+                Order.store_id == store.id,
+                Order.status != 'cancelled',
+                User.full_name.isnot(None),
+                User.full_name != ''
+            )
+            .distinct()
+            .all()
+        )
+        for u_name, u_phone in online_rows:
+            name = (u_name or '').strip()
+            clean = name.lower()
+            if name and clean not in seen_cust_names and not clean.startswith('deleted'):
+                seen_cust_names.add(clean)
+                familiar_customers.append({
+                    'name': name,
+                    'phone': (u_phone or '').strip(),
+                    'type': 'Online'
+                })
+    except Exception as e:
+        current_app.logger.warning(f"Error fetching online buyers for POS: {e}")
+
+    try:
+        from app.models import POSOrder
+        pos_cust_rows = (
+            db.session.query(POSOrder.customer_name, POSOrder.customer_contact)
+            .filter(
+                POSOrder.store_id == store.id,
+                POSOrder.customer_name.isnot(None),
+                POSOrder.customer_name != ''
+            )
+            .order_by(POSOrder.created_at.desc())
+            .limit(150)
+            .all()
+        )
+        for c_name, c_contact in pos_cust_rows:
+            name = (c_name or '').strip()
+            clean = name.lower()
+            if not name or clean.startswith('walk') or clean.startswith('deleted'):
+                continue
+            phone = (c_contact or '').strip()
+            if clean not in seen_cust_names:
+                seen_cust_names.add(clean)
+                familiar_customers.append({
+                    'name': name,
+                    'phone': phone,
+                    'type': 'In-Store'
+                })
+            elif phone:
+                for item in familiar_customers:
+                    if item['name'].lower() == clean and not item.get('phone'):
+                        item['phone'] = phone
+                        break
+    except Exception as e:
+        current_app.logger.warning(f"Error fetching POS customers: {e}")
+
+    familiar_customers.sort(key=lambda c: c['name'].lower())
+
     return render_template(
         'seller_pos.html',
         store=store,
@@ -9573,6 +9639,7 @@ def seller_pos():
         products_by_category=products_by_category,
         subcategories_by_main=subcategories_by_main,
         ymal_addon_options=ymal_addon_options,
+        familiar_customers=familiar_customers,
     )
 
 @templates_bp.route('/seller/pos/order', methods=['POST'])
@@ -9953,6 +10020,77 @@ def pos_next_order_id():
     next_id = (last_order.id + 1) if last_order else 1000
     
     return jsonify({'next_id': next_id})
+
+
+@templates_bp.route('/api/seller/pos/customers')
+@seller_required
+def pos_search_customers():
+    store = _get_seller_store()
+    if not store:
+        return jsonify({'error': 'No active store found'}), 403
+    q = (request.args.get('q') or '').strip().lower()
+
+    customers = []
+    seen = set()
+    try:
+        from app.models import Order
+        query = (
+            db.session.query(User.full_name, User.phone)
+            .join(Order, Order.customer_id == User.id)
+            .filter(
+                Order.store_id == store.id,
+                Order.status != 'cancelled',
+                User.full_name.isnot(None),
+                User.full_name != ''
+            )
+        )
+        if q:
+            query = query.filter(User.full_name.ilike(f'%{q}%'))
+        for u_name, u_phone in query.distinct().limit(30).all():
+            name = (u_name or '').strip()
+            clean = name.lower()
+            if name and clean not in seen and not clean.startswith('deleted'):
+                seen.add(clean)
+                customers.append({
+                    'name': name,
+                    'phone': (u_phone or '').strip(),
+                    'type': 'Online'
+                })
+    except Exception as e:
+        current_app.logger.warning(f"Error searching online customers: {e}")
+
+    try:
+        from app.models import POSOrder
+        query = db.session.query(POSOrder.customer_name, POSOrder.customer_contact).filter(
+            POSOrder.store_id == store.id,
+            POSOrder.customer_name.isnot(None),
+            POSOrder.customer_name != ''
+        )
+        if q:
+            query = query.filter(POSOrder.customer_name.ilike(f'%{q}%'))
+        for c_name, c_contact in query.order_by(POSOrder.created_at.desc()).limit(50).all():
+            name = (c_name or '').strip()
+            clean = name.lower()
+            if not name or clean.startswith('walk') or clean.startswith('deleted'):
+                continue
+            phone = (c_contact or '').strip()
+            if clean not in seen:
+                seen.add(clean)
+                customers.append({
+                    'name': name,
+                    'phone': phone,
+                    'type': 'In-Store'
+                })
+            elif phone:
+                for item in customers:
+                    if item['name'].lower() == clean and not item.get('phone'):
+                        item['phone'] = phone
+                        break
+    except Exception as e:
+        current_app.logger.warning(f"Error searching POS customers: {e}")
+
+    customers.sort(key=lambda c: c['name'].lower())
+    return jsonify({'customers': customers})
 
 
 @templates_bp.route('/seller/pos/orders')

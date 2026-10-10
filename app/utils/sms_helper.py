@@ -114,19 +114,43 @@ def _sms8_send(phone_raw, message):
     if not text:
         return False, SMS_SERVICE_UNAVAILABLE_CODE
 
-    url = f'{base}/send.php'
-    try:
-        response = requests.post(
-            url,
-            data={'key': key, 'number': e164, 'message': text},
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            timeout=15,
-        )
-        data = {}
+    # Try modern v1 messages endpoint first, fallback to /services/send.php
+    endpoints = [
+        f'{base}/api/v1/messages' if not base.endswith('/services') else 'https://app.sms8.io/api/v1/messages',
+        f'{base}/send.php' if base.endswith('/services') else f'{base}/services/send.php',
+    ]
+
+    for url in endpoints:
         try:
-            data = response.json() if response.content else {}
-        except Exception:
+            response = requests.post(
+                url,
+                data={'key': key, 'number': e164, 'message': text},
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                timeout=15,
+            )
             data = {}
+            try:
+                data = response.json() if response.content else {}
+            except Exception:
+                data = {}
+
+            ok = response.status_code in (200, 201) and (
+                data.get('success') is True
+                or (
+                    isinstance(data, dict)
+                    and data.get('success') is not False
+                    and bool(data.get('data'))
+                )
+            )
+            if ok:
+                current_app.logger.info('SMS: queued via sms8 (%s) for %s***', url, e164[:6])
+                return True, None
+
+            # If error is subscription expired or invalid key, log clearly
+            err_msg = (data.get('error') or {}).get('message', '') if isinstance(data.get('error'), dict) else str(data)
+            current_app.logger.warning('SMS: sms8 endpoint %s returned: %s', url, err_msg)
+        except Exception as exc:
+            current_app.logger.warning('SMS: sms8 request error %s on %s: %s', type(exc).__name__, url, exc)
 
         ok = response.status_code in (200, 201) and (
             data.get('success') is True

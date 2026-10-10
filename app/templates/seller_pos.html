@@ -92,6 +92,24 @@
 }
 .pos-search input::placeholder { color: var(--muted); opacity: 0.65; }
 
+.pos-search-clear {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease;
+    flex-shrink: 0;
+}
+.pos-search-clear:hover {
+    color: var(--deep-rose);
+}
+
 .pos-toolbar-right { display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0; }
 
 .kbd {
@@ -295,6 +313,62 @@
     pointer-events: none; /* overlay itself doesn't eat clicks */
 }
 
+/* ── Matched variant pill on product tile ── */
+.pos-tile-matched-variant {
+    margin-top: 4px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: rgba(181, 68, 90, 0.08);
+    border: 1px solid rgba(181, 68, 90, 0.22);
+    color: var(--deep-rose);
+    font-size: 10.5px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+.pos-tile-matched-variant i {
+    font-size: 12px;
+    flex-shrink: 0;
+}
+.pos-tile-matched-variant.is-clickable {
+    cursor: pointer;
+}
+.pos-tile-matched-variant.is-clickable:hover {
+    background: rgba(181, 68, 90, 0.16);
+    border-color: var(--deep-rose);
+    transform: translateY(-1px);
+}
+.pos-tile-matched-variant .matched-v-name {
+    font-weight: 700;
+    color: var(--charcoal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pos-tile-matched-variant .matched-v-price {
+    font-weight: 600;
+    color: var(--deep-rose);
+    margin-left: auto;
+    flex-shrink: 0;
+}
+.pos-tile-matched-variant .matched-v-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--deep-rose);
+    color: #fff;
+    font-size: 10px;
+    margin-left: 2px;
+    flex-shrink: 0;
+}
+
 .pos-category-header {
     grid-column: 1 / -1;
     font-family: var(--font-display); font-size: 20px; font-weight: 500;
@@ -476,6 +550,68 @@
 
 .variant-modal img { display: block !important; visibility: visible !important; opacity: 1 !important; }
 
+.variant-item.is-search-match {
+    border-color: var(--deep-rose) !important;
+    background: linear-gradient(135deg, rgba(181, 68, 90, 0.07) 0%, rgba(255, 255, 255, 0.95) 100%) !important;
+    box-shadow: 0 2px 8px rgba(181, 68, 90, 0.12);
+}
+.variant-match-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: var(--deep-rose);
+    color: #fff;
+    padding: 1px 5px;
+    border-radius: var(--radius-pill);
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+/* ── POS search empty state ── */
+.pos-search-empty {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    background: var(--warm-white);
+    border: 1.5px dashed var(--border-strong);
+    border-radius: 16px;
+    margin: 1rem 0;
+}
+.pos-search-empty-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(181, 68, 90, 0.08);
+    color: var(--deep-rose);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    margin-bottom: 0.75rem;
+}
+.pos-search-empty h4 {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--charcoal);
+    margin: 0 0 0.35rem;
+}
+.pos-search-empty p {
+    font-size: 12.5px;
+    color: var(--muted);
+    max-width: 380px;
+    margin: 0 0 1rem;
+    line-height: 1.4;
+}
+
 /* Empty state */
 .pos-empty {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -510,8 +646,10 @@
 
 .cust-strip { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--cream); flex-shrink: 0; }
 .cust-strip-label { font-size: 9.5px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.45rem; }
-.cust-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.cust-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; position: relative; }
+.cust-input-wrap { position: relative; width: 100%; }
 .cust-input {
+    width: 100%; box-sizing: border-box;
     padding: 0.55rem 0.875rem; background: var(--warm-white);
     border: 1.5px solid var(--border-strong); border-radius: var(--radius-md);
     font-family: var(--font-sans); font-size: 13px; color: var(--charcoal);
@@ -519,6 +657,140 @@
 }
 .cust-input:focus { border-color: var(--deep-rose); box-shadow: 0 0 0 3px rgba(181,68,90,0.08); }
 .cust-input::placeholder { color: var(--muted); opacity: 0.65; }
+
+/* Customer suggestion dropdown */
+.cust-suggestions-dropdown {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    width: max(100%, 280px);
+    max-width: min(340px, calc(100vw - 32px));
+    background: #ffffff;
+    border: 1.5px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 28px rgba(44, 37, 32, 0.16), 0 2px 8px rgba(44, 37, 32, 0.08);
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 1050;
+    display: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+.cust-suggestions-dropdown::-webkit-scrollbar { width: 4px; }
+.cust-suggestions-dropdown::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+.cust-sugg-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: #faf7f2;
+}
+.cust-sugg-header i { font-size: 11px; margin-right: 3px; color: var(--deep-rose); }
+
+.cust-sugg-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    transition: background 0.12s ease;
+    user-select: none;
+}
+.cust-sugg-item:last-child { border-bottom: none; }
+.cust-sugg-item:hover,
+.cust-sugg-item.highlighted {
+    background: #fdf2f4;
+}
+
+.cust-sugg-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #f8e8ec;
+    color: var(--deep-rose);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    border: 1px solid rgba(181, 68, 90, 0.2);
+}
+
+.cust-sugg-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.cust-sugg-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--charcoal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cust-sugg-name mark {
+    background: rgba(181, 68, 90, 0.15);
+    color: var(--deep-rose);
+    font-weight: 700;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+.cust-sugg-phone {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.cust-sugg-phone i { font-size: 10px; opacity: 0.8; }
+
+.cust-sugg-tag {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+    text-transform: uppercase;
+}
+.cust-sugg-tag.online,
+.cust-sugg-tag.account {
+    background: #e6f4ea;
+    color: #137333;
+}
+.cust-sugg-tag.in-store,
+.cust-sugg-tag.recent {
+    background: #edf2f7;
+    color: #4a5568;
+}
+
+.cust-sugg-empty {
+    padding: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    font-style: italic;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
 
 .cart-scroll {
     flex: 1; overflow-y: auto; padding: 0.75rem 1.25rem;
@@ -1374,8 +1646,11 @@
             <div class="pos-search">
                 <i class="ri-search-line"></i>
                 <input type="text" id="posSearch"
-                       placeholder="Search products…"
+                       placeholder="Search products or variants… (F2)"
                        oninput="filterProducts()" autocomplete="off">
+                <button type="button" class="pos-search-clear" id="posSearchClear" onclick="clearSearch()" title="Clear search" style="display:none;">
+                    <i class="ri-close-line"></i>
+                </button>
             </div>
             <div class="pos-toolbar-right">
                 <button type="button" class="btn btn-rose btn-sm" onclick="openPosCustomModal()" style="display:inline-flex;align-items:center;gap:0.35rem;font-weight:600;" title="Create custom walk-in arrangement">
@@ -1448,6 +1723,7 @@
                      data-is-available="{{ 'true' if p.is_available else 'false' }}"
                      data-has-variants="{{ 'true' if p.variants else 'false' }}"
                      data-variants='{{ p.variants|tojson|safe if p.variants else "[]" }}'
+                     data-variant-search="{% if p.variants %}{% for v in p.variants %}{{ v.name|default('')|lower }} {% endfor %}{% endif %}"
                      data-addon-groups='{{ p.addon_groups|tojson|safe if p.addon_groups else "[]" }}'
                      data-img="{{ img_url }}"
                      data-display-name="{{ p.name }}"
@@ -1509,9 +1785,18 @@
                                 Out of stock
                             {% endif %}
                         </div>
+                        <div class="pos-tile-matched-variant" style="display: none;"></div>
                     </div>
                 </div>
                 {% endfor %}
+                <div class="pos-search-empty" id="posEmptySearch" style="display: none;">
+                    <div class="pos-search-empty-icon"><i class="ri-search-line"></i></div>
+                    <h4>No products or variants found</h4>
+                    <p>No results matching "<strong id="posEmptySearchTerm"></strong>". Try searching with another product or variant name.</p>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="clearSearch()">
+                        <i class="ri-refresh-line"></i> Clear Search
+                    </button>
+                </div>
             </div>
             {% else %}
             <div class="pos-empty">
@@ -1544,7 +1829,10 @@
         <div class="cust-strip">
             <div class="cust-strip-label">Customer <span style="color: var(--deep-rose);">*</span></div>
             <div class="cust-inputs">
-                <input class="cust-input" id="custName" type="text" placeholder="Customer Name" required>
+                <div class="cust-input-wrap">
+                    <input class="cust-input" id="custName" type="text" placeholder="Customer Name" autocomplete="off" required>
+                    <div id="custSuggestionsDropdown" class="cust-suggestions-dropdown" style="display: none;"></div>
+                </div>
                 <input class="cust-input" id="custContact" type="tel" placeholder="0993 343 2960">
             </div>
         </div>
@@ -1645,6 +1933,7 @@ let activeSubCategory = 'all';
 let nextOrderId = 1000;
 
 const subcategoriesByMain = {{ subcategories_by_main|tojson|safe }};
+let familiarCustomers = {{ familiar_customers|tojson|safe if familiar_customers else '[]' }};
 
 /* ════════════════════════════════════════════
    PHILIPPINES PHONE VALIDATION
@@ -1739,22 +2028,243 @@ function filterSubcategory(subcatId, btn) {
     filterProducts();
 }
 
-function filterProducts() {
-    const q = document.getElementById('posSearch').value.toLowerCase().trim();
-    document.querySelectorAll('.pos-tile').forEach(t => {
-        const nameMatch    = !q || t.dataset.name.includes(q);
-        const mainCatMatch = activeMainCategory === 'all' || t.dataset.mainCategory === activeMainCategory;
-        let subcatMatch    = true;
-        if (activeMainCategory !== 'all' && activeSubCategory !== 'all') {
-            subcatMatch = t.dataset.storeCategoryId == activeSubCategory;
+function getTileMatchingVariants(tile, query) {
+    if (!query) return [];
+    const variants = parseTileJson(tile, 'variants', []) || [];
+    if (!variants || !variants.length) return [];
+
+    const q = query.toLowerCase().trim();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const prodName = (tile.dataset.displayName || tile.dataset.name || '').toLowerCase();
+
+    return variants.filter(v => {
+        if (!v || !v.name) return false;
+        const vName = v.name.toLowerCase();
+
+        // 1. Direct check on variant name
+        if (vName.includes(q)) {
+            return true;
         }
-        t.style.display = (nameMatch && mainCatMatch && subcatMatch) ? '' : 'none';
+
+        // 2. Direct tokens match in variant name
+        if (tokens.length > 0 && tokens.every(tok => vName.includes(tok))) {
+            return true;
+        }
+
+        // 3. Multi-token combination check (e.g. "fertilizer 500g" or "rose red"):
+        // The combined product name + variant name must contain all tokens,
+        // AND the variant name itself must contain at least one of the tokens.
+        const fullCombo = `${prodName} ${vName}`;
+        const comboMatchesAll = tokens.length > 0 && tokens.every(tok => fullCombo.includes(tok));
+        const variantMatchesAny = tokens.some(tok => vName.includes(tok));
+
+        return comboMatchesAll && variantMatchesAny;
     });
 }
 
+function filterProducts() {
+    const searchInput = document.getElementById('posSearch');
+    const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+
+    const clearBtn = document.getElementById('posSearchClear');
+    if (clearBtn) {
+        clearBtn.style.display = q ? 'inline-flex' : 'none';
+    }
+
+    let visibleCount = 0;
+
+    document.querySelectorAll('.pos-tile').forEach(t => {
+        const prodName = (t.dataset.displayName || t.dataset.name || '').toLowerCase();
+        const mainCatMatch = activeMainCategory === 'all' || t.dataset.mainCategory === activeMainCategory;
+        let subcatMatch = true;
+        if (activeMainCategory !== 'all' && activeSubCategory !== 'all') {
+            subcatMatch = t.dataset.storeCategoryId == activeSubCategory;
+        }
+
+        let isTextMatch = false;
+        let matchedVariants = [];
+
+        if (!q) {
+            isTextMatch = true;
+        } else {
+            // Check if product name itself contains all search tokens
+            const prodMatchesAllTokens = tokens.length > 0 && tokens.every(tok => prodName.includes(tok));
+
+            // Check matching variants
+            matchedVariants = getTileMatchingVariants(t, q);
+
+            // Also check precomputed variantSearch string if available
+            const varSearchRaw = (t.dataset.variantSearch || '').toLowerCase();
+            const varSearchMatchesAll = tokens.length > 0 && tokens.every(tok => `${prodName} ${varSearchRaw}`.includes(tok));
+
+            isTextMatch = prodMatchesAllTokens || matchedVariants.length > 0 || varSearchMatchesAll;
+        }
+
+        const shouldShow = isTextMatch && mainCatMatch && subcatMatch;
+        t.style.display = shouldShow ? '' : 'none';
+
+        // Update matched variant indicator pill on tile
+        const matchPill = t.querySelector('.pos-tile-matched-variant');
+        if (matchPill) {
+            if (shouldShow && q && matchedVariants.length > 0) {
+                if (matchedVariants.length === 1) {
+                    const mv = matchedVariants[0];
+                    const effPrice = (mv.special_price && parseFloat(mv.special_price) > 0 && parseFloat(mv.special_price) < parseFloat(mv.price))
+                        ? parseFloat(mv.special_price) : parseFloat(mv.price);
+                    const inStock = (mv.stock_quantity || 0) > 0 && mv.is_available !== false;
+
+                    matchPill.className = 'pos-tile-matched-variant is-clickable';
+                    matchPill.title = inStock ? `Quick add ${mv.name} to order` : `${mv.name} is out of stock`;
+                    matchPill.innerHTML = `
+                        <i class="ri-git-commit-line"></i>
+                        <span class="matched-v-name">${esc(mv.name)}</span>
+                        <span class="matched-v-price">₱${effPrice.toFixed(2)}</span>
+                        ${inStock ? '<span class="matched-v-btn"><i class="ri-add-line"></i></span>' : '<span style="font-size:9.5px;opacity:0.7;">(OOS)</span>'}
+                    `;
+                    matchPill.onclick = (e) => {
+                        e.stopPropagation();
+                        if (inStock) {
+                            posQuickAddVariant(t, mv.id, e);
+                        } else {
+                            showToast(`${mv.name} is currently out of stock.`, 'error');
+                        }
+                    };
+                    matchPill.style.display = 'flex';
+                } else {
+                    // Multiple variants matched
+                    matchPill.className = 'pos-tile-matched-variant is-clickable';
+                    matchPill.title = `View ${matchedVariants.length} matching variants`;
+                    const namesList = matchedVariants.slice(0, 2).map(v => esc(v.name)).join(', ');
+                    const extra = matchedVariants.length > 2 ? ` +${matchedVariants.length - 2}` : '';
+                    matchPill.innerHTML = `
+                        <i class="ri-git-commit-line"></i>
+                        <span class="matched-v-name">${matchedVariants.length} variants:</span>
+                        <span class="matched-v-price" style="font-weight:500;font-size:10px;">${namesList}${extra}</span>
+                    `;
+                    matchPill.onclick = (e) => {
+                        e.stopPropagation();
+                        showVariantModal(t);
+                    };
+                    matchPill.style.display = 'flex';
+                }
+            } else {
+                matchPill.style.display = 'none';
+                matchPill.onclick = null;
+            }
+        }
+
+        if (shouldShow) visibleCount++;
+    });
+
+    // Empty search state feedback
+    const emptyEl = document.getElementById('posEmptySearch');
+    const termEl = document.getElementById('posEmptySearchTerm');
+    if (emptyEl) {
+        if (visibleCount === 0 && q) {
+            if (termEl) termEl.textContent = q;
+            emptyEl.style.display = 'flex';
+        } else {
+            emptyEl.style.display = 'none';
+        }
+    }
+}
+
 function clearSearch() {
-    document.getElementById('posSearch').value = '';
-    filterProducts();
+    const input = document.getElementById('posSearch');
+    if (input) {
+        input.value = '';
+        filterProducts();
+        input.focus();
+    }
+}
+
+function posQuickAddVariant(tile, variantId, evt) {
+    clearPosHoverTimers();
+    if (!tile.dataset.isAvailable || tile.dataset.isAvailable === 'false') {
+        showToast('This product is currently unavailable.', 'error');
+        return;
+    }
+    const variants = parseTileJson(tile, 'variants', []) || [];
+    const v = variants.find(x => Number(x.id) === Number(variantId));
+    if (!v || !(v.stock_quantity > 0) || v.is_available === false) {
+        showToast('This variant is out of stock.', 'error');
+        return;
+    }
+    const price = (v.special_price && parseFloat(v.special_price) > 0 && parseFloat(v.special_price) < parseFloat(v.price))
+        ? parseFloat(v.special_price) : parseFloat(v.price);
+    const img = (v.image_url && String(v.image_url).trim()) ? v.image_url : (tile.dataset.img || '');
+
+    const ok = _posPushOrBump({
+        id: parseInt(tile.dataset.id),
+        name: tile.dataset.displayName || tile.dataset.name,
+        price,
+        qty: 1,
+        img,
+        stock: parseInt(v.stock_quantity) || 0,
+        variant_id: parseInt(v.id),
+        variant_name: v.name,
+        addons: [],
+    });
+    if (!ok) return;
+
+    if (evt && evt.currentTarget) {
+        _posFlashClickTarget(evt);
+    }
+    tile.classList.add('flash');
+    setTimeout(() => tile.classList.remove('flash'), 280);
+    renderCart();
+    scrollToBottom();
+    showToast(`Added ${tile.dataset.displayName} (${v.name})`, 'success');
+}
+
+function handlePosSearchEnter() {
+    const searchInput = document.getElementById('posSearch');
+    const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    if (!q) return;
+
+    const visibleTiles = Array.from(document.querySelectorAll('.pos-tile')).filter(t => t.style.display !== 'none');
+    if (!visibleTiles.length) {
+        showToast('No matching products or variants found.', 'info');
+        return;
+    }
+
+    // If exactly one tile is visible:
+    if (visibleTiles.length === 1) {
+        const tile = visibleTiles[0];
+        const matchedVars = getTileMatchingVariants(tile, q);
+        if (tile.dataset.hasVariants === 'true') {
+            if (matchedVars.length === 1) {
+                const mv = matchedVars[0];
+                if ((mv.stock_quantity || 0) > 0 && mv.is_available !== false) {
+                    posQuickAddVariant(tile, mv.id, null);
+                    searchInput.select();
+                    return;
+                }
+            }
+            showVariantModal(tile);
+            return;
+        } else {
+            // Product has no variants
+            const stock = parseInt(tile.dataset.stock) || 0;
+            if (tile.dataset.isAvailable === 'true' && stock > 0) {
+                addToCart(tile);
+                searchInput.select();
+                return;
+            } else {
+                showToast('This item is out of stock.', 'error');
+                return;
+            }
+        }
+    }
+
+    // Multiple tiles visible: open variant modal or click first tile
+    const firstTile = visibleTiles[0];
+    if (tileNeedsSelectionModal(firstTile)) {
+        showVariantModal(firstTile);
+    } else {
+        handleProductClick(firstTile);
+    }
 }
 
 /* ════════════════════════════════════════════
@@ -1955,9 +2465,21 @@ function renderPosPickerBody() {
     if (!_posPickerState || !_posPickerState.tile) return;
     const tile = _posPickerState.tile;
     const productName = tile.dataset.displayName;
+    const prodName = (tile.dataset.displayName || tile.dataset.name || '').toLowerCase();
     const productImg = tile.dataset.img || '';
     const productAddons = tileProductAddons(tile);
+    const q = (document.getElementById('posSearch')?.value || '').toLowerCase().trim();
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+    const isStandardMatch = Boolean(q && tokens.length > 0 && tokens.every(tok => prodName.includes(tok)));
+    const matchedVariants = q ? getTileMatchingVariants(tile, q) : [];
+    const matchedVariantIds = new Set(matchedVariants.map(v => Number(v.id)));
+
     const variants = [...(parseTileJson(tile, 'variants', []) || [])].sort((a, b) => {
+        if (q && matchedVariantIds.size > 0) {
+            const aMatch = matchedVariantIds.has(Number(a.id)) ? 0 : 1;
+            const bMatch = matchedVariantIds.has(Number(b.id)) ? 0 : 1;
+            if (aMatch !== bMatch) return aMatch - bMatch;
+        }
         const aOk = (a.stock_quantity || 0) > 0 && a.is_available !== false ? 0 : 1;
         const bOk = (b.stock_quantity || 0) > 0 && b.is_available !== false ? 0 : 1;
         if (aOk !== bOk) return aOk - bOk;
@@ -1973,11 +2495,14 @@ function renderPosPickerBody() {
     html += `<div class="pos-picker-section-label">Product option</div>`;
 
     const renderStandard = () => `
-        <div class="variant-item ${mainOk ? '' : 'unavailable'}"
+        <div class="variant-item ${mainOk ? '' : 'unavailable'} ${isStandardMatch ? 'is-search-match' : ''}"
              onclick="${mainOk ? `posClickMain(event)` : ''}">
             ${_posOptImg(productImg, productName)}
             <div class="variant-item-info">
-                <div class="variant-item-name">Standard</div>
+                <div class="variant-item-name">
+                    Standard
+                    ${isStandardMatch ? '<span class="variant-match-tag"><i class="ri-check-line"></i> Match</span>' : ''}
+                </div>
                 <div class="variant-item-details"><span>${mainOk ? mainStock + ' in stock' : 'Out of stock'}</span></div>
             </div>
             ${_posPriceHtml(mainPrice)}
@@ -1990,13 +2515,25 @@ function renderPosPickerBody() {
         const eff = (v.special_price && parseFloat(v.special_price) > 0 && parseFloat(v.special_price) < parseFloat(v.price))
             ? parseFloat(v.special_price) : parseFloat(v.price);
         const img = (v.image_url && String(v.image_url).trim()) ? v.image_url : productImg;
+        const isMatch = matchedVariantIds.has(Number(v.id));
+        const itemClasses = [
+            'variant-item',
+            inStock ? '' : 'unavailable',
+            isMatch ? 'is-search-match' : ''
+        ].filter(Boolean).join(' ');
+
         html += `
-            <div class="variant-item ${inStock ? '' : 'unavailable'}"
+            <div class="${itemClasses}"
                  onclick="${inStock ? `posClickVariant(${v.id}, event)` : ''}">
                 ${_posOptImg(img, v.name)}
                 <div class="variant-item-info">
-                    <div class="variant-item-name">${esc(v.name)}</div>
-                    <div class="variant-item-details"><span>${inStock ? (v.stock_quantity + ' in stock') : 'Out of stock'}</span></div>
+                    <div class="variant-item-name">
+                        ${esc(v.name)}
+                        ${isMatch ? '<span class="variant-match-tag"><i class="ri-check-line"></i> Match</span>' : ''}
+                    </div>
+                    <div class="variant-item-details">
+                        <span>${inStock ? (v.stock_quantity + ' in stock') : 'Out of stock'}</span>
+                    </div>
                 </div>
                 ${_posPriceHtml(eff, v.price)}
             </div>`;
@@ -2255,13 +2792,241 @@ function closeVariantModal() {
     setTimeout(finishClose, 220);
 }
 
-/* Modal add actions live in posConfirmPickerAdd */
+/* ════════════════════════════════════════════
+   FAMILIAR CUSTOMER AUTOCOMPLETE
+════════════════════════════════════════════ */
+let _custSuggHighlightIdx = -1;
+let _custSuggActiveItems = [];
+let _custSearchDebounceTimer = null;
+
+function getCustomerInitials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+}
+
+function highlightMatchText(text, query) {
+    if (!query || !text) return esc(text);
+    const escapedQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedQ})`, 'gi');
+    const safeText = esc(text);
+    return safeText.replace(regex, '<mark>$1</mark>');
+}
+
+function renderCustomerSuggestions(matched, query) {
+    const dropdown = document.getElementById('custSuggestionsDropdown');
+    if (!dropdown) return;
+
+    _custSuggActiveItems = matched;
+    _custSuggHighlightIdx = -1;
+
+    if (!matched.length) {
+        if (query && query.trim().length > 0) {
+            dropdown.innerHTML = `
+                <div class="cust-sugg-empty">
+                    <i class="ri-user-search-line"></i> No familiar customers found
+                </div>`;
+            dropdown.style.display = 'block';
+        } else {
+            dropdown.style.display = 'none';
+        }
+        return;
+    }
+
+    const title = query ? 'Matching Customers' : 'Familiar Customers';
+    let html = `
+        <div class="cust-sugg-header">
+            <span><i class="ri-user-smile-line"></i> ${title}</span>
+            <span>${matched.length} saved</span>
+        </div>`;
+
+    matched.forEach((c, idx) => {
+        const initials = getCustomerInitials(c.name);
+        const nameHtml = highlightMatchText(c.name, query);
+        const phoneFormatted = c.phone ? esc(c.phone) : '';
+        const tagType = (c.type || 'in-store').toLowerCase().replace(/\s+/g, '-');
+        const tagLabel = c.type === 'Online' ? 'Online' : 'In-Store';
+
+        html += `
+            <div class="cust-sugg-item" data-index="${idx}">
+                <div class="cust-sugg-avatar">${initials}</div>
+                <div class="cust-sugg-content">
+                    <div class="cust-sugg-name">${nameHtml}</div>
+                    ${phoneFormatted ? `<div class="cust-sugg-phone"><i class="ri-phone-line"></i> ${phoneFormatted}</div>` : ''}
+                </div>
+                <span class="cust-sugg-tag ${tagType}">${tagLabel}</span>
+            </div>`;
+    });
+
+    dropdown.innerHTML = html;
+    dropdown.style.display = 'block';
+
+    dropdown.querySelectorAll('.cust-sugg-item').forEach(el => {
+        const idx = parseInt(el.dataset.index, 10);
+        el.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            selectCustomerSuggestion(_custSuggActiveItems[idx]);
+        });
+        el.addEventListener('mouseenter', function () {
+            setCustHighlight(idx);
+        });
+    });
+}
+
+function setCustHighlight(idx) {
+    const dropdown = document.getElementById('custSuggestionsDropdown');
+    if (!dropdown) return;
+    const items = dropdown.querySelectorAll('.cust-sugg-item');
+    items.forEach(el => el.classList.remove('highlighted'));
+
+    _custSuggHighlightIdx = idx;
+    if (idx >= 0 && idx < items.length) {
+        const active = items[idx];
+        active.classList.add('highlighted');
+        active.scrollIntoView({ block: 'nearest' });
+    }
+}
+
+function selectCustomerSuggestion(c) {
+    if (!c) return;
+    const nameInput = document.getElementById('custName');
+    const phoneInput = document.getElementById('custContact');
+
+    nameInput.value = c.name;
+    nameInput.style.borderColor = 'var(--border-strong)';
+
+    if (c.phone) {
+        phoneInput.value = c.phone;
+        phoneInput.style.borderColor = 'var(--border-strong)';
+        const pv = validatePhilippinePhone(c.phone);
+        if (pv.isValid && pv.formatted) {
+            phoneInput.value = pv.formatted;
+        }
+        phoneInput.dispatchEvent(new Event('input'));
+    }
+
+    hideCustomerSuggestions();
+}
+
+function hideCustomerSuggestions() {
+    const dropdown = document.getElementById('custSuggestionsDropdown');
+    if (dropdown) dropdown.style.display = 'none';
+    _custSuggHighlightIdx = -1;
+    _custSuggActiveItems = [];
+}
+
+function filterFamiliarCustomers(query) {
+    const q = (query || '').trim().toLowerCase();
+    const cleanDigits = q.replace(/\D/g, '');
+
+    let filtered = familiarCustomers.filter(c => {
+        if (!q) return true;
+        const nameMatch = (c.name || '').toLowerCase().includes(q);
+        const phoneMatch = cleanDigits && (c.phone || '').replace(/\D/g, '').includes(cleanDigits);
+        return nameMatch || phoneMatch;
+    });
+
+    return filtered.slice(0, 8);
+}
+
+function handleCustomerSearchInput(query) {
+    const matched = filterFamiliarCustomers(query);
+    renderCustomerSuggestions(matched, query);
+
+    const q = (query || '').trim();
+    if (q.length >= 2 && matched.length < 3) {
+        clearTimeout(_custSearchDebounceTimer);
+        _custSearchDebounceTimer = setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/seller/pos/customers?q=${encodeURIComponent(q)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data && Array.isArray(data.customers) && data.customers.length) {
+                    data.customers.forEach(nc => {
+                        if (!familiarCustomers.some(fc => fc.name.toLowerCase() === nc.name.toLowerCase())) {
+                            familiarCustomers.push(nc);
+                        }
+                    });
+                    const currentVal = (document.getElementById('custName')?.value || '').trim();
+                    if (currentVal.toLowerCase() === q.toLowerCase()) {
+                        renderCustomerSuggestions(filterFamiliarCustomers(currentVal), currentVal);
+                    }
+                }
+            } catch (err) {
+                // Silently ignore remote search errors
+            }
+        }, 250);
+    }
+}
+
+function initCustomerAutocomplete() {
+    const nameInput = document.getElementById('custName');
+    const dropdown = document.getElementById('custSuggestionsDropdown');
+    if (!nameInput || !dropdown) return;
+
+    nameInput.addEventListener('focus', function () {
+        handleCustomerSearchInput(nameInput.value);
+    });
+
+    nameInput.addEventListener('input', function () {
+        nameInput.style.borderColor = 'var(--border-strong)';
+        handleCustomerSearchInput(nameInput.value);
+    });
+
+    nameInput.addEventListener('keydown', function (e) {
+        if (dropdown.style.display === 'none' || !_custSuggActiveItems.length) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                handleCustomerSearchInput(nameInput.value);
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const nextIdx = _custSuggHighlightIdx + 1 >= _custSuggActiveItems.length ? 0 : _custSuggHighlightIdx + 1;
+            setCustHighlight(nextIdx);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const prevIdx = _custSuggHighlightIdx - 1 < 0 ? _custSuggActiveItems.length - 1 : _custSuggHighlightIdx - 1;
+            setCustHighlight(prevIdx);
+        } else if (e.key === 'Enter') {
+            if (_custSuggHighlightIdx >= 0 && _custSuggHighlightIdx < _custSuggActiveItems.length) {
+                e.preventDefault();
+                selectCustomerSuggestion(_custSuggActiveItems[_custSuggHighlightIdx]);
+            }
+        } else if (e.key === 'Tab') {
+            if (_custSuggHighlightIdx >= 0 && _custSuggHighlightIdx < _custSuggActiveItems.length) {
+                selectCustomerSuggestion(_custSuggActiveItems[_custSuggHighlightIdx]);
+            } else {
+                hideCustomerSuggestions();
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            hideCustomerSuggestions();
+        }
+    });
+
+    nameInput.addEventListener('blur', function () {
+        setTimeout(hideCustomerSuggestions, 180);
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.cust-input-wrap')) {
+            hideCustomerSuggestions();
+        }
+    });
+}
 
 /* ════════════════════════════════════════════
    INITIALIZATION
 ════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('custName').required = true;
+    initCustomerAutocomplete();
 
     const phoneInput = document.getElementById('custContact');
     phoneInput.addEventListener('input', handlePhoneInput);
@@ -2278,6 +3043,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
     fetchNextOrderId();
     renderCart();
+
+    const searchInput = document.getElementById('posSearch');
+    if (searchInput) {
+        searchInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handlePosSearchEnter();
+            }
+        });
+    }
 
     const variantModal = document.getElementById('variantModal');
     if (variantModal) {
@@ -3113,6 +3888,7 @@ function resetOrder() {
     document.getElementById('custContact').value     = '';
     document.getElementById('custName').style.borderColor    = 'var(--border-strong)';
     document.getElementById('custContact').style.borderColor = 'var(--border-strong)';
+    hideCustomerSuggestions();
     fetchNextOrderId();
     document.getElementById('chargeBtn').innerHTML =
         '<i class="ri-secure-payment-line"></i> Charge &nbsp;<span id="chargeLbl">₱0.00</span>';
@@ -3130,7 +3906,11 @@ function scrollToBottom() {
    KEYBOARD SHORTCUTS
 ════════════════════════════════════════════ */
 document.addEventListener('keydown', e => {
-    if (e.key === 'F2')  { e.preventDefault(); document.getElementById('posSearch').focus(); }
+    if (e.key === 'F2')  {
+        e.preventDefault();
+        const s = document.getElementById('posSearch');
+        if (s) { s.focus(); s.select(); }
+    }
     if (e.key === 'F10') { e.preventDefault(); processOrder(); }
     if (e.key === 'Escape') {
         document.getElementById('receiptOverlay').classList.remove('active');
