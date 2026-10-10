@@ -1,10 +1,12 @@
 """
 SMS delivery for OTP codes and credential texts.
 
+Smart Prefix Routing:
+- Smart / TNT / Sun: Routed via sms8.io first (bypasses A2P blocking), with iProg as backup.
+- Globe / TM / DITO: Routed via iProg first (fast A2P delivery), with sms8.io as backup.
+
 OTP generation and verification stay in this app. Providers only send the
 code we already created.
-
-Order: sms8.io (Android SIM gateway) first, then iProg as backup.
 Do not use SMS8's /ajax/otp-send.php — that would store OTPs on their side.
 """
 
@@ -12,7 +14,7 @@ from __future__ import annotations
 
 from flask import current_app
 
-from app.utils.phone_utils import normalize_ph_mobile
+from app.utils.phone_utils import is_smart_tnt_network, normalize_ph_mobile
 
 SMS_SERVICE_UNAVAILABLE_CODE = 'sms_service_unavailable'
 SMS_SERVICE_UNAVAILABLE_MESSAGE = (
@@ -232,92 +234,8 @@ def _iprog_send_otp(phone_raw, otp_code=None, expiry_minutes=5):
         return False, None, SMS_SERVICE_UNAVAILABLE_CODE
 
 
-def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification'):
-    """
-    Send the app-generated OTP. sms8.io first, iProg backup.
-
-    Returns (ok: bool, delivered_otp: str|None, error_code: str|None).
-    delivered_otp is the code the user must enter (ours, unless iProg
-    generated a different one). Never logs the plaintext OTP or API keys.
-    """
-    local_09, _msisdn = _iprog_phone_number(phone)
-    if not local_09:
-        current_app.logger.error('SMS: invalid phone number')
-        return False, None, SMS_SERVICE_UNAVAILABLE_CODE
-
-    code = str(otp_code).strip() if otp_code else ''
-    use_sms8 = True
-    use_iprog = True
-    try:
-        from app.utils.feature_controls import iprog_enabled, sms8_enabled
-        use_sms8 = sms8_enabled()
-        use_iprog = iprog_enabled()
-    except Exception:
-        pass
-
-    if not use_sms8 and not use_iprog:
-        current_app.logger.error('SMS: both sms8 and iProg are disabled in Admin Controls')
-        return False, None, SMS_SERVICE_UNAVAILABLE_CODE
-
-    sms8_key, _base = _sms8_config()
-    if use_sms8 and sms8_key and code:
-        ok, err = _sms8_send(phone, _otp_sms_body(code, expiry_minutes, purpose))
-        if ok:
-            return True, code, None
-        if use_iprog:
-            current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
-        else:
-            return False, None, err or SMS_SERVICE_UNAVAILABLE_CODE
-    elif use_sms8 and not sms8_key:
-        current_app.logger.info('SMS: SMS8_API_KEY not set')
-        if not use_iprog:
-            return False, None, SMS_SERVICE_UNAVAILABLE_CODE
-    elif not use_sms8:
-        current_app.logger.info('SMS: sms8 disabled in Admin Controls')
-    elif not code:
-        current_app.logger.warning('SMS: no app OTP code, skipping sms8')
-
-    if use_iprog:
-        return _iprog_send_otp(phone, otp_code=otp_code, expiry_minutes=expiry_minutes)
-
-    return False, None, SMS_SERVICE_UNAVAILABLE_CODE
-
-
-def send_sms_message(phone, message):
-    """
-    Send a free-form SMS. sms8.io first when enabled, then iProg if enabled.
-    Returns (ok: bool, error_code: str|None).
-    """
-    use_sms8 = True
-    use_iprog = True
-    try:
-        from app.utils.feature_controls import iprog_enabled, sms8_enabled
-        use_sms8 = sms8_enabled()
-        use_iprog = iprog_enabled()
-    except Exception:
-        pass
-
-    if not use_sms8 and not use_iprog:
-        current_app.logger.error('SMS: both sms8 and iProg are disabled in Admin Controls')
-        return False, SMS_SERVICE_UNAVAILABLE_CODE
-
-    sms8_key, _base = _sms8_config()
-    if use_sms8 and sms8_key:
-        ok, err = _sms8_send(phone, message)
-        if ok:
-            return True, None
-        if use_iprog:
-            current_app.logger.warning('SMS: sms8 failed, trying iProg backup')
-        else:
-            return False, err or SMS_SERVICE_UNAVAILABLE_CODE
-    elif use_sms8 and not sms8_key:
-        current_app.logger.info('SMS: SMS8_API_KEY not set')
-        if not use_iprog:
-            return False, SMS_SERVICE_UNAVAILABLE_CODE
-
-    if not use_iprog:
-        return False, SMS_SERVICE_UNAVAILABLE_CODE
-
+def _iprog_send_message(phone_raw, message):
+    """Send free-form SMS via iProg /sms_messages. Returns (ok, error_code)."""
     try:
         import requests
     except ImportError:
@@ -329,7 +247,7 @@ def send_sms_message(phone, message):
         current_app.logger.error('SMS: IPROG_API_TOKEN is not configured')
         return False, SMS_SERVICE_UNAVAILABLE_CODE
 
-    local_09, msisdn_63 = _iprog_phone_number(phone)
+    local_09, msisdn_63 = _iprog_phone_number(phone_raw)
     if not local_09:
         current_app.logger.error('SMS: invalid phone number')
         return False, SMS_SERVICE_UNAVAILABLE_CODE
@@ -362,6 +280,7 @@ def send_sms_message(phone, message):
             bool(data.get('message_id'))
         )
         if ok:
+            current_app.logger.info('SMS: message sent via iProg for %s***', local_09[:4])
             return True, None
 
         if _is_sender_name_error(data):
@@ -381,6 +300,145 @@ def send_sms_message(phone, message):
     except Exception as exc:
         current_app.logger.error('SMS: request error %s: %s', type(exc).__name__, exc)
         return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+
+def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification'):
+    """
+    Send the app-generated OTP with Smart Prefix Routing:
+    - Smart/TNT/Sun: sms8.io first (bypasses A2P block), fallback to iProg.
+    - Globe/TM/DITO/other: iProg first, fallback to sms8.io.
+
+    Returns (ok: bool, delivered_otp: str|None, error_code: str|None).
+    """
+    local_09, _msisdn = _iprog_phone_number(phone)
+    if not local_09:
+        current_app.logger.error('SMS: invalid phone number')
+        return False, None, SMS_SERVICE_UNAVAILABLE_CODE
+
+    code = str(otp_code).strip() if otp_code else ''
+    use_sms8 = True
+    use_iprog = True
+    try:
+        from app.utils.feature_controls import iprog_enabled, sms8_enabled
+        use_sms8 = sms8_enabled()
+        use_iprog = iprog_enabled()
+    except Exception:
+        pass
+
+    if not use_sms8 and not use_iprog:
+        current_app.logger.error('SMS: both sms8 and iProg are disabled in Admin Controls')
+        return False, None, SMS_SERVICE_UNAVAILABLE_CODE
+
+    sms8_key, _base = _sms8_config()
+    is_smart = is_smart_tnt_network(phone)
+
+    # Route 1: Smart / TNT / Sun -> Primary: SMS8, Backup: iProg
+    if is_smart:
+        current_app.logger.info('SMS: routing Smart/TNT/Sun (%s***) to SMS8 primary', local_09[:4])
+        if use_sms8 and sms8_key and code:
+            ok, err = _sms8_send(phone, _otp_sms_body(code, expiry_minutes, purpose))
+            if ok:
+                return True, code, None
+            if use_iprog:
+                current_app.logger.warning('SMS: sms8 failed for Smart/TNT number (%s), trying iProg fallback', err)
+                return _iprog_send_otp(phone, otp_code=otp_code, expiry_minutes=expiry_minutes)
+            return False, None, err or SMS_SERVICE_UNAVAILABLE_CODE
+        elif use_iprog:
+            current_app.logger.info('SMS: sms8 not configured/disabled, using iProg for Smart/TNT')
+            return _iprog_send_otp(phone, otp_code=otp_code, expiry_minutes=expiry_minutes)
+        return False, None, SMS_SERVICE_UNAVAILABLE_CODE
+
+    # Route 2: Globe / TM / DITO / other -> Primary: iProg, Backup: SMS8
+    current_app.logger.info('SMS: routing Globe/TM/DITO (%s***) to iProg primary', local_09[:4])
+    if use_iprog:
+        ok, delivered, err = _iprog_send_otp(phone, otp_code=otp_code, expiry_minutes=expiry_minutes)
+        if ok:
+            return True, delivered, None
+        if use_sms8 and sms8_key and code:
+            current_app.logger.warning('SMS: iProg failed for %s*** (err=%s), trying SMS8 fallback', local_09[:4], err)
+            sms8_ok, sms8_err = _sms8_send(phone, _otp_sms_body(code, expiry_minutes, purpose))
+            if sms8_ok:
+                return True, code, None
+        return False, None, err or SMS_SERVICE_UNAVAILABLE_CODE
+
+    # If iProg disabled in admin controls, fallback to sms8
+    if use_sms8 and sms8_key and code:
+        ok, err = _sms8_send(phone, _otp_sms_body(code, expiry_minutes, purpose))
+        if ok:
+            return True, code, None
+        return False, None, err or SMS_SERVICE_UNAVAILABLE_CODE
+
+    return False, None, SMS_SERVICE_UNAVAILABLE_CODE
+
+
+def send_sms_message(phone, message):
+    """
+    Send a free-form SMS with Smart Prefix Routing:
+    - Smart/TNT/Sun: sms8.io first, fallback to iProg.
+    - Globe/TM/DITO/other: iProg first, fallback to sms8.io.
+    Returns (ok: bool, error_code: str|None).
+    """
+    local_09, _msisdn = _iprog_phone_number(phone)
+    if not local_09:
+        current_app.logger.error('SMS: invalid phone number')
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+    text = (message or '').strip()
+    if not text:
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+    use_sms8 = True
+    use_iprog = True
+    try:
+        from app.utils.feature_controls import iprog_enabled, sms8_enabled
+        use_sms8 = sms8_enabled()
+        use_iprog = iprog_enabled()
+    except Exception:
+        pass
+
+    if not use_sms8 and not use_iprog:
+        current_app.logger.error('SMS: both sms8 and iProg are disabled in Admin Controls')
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+    sms8_key, _base = _sms8_config()
+    is_smart = is_smart_tnt_network(phone)
+
+    # Route 1: Smart / TNT / Sun -> Primary: SMS8, Backup: iProg
+    if is_smart:
+        current_app.logger.info('SMS: routing Smart/TNT/Sun (%s***) message to SMS8 primary', local_09[:4])
+        if use_sms8 and sms8_key:
+            ok, err = _sms8_send(phone, text)
+            if ok:
+                return True, None
+            if use_iprog:
+                current_app.logger.warning('SMS: sms8 message failed, trying iProg fallback')
+                return _iprog_send_message(phone, text)
+            return False, err or SMS_SERVICE_UNAVAILABLE_CODE
+        elif use_iprog:
+            return _iprog_send_message(phone, text)
+        return False, SMS_SERVICE_UNAVAILABLE_CODE
+
+    # Route 2: Globe / TM / DITO / other -> Primary: iProg, Backup: SMS8
+    current_app.logger.info('SMS: routing Globe/TM/DITO (%s***) message to iProg primary', local_09[:4])
+    if use_iprog:
+        ok, err = _iprog_send_message(phone, text)
+        if ok:
+            return True, None
+        if use_sms8 and sms8_key:
+            current_app.logger.warning('SMS: iProg message failed (err=%s), trying SMS8 fallback', err)
+            sms8_ok, sms8_err = _sms8_send(phone, text)
+            if sms8_ok:
+                return True, None
+        return False, err or SMS_SERVICE_UNAVAILABLE_CODE
+
+    # If iProg disabled in admin controls, fallback to sms8
+    if use_sms8 and sms8_key:
+        ok, err = _sms8_send(phone, text)
+        if ok:
+            return True, None
+        return False, err or SMS_SERVICE_UNAVAILABLE_CODE
+
+    return False, SMS_SERVICE_UNAVAILABLE_CODE
 
 
 def send_rider_credentials_sms(phone, full_name, default_password, store_name, login_id=None):

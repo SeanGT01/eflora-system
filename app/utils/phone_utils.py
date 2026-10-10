@@ -34,6 +34,27 @@ def is_valid_ph_mobile(phone_raw) -> bool:
     return bool(re.fullmatch(r'09\d{9}', normalized))
 
 
+SMART_TNT_SUN_PREFIXES = frozenset({
+    # Smart
+    '0813', '0918', '0919', '0920', '0921', '0928', '0929', '0939', '0947', '0949',
+    '0961', '0968', '0969', '0971', '0998', '0999', '0911', '0913', '0914',
+    # TNT (Talk 'N Text)
+    '0907', '0908', '0909', '0910', '0912', '0930', '0938', '0946', '0948', '0950',
+    '0970', '0981', '0989',
+    # Sun Cellular (now part of Smart/PLDT network)
+    '0922', '0923', '0924', '0925', '0931', '0932', '0933', '0934', '0940', '0941',
+    '0942', '0943', '0944', '0951', '0963',
+})
+
+
+def is_smart_tnt_network(phone_raw: str | None) -> bool:
+    """Return True if phone number prefix belongs to Smart, TNT, or Sun Cellular."""
+    norm = normalize_ph_mobile(phone_raw)
+    if not norm or len(norm) < 4:
+        return False
+    return norm[:4] in SMART_TNT_SUN_PREFIXES
+
+
 def phone_to_account_email(phone_09: str) -> str:
     """Map a normalized 09… mobile to the internal account email key."""
     phone = normalize_ph_mobile(phone_09) or (phone_09 or '').strip()
