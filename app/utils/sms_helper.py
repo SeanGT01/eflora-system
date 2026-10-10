@@ -152,27 +152,7 @@ def _sms8_send(phone_raw, message):
         except Exception as exc:
             current_app.logger.warning('SMS: sms8 request error %s on %s: %s', type(exc).__name__, url, exc)
 
-        ok = response.status_code in (200, 201) and (
-            data.get('success') is True
-            or (
-                isinstance(data, dict)
-                and data.get('success') is not False
-                and bool(data.get('data'))
-            )
-        )
-        if ok:
-            current_app.logger.info('SMS: queued via sms8 for %s***', e164[:6])
-            return True, None
-
-        current_app.logger.warning(
-            'SMS: sms8 send failed status=%s body=%s',
-            response.status_code,
-            str(data)[:300] if data else (response.text or '')[:300],
-        )
-        return False, SMS_SERVICE_UNAVAILABLE_CODE
-    except Exception as exc:
-        current_app.logger.warning('SMS: sms8 request error %s: %s', type(exc).__name__, exc)
-        return False, SMS_SERVICE_UNAVAILABLE_CODE
+    return False, SMS_SERVICE_UNAVAILABLE_CODE
 
 
 def _iprog_send_otp(phone_raw, otp_code=None, expiry_minutes=5):
