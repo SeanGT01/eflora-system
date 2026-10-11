@@ -2973,25 +2973,17 @@
                                     </div>
 
                                     <div style="margin-top: 1rem;">
-                                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; flex-wrap: wrap; gap: 0.5rem;">
-                                            <label class="form-label" style="margin-bottom: 0;">Delivery Window (Optional)</label>
-                                            <button type="button" id="clear-delivery-window-btn" style="background: none; border: none; font-size: 11.5px; color: var(--muted); cursor: pointer; text-decoration: underline; padding: 0;">Clear window (no restriction)</button>
-                                        </div>
+                                        <label class="form-label" style="margin-bottom: 0.35rem;">Delivery Window
+                                            (Optional)</label>
                                         <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                                            <div style="display:inline-flex; align-items:center; gap:0.35rem;">
-                                                <input type="time" class="form-control" id="delivery-start-time"
-                                                    value="09:00" style="width: auto; min-width: 135px;" placeholder="Start">
-                                                <span class="delivery-period-badge" id="delivery-start-badge" title="Click to toggle AM/PM" style="cursor: pointer; user-select: none; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: rgba(39, 174, 96, 0.12); color: #27ae60; border: 1px solid rgba(39, 174, 96, 0.3);">AM</span>
-                                            </div>
+                                            <input type="time" class="form-control" id="delivery-start-time"
+                                                max="11:59" value="08:00" style="width: auto; min-width: 140px;" placeholder="Start">
                                             <span style="color: var(--muted); font-weight: 600;">to</span>
-                                            <div style="display:inline-flex; align-items:center; gap:0.35rem;">
-                                                <input type="time" class="form-control" id="delivery-cutoff-time"
-                                                    value="17:00" style="width: auto; min-width: 135px;" placeholder="Cutoff">
-                                                <span class="delivery-period-badge" id="delivery-cutoff-badge" title="Click to toggle AM/PM" style="cursor: pointer; user-select: none; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: rgba(194, 78, 104, 0.12); color: var(--deep-rose); border: 1px solid rgba(194, 78, 104, 0.3);">PM</span>
-                                            </div>
+                                            <input type="time" class="form-control" id="delivery-cutoff-time"
+                                                min="12:00" value="17:00" style="width: auto; min-width: 140px;" placeholder="Cutoff">
                                         </div>
                                         <div class="form-hint" id="delivery-window-hint">Must fall within store
-                                            operating hours. Defaults to morning (AM) start and afternoon (PM) cutoff.
+                                            operating hours. Morning (AM) start and afternoon (PM) cutoff.
                                         </div>
                                     </div>
 
@@ -5712,19 +5704,34 @@
 
     function applyDeliveryPickerBounds() {
         const span = getStoreHoursSpan();
-        ['delivery-start-time', 'delivery-cutoff-time', 'order-cutoff-time'].forEach(function (id) {
-            const el = document.getElementById(id);
-            if (!el) return;
-            if (span.minOpen) el.min = span.minOpen;
-            else el.removeAttribute('min');
-            if (span.maxClose) el.max = span.maxClose;
-            else el.removeAttribute('max');
-        });
+
+        // First box: AM only (max 11:59 so browser drops PM from dropdown)
+        const startEl = document.getElementById('delivery-start-time');
+        if (startEl) {
+            startEl.min = (span.minOpen && span.minOpen < '12:00') ? span.minOpen : '00:00';
+            startEl.max = '11:59';
+        }
+
+        // Second box: PM only (min 12:00 so browser drops AM from dropdown)
+        const cutoffEl = document.getElementById('delivery-cutoff-time');
+        if (cutoffEl) {
+            cutoffEl.min = '12:00';
+            cutoffEl.max = (span.maxClose && span.maxClose >= '12:00') ? span.maxClose : '23:59';
+        }
+
+        const orderEl = document.getElementById('order-cutoff-time');
+        if (orderEl) {
+            if (span.minOpen) orderEl.min = span.minOpen;
+            else orderEl.removeAttribute('min');
+            if (span.maxClose) orderEl.max = span.maxClose;
+            else orderEl.removeAttribute('max');
+        }
+
         const hintWin = document.getElementById('delivery-window-hint');
         const hintCut = document.getElementById('order-cutoff-hint');
         if (span.minOpen && span.maxClose) {
             const range = formatScheduleTime12(span.minOpen) + ' – ' + formatScheduleTime12(span.maxClose);
-            if (hintWin) hintWin.textContent = 'Must fall within store hours (' + range + '). Example: store 7:00 AM–7:00 PM, delivery 9:00 AM–5:00 PM.';
+            if (hintWin) hintWin.textContent = 'Must fall within store hours (' + range + '). Morning (AM) start and afternoon (PM) cutoff.';
             if (hintCut) hintCut.textContent = 'Must be within store hours (' + range + '). After this time, customers cannot book same-day delivery.';
         } else {
             if (hintWin) hintWin.textContent = 'Must fall within store operating hours. Set hours first, then choose a delivery window.';
@@ -5818,111 +5825,8 @@
 
     // Initialize schedule UI
     renderScheduleEntries();
-
-    function updateDeliveryPeriodBadges() {
-        const startInput = document.getElementById('delivery-start-time');
-        const cutoffInput = document.getElementById('delivery-cutoff-time');
-        const startBadge = document.getElementById('delivery-start-badge');
-        const cutoffBadge = document.getElementById('delivery-cutoff-badge');
-
-        if (startBadge) {
-            const val = startInput ? startInput.value : '';
-            if (val) {
-                const h = parseInt(val.split(':')[0], 10);
-                const isPM = h >= 12;
-                startBadge.textContent = isPM ? 'PM' : 'AM';
-                startBadge.style.background = isPM ? 'rgba(194, 78, 104, 0.12)' : 'rgba(39, 174, 96, 0.12)';
-                startBadge.style.color = isPM ? 'var(--deep-rose)' : '#27ae60';
-                startBadge.style.borderColor = isPM ? 'rgba(194, 78, 104, 0.3)' : 'rgba(39, 174, 96, 0.3)';
-            } else {
-                startBadge.textContent = 'AM';
-                startBadge.style.background = 'rgba(39, 174, 96, 0.12)';
-                startBadge.style.color = '#27ae60';
-                startBadge.style.borderColor = 'rgba(39, 174, 96, 0.3)';
-            }
-        }
-
-        if (cutoffBadge) {
-            const val = cutoffInput ? cutoffInput.value : '';
-            if (val) {
-                const h = parseInt(val.split(':')[0], 10);
-                const isPM = h >= 12;
-                cutoffBadge.textContent = isPM ? 'PM' : 'AM';
-                cutoffBadge.style.background = isPM ? 'rgba(194, 78, 104, 0.12)' : 'rgba(39, 174, 96, 0.12)';
-                cutoffBadge.style.color = isPM ? 'var(--deep-rose)' : '#27ae60';
-                cutoffBadge.style.borderColor = isPM ? 'rgba(194, 78, 104, 0.3)' : 'rgba(39, 174, 96, 0.3)';
-            } else {
-                cutoffBadge.textContent = 'PM';
-                cutoffBadge.style.background = 'rgba(194, 78, 104, 0.12)';
-                cutoffBadge.style.color = 'var(--deep-rose)';
-                cutoffBadge.style.borderColor = 'rgba(194, 78, 104, 0.3)';
-            }
-        }
-    }
-
-    function toggleInputPeriod(inputId) {
-        const input = document.getElementById(inputId);
-        if (!input) return;
-        let val = input.value;
-        if (!val) {
-            val = inputId === 'delivery-start-time' ? '09:00' : '17:00';
-            input.value = val;
-            updateDeliveryPeriodBadges();
-            input.dispatchEvent(new Event('change'));
-            return;
-        }
-        const parts = val.split(':');
-        let h = parseInt(parts[0], 10);
-        const m = parts[1] || '00';
-        if (h < 12) {
-            h = (h + 12) % 24;
-        } else {
-            h = h - 12;
-        }
-        input.value = String(h).padStart(2, '0') + ':' + m;
-        updateDeliveryPeriodBadges();
-        input.dispatchEvent(new Event('change'));
-    }
-
-    document.getElementById('delivery-start-badge')?.addEventListener('click', function () {
-        toggleInputPeriod('delivery-start-time');
-    });
-
-    document.getElementById('delivery-cutoff-badge')?.addEventListener('click', function () {
-        toggleInputPeriod('delivery-cutoff-time');
-    });
-
-    document.getElementById('clear-delivery-window-btn')?.addEventListener('click', function () {
-        const startInput = document.getElementById('delivery-start-time');
-        const cutoffInput = document.getElementById('delivery-cutoff-time');
-        if (startInput) startInput.value = '';
-        if (cutoffInput) cutoffInput.value = '';
-        updateDeliveryPeriodBadges();
-        startInput?.dispatchEvent(new Event('change'));
-        showToast('Delivery window cleared (no restriction).', 'info');
-    });
-
-    // Auto-promote cutoff hours (01:00-11:59) to PM so seller doesn't have to toggle PM
-    document.getElementById('delivery-cutoff-time')?.addEventListener('input', function () {
-        const cutoffInput = this;
-        let val = cutoffInput.value;
-        if (val) {
-            const parts = val.split(':');
-            let h = parseInt(parts[0], 10);
-            const m = parts[1] || '00';
-            if (h >= 1 && h < 12) {
-                h += 12;
-                cutoffInput.value = String(h).padStart(2, '0') + ':' + m;
-            }
-        }
-        updateDeliveryPeriodBadges();
-    });
-
-    document.getElementById('delivery-start-time')?.addEventListener('input', updateDeliveryPeriodBadges);
-
     ['delivery-start-time', 'delivery-cutoff-time', 'order-cutoff-time'].forEach(function (id) {
         document.getElementById(id)?.addEventListener('change', function () {
-            updateDeliveryPeriodBadges();
             const deliveryStart = (document.getElementById('delivery-start-time')?.value || '').trim();
             const deliveryCutoff = (document.getElementById('delivery-cutoff-time')?.value || '').trim();
             const orderCutoff = (document.getElementById('order-cutoff-time')?.value || '').trim();
@@ -5935,8 +5839,6 @@
             if (hoursErr) showToast(hoursErr, 'error');
         });
     });
-
-    updateDeliveryPeriodBadges();
 
     // Edit button
     document.getElementById('edit-basic-info')?.addEventListener('click', async () => {
