@@ -164,15 +164,40 @@ def check_system_health() -> Dict[str, Any]:
     })
 
     # 7. Push Notifications (Firebase Cloud Messaging)
-    fcm_sender = os.getenv('FIREBASE_MESSAGING_SENDER_ID', '').strip()
-    fcm_app_id = os.getenv('FIREBASE_APP_ID', '').strip()
+    from app.utils.push import fcm_is_configured, fcm_config_hint
 
-    if fcm_sender and fcm_app_id:
+    fcm_b64 = os.getenv('FCM_SERVICE_ACCOUNT_B64', '').strip()
+    fcm_json = os.getenv('FCM_SERVICE_ACCOUNT_JSON', '').strip()
+    fcm_google = os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '').strip()
+
+    fb_project = os.getenv('FIREBASE_PROJECT_ID', '').strip()
+    fb_sender = os.getenv('FIREBASE_MESSAGING_SENDER_ID', '').strip()
+    fb_app_id = os.getenv('FIREBASE_APP_ID', '').strip()
+    fb_key = os.getenv('FIREBASE_API_KEY', '').strip()
+
+    is_placeholder = lambda val, ph: not val or val.lower() == ph.lower()
+
+    has_client_fb = (
+        (fb_project and not is_placeholder(fb_project, 'your-project-id')) or
+        (fb_sender and not is_placeholder(fb_sender, 'your-sender-id')) or
+        (fb_app_id and not is_placeholder(fb_app_id, 'your-app-id')) or
+        (fb_key and not is_placeholder(fb_key, 'your-firebase-api-key'))
+    )
+
+    if fcm_is_configured():
         fcm_status = "operational"
-        fcm_details = f"FCM configured (Sender ID: {fcm_sender}). Mobile push notification queue active."
+        fcm_details = "Firebase Cloud Messaging service account active. Direct HTTP v1 mobile push delivery enabled."
+    elif fcm_b64 or fcm_json or fcm_google:
+        hint = fcm_config_hint()
+        fcm_status = "degraded"
+        fcm_details = f"FCM credentials detected but could not be parsed ({hint}). Check JSON formatting in Railway."
+    elif has_client_fb:
+        fcm_status = "operational"
+        project_label = fb_project or fb_sender or "Configured"
+        fcm_details = f"Firebase configured (Project: {project_label}). Client notification channel active."
     else:
         fcm_status = "unconfigured"
-        fcm_details = "Firebase Messaging credentials not configured. In-app notifications only."
+        fcm_details = "Firebase credentials not configured in environment. In-app notifications only."
 
     checks.append({
         "id": "push_notifications",
