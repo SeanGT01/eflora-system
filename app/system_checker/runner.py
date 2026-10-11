@@ -15,6 +15,7 @@ import time
 import json
 import uuid
 import subprocess
+import shutil
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
@@ -52,11 +53,29 @@ SUITE_MAPPING = {
 
 def run_flutter_test_suite() -> Dict[str, Any]:
     """Execute Flutter test suite in eflowers_app if flutter CLI is available."""
-    app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "eflowers_app"))
+    # Check custom path or default adjacent workspace directory
+    custom_path = os.environ.get("FLUTTER_APP_PATH")
+    if custom_path and os.path.isdir(custom_path):
+        app_dir = custom_path
+    else:
+        app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "eflowers_app"))
+
     if not os.path.isdir(app_dir):
         return {
             "status": "skipped",
-            "reason": f"Flutter application directory not found at {app_dir}"
+            "reason": (
+                "Client-side mobile suite: 'eflowers_app' is a separate mobile repository and is not deployed "
+                "inside Railway's backend container. Run 'flutter test' in your local development workspace or mobile CI/CD."
+            )
+        }
+
+    if not shutil.which("flutter"):
+        return {
+            "status": "skipped",
+            "reason": (
+                "Flutter CLI is not installed on this host environment. "
+                "Run 'flutter test' locally inside the 'eflowers_app' directory."
+            )
         }
 
     t0 = time.time()
