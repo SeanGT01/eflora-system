@@ -2640,10 +2640,17 @@
         transform: translateX(22px);
     }
 
-    /* Custom AM-only and PM-only Delivery Window Time Pickers */
+    /* Custom AM-only and PM-only Time Pickers */
     .custom-tp-wrap {
         position: relative;
         display: inline-block;
+    }
+    .custom-tp-wrap.open {
+        z-index: 1060;
+    }
+    .schedule-entry.tp-active {
+        position: relative;
+        z-index: 1090;
     }
     .custom-tp-box {
         display: inline-flex;
@@ -5648,55 +5655,68 @@
         return String(h24).padStart(2, '0') + ':' + String(m).padStart(2, '0');
     }
 
-    function setDeliveryWindowPickerValue(type, hhmm, triggerChange) {
-        const period = type === 'start' ? 'AM' : 'PM';
-        const fallbackH = type === 'start' ? '08' : '05';
-        const hiddenIn = document.getElementById(type === 'start' ? 'delivery-start-time' : 'delivery-cutoff-time');
-        const textEl = document.getElementById('tp-text-' + type);
-        const hoursCol = document.getElementById('tp-hours-' + type);
-        const minsCol = document.getElementById('tp-mins-' + type);
+    function formatScheduleTime12(hhmm) {
+        if (!hhmm || String(hhmm).indexOf(':') < 0) return hhmm || '';
+        const parts = String(hhmm).split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) || 0;
+        if (!Number.isFinite(h)) return hhmm;
+        const period = h < 12 ? 'AM' : 'PM';
+        const display = (h % 12) || 12;
+        return m ? (display + ':' + String(m).padStart(2, '0') + ' ' + period) : (display + ':00 ' + period);
+    }
 
-        if (!hhmm) {
-            if (hiddenIn) hiddenIn.value = '';
-            if (textEl) textEl.textContent = '--:-- ' + period;
-            if (hoursCol) hoursCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
-            if (minsCol) minsCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
-            if (triggerChange && hiddenIn) hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
-            return;
-        }
+    function closeAllCustomTimePickers(exceptWrap) {
+        document.querySelectorAll('.custom-tp-wrap').forEach(wrap => {
+            if (exceptWrap && wrap === exceptWrap) return;
+            wrap.classList.remove('open');
+            const parentEntry = wrap.closest('.schedule-entry');
+            if (parentEntry) {
+                parentEntry.classList.remove('tp-active');
+            }
+            const dd = wrap.querySelector('.custom-tp-dropdown');
+            if (dd) dd.style.display = 'none';
+            const box = wrap.querySelector('.custom-tp-box');
+            if (box) box.classList.remove('open');
+        });
+    }
 
-        const t12 = parseTimeTo12(hhmm, fallbackH, period);
-        const val24 = formatTimeTo24(t12.hour, t12.minute, period);
-        if (hiddenIn) hiddenIn.value = val24;
-        if (textEl) textEl.textContent = `${t12.hour}:${t12.minute} ${period}`;
+    function attachTimePickerInstance({
+        wrap,
+        box,
+        dropdown,
+        hoursCol,
+        minsCol,
+        periodCol,
+        textEl,
+        hiddenIn,
+        period,
+        fallbackH,
+        onChange
+    }) {
+        if (!wrap || !box || !dropdown || !hoursCol || !minsCol) return null;
 
-        if (hoursCol) {
+        function updateDisplayAndHighlight(val24) {
+            if (!val24) {
+                if (hiddenIn) hiddenIn.value = '';
+                if (textEl) textEl.textContent = '--:-- ' + period;
+                hoursCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
+                minsCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
+                return;
+            }
+            const t12 = parseTimeTo12(val24, fallbackH, period);
+            const canonical24 = formatTimeTo24(t12.hour, t12.minute, period);
+            if (hiddenIn) hiddenIn.value = canonical24;
+            if (textEl) textEl.textContent = `${t12.hour}:${t12.minute} ${period}`;
             hoursCol.querySelectorAll('.custom-tp-item').forEach(el => {
                 el.classList.toggle('selected', el.dataset.val === t12.hour);
             });
-        }
-        if (minsCol) {
             minsCol.querySelectorAll('.custom-tp-item').forEach(el => {
                 el.classList.toggle('selected', el.dataset.val === t12.minute);
             });
         }
 
-        if (triggerChange && hiddenIn) {
-            hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
-            if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
-        }
-    }
-
-    function initCustomTimePicker(type, period) {
-        const wrap = document.getElementById('tp-wrap-' + type);
-        const box = document.getElementById('tp-box-' + type);
-        const dropdown = document.getElementById('tp-dropdown-' + type);
-        const hoursCol = document.getElementById('tp-hours-' + type);
-        const minsCol = document.getElementById('tp-mins-' + type);
-        const periodCol = document.getElementById('tp-period-' + type);
-        if (!box || !dropdown || !hoursCol || !minsCol) return;
-
-        // Populate hours
+        // Populate hours (01 to 12, scrollbar slider hidden)
         hoursCol.innerHTML = '';
         TP_HOURS.forEach(h => {
             const item = document.createElement('div');
@@ -5712,12 +5732,14 @@
                 item.classList.add('selected');
                 const currMin = minsCol.querySelector('.custom-tp-item.selected')?.dataset.val || '00';
                 const val24 = formatTimeTo24(h, currMin, period);
-                setDeliveryWindowPickerValue(type, val24, true);
+                updateDisplayAndHighlight(val24);
+                if (hiddenIn) hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
+                if (typeof onChange === 'function') onChange(val24);
             });
             hoursCol.appendChild(item);
         });
 
-        // Populate minutes
+        // Populate minutes (00 to 59, scrollbar slider retained)
         minsCol.innerHTML = '';
         TP_MINS.forEach(m => {
             const item = document.createElement('div');
@@ -5731,31 +5753,36 @@
                 if (periodCol) periodCol.classList.remove('active-col');
                 minsCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
                 item.classList.add('selected');
-                const currHour = hoursCol.querySelector('.custom-tp-item.selected')?.dataset.val || (type === 'start' ? '08' : '05');
+                const currHour = hoursCol.querySelector('.custom-tp-item.selected')?.dataset.val || fallbackH;
                 const val24 = formatTimeTo24(currHour, m, period);
-                setDeliveryWindowPickerValue(type, val24, true);
+                updateDisplayAndHighlight(val24);
+                if (hiddenIn) hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
+                if (typeof onChange === 'function') onChange(val24);
             });
             minsCol.appendChild(item);
         });
 
-        // Toggle open/close on box click or Enter/Space
+        // Initial display from hidden input
+        if (hiddenIn && hiddenIn.value) {
+            updateDisplayAndHighlight(hiddenIn.value);
+        }
+
         function toggleDropdown(open) {
             const isOpen = dropdown.style.display === 'block';
             const shouldOpen = open !== undefined ? open : !isOpen;
-            // Close the other picker dropdown
-            const otherType = type === 'start' ? 'cutoff' : 'start';
-            const otherDropdown = document.getElementById('tp-dropdown-' + otherType);
-            const otherBox = document.getElementById('tp-box-' + otherType);
-            if (otherDropdown) otherDropdown.style.display = 'none';
-            if (otherBox) otherBox.classList.remove('open');
 
             if (shouldOpen) {
+                closeAllCustomTimePickers(wrap);
                 dropdown.style.display = 'block';
+                wrap.classList.add('open');
                 box.classList.add('open');
+                const parentEntry = wrap.closest('.schedule-entry');
+                if (parentEntry) {
+                    parentEntry.classList.add('tp-active');
+                }
                 hoursCol.classList.add('active-col');
                 minsCol.classList.remove('active-col');
                 if (periodCol) periodCol.classList.remove('active-col');
-                // Scroll selected hour and minute to top of visible area (matching screenshot)
                 setTimeout(() => {
                     const selH = hoursCol.querySelector('.custom-tp-item.selected');
                     if (selH) hoursCol.scrollTop = selH.offsetTop - hoursCol.offsetTop;
@@ -5764,7 +5791,12 @@
                 }, 10);
             } else {
                 dropdown.style.display = 'none';
+                wrap.classList.remove('open');
                 box.classList.remove('open');
+                const parentEntry = wrap.closest('.schedule-entry');
+                if (parentEntry) {
+                    parentEntry.classList.remove('tp-active');
+                }
             }
         }
 
@@ -5781,24 +5813,65 @@
                 toggleDropdown(false);
             }
         });
+
+        return {
+            setValue: updateDisplayAndHighlight
+        };
+    }
+
+    let deliveryStartPicker = null;
+    let deliveryCutoffPicker = null;
+
+    function setDeliveryWindowPickerValue(type, hhmm, triggerChange) {
+        const fallbackH = type === 'start' ? '08' : '05';
+        const hiddenIn = document.getElementById(type === 'start' ? 'delivery-start-time' : 'delivery-cutoff-time');
+        const picker = type === 'start' ? deliveryStartPicker : deliveryCutoffPicker;
+        if (picker) {
+            picker.setValue(hhmm);
+        }
+        if (triggerChange && hiddenIn) {
+            hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
+            if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
+        }
     }
 
     function setupDeliveryWindowPickers() {
-        initCustomTimePicker('start', 'AM');
-        initCustomTimePicker('cutoff', 'PM');
+        deliveryStartPicker = attachTimePickerInstance({
+            wrap: document.getElementById('tp-wrap-start'),
+            box: document.getElementById('tp-box-start'),
+            dropdown: document.getElementById('tp-dropdown-start'),
+            hoursCol: document.getElementById('tp-hours-start'),
+            minsCol: document.getElementById('tp-mins-start'),
+            periodCol: document.getElementById('tp-period-start'),
+            textEl: document.getElementById('tp-text-start'),
+            hiddenIn: document.getElementById('delivery-start-time'),
+            period: 'AM',
+            fallbackH: '08',
+            onChange: () => {
+                if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
+            }
+        });
 
-        // Document click closes open dropdowns
+        deliveryCutoffPicker = attachTimePickerInstance({
+            wrap: document.getElementById('tp-wrap-cutoff'),
+            box: document.getElementById('tp-box-cutoff'),
+            dropdown: document.getElementById('tp-dropdown-cutoff'),
+            hoursCol: document.getElementById('tp-hours-cutoff'),
+            minsCol: document.getElementById('tp-mins-cutoff'),
+            periodCol: document.getElementById('tp-period-cutoff'),
+            textEl: document.getElementById('tp-text-cutoff'),
+            hiddenIn: document.getElementById('delivery-cutoff-time'),
+            period: 'PM',
+            fallbackH: '05',
+            onChange: () => {
+                if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
+            }
+        });
+
+        // Global outside click listener to close open time pickers
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('#tp-wrap-start')) {
-                const dd = document.getElementById('tp-dropdown-start');
-                if (dd) dd.style.display = 'none';
-                document.getElementById('tp-box-start')?.classList.remove('open');
-            }
-            if (!e.target.closest('#tp-wrap-cutoff')) {
-                const dd = document.getElementById('tp-dropdown-cutoff');
-                if (dd) dd.style.display = 'none';
-                document.getElementById('tp-box-cutoff')?.classList.remove('open');
-            }
+            const wrap = e.target.closest('.custom-tp-wrap');
+            closeAllCustomTimePickers(wrap);
         });
 
         // Clear window button
@@ -5872,6 +5945,33 @@
         }
     }
 
+    function updateScheduleWarnings() {
+        scheduleEntries.forEach((entry, idx) => {
+            const warnContainer = document.getElementById(`schedule-warnings-${idx}`);
+            if (!warnContainer) return;
+
+            let html = '';
+            if (entry.open && entry.close && entry.open >= entry.close) {
+                html += '<div class="schedule-error" style="color: #c0392b; font-size: 12px; margin-top: 0.5rem;"><i class="ri-error-warning-line"></i> Close time must be after open time</div>';
+            }
+            if (entry.days.length > 0 && entry.open && entry.close && entry.open < entry.close) {
+                for (let j = 0; j < scheduleEntries.length; j++) {
+                    if (j === idx) continue;
+                    const other = scheduleEntries[j];
+                    const sharedDays = entry.days.filter(d => other.days.includes(d));
+                    if (sharedDays.length > 0 && other.open && other.close && other.open < other.close) {
+                        if (entry.open < other.close && entry.close > other.open) {
+                            const dayNames = sharedDays.map(d => DAY_LABELS[d]).join(', ');
+                            html += `<div class="schedule-error" style="color: #e67e22; font-size: 12px; margin-top: 0.5rem;"><i class="ri-alert-line"></i> Overlaps with Time Block ${j + 1} on ${dayNames}</div>`;
+                            break;
+                        }
+                    }
+                }
+            }
+            warnContainer.innerHTML = html;
+        });
+    }
+
     function renderScheduleEntries() {
         const container = document.getElementById('schedule-entries');
         container.innerHTML = '';
@@ -5896,26 +5996,8 @@
                     ${DAY_LABELS[d]}</button>`;
             }).join('');
 
-            // Check for time validation issues
-            const timeError = entry.open && entry.close && entry.open >= entry.close
-                ? '<div class="schedule-error" style="color: #c0392b; font-size: 12px; margin-top: 0.5rem;"><i class="ri-error-warning-line"></i> Close time must be after open time</div>' : '';
-
-            // Check for overlap with other entries on same days
-            let overlapWarning = '';
-            if (entry.days.length > 0 && entry.open && entry.close && entry.open < entry.close) {
-                for (let j = 0; j < scheduleEntries.length; j++) {
-                    if (j === idx) continue;
-                    const other = scheduleEntries[j];
-                    const sharedDays = entry.days.filter(d => other.days.includes(d));
-                    if (sharedDays.length > 0 && other.open && other.close && other.open < other.close) {
-                        if (entry.open < other.close && entry.close > other.open) {
-                            const dayNames = sharedDays.map(d => DAY_LABELS[d]).join(', ');
-                            overlapWarning = `<div class="schedule-error" style="color: #e67e22; font-size: 12px; margin-top: 0.5rem;"><i class="ri-alert-line"></i> Overlaps with Time Block ${j + 1} on ${dayNames}</div>`;
-                            break;
-                        }
-                    }
-                }
-            }
+            const openT12 = parseTimeTo12(entry.open, '07', 'AM');
+            const closeT12 = parseTimeTo12(entry.close, '07', 'PM');
 
             div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
@@ -5934,15 +6016,54 @@
                 <div style="display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 0.75rem;">
                     ${dayChipsHTML}
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <input type="time" class="form-control schedule-open" data-idx="${idx}" value="${entry.open}" style="width: auto; min-width: 120px;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <!-- Store Open Time (AM Only) -->
+                    <div class="custom-tp-wrap" id="schedule-wrap-open-${idx}">
+                        <div class="custom-tp-box" id="schedule-box-open-${idx}" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select open time (AM only)">
+                            <span id="schedule-text-open-${idx}">${openT12.hour}:${openT12.minute} AM</span>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" style="color: #666; flex-shrink: 0;">
+                                <circle cx="8" cy="8" r="6.5"/>
+                                <path d="M8 4.5V8L10.5 9.5"/>
+                            </svg>
+                        </div>
+                        <div class="custom-tp-dropdown" id="schedule-dropdown-open-${idx}">
+                            <div class="custom-tp-cols">
+                                <div class="custom-tp-col custom-tp-col-hours active-col" id="schedule-hours-open-${idx}"></div>
+                                <div class="custom-tp-col custom-tp-col-mins" id="schedule-mins-open-${idx}"></div>
+                                <div class="custom-tp-col custom-tp-col-period" id="schedule-period-open-${idx}">
+                                    <div class="custom-tp-item selected" data-val="AM">AM</div>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" class="schedule-open" data-idx="${idx}" id="schedule-input-open-${idx}" value="${entry.open}">
+                    </div>
+
                     <span style="color: var(--muted); font-weight: 600;">to</span>
-                    <input type="time" class="form-control schedule-close" data-idx="${idx}" value="${entry.close}" style="width: auto; min-width: 120px;">
+
+                    <!-- Store Close Time (PM Only) -->
+                    <div class="custom-tp-wrap" id="schedule-wrap-close-${idx}">
+                        <div class="custom-tp-box" id="schedule-box-close-${idx}" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select close time (PM only)">
+                            <span id="schedule-text-close-${idx}">${closeT12.hour}:${closeT12.minute} PM</span>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" style="color: #666; flex-shrink: 0;">
+                                <circle cx="8" cy="8" r="6.5"/>
+                                <path d="M8 4.5V8L10.5 9.5"/>
+                            </svg>
+                        </div>
+                        <div class="custom-tp-dropdown" id="schedule-dropdown-close-${idx}">
+                            <div class="custom-tp-cols">
+                                <div class="custom-tp-col custom-tp-col-hours active-col" id="schedule-hours-close-${idx}"></div>
+                                <div class="custom-tp-col custom-tp-col-mins" id="schedule-mins-close-${idx}"></div>
+                                <div class="custom-tp-col custom-tp-col-period" id="schedule-period-close-${idx}">
+                                    <div class="custom-tp-item selected" data-val="PM">PM</div>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" class="schedule-close" data-idx="${idx}" id="schedule-input-close-${idx}" value="${entry.close}">
+                    </div>
                 </div>
-                ${timeError}
-                ${overlapWarning}
+                <div class="schedule-warnings" id="schedule-warnings-${idx}"></div>
                 <div class="copy-dropdown" id="copy-dropdown-${idx}" style="display: none; margin-top: 0.75rem; background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.75rem; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
-                    <div style="font-size: 12px; font-weight: 600; color: var(--charcoal); margin-bottom: 0.5rem;">Apply this time (${entry.open} - ${entry.close}) to:</div>
+                    <div style="font-size: 12px; font-weight: 600; color: var(--charcoal); margin-bottom: 0.5rem;">Apply this time (${formatScheduleTime12(entry.open)} – ${formatScheduleTime12(entry.close)}) to:</div>
                     <div style="display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 0.625rem;">
                         ${ALL_DAYS.map(d => {
                 const isAlready = entry.days.includes(d);
@@ -5960,7 +6081,49 @@
             `;
 
             container.appendChild(div);
+
+            // Initialize Open Time Picker (AM Only)
+            attachTimePickerInstance({
+                wrap: div.querySelector(`#schedule-wrap-open-${idx}`),
+                box: div.querySelector(`#schedule-box-open-${idx}`),
+                dropdown: div.querySelector(`#schedule-dropdown-open-${idx}`),
+                hoursCol: div.querySelector(`#schedule-hours-open-${idx}`),
+                minsCol: div.querySelector(`#schedule-mins-open-${idx}`),
+                periodCol: div.querySelector(`#schedule-period-open-${idx}`),
+                textEl: div.querySelector(`#schedule-text-open-${idx}`),
+                hiddenIn: div.querySelector(`#schedule-input-open-${idx}`),
+                period: 'AM',
+                fallbackH: '07',
+                onChange: (val24) => {
+                    entry.open = val24;
+                    if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
+                    updateScheduleWarnings();
+                    applyDeliveryPickerBounds();
+                }
+            });
+
+            // Initialize Close Time Picker (PM Only)
+            attachTimePickerInstance({
+                wrap: div.querySelector(`#schedule-wrap-close-${idx}`),
+                box: div.querySelector(`#schedule-box-close-${idx}`),
+                dropdown: div.querySelector(`#schedule-dropdown-close-${idx}`),
+                hoursCol: div.querySelector(`#schedule-hours-close-${idx}`),
+                minsCol: div.querySelector(`#schedule-mins-close-${idx}`),
+                periodCol: div.querySelector(`#schedule-period-close-${idx}`),
+                textEl: div.querySelector(`#schedule-text-close-${idx}`),
+                hiddenIn: div.querySelector(`#schedule-input-close-${idx}`),
+                period: 'PM',
+                fallbackH: '07',
+                onChange: (val24) => {
+                    entry.close = val24;
+                    if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
+                    updateScheduleWarnings();
+                    applyDeliveryPickerBounds();
+                }
+            });
         });
+
+        updateScheduleWarnings();
         applyDeliveryPickerBounds();
 
         // Attach event listeners
@@ -5975,6 +6138,7 @@
                     entry.days.push(day);
                 }
                 renderScheduleEntries();
+                if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
             });
         });
 
@@ -5982,20 +6146,7 @@
             btn.addEventListener('click', () => {
                 scheduleEntries.splice(parseInt(btn.dataset.idx), 1);
                 renderScheduleEntries();
-            });
-        });
-
-        container.querySelectorAll('.schedule-open').forEach(input => {
-            input.addEventListener('change', () => {
-                scheduleEntries[parseInt(input.dataset.idx)].open = input.value;
-                renderScheduleEntries();
-            });
-        });
-
-        container.querySelectorAll('.schedule-close').forEach(input => {
-            input.addEventListener('change', () => {
-                scheduleEntries[parseInt(input.dataset.idx)].close = input.value;
-                renderScheduleEntries();
+                if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
             });
         });
 
@@ -6022,6 +6173,7 @@
                 if (!entry.days.includes(day)) {
                     entry.days.push(day);
                     renderScheduleEntries();
+                    if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
                 }
             });
         });
@@ -6032,6 +6184,7 @@
                 const idx = parseInt(btn.dataset.idx);
                 scheduleEntries[idx].days = [...ALL_DAYS];
                 renderScheduleEntries();
+                if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
             });
         });
 
@@ -6051,18 +6204,8 @@
             close: '19:00'
         });
         renderScheduleEntries();
+        if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
     });
-
-    function formatScheduleTime12(hhmm) {
-        if (!hhmm || String(hhmm).indexOf(':') < 0) return hhmm || '';
-        const parts = String(hhmm).split(':');
-        const h = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10) || 0;
-        if (!Number.isFinite(h)) return hhmm;
-        const period = h < 12 ? 'AM' : 'PM';
-        const display = (h % 12) || 12;
-        return m ? (display + ':' + String(m).padStart(2, '0') + ' ' + period) : (display + ':00 ' + period);
-    }
 
     function getStoreHoursSpan() {
         let minOpen = null;
