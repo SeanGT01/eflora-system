@@ -64,7 +64,7 @@ def deliver_otp(
     phone=None,
     email_sender_fn=None,
     email_sender_kwargs=None,
-    expiry_minutes=5,
+    expiry_minutes=10,
     sms_purpose='verification',
 ):
     """

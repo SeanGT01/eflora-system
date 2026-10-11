@@ -496,3 +496,93 @@ def api_v1_admin_feature_controls():
     data = request.get_json(silent=True) or {}
     flags = set_feature_controls(data)
     return jsonify({'success': True, 'flags': flags}), 200
+
+
+# ==========================================
+# SYSTEM CHECKER ADMIN API ENDPOINTS
+# ==========================================
+
+@admin_bp.route('/system-checker/overview', methods=['GET'])
+@admin_session_or_jwt_required
+def api_system_checker_overview():
+    """Returns feature inventory, test coverage summary, health status, and execution history."""
+    from app.system_checker.inventory import get_feature_inventory, get_inventory_summary
+    from app.system_checker.health import check_system_health
+    from app.system_checker.runner import get_execution_history
+
+    summary = get_inventory_summary()
+    features = get_feature_inventory()
+    health = check_system_health()
+    history = get_execution_history(10)
+
+    return jsonify({
+        'success': True,
+        'summary': summary,
+        'features': features,
+        'health': health,
+        'recent_runs': history
+    }), 200
+
+
+@admin_bp.route('/system-checker/health-check', methods=['POST'])
+@admin_session_or_jwt_required
+def api_system_checker_run_health_check():
+    """Triggers live non-destructive health checks across all integrated services."""
+    from app.system_checker.health import check_system_health
+    health_results = check_system_health()
+    return jsonify({
+        'success': True,
+        'health': health_results
+    }), 200
+
+
+@admin_bp.route('/system-checker/run-tests', methods=['POST'])
+@admin_session_or_jwt_required
+def api_system_checker_run_tests():
+    """Runs automated test suites, safely cleaning up any tracked test records."""
+    from flask import current_app
+    from app import db
+    from app.system_checker.runner import execute_tests
+
+    payload = request.get_json(silent=True) or {}
+    module_filter = payload.get('module')
+    include_flutter = bool(payload.get('include_flutter', False))
+
+    run_summary = execute_tests(
+        current_app,
+        db,
+        module_filter=module_filter,
+        include_flutter=include_flutter
+    )
+
+    return jsonify({
+        'success': True,
+        'run': run_summary
+    }), 200
+
+
+@admin_bp.route('/system-checker/run-lifecycle', methods=['POST'])
+@admin_session_or_jwt_required
+def api_system_checker_run_lifecycle():
+    """Runs the dedicated end-to-end order lifecycle simulation with safety verification."""
+    from flask import current_app
+    from app import db
+    from app.system_checker.runner import execute_order_lifecycle
+
+    lifecycle_summary = execute_order_lifecycle(current_app, db)
+    return jsonify({
+        'success': True,
+        'lifecycle': lifecycle_summary
+    }), 200
+
+
+@admin_bp.route('/system-checker/history', methods=['GET'])
+@admin_session_or_jwt_required
+def api_system_checker_history():
+    """Returns test execution history."""
+    from app.system_checker.runner import get_execution_history
+    history = get_execution_history(30)
+    return jsonify({
+        'success': True,
+        'history': history
+    }), 200

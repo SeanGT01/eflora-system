@@ -1,0 +1,981 @@
+{% extends "layout.html" %}
+
+{% block title %}System Checker — E-FLORA Admin{% endblock %}
+{% block page_title %}System Checker{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ─── System Checker Custom Styling (Preserving E-FLORA Tokens) ─── */
+.checker-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+    padding-bottom: 3rem;
+}
+
+/* Header */
+.checker-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1.75rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.checker-title-area h1 {
+    font-family: var(--font-display);
+    font-size: clamp(26px, 2.5vw, 34px);
+    font-weight: 500;
+    color: var(--charcoal);
+    margin: 0 0 0.35rem;
+    line-height: 1.15;
+}
+
+.checker-title-area h1 em {
+    font-style: italic;
+    color: var(--deep-rose);
+}
+
+.checker-desc {
+    color: var(--muted);
+    font-size: 13.5px;
+    max-width: 48rem;
+    margin: 0;
+    line-height: 1.55;
+}
+
+.checker-meta-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-top: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.env-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-pill);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.env-tag-safe {
+    background: rgba(122, 158, 126, 0.15);
+    color: var(--deep-sage);
+    border: 1px solid rgba(122, 158, 126, 0.3);
+}
+
+.env-tag-prod {
+    background: rgba(181, 68, 90, 0.12);
+    color: var(--deep-rose);
+    border: 1px solid rgba(181, 68, 90, 0.25);
+}
+
+.checker-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+/* Stat Cards */
+.checker-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1.25rem 1.35rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: var(--transition);
+}
+
+.stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.stat-card-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.stat-card-value {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--charcoal);
+    line-height: 1;
+}
+
+.stat-card-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 0.4rem;
+}
+
+.stat-card.accent-rose .stat-card-value { color: var(--deep-rose); }
+.stat-card.accent-sage .stat-card-value { color: var(--deep-sage); }
+.stat-card.accent-terracotta .stat-card-value { color: var(--terracotta); }
+
+/* System Health Panel */
+.health-panel {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1.75rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.panel-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--charcoal);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 0.85rem;
+}
+
+.health-item {
+    background: var(--warm-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.95rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.health-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.health-item-name {
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--charcoal);
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.health-badge {
+    padding: 0.18rem 0.55rem;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.health-badge.operational {
+    background: rgba(122, 158, 126, 0.16);
+    color: var(--deep-sage);
+}
+
+.health-badge.degraded {
+    background: rgba(196, 113, 75, 0.15);
+    color: var(--terracotta);
+}
+
+.health-badge.unconfigured {
+    background: rgba(154, 141, 133, 0.15);
+    color: var(--muted);
+}
+
+.health-badge.failed {
+    background: rgba(181, 68, 90, 0.16);
+    color: var(--deep-rose);
+}
+
+.health-item-details {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+/* Feature Coverage Table */
+.matrix-panel {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1.75rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.matrix-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.filter-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    max-width: 100%;
+}
+
+.filter-btn {
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--charcoal);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--transition);
+}
+
+.filter-btn:hover {
+    background: rgba(107, 76, 59, 0.06);
+}
+
+.filter-btn.active {
+    background: var(--charcoal);
+    color: var(--cream);
+    border-color: var(--charcoal);
+}
+
+.search-box {
+    position: relative;
+    min-width: 240px;
+}
+
+.search-box i {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 15px;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 0.45rem 0.85rem 0.45rem 2.2rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    background: var(--warm-white);
+}
+
+.search-box input:focus {
+    outline: none;
+    border-color: var(--dusty-rose);
+    box-shadow: 0 0 0 2px rgba(212, 120, 138, 0.2);
+}
+
+.table-responsive {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.checker-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+}
+
+.checker-table th {
+    background: var(--warm-white);
+    padding: 0.85rem 1rem;
+    font-weight: 600;
+    color: var(--charcoal);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.checker-table td {
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(107, 76, 59, 0.08);
+    vertical-align: middle;
+}
+
+.checker-table tr:hover td {
+    background: rgba(250, 246, 240, 0.45);
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: var(--radius-pill);
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.status-badge.passed {
+    background: rgba(122, 158, 126, 0.15);
+    color: var(--deep-sage);
+}
+
+.status-badge.failed {
+    background: rgba(181, 68, 90, 0.15);
+    color: var(--deep-rose);
+}
+
+.status-badge.blocked {
+    background: rgba(196, 113, 75, 0.15);
+    color: var(--terracotta);
+}
+
+.status-badge.skipped, .status-badge.not_tested {
+    background: rgba(154, 141, 133, 0.15);
+    color: var(--muted);
+}
+
+/* History Panel */
+.history-panel {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1.75rem;
+    box-shadow: var(--shadow-sm);
+}
+
+/* Modal styling */
+.checker-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(44, 37, 32, 0.55);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.checker-modal {
+    background: #ffffff;
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 780px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-deep);
+    overflow: hidden;
+}
+
+.checker-modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.checker-modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    font-size: 13.5px;
+}
+
+.checker-modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    background: var(--warm-white);
+}
+
+/* Loading spinner */
+.btn-loading i {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="checker-shell">
+
+    <!-- ─── Section A: Page Header ─── -->
+    <div class="checker-header">
+        <div class="checker-title-area">
+            <h1>E-FLORA <em>System Checker</em></h1>
+            <p class="checker-desc">
+                Centralized automated test verification suite. Tests live services, API endpoints, role authorization,
+                business rules, order lifecycle simulations, and verified test-data cleanup.
+            </p>
+            <div class="checker-meta-badges">
+                <span class="env-tag env-tag-safe" id="envBadge">
+                    <i class="ri-shield-check-line"></i> Safety Active
+                </span>
+                <span class="env-tag" style="background: rgba(107, 76, 59, 0.08); color: var(--bark);">
+                    <i class="ri-time-line"></i> Last run: <span id="lastRunTime">Never</span>
+                </span>
+                <span class="env-tag" style="background: rgba(107, 76, 59, 0.08); color: var(--bark);">
+                    <i class="ri-database-2-line"></i> DB: <span id="dbSafetyText">Checking...</span>
+                </span>
+            </div>
+        </div>
+        <div class="checker-header-actions" style="display:flex; align-items:center; flex-wrap:wrap; gap:0.6rem;">
+            <label style="display:inline-flex; align-items:center; gap:0.4rem; font-size:12px; color:var(--bark); cursor:pointer; padding:0.4rem 0.6rem; background:rgba(107,76,59,0.06); border-radius:var(--radius-sm); border:1px solid var(--border);">
+                <input type="checkbox" id="chkIncludeFlutter" style="accent-color: var(--deep-rose); cursor:pointer;">
+                <span style="font-weight:500;">Include Flutter App Tests</span>
+            </label>
+            <button class="btn btn-outline" id="btnHealthCheck" onclick="runHealthCheck()">
+                <i class="ri-heart-pulse-line"></i> Health Check
+            </button>
+            <button class="btn btn-outline" id="btnOrderLifecycle" onclick="confirmRunLifecycle()">
+                <i class="ri-route-line"></i> Order Lifecycle E2E
+            </button>
+            <button class="btn btn-primary" id="btnRunAllTests" onclick="runAllTests()">
+                <i class="ri-play-circle-line"></i> Run All Tests
+            </button>
+        </div>
+    </div>
+
+    <!-- ─── Section B: Summary Cards ─── -->
+    <div class="checker-stats-grid">
+        <div class="stat-card">
+            <div class="stat-card-label">Discovered Features <i class="ri-scan-2-line"></i></div>
+            <div class="stat-card-value" id="statDiscoveredFeatures">—</div>
+            <div class="stat-card-sub"><span id="statFeaturesWithTests">—</span> with automated tests</div>
+        </div>
+
+        <div class="stat-card accent-rose">
+            <div class="stat-card-label">Feature Coverage <i class="ri-pie-chart-line"></i></div>
+            <div class="stat-card-value" id="statFeatureCoverage">—%</div>
+            <div class="stat-card-sub"><span id="statUntestedFeatures">—</span> features need tests</div>
+        </div>
+
+        <div class="stat-card accent-sage">
+            <div class="stat-card-label">Tests Passed <i class="ri-checkbox-circle-line"></i></div>
+            <div class="stat-card-value" id="statTestsPassed">—</div>
+            <div class="stat-card-sub"><span id="statPassRate">—%</span> pass rate on latest run</div>
+        </div>
+
+        <div class="stat-card accent-terracotta">
+            <div class="stat-card-label">Failed / Blocked <i class="ri-alert-line"></i></div>
+            <div class="stat-card-value" id="statTestsFailed">—</div>
+            <div class="stat-card-sub"><span id="statTestsBlocked">—</span> blocked or skipped</div>
+        </div>
+    </div>
+
+    <!-- ─── Section D: System Health Panel ─── -->
+    <div class="health-panel">
+        <div class="panel-header">
+            <h2 class="panel-title"><i class="ri-service-line" style="color: var(--dusty-rose);"></i> Service Health & Integrations</h2>
+            <button class="btn btn-sm btn-outline" onclick="runHealthCheck()">
+                <i class="ri-refresh-line"></i> Refresh Status
+            </button>
+        </div>
+        <div class="health-grid" id="healthGrid">
+            <!-- Rendered dynamically -->
+            <div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--muted);">
+                <i class="ri-loader-4-line ri-spin"></i> Inspecting live services...
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Section C: Feature & Module Coverage Matrix ─── -->
+    <div class="matrix-panel">
+        <div class="panel-header">
+            <h2 class="panel-title"><i class="ri-table-line" style="color: var(--deep-sage);"></i> Discovered Feature Inventory & Test Matrix</h2>
+            <div class="search-box">
+                <i class="ri-search-line"></i>
+                <input type="text" id="featureSearch" placeholder="Search feature, role, endpoint..." oninput="filterFeatureTable()">
+            </div>
+        </div>
+
+        <div class="matrix-toolbar">
+            <div class="filter-pills" id="moduleFilterPills">
+                <button class="filter-btn active" data-mod="all" onclick="setModuleFilter('all')">All Modules</button>
+                <button class="filter-btn" data-mod="Authentication & Security" onclick="setModuleFilter('Authentication & Security')">Auth & Security</button>
+                <button class="filter-btn" data-mod="Customer Module" onclick="setModuleFilter('Customer Module')">Customer</button>
+                <button class="filter-btn" data-mod="Seller & Store Management" onclick="setModuleFilter('Seller & Store Management')">Seller & Store</button>
+                <button class="filter-btn" data-mod="Rider & Delivery" onclick="setModuleFilter('Rider & Delivery')">Rider & Delivery</button>
+                <button class="filter-btn" data-mod="Orders & Inventory" onclick="setModuleFilter('Orders & Inventory')">Orders & Stock</button>
+                <button class="filter-btn" data-mod="Payments & Financials" onclick="setModuleFilter('Payments & Financials')">Payments</button>
+                <button class="filter-btn" data-mod="Chat & Messaging" onclick="setModuleFilter('Chat & Messaging')">Chat</button>
+                <button class="filter-btn" data-mod="Administrator Module" onclick="setModuleFilter('Administrator Module')">Admin</button>
+                <button class="filter-btn" data-mod="External Integrations" onclick="setModuleFilter('External Integrations')">Integrations</button>
+                <button class="filter-btn" data-mod="Flutter Mobile App" onclick="setModuleFilter('Flutter Mobile App')">Flutter App</button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="checker-table" id="featuresTable">
+                <thead>
+                    <tr>
+                        <th>Module</th>
+                        <th>Feature / Capability</th>
+                        <th>User Roles</th>
+                        <th>Test Coverage</th>
+                        <th>Latest Result</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="featuresTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 2rem; color: var(--muted);">
+                            <i class="ri-loader-4-line ri-spin"></i> Loading feature matrix...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ─── Section E: Test Execution History ─── -->
+    <div class="history-panel">
+        <div class="panel-header">
+            <h2 class="panel-title"><i class="ri-history-line" style="color: var(--bark);"></i> Test Execution Runs & Safety Verification</h2>
+            <button class="btn btn-sm btn-outline" onclick="loadOverview()">
+                <i class="ri-refresh-line"></i> Refresh Runs
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="checker-table">
+                <thead>
+                    <tr>
+                        <th>Run ID</th>
+                        <th>Executed At</th>
+                        <th>Scope</th>
+                        <th>Passed / Executed</th>
+                        <th>Pass Rate</th>
+                        <th>Cleanup Status</th>
+                        <th>Report</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 1.5rem; color: var(--muted);">
+                            No test runs executed yet. Click "Run All Tests" to initiate verification.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- ─── Details Modal ─── -->
+<div class="checker-modal-overlay" id="detailsModal">
+    <div class="checker-modal">
+        <div class="checker-modal-header">
+            <h3 style="font-family: var(--font-display); font-size: 20px; margin: 0;" id="modalTitle">Test Report Details</h3>
+            <button type="button" class="btn btn-sm btn-outline" onclick="closeDetailsModal()" style="border:none; padding:4px 8px;">
+                <i class="ri-close-line" style="font-size: 20px;"></i>
+            </button>
+        </div>
+        <div class="checker-modal-body" id="modalBody">
+            <!-- Dynamic modal contents -->
+        </div>
+        <div class="checker-modal-footer">
+            <button class="btn btn-outline" onclick="closeDetailsModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let globalInventory = [];
+let latestRunResults = {};
+let activeModuleFilter = 'all';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadOverview();
+});
+
+async function loadOverview() {
+    try {
+        const res = await fetch('/api/v1/admin/system-checker/overview');
+        if (!res.ok) throw new Error('Unauthorized or server error');
+        const data = await res.json();
+
+        // 1. Render Summary Stats
+        const summary = data.summary || {};
+        document.getElementById('statDiscoveredFeatures').textContent = summary.total_features || 0;
+        document.getElementById('statFeaturesWithTests').textContent = summary.features_with_tests || 0;
+        document.getElementById('statUntestedFeatures').textContent = summary.features_without_tests || 0;
+        document.getElementById('statFeatureCoverage').textContent = (summary.coverage_percentage || 0) + '%';
+
+        // 2. Render Health Panel
+        renderHealthGrid(data.health);
+
+        // 3. Render Features
+        globalInventory = data.features || [];
+        renderFeaturesTable(globalInventory);
+
+        // 4. Render History
+        renderHistoryTable(data.recent_runs || []);
+
+        // 5. Update safety badge
+        const dbHealth = (data.health && data.health.checks) ? data.health.checks.find(c => c.id === 'database_connection') : null;
+        if (dbHealth) {
+            document.getElementById('dbSafetyText').textContent = dbHealth.status === 'operational' ? 'Verified' : dbHealth.status;
+            if (dbHealth.details && dbHealth.details.includes('PRODUCTION DATABASE DETECTED')) {
+                const b = document.getElementById('envBadge');
+                b.className = 'env-tag env-tag-prod';
+                b.innerHTML = '<i class="ri-lock-line"></i> Railway Prod Safe-Guarded';
+            }
+        }
+
+    } catch (err) {
+        console.error('Failed to load system checker overview:', err);
+    }
+}
+
+function renderHealthGrid(health) {
+    const grid = document.getElementById('healthGrid');
+    if (!health || !health.checks) {
+        grid.innerHTML = '<div style="color:var(--muted);">No health data.</div>';
+        return;
+    }
+
+    grid.innerHTML = health.checks.map(c => `
+        <div class="health-item">
+            <div class="health-item-top">
+                <span class="health-item-name">
+                    <i class="${getHealthIcon(c.id)}"></i> ${c.name}
+                </span>
+                <span class="health-badge ${c.status}">${c.status}</span>
+            </div>
+            <div class="health-item-details">${c.details || ''}</div>
+        </div>
+    `).join('');
+}
+
+function getHealthIcon(id) {
+    switch (id) {
+        case 'flask_backend': return 'ri-server-line';
+        case 'database_connection': return 'ri-database-2-line';
+        case 'email_service': return 'ri-mail-send-line';
+        case 'sms_gateway': return 'ri-message-2-line';
+        case 'cloudinary_storage': return 'ri-image-line';
+        case 'mapping_services': return 'ri-map-pin-2-line';
+        case 'push_notifications': return 'ri-notification-3-line';
+        default: return 'ri-checkbox-circle-line';
+    }
+}
+
+function renderFeaturesTable(features) {
+    const tbody = document.getElementById('featuresTableBody');
+    if (!features || features.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:1.5rem; color:var(--muted);">No features match current filter.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = features.map(f => {
+        const latest = latestRunResults[f.id];
+        let statusBadge = '<span class="status-badge not_tested"><i class="ri-time-line"></i> Not Tested</span>';
+        if (latest) {
+            if (latest.status === 'passed') {
+                statusBadge = '<span class="status-badge passed"><i class="ri-check-line"></i> Passed</span>';
+            } else if (latest.status === 'failed') {
+                statusBadge = '<span class="status-badge failed"><i class="ri-close-line"></i> Failed</span>';
+            } else if (latest.status === 'blocked') {
+                statusBadge = '<span class="status-badge blocked"><i class="ri-error-warning-line"></i> Blocked</span>';
+            } else {
+                statusBadge = `<span class="status-badge skipped">${latest.status}</span>`;
+            }
+        }
+
+        const rolesHtml = (f.roles || []).map(r => `<span style="display:inline-block; padding:1px 6px; background:rgba(107,76,59,0.08); border-radius:4px; font-size:11px; margin-right:3px;">${r}</span>`).join('');
+
+        return `
+            <tr>
+                <td style="font-weight:600; color:var(--bark);">${f.module}</td>
+                <td>
+                    <div style="font-weight:600; color:var(--charcoal);">${f.name}</div>
+                    <div style="font-size:12px; color:var(--muted); max-width:28rem;">${f.description}</div>
+                </td>
+                <td>${rolesHtml}</td>
+                <td>
+                    ${f.has_test ? '<span style="color:var(--deep-sage); font-weight:600;"><i class="ri-check-line"></i> Automated</span>' : '<span style="color:var(--muted);">Manual / Pending</span>'}
+                </td>
+                <td>${statusBadge}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline" onclick="runSingleModule('${f.module}')" title="Run tests for this module">
+                        <i class="ri-play-line"></i> Run
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function setModuleFilter(mod) {
+    activeModuleFilter = mod;
+    document.querySelectorAll('#moduleFilterPills .filter-btn').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-mod') === mod);
+    });
+    filterFeatureTable();
+}
+
+function filterFeatureTable() {
+    const q = (document.getElementById('featureSearch').value || '').toLowerCase();
+    const filtered = globalInventory.filter(f => {
+        const matchesMod = (activeModuleFilter === 'all') || (f.module === activeModuleFilter);
+        const matchesQuery = !q || f.name.toLowerCase().includes(q) || f.module.toLowerCase().includes(q) || (f.roles || []).join(' ').toLowerCase().includes(q) || (f.endpoints || []).join(' ').toLowerCase().includes(q);
+        return matchesMod && matchesQuery;
+    });
+    renderFeaturesTable(filtered);
+}
+
+function renderHistoryTable(runs) {
+    const tbody = document.getElementById('historyTableBody');
+    if (!runs || runs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:1.5rem; color:var(--muted);">No test runs recorded yet.</td></tr>';
+        return;
+    }
+
+    // Update last run time & summary cards from the latest run
+    const latest = runs[0];
+    document.getElementById('lastRunTime').textContent = latest.completed_at || latest.started_at;
+    document.getElementById('statTestsPassed').textContent = latest.passed || 0;
+    document.getElementById('statTestsFailed').textContent = latest.failed || 0;
+    document.getElementById('statTestsBlocked').textContent = (latest.blocked || 0) + (latest.skipped || 0);
+    document.getElementById('statPassRate').textContent = (latest.pass_rate_percentage || 0) + '%';
+
+    // Index latest results
+    if (latest.results) {
+        latest.results.forEach(r => {
+            latestRunResults[r.feature_id] = r;
+        });
+        filterFeatureTable();
+    }
+
+    tbody.innerHTML = runs.map(r => `
+        <tr>
+            <td style="font-family:monospace; font-size:12px; font-weight:600;">${r.run_id}</td>
+            <td>${r.started_at}</td>
+            <td><span style="font-weight:600; color:var(--bark);">${r.module_filter || 'all'}</span></td>
+            <td>
+                <span style="color:var(--deep-sage); font-weight:600;">${r.passed}</span> / ${r.total_executed || (r.passed + r.failed)}
+            </td>
+            <td>
+                <span style="font-weight:600; color:${r.pass_rate_percentage >= 90 ? 'var(--deep-sage)' : 'var(--deep-rose)'};">
+                    ${r.pass_rate_percentage}%
+                </span>
+            </td>
+            <td>
+                <span class="status-badge passed"><i class="ri-shield-check-line"></i> ${r.cleanup_status || 'verified_clean'}</span>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-outline" onclick='openRunDetails(${JSON.stringify(r)})'>
+                    <i class="ri-file-list-3-line"></i> Inspect
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function runHealthCheck() {
+    const btn = document.getElementById('btnHealthCheck');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Checking...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/v1/admin/system-checker/health-check', { method: 'POST' });
+        const data = await res.json();
+        if (data.health) {
+            renderHealthGrid(data.health);
+        }
+    } catch (err) {
+        alert('Health check request failed: ' + err);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function runAllTests() {
+    const btn = document.getElementById('btnRunAllTests');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Running Tests...';
+    btn.disabled = true;
+
+    const includeFlutter = document.getElementById('chkIncludeFlutter')?.checked || false;
+
+    try {
+        const res = await fetch('/api/v1/admin/system-checker/run-tests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ include_flutter: includeFlutter })
+        });
+        const data = await res.json();
+        if (data.run) {
+            loadOverview();
+            openRunDetails(data.run);
+        }
+    } catch (err) {
+        alert('Test execution error: ' + err);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function runSingleModule(moduleName) {
+    const isFlutter = (moduleName === 'Flutter Mobile App');
+    try {
+        const res = await fetch('/api/v1/admin/system-checker/run-tests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ module: moduleName, include_flutter: isFlutter })
+        });
+        const data = await res.json();
+        if (data.run) {
+            loadOverview();
+            openRunDetails(data.run);
+        }
+    } catch (err) {
+        alert('Module test execution error: ' + err);
+    }
+}
+
+function confirmRunLifecycle() {
+    if (confirm('Execute simulated end-to-end customer-to-seller-to-rider order lifecycle test?\n\nSafety protocol verifies test-isolation and performs guaranteed rollback and cleanup.')) {
+        runLifecycleTest();
+    }
+}
+
+async function runLifecycleTest() {
+    const btn = document.getElementById('btnOrderLifecycle');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Simulating Lifecycle...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/v1/admin/system-checker/run-lifecycle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        loadOverview();
+        if (data.lifecycle) {
+            openLifecycleModal(data.lifecycle);
+        }
+    } catch (err) {
+        alert('Order lifecycle execution error: ' + err);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+function openRunDetails(run) {
+    document.getElementById('modalTitle').textContent = `Test Run Breakdown — ${run.run_id}`;
+    let itemsHtml = '';
+    if (run.results && run.results.length > 0) {
+        itemsHtml = run.results.map(r => `
+            <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+                    <strong>${r.feature_name}</strong>
+                    <span class="status-badge ${r.status}">${r.status}</span>
+                </div>
+                <div style="font-size:12.5px; color:var(--muted);">${r.details || 'Assertion verified.'}</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:2px;">Duration: ${r.duration_ms || 0}ms</div>
+            </div>
+        `).join('');
+    } else {
+        itemsHtml = '<div style="color:var(--muted);">No itemized results available.</div>';
+    }
+
+    document.getElementById('modalBody').innerHTML = `
+        <div style="margin-bottom:1.25rem; background:var(--warm-white); padding:1rem; border-radius:var(--radius-md); border:1px solid var(--border);">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:12.5px;">
+                <div><strong>Scope:</strong> ${run.module_filter || 'All'}</div>
+                <div><strong>Duration:</strong> ${run.duration_seconds || 0}s</div>
+                <div><strong>Passed:</strong> <span style="color:var(--deep-sage); font-weight:600;">${run.passed}</span></div>
+                <div><strong>Failed:</strong> <span style="color:var(--deep-rose); font-weight:600;">${run.failed}</span></div>
+                <div><strong>Cleanup Status:</strong> <span style="color:var(--deep-sage);">${run.cleanup_status || 'Verified Clean'}</span></div>
+                <div><strong>Deleted Records:</strong> ${run.deleted_records_count || 0}</div>
+            </div>
+        </div>
+        <h4 style="font-size:14px; margin-bottom:0.75rem;">Itemized Assertions</h4>
+        ${itemsHtml}
+    `;
+
+    document.getElementById('detailsModal').style.display = 'flex';
+}
+
+function openLifecycleModal(lc) {
+    document.getElementById('modalTitle').textContent = `Order Lifecycle E2E Simulation — ${lc.order_id || 'Result'}`;
+    let stepsHtml = '';
+    if (lc.steps && lc.steps.length > 0) {
+        stepsHtml = lc.steps.map(s => `
+            <div style="padding: 0.6rem 0; border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+                <span><strong>Step ${s.step}:</strong> ${s.name}</span>
+                <span class="status-badge passed"><i class="ri-check-line"></i> Passed</span>
+            </div>
+        `).join('');
+    }
+
+    document.getElementById('modalBody').innerHTML = `
+        <div style="margin-bottom:1rem; padding:1rem; border-radius:var(--radius-md); background: ${lc.status === 'blocked' ? 'rgba(196,113,75,0.1)' : 'rgba(122,158,126,0.1)'}; border:1px solid ${lc.status === 'blocked' ? 'rgba(196,113,75,0.3)' : 'rgba(122,158,126,0.3)'};">
+            <h4 style="margin:0 0 0.35rem; color:${lc.status === 'blocked' ? 'var(--terracotta)' : 'var(--deep-sage)'};">
+                Status: ${lc.status.toUpperCase()} (${lc.safety_status})
+            </h4>
+            <p style="margin:0; font-size:12.5px;">${lc.details || lc.reason || ''}</p>
+        </div>
+        ${stepsHtml}
+    `;
+
+    document.getElementById('detailsModal').style.display = 'flex';
+}
+
+function closeDetailsModal() {
+    document.getElementById('detailsModal').style.display = 'none';
+}
+</script>
+{% endblock %}

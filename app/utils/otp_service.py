@@ -25,7 +25,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 # Tunable defaults — keep aligned with the rider OTP flow unless explicitly stated.
 OTP_LENGTH = 6
-DEFAULT_EXPIRY_MINUTES = 5         # customer registration: 5 minutes (per spec)
+DEFAULT_EXPIRY_MINUTES = 10        # registration: 10 minutes (per spec)
 RESEND_COOLDOWN_SECONDS = 60       # minimum gap between two OTP emails
 MAX_VERIFY_ATTEMPTS = 5            # lock the row after this many bad attempts
 

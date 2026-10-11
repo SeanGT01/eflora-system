@@ -290,7 +290,7 @@ def send_rider_otp_email(recipient_email, otp_code, store_name, seller_name):
         return False
 
 
-def send_customer_otp_email(recipient_email, otp_code, full_name=None, expiry_minutes=5):
+def send_customer_otp_email(recipient_email, otp_code, full_name=None, expiry_minutes=10):
     """
     Send a 6-digit OTP code to a prospective customer for self-registration
     via the same Gmail OAuth2 pipeline used by the rider flow.
@@ -358,7 +358,7 @@ def send_customer_otp_email(recipient_email, otp_code, full_name=None, expiry_mi
         return False
 
 
-def send_password_reset_otp_email(recipient_email, otp_code, full_name=None, expiry_minutes=5):
+def send_password_reset_otp_email(recipient_email, otp_code, full_name=None, expiry_minutes=10):
     """Send a 6-digit OTP for forgot-password via the Gmail OAuth pipeline."""
     try:
         subject = "E-Flora - Reset your password"
@@ -420,7 +420,7 @@ def send_password_reset_otp_email(recipient_email, otp_code, full_name=None, exp
         return False
 
 
-def send_seller_signup_otp_email(recipient_email, otp_code, full_name=None, expiry_minutes=5):
+def send_seller_signup_otp_email(recipient_email, otp_code, full_name=None, expiry_minutes=10):
     """Gmail OTP for standalone seller registration (same delivery pipeline as customer OTP)."""
     try:
         subject = "E-Flora Seller — verify your email"

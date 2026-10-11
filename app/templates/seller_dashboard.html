@@ -813,6 +813,8 @@
   font-weight: 500;
   color: var(--charcoal);
   flex-shrink: 0;
+  text-align: right;
+  min-width: 68px;
 }
 
 .rank-sold span {
@@ -820,6 +822,8 @@
   font-size: 9.5px;
   color: var(--muted);
   font-weight: 400;
+  display: inline-block;
+  margin-left: 2px;
 }
 
 /* ─── Orders Table ──────────────────────────────────────── */
@@ -2273,7 +2277,7 @@ table.dash-table {
         <!-- Online Card -->
         <div class="rev-bento-card rev-card-online" onclick="switchRevenueView('channels')" title="Click to view Online vs POS breakdown">
           <div class="rev-card-top">
-            <span class="rev-card-tag online"><i class="ri-global-line"></i> Online Store</span>
+            <span class="rev-card-tag online"><i class="ri-global-line"></i> Online Order</span>
             <span class="rev-card-share" id="shareOnline">0%</span>
           </div>
           <div class="rev-card-main">
@@ -2291,7 +2295,7 @@ table.dash-table {
         <!-- POS Card -->
         <div class="rev-bento-card rev-card-pos" onclick="switchRevenueView('channels')" title="Click to view Online vs POS breakdown">
           <div class="rev-card-top">
-            <span class="rev-card-tag pos"><i class="ri-store-2-line"></i> POS Store</span>
+            <span class="rev-card-tag pos"><i class="ri-store-2-line"></i> POS Order</span>
             <span class="rev-card-share" id="sharePos">0%</span>
           </div>
           <div class="rev-card-main">
@@ -2328,38 +2332,80 @@ table.dash-table {
 
     <!-- Top Products -->
     <div class="panel">
-      <div class="panel-head">
+      <div class="panel-head" style="gap: 0.5rem;">
         <span class="panel-title">Top Products</span>
+        <div class="rev-toggle-group" role="tablist" aria-label="Top products filter" style="margin-left: auto;">
+          <button type="button" class="rev-toggle-btn active" id="btnTopQtySeller" onclick="switchTopProducts('qty', this)">
+            By Quantity
+          </button>
+          <button type="button" class="rev-toggle-btn" id="btnTopSalesSeller" onclick="switchTopProducts('sales', this)">
+            By Sales
+          </button>
+        </div>
         <a href="{{ url_for('templates.seller_products') }}" class="panel-action">
           All <i class="ri-arrow-right-line"></i>
         </a>
       </div>
 
-      {% if top_products %}
-        {% set rank_classes = ['gold', 'silver', 'bronze', 'plain', 'plain'] %}
-        {% for product in top_products %}
-        <div class="product-rank">
-          <div class="rank-num {{ rank_classes[loop.index0] if loop.index0 < 5 else 'plain' }}">{{ loop.index }}</div>
-          <div class="rank-thumb">
-            {% if product.image_url %}
-            <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy">
-            {% else %}
-            <i class="ri-image-line"></i>
-            {% endif %}
+      <!-- By Quantity List -->
+      <div id="topProductsQtyList" class="top-products-list">
+        {% set qty_list = top_products_by_qty or top_products %}
+        {% if qty_list and qty_list|length > 0 %}
+          {% set rank_classes = ['gold', 'silver', 'bronze', 'plain', 'plain'] %}
+          {% for product in qty_list %}
+          <div class="product-rank">
+            <div class="rank-num {{ rank_classes[loop.index0] if loop.index0 < 5 else 'plain' }}">{{ loop.index }}</div>
+            <div class="rank-thumb">
+              {% if product.image_url %}
+              <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy">
+              {% else %}
+              <i class="ri-image-line"></i>
+              {% endif %}
+            </div>
+            <div class="rank-info">
+              <div class="rank-name" title="{{ product.name }}">{{ product.name }}</div>
+              <div class="rank-store">{{ product.category or 'General' }}</div>
+            </div>
+            <div class="rank-sold">{{ '{:,}'.format(product.total_sold) }} <span>sold</span></div>
           </div>
-          <div class="rank-info">
-            <div class="rank-name">{{ product.name }}</div>
-            <div class="rank-store">{{ product.category }}</div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-panel">
+            <i class="ri-bar-chart-box-line"></i>
+            No sales data yet
           </div>
-          <div class="rank-sold">{{ product.total_sold }} <span>sold</span></div>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty-panel">
-          <i class="ri-bar-chart-box-line"></i>
-          No sales data yet
-        </div>
-      {% endif %}
+        {% endif %}
+      </div>
+
+      <!-- By Sales List -->
+      <div id="topProductsSalesList" class="top-products-list" style="display: none;">
+        {% set sales_list = top_products_by_sales or top_products %}
+        {% if sales_list and sales_list|length > 0 %}
+          {% set rank_classes = ['gold', 'silver', 'bronze', 'plain', 'plain'] %}
+          {% for product in sales_list %}
+          <div class="product-rank">
+            <div class="rank-num {{ rank_classes[loop.index0] if loop.index0 < 5 else 'plain' }}">{{ loop.index }}</div>
+            <div class="rank-thumb">
+              {% if product.image_url %}
+              <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy">
+              {% else %}
+              <i class="ri-image-line"></i>
+              {% endif %}
+            </div>
+            <div class="rank-info">
+              <div class="rank-name" title="{{ product.name }}">{{ product.name }}</div>
+              <div class="rank-store">{{ product.category or 'General' }}</div>
+            </div>
+            <div class="rank-sold">₱{{ '{:,.2f}'.format(product.total_sales or 0) }} <span>sales</span></div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-panel">
+            <i class="ri-bar-chart-box-line"></i>
+            No sales data yet
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
@@ -3011,6 +3057,25 @@ function setPeriod(period, btn) {
   url.searchParams.delete('from');
   url.searchParams.delete('to');
   window.location.href = url.toString();
+}
+
+function switchTopProducts(mode, triggerBtn) {
+  const qtyList = document.getElementById('topProductsQtyList');
+  const salesList = document.getElementById('topProductsSalesList');
+  if (!qtyList || !salesList) return;
+
+  if (mode === 'sales') {
+    qtyList.style.display = 'none';
+    salesList.style.display = 'block';
+  } else {
+    qtyList.style.display = 'block';
+    salesList.style.display = 'none';
+  }
+
+  if (triggerBtn && triggerBtn.parentElement) {
+    triggerBtn.parentElement.querySelectorAll('.rev-toggle-btn').forEach(b => b.classList.remove('active'));
+    triggerBtn.classList.add('active');
+  }
 }
 
 function toggleCustom() {

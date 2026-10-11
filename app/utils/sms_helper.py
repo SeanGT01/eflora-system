@@ -82,7 +82,7 @@ def _extract_error_text(data) -> str:
 
 
 def _otp_sms_body(otp_code, expiry_minutes, purpose='verification'):
-    minutes = int(expiry_minutes) if expiry_minutes else 5
+    minutes = int(expiry_minutes) if expiry_minutes else 10
     code = str(otp_code).strip()
     if purpose == 'password_reset':
         return (
@@ -157,7 +157,7 @@ def _sms8_send(phone_raw, message):
     return False, SMS_SERVICE_UNAVAILABLE_CODE
 
 
-def _iprog_send_otp(phone_raw, otp_code=None, expiry_minutes=5):
+def _iprog_send_otp(phone_raw, otp_code=None, expiry_minutes=10):
     """Send OTP via iProg /otp/send_otp. May return a provider-generated code."""
     try:
         import requests
@@ -181,7 +181,7 @@ def _iprog_send_otp(phone_raw, otp_code=None, expiry_minutes=5):
     payload = {
         'api_token': token,
         'phone_number': msisdn_63,
-        'expires_in_minutes': int(expiry_minutes) if expiry_minutes else 5,
+        'expires_in_minutes': int(expiry_minutes) if expiry_minutes else 10,
         'sms_provider': 2,
     }
 
@@ -302,7 +302,7 @@ def _iprog_send_message(phone_raw, message):
         return False, SMS_SERVICE_UNAVAILABLE_CODE
 
 
-def send_otp_sms(phone, otp_code=None, expiry_minutes=5, purpose='verification'):
+def send_otp_sms(phone, otp_code=None, expiry_minutes=10, purpose='verification'):
     """
     Send the app-generated OTP with Smart Prefix Routing:
     - Smart/TNT/Sun: sms8.io first (bypasses A2P block), fallback to iProg.

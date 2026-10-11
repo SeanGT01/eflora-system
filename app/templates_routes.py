@@ -4914,6 +4914,7 @@ def _render_admin_dashboard():
         Store.name.label('store_name'),
         Category.name.label('category_name'),
         func.coalesce(func.sum(OrderItem.quantity), 0).label('total_sold'),
+        func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('total_sales'),
     ).join(OrderItem, OrderItem.product_id == Product.id) \
      .join(Order, Order.id == OrderItem.order_id) \
      .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id) \
@@ -4934,6 +4935,7 @@ def _render_admin_dashboard():
         Store.name.label('store_name'),
         Category.name.label('category_name'),
         func.coalesce(func.sum(POSOrderItem.quantity), 0).label('total_sold'),
+        func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('total_sales'),
     ).join(POSOrderItem, POSOrderItem.product_id == Product.id) \
      .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
      .outerjoin(ProductVariant, ProductVariant.id == POSOrderItem.variant_id) \
@@ -4955,10 +4957,15 @@ def _render_admin_dashboard():
             'store_name': r.store_name or '—',
             'category': r.category_name or 'General',
             'total_sold': 0,
+            'total_sales': 0.0,
         })
         entry['total_sold'] += int(r.total_sold or 0)
-    top_products = sorted(merged_top.values(), key=lambda x: x['total_sold'], reverse=True)[:5]
-    _attach_listing_thumbs(top_products)
+        entry['total_sales'] += float(r.total_sales or 0.0)
+
+    _attach_listing_thumbs(list(merged_top.values()))
+    top_products_by_qty = sorted(merged_top.values(), key=lambda x: (x['total_sold'], x['total_sales']), reverse=True)[:5]
+    top_products_by_sales = sorted(merged_top.values(), key=lambda x: (x['total_sales'], x['total_sold']), reverse=True)[:5]
+    top_products = top_products_by_qty
 
     # Recent orders: completed online + POS, sorted by real timestamp
     online_recent_q = (Order.query
@@ -5036,14 +5043,26 @@ def _render_admin_dashboard():
                 p_map[d][0] += float(amt or 0)
                 p_map[d][1] += 1
 
-        labels, revenues, order_counts = [], [], []
+        labels, rev, o_rev, p_rev, cnt, o_cnt, p_cnt = [], [], [], [], [], [], []
         for day_val in _iter_pht_days(ds_start, ds_end):
-            o_rev, o_cnt = o_map.get(day_val, [0.0, 0])
-            p_rev, p_cnt = p_map.get(day_val, [0.0, 0])
             labels.append(day_val.strftime('%b %d'))
-            revenues.append(o_rev + p_rev)
-            order_counts.append(o_cnt + p_cnt)
-        return {'labels': labels, 'revenue': revenues, 'orders': order_counts}
+            or_v, oc = o_map.get(day_val, [0.0, 0])
+            pr_v, pc = p_map.get(day_val, [0.0, 0])
+            o_rev.append(or_v)
+            p_rev.append(pr_v)
+            rev.append(or_v + pr_v)
+            o_cnt.append(oc)
+            p_cnt.append(pc)
+            cnt.append(oc + pc)
+        return {
+            'labels': labels,
+            'revenue': rev,
+            'online_revenue': o_rev,
+            'pos_revenue': p_rev,
+            'orders': cnt,
+            'online_orders': o_cnt,
+            'pos_orders': p_cnt,
+        }
 
     chart_data = _admin_build_chart(range_start, range_end)
 
@@ -5117,6 +5136,8 @@ def _render_admin_dashboard():
         customers_change=customers_change,
         delivery_rate=delivery_rate,
         top_products=top_products,
+        top_products_by_qty=top_products_by_qty,
+        top_products_by_sales=top_products_by_sales,
         recent_orders=recent_orders_list,
         chart_data=chart_data,
         avg_rating=avg_rating,
@@ -5281,6 +5302,7 @@ def seller_dashboard():
         ProductVariant.name.label('variant_name'),
         Category.name.label('category_name'),
         func.coalesce(func.sum(OrderItem.quantity), 0).label('total_sold'),
+        func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('total_sales'),
     ).join(OrderItem, OrderItem.product_id == Product.id) \
      .join(Order, Order.id == OrderItem.order_id) \
      .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id) \
@@ -5299,6 +5321,7 @@ def seller_dashboard():
         ProductVariant.name.label('variant_name'),
         Category.name.label('category_name'),
         func.coalesce(func.sum(POSOrderItem.quantity), 0).label('total_sold'),
+        func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('total_sales'),
     ).join(POSOrderItem, POSOrderItem.product_id == Product.id) \
      .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
      .outerjoin(ProductVariant, ProductVariant.id == POSOrderItem.variant_id) \
@@ -5311,6 +5334,7 @@ def seller_dashboard():
 
     tp_map = defaultdict(lambda: {
         'total_sold': 0,
+        'total_sales': 0.0,
         'category': 'General',
         'variant_name': None,
         'id': None,
@@ -5324,6 +5348,7 @@ def seller_dashboard():
         tp_map[key]['variant_name'] = r.variant_name
         tp_map[key]['category'] = r.category_name or 'General'
         tp_map[key]['total_sold'] += int(r.total_sold or 0)
+        tp_map[key]['total_sales'] += float(r.total_sales or 0.0)
     for r in pos_top:
         key = (r.id, r.variant_id)
         tp_map[key]['id'] = r.id
@@ -5332,32 +5357,16 @@ def seller_dashboard():
         tp_map[key]['variant_name'] = r.variant_name
         tp_map[key]['category'] = r.category_name or 'General'
         tp_map[key]['total_sold'] += int(r.total_sold or 0)
+        tp_map[key]['total_sales'] += float(r.total_sales or 0.0)
 
-    top_products = sorted(tp_map.values(), key=lambda x: x['total_sold'], reverse=True)[:5]
-    prod_ids = [tp['id'] for tp in top_products if tp.get('id')]
-    products_by_id = {}
-    if prod_ids:
-        products_by_id = {
-            p.id: p
-            for p in Product.query.options(selectinload(Product.images)).filter(
-                Product.id.in_(prod_ids)
-            ).all()
-        }
-    var_ids = [tp['variant_id'] for tp in top_products if tp.get('variant_id')]
-    variants_by_id = {}
-    if var_ids:
-        variants_by_id = {
-            v.id: v
-            for v in ProductVariant.query.filter(ProductVariant.id.in_(var_ids)).all()
-        }
-    for tp in top_products:
+    for tp in tp_map.values():
         if tp.get('variant_name'):
             tp['name'] = f"{tp['name']} — {tp['variant_name']}"
-        product = products_by_id.get(tp.get('id'))
-        variant = variants_by_id.get(tp.get('variant_id'))
-        tp['image_url'] = _product_listing_thumb(product, variant)
-        tp.pop('variant_name', None)
-        tp.pop('variant_id', None)
+
+    _attach_listing_thumbs(list(tp_map.values()))
+    top_products_by_qty = sorted(tp_map.values(), key=lambda x: (x['total_sold'], x['total_sales']), reverse=True)[:5]
+    top_products_by_sales = sorted(tp_map.values(), key=lambda x: (x['total_sales'], x['total_sold']), reverse=True)[:5]
+    top_products = top_products_by_qty
 
     # ── Recent orders (online + POS, last 10 combined) ──
     online_recent = Order.query.filter(
@@ -5741,6 +5750,8 @@ def seller_dashboard():
         customers_change=customers_change,
         delivery_rate=delivery_rate,
         top_products=top_products,
+        top_products_by_qty=top_products_by_qty,
+        top_products_by_sales=top_products_by_sales,
         recent_orders=recent_orders_list,
         chart_data=chart_data,
         avg_rating=avg_rating,
@@ -5771,6 +5782,12 @@ def seller_dashboard():
         repeat_customers_list=repeat_customers_list,
         repeat_customers_is_all_time=repeat_customers_is_all_time,
     )
+
+@templates_bp.route('/admin/system-checker')
+def admin_system_checker():
+    if session.get('role') != 'admin':
+        return redirect(url_for('templates.dashboard'))
+    return render_template('admin_system_checker.html')
 
 @templates_bp.route('/admin/users')
 def admin_users():
