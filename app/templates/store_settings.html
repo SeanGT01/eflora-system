@@ -2640,6 +2640,143 @@
         transform: translateX(22px);
     }
 
+    /* Custom AM-only and PM-only Delivery Window Time Pickers */
+    .custom-tp-wrap {
+        position: relative;
+        display: inline-block;
+    }
+    .custom-tp-box {
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 140px;
+        height: 38px;
+        padding: 0.35rem 0.75rem;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--charcoal);
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        user-select: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        box-sizing: border-box;
+    }
+    .custom-tp-box:hover, .custom-tp-box:focus {
+        border-color: var(--border-strong);
+        outline: none;
+    }
+    .custom-tp-box.open {
+        border-color: var(--charcoal);
+        box-shadow: 0 0 0 2px rgba(42,35,30,0.12);
+    }
+    .custom-tp-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        z-index: 1050;
+        background: #ffffff;
+        border: 1px solid #b5b5b5;
+        border-radius: 4px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        display: none;
+        width: 180px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+        overflow: hidden;
+    }
+    .custom-tp-cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        height: 180px;
+    }
+    .custom-tp-col {
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        border-right: 1px solid #ededed;
+        padding: 4px 2px;
+        scrollbar-width: thin;
+        box-sizing: border-box;
+        scroll-behavior: smooth;
+    }
+    .custom-tp-col::-webkit-scrollbar {
+        width: 4px;
+    }
+    .custom-tp-col::-webkit-scrollbar-thumb {
+        background: #cccccc;
+        border-radius: 2px;
+    }
+    .custom-tp-col:last-child {
+        border-right: none;
+    }
+    .custom-tp-item {
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: #222;
+        cursor: pointer;
+        user-select: none;
+        margin: 1px 2px;
+        border-radius: 3px;
+        box-sizing: border-box;
+        transition: background 0.1s ease;
+    }
+    .custom-tp-item:hover {
+        background: #f0f0f0;
+    }
+    .custom-tp-item.selected {
+        background: #d4d4d4;
+        font-weight: 700;
+        color: #000;
+        border: 1.5px solid #222;
+    }
+    .custom-tp-period-item {
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 6px 4px;
+        font-weight: 700;
+        font-size: 13px;
+        background: #d4d4d4;
+        color: #000;
+        border: 1.5px solid #222;
+        border-radius: 3px;
+        cursor: default;
+        user-select: none;
+        box-sizing: border-box;
+    }
+    .tp-clock-icon {
+        font-size: 16px;
+        color: var(--muted);
+    }
+    .custom-tp-footer {
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 0 8px;
+        background: #f8f8f8;
+        border-top: 1px solid #e8e8e8;
+    }
+    .custom-tp-done-btn {
+        background: var(--charcoal, #2a231e);
+        color: #fff;
+        border: none;
+        border-radius: 3px;
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 2px 10px;
+        cursor: pointer;
+    }
+    .custom-tp-done-btn:hover {
+        opacity: 0.9;
+    }
+
     @media (max-width: 767px) {
         .settings-header {
             flex-direction: column !important;
@@ -2973,14 +3110,54 @@
                                     </div>
 
                                     <div style="margin-top: 1rem;">
-                                        <label class="form-label" style="margin-bottom: 0.35rem;">Delivery Window
-                                            (Optional)</label>
+                                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; flex-wrap: wrap; gap: 0.5rem;">
+                                            <label class="form-label" style="margin-bottom: 0;">Delivery Window (Optional)</label>
+                                            <button type="button" id="tp-clear-window" style="background: none; border: none; font-size: 11.5px; color: var(--muted); cursor: pointer; text-decoration: underline; padding: 0;">Clear window (no restriction)</button>
+                                        </div>
                                         <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                                            <input type="time" class="form-control" id="delivery-start-time"
-                                                max="11:59" value="08:00" style="width: auto; min-width: 140px;" placeholder="Start">
+                                            <!-- Start Time (AM Only) -->
+                                            <div class="custom-tp-wrap" id="tp-wrap-start">
+                                                <div class="custom-tp-box" id="tp-box-start" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select start time (AM only)">
+                                                    <span id="tp-text-start">08:00 AM</span>
+                                                    <i class="ri-time-line tp-clock-icon"></i>
+                                                </div>
+                                                <div class="custom-tp-dropdown" id="tp-dropdown-start">
+                                                    <div class="custom-tp-cols">
+                                                        <div class="custom-tp-col" id="tp-hours-start"></div>
+                                                        <div class="custom-tp-col" id="tp-mins-start"></div>
+                                                        <div class="custom-tp-col">
+                                                            <div class="custom-tp-period-item">AM</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="custom-tp-footer">
+                                                        <button type="button" class="custom-tp-done-btn">Done</button>
+                                                    </div>
+                                                </div>
+                                                <input type="hidden" id="delivery-start-time" value="08:00">
+                                            </div>
+
                                             <span style="color: var(--muted); font-weight: 600;">to</span>
-                                            <input type="time" class="form-control" id="delivery-cutoff-time"
-                                                min="12:00" value="17:00" style="width: auto; min-width: 140px;" placeholder="Cutoff">
+
+                                            <!-- Cutoff Time (PM Only) -->
+                                            <div class="custom-tp-wrap" id="tp-wrap-cutoff">
+                                                <div class="custom-tp-box" id="tp-box-cutoff" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select cutoff time (PM only)">
+                                                    <span id="tp-text-cutoff">05:00 PM</span>
+                                                    <i class="ri-time-line tp-clock-icon"></i>
+                                                </div>
+                                                <div class="custom-tp-dropdown" id="tp-dropdown-cutoff">
+                                                    <div class="custom-tp-cols">
+                                                        <div class="custom-tp-col" id="tp-hours-cutoff"></div>
+                                                        <div class="custom-tp-col" id="tp-mins-cutoff"></div>
+                                                        <div class="custom-tp-col">
+                                                            <div class="custom-tp-period-item">PM</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="custom-tp-footer">
+                                                        <button type="button" class="custom-tp-done-btn">Done</button>
+                                                    </div>
+                                                </div>
+                                                <input type="hidden" id="delivery-cutoff-time" value="17:00">
+                                            </div>
                                         </div>
                                         <div class="form-hint" id="delivery-window-hint">Must fall within store
                                             operating hours. Morning (AM) start and afternoon (PM) cutoff.
@@ -5438,6 +5615,200 @@
     const DAY_LABELS = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' };
     let scheduleEntries = [];
 
+    // ─── AM-ONLY & PM-ONLY CUSTOM TIME PICKERS ───
+    const TP_HOURS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+    const TP_MINS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
+    function parseTimeTo12(hhmm, fallbackHour, forcedPeriod) {
+        if (!hhmm || String(hhmm).indexOf(':') < 0) {
+            return { hour: fallbackHour, minute: '00', period: forcedPeriod };
+        }
+        const parts = String(hhmm).split(':');
+        let h = parseInt(parts[0], 10);
+        let m = parseInt(parts[1], 10);
+        if (isNaN(h)) h = parseInt(fallbackHour, 10) || 8;
+        if (isNaN(m)) m = 0;
+        let h12 = (h % 12) || 12;
+        return {
+            hour: String(h12).padStart(2, '0'),
+            minute: String(m).padStart(2, '0'),
+            period: forcedPeriod
+        };
+    }
+
+    function formatTimeTo24(hourStr, minuteStr, period) {
+        let h = parseInt(hourStr, 10);
+        let m = parseInt(minuteStr, 10) || 0;
+        if (isNaN(h)) h = 8;
+        let h24;
+        if (period === 'AM') {
+            h24 = (h === 12) ? 0 : h;
+        } else {
+            h24 = (h === 12) ? 12 : (h + 12);
+        }
+        return String(h24).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    function setDeliveryWindowPickerValue(type, hhmm, triggerChange) {
+        const period = type === 'start' ? 'AM' : 'PM';
+        const fallbackH = type === 'start' ? '08' : '05';
+        const hiddenIn = document.getElementById(type === 'start' ? 'delivery-start-time' : 'delivery-cutoff-time');
+        const textEl = document.getElementById('tp-text-' + type);
+        const hoursCol = document.getElementById('tp-hours-' + type);
+        const minsCol = document.getElementById('tp-mins-' + type);
+
+        if (!hhmm) {
+            if (hiddenIn) hiddenIn.value = '';
+            if (textEl) textEl.textContent = '--:-- ' + period;
+            if (hoursCol) hoursCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
+            if (minsCol) minsCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
+            if (triggerChange && hiddenIn) hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
+            return;
+        }
+
+        const t12 = parseTimeTo12(hhmm, fallbackH, period);
+        const val24 = formatTimeTo24(t12.hour, t12.minute, period);
+        if (hiddenIn) hiddenIn.value = val24;
+        if (textEl) textEl.textContent = `${t12.hour}:${t12.minute} ${period}`;
+
+        if (hoursCol) {
+            hoursCol.querySelectorAll('.custom-tp-item').forEach(el => {
+                el.classList.toggle('selected', el.dataset.val === t12.hour);
+            });
+        }
+        if (minsCol) {
+            minsCol.querySelectorAll('.custom-tp-item').forEach(el => {
+                el.classList.toggle('selected', el.dataset.val === t12.minute);
+            });
+        }
+
+        if (triggerChange && hiddenIn) {
+            hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
+            if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
+        }
+    }
+
+    function initCustomTimePicker(type, period) {
+        const wrap = document.getElementById('tp-wrap-' + type);
+        const box = document.getElementById('tp-box-' + type);
+        const dropdown = document.getElementById('tp-dropdown-' + type);
+        const hoursCol = document.getElementById('tp-hours-' + type);
+        const minsCol = document.getElementById('tp-mins-' + type);
+        if (!box || !dropdown || !hoursCol || !minsCol) return;
+
+        // Populate hours
+        hoursCol.innerHTML = '';
+        TP_HOURS.forEach(h => {
+            const item = document.createElement('div');
+            item.className = 'custom-tp-item';
+            item.dataset.val = h;
+            item.textContent = h;
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hoursCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
+                item.classList.add('selected');
+                const currMin = minsCol.querySelector('.custom-tp-item.selected')?.dataset.val || '00';
+                const val24 = formatTimeTo24(h, currMin, period);
+                setDeliveryWindowPickerValue(type, val24, true);
+            });
+            hoursCol.appendChild(item);
+        });
+
+        // Populate minutes
+        minsCol.innerHTML = '';
+        TP_MINS.forEach(m => {
+            const item = document.createElement('div');
+            item.className = 'custom-tp-item';
+            item.dataset.val = m;
+            item.textContent = m;
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                minsCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
+                item.classList.add('selected');
+                const currHour = hoursCol.querySelector('.custom-tp-item.selected')?.dataset.val || (type === 'start' ? '08' : '05');
+                const val24 = formatTimeTo24(currHour, m, period);
+                setDeliveryWindowPickerValue(type, val24, true);
+            });
+            minsCol.appendChild(item);
+        });
+
+        // Toggle open/close on box click or Enter/Space
+        function toggleDropdown(open) {
+            const isOpen = dropdown.style.display === 'block';
+            const shouldOpen = open !== undefined ? open : !isOpen;
+            // Close the other picker dropdown
+            const otherType = type === 'start' ? 'cutoff' : 'start';
+            const otherDropdown = document.getElementById('tp-dropdown-' + otherType);
+            const otherBox = document.getElementById('tp-box-' + otherType);
+            if (otherDropdown) otherDropdown.style.display = 'none';
+            if (otherBox) otherBox.classList.remove('open');
+
+            if (shouldOpen) {
+                dropdown.style.display = 'block';
+                box.classList.add('open');
+                // Scroll selected hour and minute to center
+                setTimeout(() => {
+                    const selH = hoursCol.querySelector('.custom-tp-item.selected');
+                    if (selH) hoursCol.scrollTop = selH.offsetTop - (hoursCol.clientHeight / 2) + (selH.clientHeight / 2);
+                    const selM = minsCol.querySelector('.custom-tp-item.selected');
+                    if (selM) minsCol.scrollTop = selM.offsetTop - (minsCol.clientHeight / 2) + (selM.clientHeight / 2);
+                }, 10);
+            } else {
+                dropdown.style.display = 'none';
+                box.classList.remove('open');
+            }
+        }
+
+        box.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleDropdown();
+        });
+
+        box.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleDropdown();
+            } else if (e.key === 'Escape') {
+                toggleDropdown(false);
+            }
+        });
+
+        // Done button in footer
+        dropdown.querySelector('.custom-tp-done-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleDropdown(false);
+        });
+    }
+
+    function setupDeliveryWindowPickers() {
+        initCustomTimePicker('start', 'AM');
+        initCustomTimePicker('cutoff', 'PM');
+
+        // Document click closes open dropdowns
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#tp-wrap-start')) {
+                const dd = document.getElementById('tp-dropdown-start');
+                if (dd) dd.style.display = 'none';
+                document.getElementById('tp-box-start')?.classList.remove('open');
+            }
+            if (!e.target.closest('#tp-wrap-cutoff')) {
+                const dd = document.getElementById('tp-dropdown-cutoff');
+                if (dd) dd.style.display = 'none';
+                document.getElementById('tp-box-cutoff')?.classList.remove('open');
+            }
+        });
+
+        // Clear window button
+        document.getElementById('tp-clear-window')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            setDeliveryWindowPickerValue('start', '', true);
+            setDeliveryWindowPickerValue('cutoff', '', true);
+            showToast('Delivery window cleared. No restrictions applied.', 'info');
+        });
+    }
+
+    setupDeliveryWindowPickers();
+
     // Load existing schedule from server
     const existingSchedule = JSON.parse('{{ (store.store_schedule if store.store_schedule else none) | tojson | safe }}');
     if (existingSchedule && existingSchedule.schedules) {
@@ -5450,16 +5821,15 @@
         const savedDuration = existingSchedule.slot_duration || 2;
         document.getElementById('slot-duration').value = savedDuration;
     }
-    if (existingSchedule && existingSchedule.delivery_start) {
-        document.getElementById('delivery-start-time').value = existingSchedule.delivery_start;
-    } else {
-        document.getElementById('delivery-start-time').value = '09:00';
-    }
-    if (existingSchedule && existingSchedule.delivery_cutoff) {
-        document.getElementById('delivery-cutoff-time').value = existingSchedule.delivery_cutoff;
-    } else {
-        document.getElementById('delivery-cutoff-time').value = '17:00';
-    }
+
+    const initialStart = (existingSchedule && existingSchedule.delivery_start !== undefined)
+        ? (existingSchedule.delivery_start || '')
+        : '08:00';
+    const initialCutoff = (existingSchedule && existingSchedule.delivery_cutoff !== undefined)
+        ? (existingSchedule.delivery_cutoff || '')
+        : '17:00';
+    setDeliveryWindowPickerValue('start', initialStart, false);
+    setDeliveryWindowPickerValue('cutoff', initialCutoff, false);
     if (existingSchedule && existingSchedule.order_cutoff) {
         document.getElementById('order-cutoff-time').value = existingSchedule.order_cutoff;
     }
