@@ -831,9 +831,11 @@
     {% if stores and stores|length > 0 %}
     <div class="adm-store-grid" id="storesGrid">
         {% for s in stores %}
+        {% set d_method = s.delivery_method or 'radius' %}
+        {% set d_munis = s.selected_municipalities or [] %}
         <article class="adm-store-card"
             data-store-id="{{ s.id }}"
-            data-search="{{ (s.name ~ ' ' ~ s.owner_name ~ ' ' ~ s.owner_email ~ ' ' ~ (s.location or ''))|lower }}"
+            data-search="{{ (s.name ~ ' ' ~ s.owner_name ~ ' ' ~ s.owner_email ~ ' ' ~ (s.location or '') ~ ' ' ~ (d_munis|join(' ')))|lower }}"
             data-status="{{ s.status }}"
             data-name="{{ (s.name or '')|lower }}"
             data-created="{{ s.created_at_sort or '' }}">
@@ -863,9 +865,22 @@
             </div>
             <div class="adm-store-foot">
               <span>{{ '{:,}'.format(s.product_count) }} product{{ '' if s.product_count == 1 else 's' }}</span>
+              {% if d_method == 'municipality' %}
+              <span class="sep" aria-hidden="true"></span>
+              <span title="{% if d_munis %}Covered: {{ d_munis|join(', ') }}{% else %}Municipality coverage{% endif %}">
+                <i class="ri-community-line" aria-hidden="true"></i>
+                {% if d_munis|length > 0 %}{{ d_munis|length }} municipalit{{ 'y' if d_munis|length == 1 else 'ies' }}{% else %}Municipality delivery{% endif %}
+              </span>
+              {% elif d_method == 'zone' %}
+              <span class="sep" aria-hidden="true"></span>
+              <span title="Custom drawn delivery zone">
+                <i class="ri-map-2-line" aria-hidden="true"></i> Custom zone
+              </span>
+              {% else %}
               {% if s.delivery_radius_km %}
               <span class="sep" aria-hidden="true"></span>
-              <span>{{ '%.1f'|format(s.delivery_radius_km) }} km delivery radius</span>
+              <span><i class="ri-route-line" aria-hidden="true"></i> {{ '%.1f'|format(s.delivery_radius_km) }} km radius</span>
+              {% endif %}
               {% endif %}
               <div class="adm-store-actions">
                 <button type="button" class="adm-store-cta" onclick="viewStore({{ s.id }})">
@@ -1135,6 +1150,16 @@
           <div class="detail-block">
             <div class="detail-label">Total Orders</div>
             <div class="detail-value">${store.stats.order_count.toLocaleString()}</div>
+          </div>
+          <div class="detail-block full">
+            <div class="detail-label">Delivery Mode</div>
+            <div class="detail-value">
+              ${store.delivery_method === 'municipality'
+                ? `Municipality (${store.selected_municipalities && store.selected_municipalities.length ? store.selected_municipalities.join(', ') : 'None selected'})`
+                : store.delivery_method === 'zone'
+                ? 'Custom Drawn Delivery Zone'
+                : `${store.delivery_radius_km || 5} km radius`}
+            </div>
           </div>
           <div class="detail-block full">
             <div class="detail-label">Delivered Revenue</div>

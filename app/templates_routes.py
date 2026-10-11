@@ -6231,6 +6231,9 @@ def admin_stores():
             'owner_email': owner_email,
             'location': loc,
             'delivery_radius_km': float(s.delivery_radius_km or 0),
+            'delivery_method': s.delivery_method or 'radius',
+            'selected_municipalities': s.selected_municipalities or [],
+            'allow_pickup': bool(s.allow_pickup),
             'product_count': int(product_count),
             'order_count': int(order_count),
             'revenue': revenue,
@@ -6343,6 +6346,9 @@ def _store_summary_dict(store: 'Store') -> dict:
         'banner_url': store.banner_url,
         'location': (store.public_location_label or store.formatted_address or store.address or '').strip(),
         'delivery_radius_km': float(store.delivery_radius_km or 0),
+        'delivery_method': store.delivery_method or 'radius',
+        'selected_municipalities': store.selected_municipalities or [],
+        'allow_pickup': bool(store.allow_pickup),
         'status': (
             'suspended'
             if (store.status or '').lower() == 'inactive'

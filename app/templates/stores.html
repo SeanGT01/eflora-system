@@ -404,8 +404,10 @@
     {% if stores and stores|length > 0 %}
     <div class="stores-browse-grid" id="storesBrowseGrid">
         {% for store in stores %}
-        {% set hay = ((store.name or '') ~ ' ' ~ (store.barangay or '') ~ ' ' ~ (store.municipality or '') ~ ' ' ~ (store.address or '') ~ ' ' ~ (store.public_location_label or ''))|lower %}
-        {% set radius = store.delivery_radius_km %}
+        {% set d_method = store.delivery_method or 'radius' %}
+        {% set d_munis = store.selected_municipalities or [] %}
+        {% set d_radius = store.delivery_radius_km %}
+        {% set hay = ((store.name or '') ~ ' ' ~ (store.barangay or '') ~ ' ' ~ (store.municipality or '') ~ ' ' ~ (store.address or '') ~ ' ' ~ (store.public_location_label or '') ~ ' ' ~ (d_munis|join(' ')))|lower %}
         <a
             href="{{ url_for('templates.store_detail', store_id=store.id) }}"
             class="stores-browse-card{% if store.is_newly_approved %} newly-approved{% endif %}"
@@ -451,9 +453,22 @@
                 </div>
                 <div class="store-card-foot">
                     <span><i class="ri-box-3-line" aria-hidden="true"></i> {{ store.product_count or 0 }} product{{ '' if store.product_count == 1 else 's' }}</span>
-                    {% if radius %}
+                    {% if d_method == 'municipality' %}
                     <span class="sep" aria-hidden="true"></span>
-                    <span>{{ '%.1f'|format(radius|float) }} km delivery radius</span>
+                    <span title="{% if d_munis %}Covered: {{ d_munis|join(', ') }}{% else %}Municipality coverage{% endif %}">
+                        <i class="ri-community-line" aria-hidden="true"></i>
+                        {% if d_munis|length > 0 %}{{ d_munis|length }} municipalit{{ 'y' if d_munis|length == 1 else 'ies' }}{% else %}Municipality delivery{% endif %}
+                    </span>
+                    {% elif d_method == 'zone' %}
+                    <span class="sep" aria-hidden="true"></span>
+                    <span title="Custom drawn delivery zone">
+                        <i class="ri-map-2-line" aria-hidden="true"></i> Custom zone
+                    </span>
+                    {% else %}
+                    {% if d_radius %}
+                    <span class="sep" aria-hidden="true"></span>
+                    <span><i class="ri-route-line" aria-hidden="true"></i> {{ '%.1f'|format(d_radius|float) }} km radius</span>
+                    {% endif %}
                     {% endif %}
                     <span class="store-card-cta">View Details <i class="ri-arrow-right-line" aria-hidden="true"></i></span>
                 </div>
