@@ -6196,17 +6196,32 @@ def admin_stores():
     total_revenue = 0.0
 
     for s in stores:
-        revenue = db.session.query(
+        online_revenue = db.session.query(
             func.coalesce(func.sum(Order.total_amount), 0)
         ).filter(
             Order.store_id == s.id,
             Order.status == 'delivered'
         ).scalar() or 0
-        revenue = float(revenue)
+        online_revenue = float(online_revenue)
 
-        order_count = db.session.query(func.count(Order.id)).filter(
+        pos_revenue = db.session.query(
+            func.coalesce(func.sum(POSOrder.total_amount), 0)
+        ).filter(
+            POSOrder.store_id == s.id
+        ).scalar() or 0
+        pos_revenue = float(pos_revenue)
+
+        revenue = online_revenue + pos_revenue
+
+        online_order_count = db.session.query(func.count(Order.id)).filter(
             Order.store_id == s.id
         ).scalar() or 0
+
+        pos_order_count = db.session.query(func.count(POSOrder.id)).filter(
+            POSOrder.store_id == s.id
+        ).scalar() or 0
+
+        order_count = int(online_order_count + pos_order_count)
 
         product_count = db.session.query(func.count(Product.id)).filter(
             Product.store_id == s.id,
@@ -6236,7 +6251,11 @@ def admin_stores():
             'allow_pickup': bool(s.allow_pickup),
             'product_count': int(product_count),
             'order_count': int(order_count),
+            'online_order_count': int(online_order_count),
+            'pos_order_count': int(pos_order_count),
             'revenue': revenue,
+            'online_revenue': online_revenue,
+            'pos_revenue': pos_revenue,
             'revenue_display': f"₱{revenue:,.2f}",
             'created_at': _fmt_pht(s.created_at, '%b %d, %Y') if s.created_at else '—',
             'created_at_sort': s.created_at.isoformat() if s.created_at else '',
@@ -6319,17 +6338,33 @@ def _validated_store_description(raw):
 def _store_summary_dict(store: 'Store') -> dict:
     """Serialize a Store row plus computed counters for the admin UI."""
     from sqlalchemy import func as sa_func
-    revenue = db.session.query(
+
+    online_revenue = db.session.query(
         sa_func.coalesce(sa_func.sum(Order.total_amount), 0)
     ).filter(
         Order.store_id == store.id,
         Order.status == 'delivered'
     ).scalar() or 0
-    revenue = float(revenue)
+    online_revenue = float(online_revenue)
 
-    order_count = db.session.query(sa_func.count(Order.id)).filter(
+    pos_revenue = db.session.query(
+        sa_func.coalesce(sa_func.sum(POSOrder.total_amount), 0)
+    ).filter(
+        POSOrder.store_id == store.id
+    ).scalar() or 0
+    pos_revenue = float(pos_revenue)
+
+    total_revenue = online_revenue + pos_revenue
+
+    online_order_count = db.session.query(sa_func.count(Order.id)).filter(
         Order.store_id == store.id
     ).scalar() or 0
+
+    pos_order_count = db.session.query(sa_func.count(POSOrder.id)).filter(
+        POSOrder.store_id == store.id
+    ).scalar() or 0
+
+    total_order_count = int(online_order_count + pos_order_count)
 
     product_count = db.session.query(sa_func.count(Product.id)).filter(
         Product.store_id == store.id,
@@ -6362,9 +6397,13 @@ def _store_summary_dict(store: 'Store') -> dict:
         } if store.seller else {'id': None, 'full_name': 'Unassigned', 'email': '', 'phone': None},
         'stats': {
             'product_count': int(product_count),
-            'order_count': int(order_count),
-            'revenue': revenue,
-            'revenue_display': f"₱{revenue:,.2f}",
+            'order_count': total_order_count,
+            'online_order_count': int(online_order_count),
+            'pos_order_count': int(pos_order_count),
+            'revenue': total_revenue,
+            'online_revenue': online_revenue,
+            'pos_revenue': pos_revenue,
+            'revenue_display': f"₱{total_revenue:,.2f}",
         },
         'created_at': _fmt_pht(store.created_at, '%Y-%m-%d %I:%M %p') if store.created_at else None,
         'updated_at': _fmt_pht(store.updated_at, '%Y-%m-%d %I:%M %p') if store.updated_at else None,

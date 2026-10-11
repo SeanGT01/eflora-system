@@ -803,7 +803,7 @@
     <div class="kpi-card bark">
       <div class="kpi-label">Combined Revenue</div>
       <div class="kpi-value" style="font-size:24px;">₱{{ '{:,.2f}'.format(total_platform_revenue|default(0)|float) }}</div>
-      <div class="kpi-sub">All-time delivered orders</div>
+      <div class="kpi-sub">Online &amp; in-store POS</div>
     </div>
   </div>
 
@@ -1149,7 +1149,10 @@
           </div>
           <div class="detail-block">
             <div class="detail-label">Total Orders</div>
-            <div class="detail-value">${store.stats.order_count.toLocaleString()}</div>
+            <div class="detail-value">
+              ${(store.stats.order_count || 0).toLocaleString()}
+              ${store.stats.pos_order_count ? `<span style="display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px;">(${store.stats.online_order_count || 0} online + ${store.stats.pos_order_count} POS)</span>` : ''}
+            </div>
           </div>
           <div class="detail-block full">
             <div class="detail-label">Delivery Mode</div>
@@ -1162,8 +1165,11 @@
             </div>
           </div>
           <div class="detail-block full">
-            <div class="detail-label">Delivered Revenue</div>
-            <div class="detail-value" style="color:var(--deep-rose);">${formatStoreRevenue(store.stats)}</div>
+            <div class="detail-label">Total Revenue</div>
+            <div class="detail-value" style="color:var(--deep-rose);">
+              ${formatStoreRevenue(store.stats)}
+              ${store.stats.pos_revenue ? `<span style="font-size:11.5px;color:var(--muted);font-weight:400;margin-left:6px;">(₱${(store.stats.online_revenue || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} online + ₱${(store.stats.pos_revenue || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} POS)</span>` : ''}
+            </div>
           </div>
         </div>
       `;
