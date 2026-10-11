@@ -389,13 +389,20 @@
 .checker-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(44, 37, 32, 0.55);
-    backdrop-filter: blur(4px);
+    background: rgba(44, 37, 32, 0.6);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     z-index: 1000;
     display: none;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
+    padding: 1.25rem;
+    animation: checkerFadeIn 0.2s ease-out;
+}
+
+@keyframes checkerFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .checker-modal {
@@ -406,8 +413,14 @@
     max-height: 85vh;
     display: flex;
     flex-direction: column;
-    box-shadow: var(--shadow-deep);
+    box-shadow: 0 20px 40px rgba(44, 37, 32, 0.25), 0 1px 3px rgba(44, 37, 32, 0.1);
     overflow: hidden;
+    animation: checkerScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes checkerScaleUp {
+    from { transform: scale(0.95); opacity: 0.8; }
+    to { transform: scale(1); opacity: 1; }
 }
 
 .checker-modal-header {
@@ -607,8 +620,51 @@
 
 </div>
 
+<!-- ─── Order Lifecycle Confirmation Modal ─── -->
+<div class="checker-modal-overlay" id="confirmLifecycleModal" onclick="handleConfirmModalBackdrop(event)">
+    <div class="checker-modal" style="max-width: 500px; text-align: center; border: 1px solid var(--border); position: relative;">
+        <button type="button" onclick="closeConfirmLifecycleModal()" aria-label="Close modal" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 22px; color: var(--muted); cursor: pointer; padding: 4px 6px; line-height: 1; border-radius: var(--radius-sm); transition: color 0.15s ease;" onmouseover="this.style.color='var(--charcoal)'" onmouseout="this.style.color='var(--muted)'">
+            <i class="ri-close-line"></i>
+        </button>
+        <div class="checker-modal-body" style="padding: 2.25rem 2rem 1.75rem;">
+            <div style="width: 60px; height: 60px; border-radius: 50%; background: rgba(181, 68, 90, 0.1); color: var(--deep-rose); display: inline-flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 1.15rem; box-shadow: inset 0 0 0 1px rgba(181, 68, 90, 0.2);">
+                <i class="ri-route-line"></i>
+            </div>
+            
+            <h3 style="font-family: var(--font-display); font-size: 22px; color: var(--charcoal); margin: 0 0 0.5rem; font-weight: 600;">
+                Order Lifecycle E2E Simulation
+            </h3>
+            
+            <p style="color: var(--muted); font-size: 13.5px; line-height: 1.55; margin: 0 0 1.25rem;">
+                Execute simulated end-to-end customer-to-seller-to-rider order lifecycle test?
+            </p>
+
+            <div style="background: var(--warm-white); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.95rem 1.15rem; text-align: left; margin-bottom: 1.6rem; font-size: 12.5px; line-height: 1.55; color: var(--charcoal);">
+                <div style="display:flex; align-items:center; gap:0.45rem; font-weight:600; color: var(--deep-sage); margin-bottom: 0.4rem;">
+                    <i class="ri-shield-check-line" style="font-size:16px;"></i> Production Safety Protocol Active
+                </div>
+                <div style="color: var(--charcoal); font-size: 12.5px; margin-bottom: 0.35rem; font-weight: 500;">
+                    Safety protocol verifies test-isolation and performs guaranteed rollback and cleanup.
+                </div>
+                <div style="color: var(--muted); font-size: 11.5px; line-height: 1.45;">
+                    Simulates all 12 stages (catalog, cart addons, pricing, stock deduction, GCash verification, preparation, rider transit, POD, and cancellation restoration) with zero production database mutations.
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; justify-content: center;">
+                <button type="button" class="btn btn-outline" style="min-width: 110px;" onclick="closeConfirmLifecycleModal()">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="btnConfirmProceed" style="min-width: 170px;" onclick="proceedWithLifecycleTest()">
+                    <i class="ri-play-circle-line"></i> Run Simulation
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ─── Details Modal ─── -->
-<div class="checker-modal-overlay" id="detailsModal">
+<div class="checker-modal-overlay" id="detailsModal" onclick="handleDetailsModalBackdrop(event)">
     <div class="checker-modal">
         <div class="checker-modal-header">
             <h3 style="font-family: var(--font-display); font-size: 20px; margin: 0;" id="modalTitle">Test Report Details</h3>
@@ -884,8 +940,27 @@ async function runSingleModule(moduleName) {
 }
 
 function confirmRunLifecycle() {
-    if (confirm('Execute simulated end-to-end customer-to-seller-to-rider order lifecycle test?\n\nSafety protocol verifies test-isolation and performs guaranteed rollback and cleanup.')) {
-        runLifecycleTest();
+    document.getElementById('confirmLifecycleModal').style.display = 'flex';
+}
+
+function closeConfirmLifecycleModal() {
+    document.getElementById('confirmLifecycleModal').style.display = 'none';
+}
+
+function handleConfirmModalBackdrop(event) {
+    if (event.target === document.getElementById('confirmLifecycleModal')) {
+        closeConfirmLifecycleModal();
+    }
+}
+
+function proceedWithLifecycleTest() {
+    closeConfirmLifecycleModal();
+    runLifecycleTest();
+}
+
+function handleDetailsModalBackdrop(event) {
+    if (event.target === document.getElementById('detailsModal')) {
+        closeDetailsModal();
     }
 }
 
@@ -977,5 +1052,12 @@ function openLifecycleModal(lc) {
 function closeDetailsModal() {
     document.getElementById('detailsModal').style.display = 'none';
 }
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeConfirmLifecycleModal();
+        closeDetailsModal();
+    }
+});
 </script>
 {% endblock %}
