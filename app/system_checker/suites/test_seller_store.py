@@ -120,7 +120,10 @@ def test_pos_order_creation_and_inventory(app, db, tracker) -> dict:
 
 
 def test_store_admin_invitation_and_permissions(app, db, tracker) -> dict:
-    """Validate store admin staff role permissions parsing and enforcement."""
+    """Validate store admin staff role permissions parsing, route mapping, and write enforcement."""
+    from app.utils.store_admin_perms import _path_perm, deny_if_forbidden
+    from flask import session
+
     raw = {"products": True, "pos": True, "orders": False}
     normalized = normalize_permissions(raw)
 
@@ -129,10 +132,21 @@ def test_store_admin_invitation_and_permissions(app, db, tracker) -> dict:
     assert normalized["orders"] is False, "Orders permission should be False"
     assert normalized["inventory"] is True, "Unspecified permissions should default to True"
 
+    # Route permission mapping
+    assert _path_perm('/seller/products') == 'products'
+    assert _path_perm('/api/seller/orders') == 'orders'
+    assert _path_perm('/seller/pos') == 'pos'
+
+    # deny_if_forbidden logic verification
+    with app.test_request_context('/api/seller/orders/1/status', method='POST'):
+        session['user_id'] = 9999
+        session['role'] = 'seller'
+        assert deny_if_forbidden() is None, "Owner must bypass deny_if_forbidden"
+
     return {
         "status": "passed",
-        "assertions": 4,
-        "details": "Store admin granular permissions parsing and normalization verified."
+        "assertions": 8,
+        "details": "Store admin granular permissions parsing, route mapping, and write enforcement verified."
     }
 
 

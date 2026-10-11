@@ -113,7 +113,7 @@ def deny_if_forbidden(path=None):
     key = _path_perm(path if path is not None else request.path)
     if not key or has_store_admin_perm(key):
         return None
-    labels = dict(PERM_FIELDS)
+    labels = {k: label for k, label, _ in PERM_FIELDS}
     message = f'You can view {labels.get(key, key)}, but you do not have permission to make changes.'
     wants_json = (
         request.path.startswith('/api/')
