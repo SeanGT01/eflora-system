@@ -47,8 +47,11 @@ def rider_dashboard():
     
     today_orders = Order.query.filter(
         Order.rider_id == rider.id,
-        Order.created_at >= today_start,
-        Order.created_at < today_end,
+        db.or_(
+            db.and_(Order.created_at >= today_start, Order.created_at < today_end),
+            db.and_(fulfill_at >= today_start, fulfill_at < today_end),
+            Order.status.in_(['on_delivery', 'accepted', 'preparing', 'done_preparing'])
+        )
     ).count()
     
     # Count delivered + completed (customer-confirmed) using fulfillment date.
@@ -57,6 +60,21 @@ def rider_dashboard():
         Order.status.in_(_DELIVERED_STATUSES),
         fulfill_at >= today_start,
         fulfill_at < today_end,
+    ).count()
+
+    today_custom_orders = Order.query.filter(
+        Order.rider_id == rider.id,
+        db.or_(Order.order_type == 'custom_chat', Order.custom_ticket_id.isnot(None)),
+        db.or_(
+            db.and_(Order.created_at >= today_start, Order.created_at < today_end),
+            db.and_(fulfill_at >= today_start, fulfill_at < today_end),
+            Order.status.in_(['on_delivery', 'accepted', 'preparing', 'done_preparing'])
+        )
+    ).count()
+
+    custom_orders = Order.query.filter(
+        Order.rider_id == rider.id,
+        db.or_(Order.order_type == 'custom_chat', Order.custom_ticket_id.isnot(None))
     ).count()
     
     # Current active delivery
@@ -74,7 +92,9 @@ def rider_dashboard():
         'rider': rider.to_dict(),
         'stats': {
             'today_orders': today_orders,
-            'today_delivered': today_delivered
+            'today_delivered': today_delivered,
+            'today_custom_orders': today_custom_orders,
+            'custom_orders': custom_orders,
         },
         'current_order': None,
         'recent_orders': []
@@ -177,7 +197,7 @@ def get_available_orders():
         )
         .filter(
             Order.store_id == rider.store_id,
-            Order.status.in_(['accepted', 'done_preparing']),
+            Order.status.in_(['accepted', 'preparing', 'done_preparing']),
             Order.rider_id.is_(None),
             db.or_(Order.fulfillment_type == 'delivery', Order.fulfillment_type.is_(None))
         )
@@ -232,7 +252,7 @@ def accept_order(order_id):
     if not order or order.store_id != rider.store_id:
         return jsonify({'error': 'Order not found'}), 404
     
-    if order.status not in ('accepted', 'done_preparing') or order.rider_id is not None:
+    if order.status not in ('accepted', 'preparing', 'done_preparing') or order.rider_id is not None:
         return jsonify({'error': 'Order cannot be accepted'}), 400
 
     if getattr(order, 'fulfillment_type', '') == 'pickup':

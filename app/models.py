@@ -2034,6 +2034,7 @@ class Order(db.Model):
             'store_longitude': float(self.store.longitude) if self.store and self.store.longitude is not None else None,
             'rider_name': self.assigned_rider.user.full_name if self.assigned_rider and self.assigned_rider.user else None,
             'custom_ticket_id': self.custom_ticket_id,
+            'is_custom_order': bool(self.order_type == 'custom_chat' or self.custom_ticket_id),
         }
 
 
@@ -2109,7 +2110,7 @@ class OrderItem(db.Model):
             'total': (unit * int(self.quantity or 0)) + addons_sum,
             'product_name': resolved_name,
             'product_image_url': self.product_image,
-            'is_custom_order': bool(self.order and self.order.order_type == 'custom_chat'),
+            'is_custom_order': bool(self.order and (self.order.order_type == 'custom_chat' or self.order.custom_ticket_id)),
             'addons': addons_list,
             'addons_total': addons_sum,
         }

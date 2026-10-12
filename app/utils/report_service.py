@@ -1524,6 +1524,7 @@ def _customers_section(store_id, start, end):
 
     pos_rows = db.session.query(
         POSOrder.id,
+        POSOrder.order_number,
         POSOrder.customer_name,
         POSOrder.customer_contact,
         POSOrder.total_amount,
@@ -1550,7 +1551,8 @@ def _customers_section(store_id, start, end):
         raw_name = (p.customer_name or '').strip()
         is_walkin = _is_anonymous_walk_in(raw_name)
         if is_walkin:
-            display_name = f"Walk-in (POS #{p.id})"
+            ord_num = p.order_number or f"POS-{p.id:04d}"
+            display_name = f"Walk-in (#{ord_num})"
             key = f"pos_walkin_{p.id}"
         else:
             display_name = raw_name
@@ -3573,6 +3575,7 @@ def _admin_customers_section(start, end):
 
     pos_rows = db.session.query(
         POSOrder.id,
+        POSOrder.order_number,
         POSOrder.customer_name,
         POSOrder.customer_contact,
         POSOrder.total_amount,
@@ -3598,7 +3601,8 @@ def _admin_customers_section(start, end):
         raw_name = (p.customer_name or '').strip()
         is_walkin = _is_anonymous_walk_in(raw_name)
         if is_walkin:
-            display_name = f"Walk-in (POS #{p.id})"
+            ord_num = p.order_number or f"POS-{p.id:04d}"
+            display_name = f"Walk-in (#{ord_num})"
             key = f"pos_walkin_{p.id}"
         else:
             display_name = raw_name
