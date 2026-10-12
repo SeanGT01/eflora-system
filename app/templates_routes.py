@@ -8730,16 +8730,8 @@ def session_notifications_api():
     if session.get('role') in ('seller', 'store_admin'):
         store = _seller_portal_manageable_store(session.get('user_id'))
         if store:
-            from app.utils.seller_notifications import sync_store_stock_notifications
-            cleared_iso = session.get('notifications_cleared_at')
-            cleared_dt = None
-            if cleared_iso:
-                try:
-                    cleared_dt = datetime.fromisoformat(cleared_iso)
-                except Exception:
-                    pass
-            dismissed_map = session.get('dismissed_stock_alerts') or {}
-            sync_store_stock_notifications(store.id, cleared_at=cleared_dt, dismissed_products=dismissed_map)
+            from app.utils.seller_notifications import clear_store_restocked_notifications
+            clear_store_restocked_notifications(store.id)
 
     def _load_inbox():
         notes = (Notification.query.filter_by(user_id=user_id)
@@ -8794,16 +8786,10 @@ def session_notifications_clear_all_api():
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    now_utc = datetime.utcnow()
-    session['notifications_cleared_at'] = now_utc.isoformat()
-
     if session.get('role') in ('seller', 'store_admin'):
         from app.models import StoreAdmin
         store = _seller_portal_manageable_store(session.get('user_id'))
         if store:
-            from app.utils.seller_notifications import record_store_notifs_cleared
-            record_store_notifs_cleared(store.id, now_utc)
-
             staff = StoreAdmin.query.filter_by(store_id=store.id, is_active=True, is_archived=False).all()
             target_ids = list({user_id, store.seller_id, *(s.user_id for s in staff if s.user_id)})
             Notification.query.filter(Notification.user_id.in_(target_ids)).delete(synchronize_session=False)
@@ -8827,12 +8813,6 @@ def session_notification_delete_api(notif_id):
     notif = Notification.query.filter_by(id=notif_id, user_id=user_id).first()
     if notif:
         store = _seller_portal_manageable_store(session.get('user_id')) if session.get('role') in ('seller', 'store_admin') else None
-        if store and notif.reference_id and notif.type in ('low_stock', 'out_of_stock'):
-            from app.utils.seller_notifications import record_product_notif_dismissed
-            record_product_notif_dismissed(store.id, notif.reference_id, notif.type)
-            dismissed_map = dict(session.get('dismissed_stock_alerts') or {})
-            dismissed_map[str(notif.reference_id)] = datetime.utcnow().isoformat()
-            session['dismissed_stock_alerts'] = dismissed_map
         if store and notif.reference_id and notif.type in ('low_stock', 'out_of_stock', 'new_order'):
             from app.models import StoreAdmin
             staff = StoreAdmin.query.filter_by(store_id=store.id, is_active=True, is_archived=False).all()
