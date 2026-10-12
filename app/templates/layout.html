@@ -2346,7 +2346,7 @@
 {% endif %}
 
 {% if session.get('role') in ['seller', 'store_admin', 'admin'] %}
-<!-- ══ CLEAR ALL NOTIFICATIONS CONFIRMATION MODAL ══ -->
+<!-- ══ NOTIFICATION CONFIRMATION MODAL (SINGLE DELETE & CLEAR ALL) ══ -->
 <div class="modal-overlay modal-topmost" id="clearNotifsModal" onclick="if(event.target===this) closeClearNotifsModal()" role="dialog" aria-modal="true" aria-labelledby="clearNotifsTitle">
     <div class="modal modal-sm" style="max-width: 440px;" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -2361,10 +2361,10 @@
                     <i class="ri-delete-bin-line"></i>
                 </div>
                 <div style="flex: 1; min-width: 0;">
-                    <div style="font-weight: 600; font-size: 15px; color: var(--charcoal); margin-bottom: 4px;">
+                    <div id="clearNotifsPromptHeading" style="font-weight: 600; font-size: 15px; color: var(--charcoal); margin-bottom: 4px;">
                         Clear all notifications?
                     </div>
-                    <p style="margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5;">
+                    <p id="clearNotifsPromptDesc" style="margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5;">
                         Are you sure you want to clear your notification inbox? This will remove all notifications and cannot be undone.
                     </p>
                 </div>
@@ -2372,8 +2372,8 @@
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-outline" onclick="closeClearNotifsModal()">Cancel</button>
-            <button type="button" class="btn btn-rose" id="confirmClearNotifsBtn" onclick="confirmClearAllNotifs()" style="min-width: 110px;">
-                <i class="ri-delete-bin-line"></i> Clear all
+            <button type="button" class="btn btn-rose" id="confirmClearNotifsBtn" onclick="confirmNotifAction()" style="min-width: 110px;">
+                <i class="ri-delete-bin-line"></i> <span id="confirmClearNotifsBtnText">Clear all</span>
             </button>
         </div>
     </div>
@@ -2796,9 +2796,28 @@
         if (markBtn) markBtn.style.display = 'none';
     }
 
-    function openClearNotifsModal() {
+    let pendingDeleteNotifId = null;
+
+    function openClearNotifsModal(forSingleId = null) {
         const modal = document.getElementById('clearNotifsModal');
         if (!modal) return;
+        pendingDeleteNotifId = forSingleId;
+        const titleEl = document.getElementById('clearNotifsTitle');
+        const headingEl = document.getElementById('clearNotifsPromptHeading');
+        const descEl = document.getElementById('clearNotifsPromptDesc');
+        const btnTextEl = document.getElementById('confirmClearNotifsBtnText');
+
+        if (forSingleId) {
+            if (titleEl) titleEl.textContent = 'Delete notification';
+            if (headingEl) headingEl.textContent = 'Delete this notification?';
+            if (descEl) descEl.textContent = 'Are you sure you want to remove this notification? This cannot be undone.';
+            if (btnTextEl) btnTextEl.textContent = 'Delete';
+        } else {
+            if (titleEl) titleEl.textContent = 'Clear notifications';
+            if (headingEl) headingEl.textContent = 'Clear all notifications?';
+            if (descEl) descEl.textContent = 'Are you sure you want to clear your notification inbox? This will remove all notifications and cannot be undone.';
+            if (btnTextEl) btnTextEl.textContent = 'Clear all';
+        }
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
@@ -2808,15 +2827,15 @@
         if (!modal) return;
         modal.classList.remove('active');
         document.body.style.overflow = '';
+        pendingDeleteNotifId = null;
     }
 
     function clearAllNotifs() {
         if (!NOTIF_ENABLED) return;
-        openClearNotifsModal();
+        openClearNotifsModal(null);
     }
 
-    async function confirmClearAllNotifs() {
-        if (!NOTIF_ENABLED) return;
+    async function executeClearAllNotifs() {
         const btn = document.getElementById('confirmClearNotifsBtn');
         const origHtml = btn ? btn.innerHTML : '';
         if (btn) {
@@ -2853,20 +2872,12 @@
         }
     }
 
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-            const modal = document.getElementById('clearNotifsModal');
-            if (modal && modal.classList.contains('active')) {
-                closeClearNotifsModal();
-            }
-        }
-    });
-
-    async function deleteNotif(id, event) {
-        if (!NOTIF_ENABLED || !id) return;
-        if (event) {
-            event.preventDefault();
-            event.stopPropagation();
+    async function executeDeleteSingleNotif(id) {
+        const btn = document.getElementById('confirmClearNotifsBtn');
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Deleting…';
         }
         const item = document.querySelector(`.notif-item[data-notif-id="${id}"]`);
         if (item) {
@@ -2876,7 +2887,8 @@
             item.style.pointerEvents = 'none';
         }
         try {
-            await fetch(`${NOTIF_API_BASE}/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${NOTIF_API_BASE}/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed to delete');
             if (item) item.remove();
             const remaining = document.querySelectorAll('.notif-item');
             const unread = document.querySelectorAll('.notif-item.unread').length;
@@ -2893,6 +2905,10 @@
                 if (dot) dot.style.display = unread > 0 ? 'block' : 'none';
                 if (markBtn) markBtn.style.display = unread > 0 ? '' : 'none';
             }
+            closeClearNotifsModal();
+            if (typeof showToast === 'function') {
+                showToast('Notification deleted', 'success');
+            }
         } catch (e) {
             console.error('Error deleting notification:', e);
             if (item) {
@@ -2900,7 +2916,44 @@
                 item.style.transform = '';
                 item.style.pointerEvents = '';
             }
+            if (typeof showToast === 'function') {
+                showToast('Failed to delete notification', 'error');
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
         }
+    }
+
+    async function confirmNotifAction() {
+        if (!NOTIF_ENABLED) return;
+        if (pendingDeleteNotifId) {
+            await executeDeleteSingleNotif(pendingDeleteNotifId);
+        } else {
+            await executeClearAllNotifs();
+        }
+    }
+
+    const confirmClearAllNotifs = confirmNotifAction;
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('clearNotifsModal');
+            if (modal && modal.classList.contains('active')) {
+                closeClearNotifsModal();
+            }
+        }
+    });
+
+    function deleteNotif(id, event) {
+        if (!NOTIF_ENABLED || !id) return;
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        openClearNotifsModal(id);
     }
 
     function isPhoneNotifLayout() {

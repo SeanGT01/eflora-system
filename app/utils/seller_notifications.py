@@ -215,6 +215,7 @@ def clear_resolved_stock_notifications(
 
 
 _STORE_NOTIFS_CLEARED_AT: dict[int, datetime] = {}
+_PRODUCT_NOTIF_DISMISSED_AT: dict[tuple[int, int, str], datetime] = {}
 
 
 def record_store_notifs_cleared(store_id: int, dt=None):
@@ -230,15 +231,32 @@ def get_store_notifs_cleared(store_id: int):
     return _STORE_NOTIFS_CLEARED_AT.get(store_id)
 
 
-def sync_store_stock_notifications(store_id, cleared_at=None):
+def record_product_notif_dismissed(store_id: int, product_id: int, notif_type: str = None, dt=None):
+    """Record when a specific product stock alert was dismissed so it is not immediately re-created."""
+    if not store_id or not product_id:
+        return
+    from datetime import datetime as dt_cls
+    now = dt or dt_cls.utcnow()
+    types = [notif_type] if notif_type else ['low_stock', 'out_of_stock']
+    for t in types:
+        _PRODUCT_NOTIF_DISMISSED_AT[(int(store_id), int(product_id), t)] = now
+
+
+def get_product_notif_dismissed(store_id: int, product_id: int, notif_type: str):
+    """Get the timestamp when a product's stock alert was dismissed."""
+    return _PRODUCT_NOTIF_DISMISSED_AT.get((int(store_id), int(product_id), notif_type))
+
+
+def sync_store_stock_notifications(store_id, cleared_at=None, dismissed_products=None):
     """
     Ensure the store's seller and staff have active notifications for currently
     out of stock (<= 0) and low stock (1..5) products without duplicate spam,
     and automatically remove alerts for products that have been restocked.
-    If notifications were recently cleared, skip re-creating alerts for products
-    whose stock hasn't changed since the clear event.
+    If notifications were recently cleared or individually dismissed, skip re-creating alerts
+    for products whose stock hasn't changed since the dismiss event.
     """
     try:
+        from datetime import datetime as dt_cls
         from app.models import Product, ProductVariant
         store = Store.query.get(store_id)
         if not store or not store.seller_id:
@@ -289,7 +307,15 @@ def sync_store_stock_notifications(store_id, cleared_at=None):
         ).all()
 
         for p in out_of_stock_products:
-            if cleared_cutoff and p.updated_at and p.updated_at <= cleared_cutoff:
+            prod_ts = p.updated_at or p.created_at
+            p_dismissed = get_product_notif_dismissed(store.id, p.id, 'out_of_stock')
+            if not p_dismissed and dismissed_products and str(p.id) in dismissed_products:
+                try:
+                    p_dismissed = dt_cls.fromisoformat(dismissed_products[str(p.id)])
+                except Exception:
+                    pass
+            cutoff = max(filter(None, [cleared_cutoff, p_dismissed])) if (cleared_cutoff or p_dismissed) else None
+            if cutoff and (prod_ts is None or prod_ts <= cutoff):
                 continue
             existing = Notification.query.filter_by(
                 user_id=seller_id,
@@ -316,7 +342,15 @@ def sync_store_stock_notifications(store_id, cleared_at=None):
         ).order_by(Product.stock_quantity.asc()).limit(15).all()
 
         for p in low_stock_products:
-            if cleared_cutoff and p.updated_at and p.updated_at <= cleared_cutoff:
+            prod_ts = p.updated_at or p.created_at
+            p_dismissed = get_product_notif_dismissed(store.id, p.id, 'low_stock')
+            if not p_dismissed and dismissed_products and str(p.id) in dismissed_products:
+                try:
+                    p_dismissed = dt_cls.fromisoformat(dismissed_products[str(p.id)])
+                except Exception:
+                    pass
+            cutoff = max(filter(None, [cleared_cutoff, p_dismissed])) if (cleared_cutoff or p_dismissed) else None
+            if cutoff and (prod_ts is None or prod_ts <= cutoff):
                 continue
             existing = Notification.query.filter_by(
                 user_id=seller_id,
