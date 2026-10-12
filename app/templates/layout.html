@@ -538,7 +538,7 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-lg);
-            width: min(360px, 92vw);
+            width: min(390px, 94vw);
             max-height: min(70vh, 520px);
             z-index: 12450;
             display: none;
@@ -653,6 +653,38 @@
             word-break: break-word;
         }
         .notif-time { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+        .notif-item-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+        .notif-item-delete {
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 15px;
+            opacity: 0.5;
+            transition: var(--transition);
+            padding: 0;
+        }
+        .notif-item:hover .notif-item-delete {
+            opacity: 0.85;
+        }
+        .notif-item-delete:hover {
+            background: rgba(192, 57, 43, 0.1);
+            color: #c0392b !important;
+            opacity: 1 !important;
+            transform: scale(1.1);
+        }
         .notif-chevron {
             flex-shrink: 0;
             color: var(--muted);
@@ -1505,10 +1537,11 @@
                 display: inline-flex;
             }
 
-            #markAllReadBtn {
-                min-height: 36px;
-                padding: 0.4rem 0.75rem;
-                font-size: 12px;
+            #markAllReadBtn,
+            #clearAllNotifsBtn {
+                min-height: 34px;
+                padding: 0.35rem 0.65rem;
+                font-size: 11.5px;
                 white-space: nowrap;
             }
 
@@ -2205,7 +2238,8 @@
                         <div class="notif-panel-header">
                             <span class="notif-panel-title">Notifications</span>
                             <div class="notif-panel-actions">
-                                <button class="btn btn-outline btn-sm" id="markAllReadBtn" onclick="markAllNotifsRead()">Mark all read</button>
+                                <button class="btn btn-outline btn-sm" id="markAllReadBtn" onclick="markAllNotifsRead()" style="display:none;">Mark all read</button>
+                                <button class="btn btn-outline btn-sm notif-clear-btn" id="clearAllNotifsBtn" onclick="clearAllNotifs()" style="display:none;" title="Clear all notifications">Clear all</button>
                                 <button type="button" class="notif-panel-close" id="notifCloseBtn" onclick="closeNotifPanel()" aria-label="Close notifications">
                                     <i class="ri-close-line"></i>
                                 </button>
@@ -2628,7 +2662,12 @@
                 <div class="notif-body-sub">${escapeHtml(n.message)}</div>
                 <div class="notif-time">${timeAgo(n.created_at)}</div>
             </div>
-            ${chevron}
+            <div class="notif-item-actions">
+                <button type="button" class="notif-item-delete" onclick="deleteNotif(${n.id}, event)" title="Delete notification" aria-label="Delete notification">
+                    <i class="ri-close-line"></i>
+                </button>
+                ${chevron}
+            </div>
         </div>`;
     }
 
@@ -2643,6 +2682,7 @@
         const loading = document.getElementById('notifLoading');
         const dot = document.querySelector('.notif-dot');
         const markBtn = document.getElementById('markAllReadBtn');
+        const clearBtn = document.getElementById('clearAllNotifsBtn');
         if (!list) return;
         try {
             const res = await fetch(NOTIF_API_BASE);
@@ -2655,12 +2695,14 @@
                 if (empty) empty.style.display = 'block';
                 if (dot) dot.style.display = 'none';
                 if (markBtn) markBtn.style.display = 'none';
+                if (clearBtn) clearBtn.style.display = 'none';
             } else {
                 list.innerHTML = notifs.map(renderNotifItem).join('');
                 if (empty) empty.style.display = 'none';
                 const unread = data.unread_count || 0;
                 if (dot) dot.style.display = unread > 0 ? 'block' : 'none';
                 if (markBtn) markBtn.style.display = unread > 0 ? '' : 'none';
+                if (clearBtn) clearBtn.style.display = '';
                 // Keep the latest messages visible at the top of the scroll area
                 list.scrollTop = 0;
             }
@@ -2682,8 +2724,9 @@
         }
     }
 
-    async function handleNotifClick(el) {
+    async function handleNotifClick(el, e) {
         if (!el) return;
+        if (e && e.target && e.target.closest('.notif-item-delete')) return;
         const id = Number(el.dataset.notifId);
         const targetUrl = el.dataset.targetUrl || '';
         if (id) await markNotifRead(id, el);
@@ -2693,16 +2736,18 @@
     }
 
     document.getElementById('notifList')?.addEventListener('click', function (e) {
+        if (e.target.closest('.notif-item-delete')) return;
         const item = e.target.closest('.notif-item');
         if (!item || !this.contains(item)) return;
-        handleNotifClick(item);
+        handleNotifClick(item, e);
     });
     document.getElementById('notifList')?.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.target.closest('.notif-item-delete')) return;
         const item = e.target.closest('.notif-item');
         if (!item || !this.contains(item)) return;
         e.preventDefault();
-        handleNotifClick(item);
+        handleNotifClick(item, e);
     });
 
     async function markAllNotifsRead() {
@@ -2713,6 +2758,63 @@
         if (dot) dot.style.display = 'none';
         const markBtn = document.getElementById('markAllReadBtn');
         if (markBtn) markBtn.style.display = 'none';
+    }
+
+    async function clearAllNotifs() {
+        if (!NOTIF_ENABLED) return;
+        if (!confirm('Are you sure you want to clear all notifications?')) return;
+        try {
+            const res = await fetch(`${NOTIF_API_BASE}/clear-all`, { method: 'POST' });
+            if (!res.ok) throw new Error('Failed to clear');
+            const list = document.getElementById('notifList');
+            const empty = document.getElementById('notifEmpty');
+            const dot = document.querySelector('.notif-dot');
+            const markBtn = document.getElementById('markAllReadBtn');
+            const clearBtn = document.getElementById('clearAllNotifsBtn');
+            if (list) list.innerHTML = '';
+            if (empty) empty.style.display = 'block';
+            if (dot) dot.style.display = 'none';
+            if (markBtn) markBtn.style.display = 'none';
+            if (clearBtn) clearBtn.style.display = 'none';
+            if (typeof showToast === 'function') {
+                showToast('All notifications cleared', 'success');
+            }
+        } catch (e) {
+            console.error('Error clearing notifications:', e);
+            if (typeof showToast === 'function') {
+                showToast('Failed to clear notifications', 'error');
+            }
+        }
+    }
+
+    async function deleteNotif(id, event) {
+        if (!NOTIF_ENABLED || !id) return;
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        try {
+            await fetch(`${NOTIF_API_BASE}/${id}`, { method: 'DELETE' });
+            const item = document.querySelector(`.notif-item[data-notif-id="${id}"]`);
+            if (item) item.remove();
+            const remaining = document.querySelectorAll('.notif-item');
+            const unread = document.querySelectorAll('.notif-item.unread').length;
+            const dot = document.querySelector('.notif-dot');
+            const markBtn = document.getElementById('markAllReadBtn');
+            const clearBtn = document.getElementById('clearAllNotifsBtn');
+            const empty = document.getElementById('notifEmpty');
+            if (remaining.length === 0) {
+                if (empty) empty.style.display = 'block';
+                if (clearBtn) clearBtn.style.display = 'none';
+                if (markBtn) markBtn.style.display = 'none';
+                if (dot) dot.style.display = 'none';
+            } else {
+                if (dot) dot.style.display = unread > 0 ? 'block' : 'none';
+                if (markBtn) markBtn.style.display = unread > 0 ? '' : 'none';
+            }
+        } catch (e) {
+            console.error('Error deleting notification:', e);
+        }
     }
 
     function isPhoneNotifLayout() {

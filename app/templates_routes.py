@@ -8731,7 +8731,14 @@ def session_notifications_api():
         store = _seller_portal_manageable_store(session.get('user_id'))
         if store:
             from app.utils.seller_notifications import sync_store_stock_notifications
-            sync_store_stock_notifications(store.id)
+            cleared_iso = session.get('notifications_cleared_at')
+            cleared_dt = None
+            if cleared_iso:
+                try:
+                    cleared_dt = datetime.fromisoformat(cleared_iso)
+                except Exception:
+                    pass
+            sync_store_stock_notifications(store.id, cleared_at=cleared_dt)
 
     def _load_inbox():
         notes = (Notification.query.filter_by(user_id=user_id)
@@ -8773,6 +8780,64 @@ def session_notifications_read_all_api():
         return jsonify({'error': 'Unauthorized'}), 401
     Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
     db.session.commit()
+    return jsonify({'success': True}), 200
+
+
+@templates_bp.route('/api/seller/notifications/clear-all', methods=['POST', 'DELETE'])
+@templates_bp.route('/api/admin/notifications/clear-all', methods=['POST', 'DELETE'])
+@templates_bp.route('/api/notifications/clear-all', methods=['POST', 'DELETE'])
+def session_notifications_clear_all_api():
+    if session.get('role') not in ('seller', 'store_admin', 'admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    user_id = _session_notification_inbox_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    now_utc = datetime.utcnow()
+    session['notifications_cleared_at'] = now_utc.isoformat()
+
+    if session.get('role') in ('seller', 'store_admin'):
+        from app.models import StoreAdmin
+        store = _seller_portal_manageable_store(session.get('user_id'))
+        if store:
+            from app.utils.seller_notifications import record_store_notifs_cleared
+            record_store_notifs_cleared(store.id, now_utc)
+
+            staff = StoreAdmin.query.filter_by(store_id=store.id, is_active=True, is_archived=False).all()
+            target_ids = list({user_id, store.seller_id, *(s.user_id for s in staff if s.user_id)})
+            Notification.query.filter(Notification.user_id.in_(target_ids)).delete(synchronize_session=False)
+            db.session.commit()
+            return jsonify({'success': True}), 200
+
+    Notification.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify({'success': True}), 200
+
+
+@templates_bp.route('/api/seller/notifications/<int:notif_id>', methods=['DELETE'])
+@templates_bp.route('/api/admin/notifications/<int:notif_id>', methods=['DELETE'])
+@templates_bp.route('/api/notifications/<int:notif_id>', methods=['DELETE'])
+def session_notification_delete_api(notif_id):
+    if session.get('role') not in ('seller', 'store_admin', 'admin'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    user_id = _session_notification_inbox_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    notif = Notification.query.filter_by(id=notif_id, user_id=user_id).first()
+    if notif:
+        store = _seller_portal_manageable_store(session.get('user_id')) if session.get('role') in ('seller', 'store_admin') else None
+        if store and notif.reference_id and notif.type in ('low_stock', 'out_of_stock', 'new_order'):
+            from app.models import StoreAdmin
+            staff = StoreAdmin.query.filter_by(store_id=store.id, is_active=True, is_archived=False).all()
+            target_ids = list({user_id, store.seller_id, *(s.user_id for s in staff if s.user_id)})
+            Notification.query.filter(
+                Notification.user_id.in_(target_ids),
+                Notification.type == notif.type,
+                Notification.reference_id == notif.reference_id,
+            ).delete(synchronize_session=False)
+        else:
+            db.session.delete(notif)
+        db.session.commit()
     return jsonify({'success': True}), 200
 
 

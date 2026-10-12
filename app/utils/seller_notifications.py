@@ -214,11 +214,29 @@ def clear_resolved_stock_notifications(
         return 0
 
 
-def sync_store_stock_notifications(store_id):
+_STORE_NOTIFS_CLEARED_AT: dict[int, datetime] = {}
+
+
+def record_store_notifs_cleared(store_id: int, dt=None):
+    """Record when a store's notifications were cleared so stock alerts are not immediately respawned."""
+    if not store_id:
+        return
+    from datetime import datetime as dt_cls
+    _STORE_NOTIFS_CLEARED_AT[store_id] = dt or dt_cls.utcnow()
+
+
+def get_store_notifs_cleared(store_id: int):
+    """Get the timestamp when this store's notifications were last cleared."""
+    return _STORE_NOTIFS_CLEARED_AT.get(store_id)
+
+
+def sync_store_stock_notifications(store_id, cleared_at=None):
     """
     Ensure the store's seller and staff have active notifications for currently
     out of stock (<= 0) and low stock (1..5) products without duplicate spam,
     and automatically remove alerts for products that have been restocked.
+    If notifications were recently cleared, skip re-creating alerts for products
+    whose stock hasn't changed since the clear event.
     """
     try:
         from app.models import Product, ProductVariant
@@ -231,6 +249,8 @@ def sync_store_stock_notifications(store_id):
         staff = StoreAdmin.query.filter_by(store_id=store.id, is_active=True, is_archived=False).all()
         recipients.extend([s.user_id for s in staff if s.user_id])
         recipients = list(set(recipients))
+
+        cleared_cutoff = cleared_at or get_store_notifs_cleared(store.id)
 
         # ── Step 0: Remove alerts for restocked products ─────────────
         # A. Products restocked above threshold (> 5): remove both out_of_stock and low_stock
@@ -269,6 +289,8 @@ def sync_store_stock_notifications(store_id):
         ).all()
 
         for p in out_of_stock_products:
+            if cleared_cutoff and p.updated_at and p.updated_at <= cleared_cutoff:
+                continue
             existing = Notification.query.filter_by(
                 user_id=seller_id,
                 type='out_of_stock',
@@ -294,6 +316,8 @@ def sync_store_stock_notifications(store_id):
         ).order_by(Product.stock_quantity.asc()).limit(15).all()
 
         for p in low_stock_products:
+            if cleared_cutoff and p.updated_at and p.updated_at <= cleared_cutoff:
+                continue
             existing = Notification.query.filter_by(
                 user_id=seller_id,
                 type='low_stock',
@@ -310,9 +334,11 @@ def sync_store_stock_notifications(store_id):
                     ))
                 created_count += 1
 
-        db.session.commit()
+        if created_count > 0:
+            db.session.commit()
         return created_count
     except Exception as exc:
         logger.exception('sync_store_stock_notifications failed: %s', exc)
         return 0
+
 
