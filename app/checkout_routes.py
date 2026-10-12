@@ -579,6 +579,7 @@ def _reduce_stock_lookup(stock_lookup, user_id, reason_notes, store_id=None):
                 stock_before=before,
                 stock_after=after,
                 threshold=LOW_STOCK_THRESHOLD,
+                variant=variant,
             )
 
 
@@ -2739,6 +2740,7 @@ def buy_now_create_order():
             product=product,
             stock_before=stock_before,
             stock_after=stock_after,
+            variant=variant,
         )
 
         # Reduce stock for add-ons

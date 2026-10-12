@@ -81,6 +81,8 @@
 <div class="products-grid" id="productsGrid">
     {% for product in products %}
     <div class="product-card"
+         id="product-card-{{ product.id }}"
+         data-id="{{ product.id }}"
          data-name="{{ product.name|lower }}"
          data-category="{{ product.category|lower if product.category else '' }}"
          data-stock="{{ product.stock_quantity }}">
@@ -357,6 +359,13 @@
         transform: translateY(-4px);
         box-shadow: var(--shadow-md);
         border-color: var(--border-strong);
+    }
+
+    .product-card.product-card-highlighted {
+        outline: 2px solid var(--terracotta);
+        box-shadow: 0 0 0 4px rgba(196, 112, 79, 0.25), 0 8px 24px rgba(196, 112, 79, 0.2);
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
     }
     
     .product-img-wrap {
@@ -1127,5 +1136,19 @@
     window.deleteProduct = deleteProduct;
     window.openStockModal = openStockModal;
     window.submitStockUpdate = submitStockUpdate;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const highlightId = urlParams.get('highlight');
+        if (highlightId) {
+            const card = document.getElementById(`product-card-${highlightId}`) || document.querySelector(`[data-id="${highlightId}"]`);
+            if (card) {
+                card.style.display = '';
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.classList.add('product-card-highlighted');
+                setTimeout(() => card.classList.remove('product-card-highlighted'), 3500);
+            }
+        }
+    });
 </script>
 {% endblock %}

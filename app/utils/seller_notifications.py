@@ -87,26 +87,61 @@ def notify_store_seller(
 
 def notify_low_stock_if_crossed(
     *,
-    store_id,
+    store_id=None,
     product,
     stock_before: int,
     stock_after: int,
     threshold: int = LOW_STOCK_THRESHOLD,
+    variant=None,
 ):
-    """Notify once when stock crosses from above threshold into <= threshold."""
+    """
+    Notify store seller when stock crosses thresholds:
+    - Out of stock alert: stock drops to 0 or below (stock_before > 0 and stock_after <= 0).
+    - Low stock alert: stock crosses from above threshold into low stock range (stock_before > threshold and 0 < stock_after <= threshold).
+    """
     try:
-        if stock_before is None or stock_after is None:
+        if product is None or stock_before is None or stock_after is None:
             return None
-        if stock_before > threshold and stock_after <= threshold:
-            name = getattr(product, 'name', None) or 'Product'
-            pid = getattr(product, 'id', None)
+
+        try:
+            stock_before = int(stock_before)
+            stock_after = int(stock_after)
+            threshold = int(threshold)
+        except (ValueError, TypeError):
+            return None
+
+        sid = store_id or getattr(product, 'store_id', None)
+        if not sid:
+            return None
+
+        base_name = getattr(product, 'name', None) or 'Product'
+        variant_name = getattr(variant, 'name', None) if variant else None
+        item_name = f"{base_name} ({variant_name})" if variant_name else base_name
+        pid = getattr(product, 'id', None)
+
+        # 1. Out of stock alert (takes precedence if dropped directly to 0)
+        if stock_before > 0 and stock_after <= 0:
             return notify_store_seller(
-                store_id=store_id,
+                store_id=sid,
+                title='Out of stock alert',
+                message=f'"{item_name}" is now out of stock (0 left).',
+                type='out_of_stock',
+                reference_id=pid,
+            )
+
+        # 2. Low stock alert
+        if stock_before > threshold and 0 < stock_after <= threshold:
+            return notify_store_seller(
+                store_id=sid,
                 title='Low stock alert',
-                message=f'"{name}" is low on stock ({stock_after} left after a customer order).',
+                message=f'"{item_name}" is low on stock ({stock_after} left).',
                 type='low_stock',
                 reference_id=pid,
             )
     except Exception as exc:
         logger.exception('notify_low_stock_if_crossed failed: %s', exc)
     return None
+
+
+notify_stock_alerts_if_crossed = notify_low_stock_if_crossed
+

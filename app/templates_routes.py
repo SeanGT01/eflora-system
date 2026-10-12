@@ -23,6 +23,7 @@ from app.laguna_addresses import get_municipalities, get_barangays, get_coordina
 from app.models import UserAddress
 
 from app.utils.cloudinary_helper import upload_to_cloudinary, delete_from_cloudinary
+from app.utils.seller_notifications import notify_low_stock_if_crossed
 # app/templates_routes.py - Add these imports at the top
 from flask_wtf.csrf import generate_csrf
 from sqlalchemy.orm import joinedload, selectinload
@@ -7222,7 +7223,15 @@ def manage_product(product_id):
                         pass
             if 'stock_quantity' in request.form:
                 try:
-                    product.stock_quantity = int(request.form['stock_quantity'])
+                    old_stock = int(product.stock_quantity or 0)
+                    new_stock = int(request.form['stock_quantity'])
+                    product.stock_quantity = new_stock
+                    notify_low_stock_if_crossed(
+                        store_id=product.store_id,
+                        product=product,
+                        stock_before=old_stock,
+                        stock_after=new_stock,
+                    )
                 except ValueError:
                     return jsonify({'error': 'Invalid stock quantity format'}), 400
             
@@ -7466,7 +7475,16 @@ def manage_product(product_id):
                                             pass
                                     else:
                                         variant.special_price = None
-                                    variant.stock_quantity = int(variant_data.get('stock_quantity', 0))
+                                    v_old_stock = int(variant.stock_quantity or 0)
+                                    v_new_stock = int(variant_data.get('stock_quantity', 0))
+                                    variant.stock_quantity = v_new_stock
+                                    notify_low_stock_if_crossed(
+                                        store_id=product.store_id,
+                                        product=product,
+                                        stock_before=v_old_stock,
+                                        stock_after=v_new_stock,
+                                        variant=variant,
+                                    )
                                     variant.sku = variant_data.get('sku')
                                     variant.attributes = variant_data.get('attributes')
                                     variant.sort_order = idx
@@ -7861,8 +7879,10 @@ def reduce_product_stock(product_id):
                 return jsonify({'error': f'Cannot reduce by {amount}. Available: {variant.stock_quantity}'}), 400
             
             # Reduce variant stock
+            stock_before = int(variant.stock_quantity or 0)
             variant.stock_quantity -= amount
             variant.updated_at = datetime.utcnow()
+            stock_after = int(variant.stock_quantity or 0)
             
             # Create audit entry
             reduction = StockReduction(
@@ -7874,6 +7894,13 @@ def reduce_product_stock(product_id):
                 reduced_by=user_id
             )
             db.session.add(reduction)
+            notify_low_stock_if_crossed(
+                store_id=product.store_id,
+                product=product,
+                stock_before=stock_before,
+                stock_after=stock_after,
+                variant=variant,
+            )
             
             print(f"✅ Variant stock reduction recorded:")
             print(f"   Product: {product.name} (ID: {product.id})")
@@ -7896,7 +7923,15 @@ def reduce_product_stock(product_id):
             
         else:
             # Reduce main product stock
+            stock_before = int(product.stock_quantity or 0)
             reduction = product.reduce_stock(amount, reason, user_id, reason_notes)
+            stock_after = int(product.stock_quantity or 0)
+            notify_low_stock_if_crossed(
+                store_id=product.store_id,
+                product=product,
+                stock_before=stock_before,
+                stock_after=stock_after,
+            )
             db.session.commit()
             
             print(f"✅ Main product stock reduction recorded:")
@@ -10057,7 +10092,9 @@ def pos_create_order():
             if not item.get('addons_only'):
                 if item['variant_id']:
                     variant = ProductVariant.query.get(item['variant_id'])
+                    stock_before = int(variant.stock_quantity or 0)
                     variant.stock_quantity -= item['quantity']
+                    stock_after = int(variant.stock_quantity or 0)
                     
                     # Create StockReduction record for variant
                     stock_reduction = StockReduction(
@@ -10069,8 +10106,17 @@ def pos_create_order():
                         reduced_by=user_id
                     )
                     db.session.add(stock_reduction)
+                    notify_low_stock_if_crossed(
+                        store_id=store.id,
+                        product=item['product'],
+                        stock_before=stock_before,
+                        stock_after=stock_after,
+                        variant=variant,
+                    )
                 else:
+                    stock_before = int(item['product'].stock_quantity or 0)
                     item['product'].stock_quantity -= item['quantity']
+                    stock_after = int(item['product'].stock_quantity or 0)
                     
                     # Create StockReduction record for main product
                     stock_reduction = StockReduction(
@@ -10082,6 +10128,12 @@ def pos_create_order():
                         reduced_by=user_id
                     )
                     db.session.add(stock_reduction)
+                    notify_low_stock_if_crossed(
+                        store_id=store.id,
+                        product=item['product'],
+                        stock_before=stock_before,
+                        stock_after=stock_after,
+                    )
 
             # Structured add-ons: include cost in order total (already) and decrement stock
             if item.get('addon_lines'):
@@ -13863,7 +13915,16 @@ def update_variant(variant_id):
         
         if request.form.get('stock_quantity'):
             try:
-                variant.stock_quantity = int(request.form.get('stock_quantity'))
+                v_old_stock = int(variant.stock_quantity or 0)
+                v_new_stock = int(request.form.get('stock_quantity'))
+                variant.stock_quantity = v_new_stock
+                notify_low_stock_if_crossed(
+                    store_id=product.store_id,
+                    product=product,
+                    stock_before=v_old_stock,
+                    stock_after=v_new_stock,
+                    variant=variant,
+                )
             except ValueError:
                 return jsonify({'error': 'Invalid stock quantity format'}), 400
         
