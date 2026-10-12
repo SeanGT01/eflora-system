@@ -1287,8 +1287,8 @@
         color: var(--charcoal);
         margin: 0 0 0.35rem;
         line-height: 1.3;
-        height: 2.6em;
-        max-height: 2.6em;
+        height: 48px !important;
+        max-height: 48px !important;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
@@ -1296,7 +1296,36 @@
         text-overflow: ellipsis;
         white-space: normal;
         word-break: break-word;
-        overflow-wrap: break-word;
+        overflow-wrap: anywhere;
+        hyphens: auto;
+    }
+
+    /* Only shrink product titles if they are too long to preserve card size uniformity */
+    .product-card .product-title.product-title--long,
+    .product-title.product-title--long {
+        font-size: 13px !important;
+        line-height: 1.2 !important;
+        letter-spacing: -0.015em;
+        -webkit-line-clamp: 3 !important;
+    }
+
+    .product-card .product-title.product-title--xlong,
+    .product-title.product-title--xlong {
+        font-size: 11.5px !important;
+        line-height: 1.15 !important;
+        letter-spacing: -0.02em;
+        -webkit-line-clamp: 3 !important;
+    }
+
+    @media (max-width: 480px) {
+        .product-title.product-title--long {
+            font-size: 12px !important;
+            line-height: 1.18 !important;
+        }
+        .product-title.product-title--xlong {
+            font-size: 10.5px !important;
+            line-height: 1.12 !important;
+        }
     }
 
     .product-footer,
@@ -2238,8 +2267,8 @@
             font-size: 16px !important;
             font-weight: 600 !important;
             line-height: 1.3;
-            height: 2.6em;
-            max-height: 2.6em;
+            height: 46px !important;
+            max-height: 46px !important;
             margin-bottom: 0.25rem;
             display: -webkit-box;
             -webkit-line-clamp: 2;
@@ -2248,7 +2277,8 @@
             text-overflow: ellipsis;
             white-space: normal;
             word-break: break-word;
-            overflow-wrap: break-word;
+            overflow-wrap: anywhere;
+            hyphens: auto;
         }
         .product-price,
         .product-price .ep-price__sale,
@@ -2297,8 +2327,8 @@
             font-weight: 600 !important;
             line-height: 1.3;
             margin-bottom: 0.25rem;
-            height: 2.6em;
-            max-height: 2.6em;
+            height: 42px !important;
+            max-height: 42px !important;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -2306,7 +2336,8 @@
             text-overflow: ellipsis;
             white-space: normal;
             word-break: break-word;
-            overflow-wrap: break-word;
+            overflow-wrap: anywhere;
+            hyphens: auto;
         }
         .product-price,
         .product-price .ep-price__sale,
@@ -2677,7 +2708,9 @@
                     </div>
 
                     <div class="product-content">
-                        <div class="product-title">{{ product.name | title_case }}</div>
+                        {% set name_str = product.name | title_case %}
+                        {% set name_len = (product.name or '') | length %}
+                        <div class="product-title {% if name_len >= 55 %}product-title--xlong{% elif name_len >= 45 %}product-title--long{% endif %}" title="{{ name_str }}">{{ name_str }}</div>
                         <div class="product-meta">
                             <div class="product-price">{{ price_tag(product, 'sm', false) }}</div>
                             {% set rating = product.avg_rating if product.avg_rating is defined else 0 %}

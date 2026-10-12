@@ -5003,7 +5003,7 @@ def _render_admin_dashboard():
     for p in pos_recent_q:
         recent_orders_list.append({
             'id': p.id,
-            'order_no': f"#POS-{p.id:04d}",
+            'order_no': f"#{p.order_number}" if p.order_number else f"#POS-{p.id:04d}",
             'customer_name': p.customer_name or 'Walk-in',
             'customer_initial': ((p.customer_name or 'W')[0]).upper(),
             'store_name': p.store.name if getattr(p, 'store', None) else '—',
@@ -9704,6 +9704,37 @@ def seller_pos():
         familiar_customers=familiar_customers,
     )
 
+def get_store_pos_prefix(store):
+    """3-letter uppercase prefix based on the store name (e.g. AKS, PRI, SPE)."""
+    if not store or not store.name:
+        return 'POS'
+    import re
+    clean = re.sub(r'[^A-Za-z0-9]', '', store.name).upper()
+    return clean[:3] if len(clean) >= 3 else (clean + 'POS')[:3]
+
+
+def get_next_pos_order_number(store_id):
+    """Calculate the next sequential order number for a store (e.g. AKS-0089)."""
+    store = Store.query.get(store_id)
+    prefix = get_store_pos_prefix(store)
+    existing = db.session.query(POSOrder.order_number).filter(
+        POSOrder.store_id == store_id,
+        POSOrder.order_number.like(f"{prefix}-%")
+    ).all()
+    max_seq = 0
+    for (num_str,) in existing:
+        if num_str:
+            parts = num_str.split('-')
+            if len(parts) >= 2 and parts[-1].isdigit():
+                try:
+                    seq = int(parts[-1])
+                    if seq > max_seq:
+                        max_seq = seq
+                except ValueError:
+                    pass
+    return f"{prefix}-{max_seq + 1:04d}"
+
+
 @templates_bp.route('/seller/pos/order', methods=['POST'])
 @seller_required
 def pos_create_order():
@@ -9901,9 +9932,13 @@ def pos_create_order():
     if total < 0:
         return jsonify({'error': 'Discount cannot exceed subtotal'}), 400
 
+    # Generate store-specific sequential order number
+    order_number = get_next_pos_order_number(store.id)
+
     # Create the order with discount & custom metadata
     pos_order = POSOrder(
         store_id=store.id,
+        order_number=order_number,
         total_amount=total,
         amount_given=amount_given,
         change_amount=change_amount,
@@ -10068,6 +10103,7 @@ def pos_create_order():
     return jsonify({
         'success': True,
         'pos_order_id': pos_order.id,
+        'order_number': pos_order.order_number,
         'message': 'Order processed successfully.'
     }), 201
 
@@ -10080,8 +10116,12 @@ def pos_next_order_id():
     
     last_order = POSOrder.query.filter_by(store_id=store.id).order_by(POSOrder.id.desc()).first()
     next_id = (last_order.id + 1) if last_order else 1000
+    next_order_number = get_next_pos_order_number(store.id)
     
-    return jsonify({'next_id': next_id})
+    return jsonify({
+        'next_id': next_id,
+        'next_order_number': next_order_number
+    })
 
 
 @templates_bp.route('/api/seller/pos/customers')
@@ -14497,6 +14537,7 @@ def pos_order_detail_api(order_id):
 
         return jsonify({
             'id': order.id,
+            'order_number': order.order_number,
             'created_at': created_at_iso,
             'created_at_date': created_at_date,
             'customer_name': order.customer_name or 'Walk-in',
@@ -14593,6 +14634,7 @@ def pos_order_history_api():
             db.or_(
                 POSOrder.customer_name.ilike(f'%{search_query}%'),
                 POSOrder.customer_contact.ilike(f'%{search_query}%'),
+                POSOrder.order_number.ilike(f'%{search_query}%'),
                 db.cast(POSOrder.id, db.String).ilike(f'%{search_query}%')
             )
         )
@@ -14627,6 +14669,7 @@ def pos_order_history_api():
 
         orders.append({
             'id':             o.id,
+            'order_number':   o.order_number,
             'created_at':     created_at_iso,
             'created_at_date': created_at_date,
             'customer_name':  o.customer_name or 'Walk-in',

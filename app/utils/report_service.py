@@ -1457,7 +1457,7 @@ def _orders_section(store_id, start, end):
         details = _pos_order_line_details(p)
         order_type = 'Walk-in (Custom)' if (p.is_custom_order or any(it.is_custom for it in (p.items or []))) else 'Walk-in (Standard)'
         pos_rows.append([
-            f"POS-{p.id:05d}",
+            p.order_number or f"POS-{p.id:05d}",
             p.customer_name or 'Walk-in',
             _format_pht(p.created_at),
             item_qty,
@@ -3510,7 +3510,7 @@ def _admin_orders_section(start, end):
         details = _pos_order_line_details(p)
         order_type = 'Walk-in (Custom)' if (p.is_custom_order or any(it.is_custom for it in (p.items or []))) else 'Walk-in (Standard)'
         pos_rows.append([
-            f"POS-{p.id:05d}",
+            p.order_number or f"POS-{p.id:05d}",
             p.store.name if getattr(p, 'store', None) else '—',
             p.customer_name or 'Walk-in',
             _format_pht(p.created_at),

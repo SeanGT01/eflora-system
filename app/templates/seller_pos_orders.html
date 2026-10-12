@@ -459,9 +459,10 @@ function renderOrders(orders) {
             ? `<span style="background:#b5445a;color:#fff;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;text-transform:uppercase;letter-spacing:0.04em;">Custom</span>` 
             : '';
 
+        const orderNumDisplay = order.order_number ? `#${order.order_number}` : `#POS-${String(order.id).padStart(4,'0')}`;
         return `
             <tr>
-                <td data-label="Order #" style="font-family:monospace;font-weight:600;">#POS-${String(order.id).padStart(4,'0')}${customBadge}</td>
+                <td data-label="Order #" style="font-family:monospace;font-weight:600;">${orderNumDisplay}${customBadge}</td>
                 <td data-label="Date">
                     <div>${dateStr}</div>
                     <div style="font-size:11px;color:var(--muted);">${timeStr}</div>
@@ -648,7 +649,7 @@ function renderOrderModal(order) {
     const itemCount = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
 
     document.getElementById('receiptTs').textContent = formatReceiptDatePH(order.created_at);
-    document.getElementById('receiptId').textContent = 'POS-' + String(order.id).padStart(4, '0');
+    document.getElementById('receiptId').textContent = order.order_number || ('POS-' + String(order.id).padStart(4, '0'));
     document.getElementById('receiptPay').textContent = PAY_LABELS[method] || method;
     document.getElementById('receiptCust').textContent = order.customer_name || 'Walk-in';
     document.getElementById('receiptCount').textContent = itemCount + (itemCount === 1 ? ' item' : ' items');

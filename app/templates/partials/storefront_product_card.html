@@ -30,7 +30,9 @@
     </div>
 
     <div class="product-content">
-        <h3 class="product-title">{{ product.name | title_case }}</h3>
+        {% set name_str = product.name | title_case %}
+        {% set name_len = (product.name or '') | length %}
+        <h3 class="product-title {% if name_len >= 55 %}product-title--xlong{% elif name_len >= 45 %}product-title--long{% endif %}" title="{{ name_str }}">{{ name_str }}</h3>
         <div class="product-meta">
             <div class="product-price">{{ price_tag(product, 'sm', false) }}</div>
             {% set rating = product.avg_rating if product.avg_rating is defined else 0 %}

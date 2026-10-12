@@ -348,6 +348,15 @@ class Store(db.Model):
         return None
 
     @property
+    def pos_prefix(self):
+        """3-letter uppercase prefix based on the store name (e.g. AKS, PRI, SPE)."""
+        if not self.name:
+            return 'POS'
+        import re
+        clean = re.sub(r'[^A-Za-z0-9]', '', self.name).upper()
+        return clean[:3] if len(clean) >= 3 else (clean + 'POS')[:3]
+
+    @property
     def usable_address(self):
         """Street address excluding legacy placeholder text."""
         addr = (self.address or '').strip()
@@ -2128,6 +2137,7 @@ class POSOrder(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
+    order_number = db.Column(db.String(50), nullable=True, index=True)  # Store-dedicated order number (e.g. AKS-0001)
     total_amount = db.Column(db.Numeric(10, 2))
     
     # ===== NEW FIELDS FOR CASH MANAGEMENT =====
@@ -2171,6 +2181,7 @@ class POSOrder(db.Model):
         
         return {
             'id': self.id,
+            'order_number': self.order_number,
             'store_id': self.store_id,
             'subtotal': subtotal,
             'discount': discount,

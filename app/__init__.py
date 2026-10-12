@@ -565,6 +565,9 @@ def create_app(config_class='default'):
                     db.session.execute(text("ALTER TABLE pos_orders ADD COLUMN dedication_message TEXT"))
                 if 'florist_notes' not in pos_order_cols:
                     db.session.execute(text("ALTER TABLE pos_orders ADD COLUMN florist_notes TEXT"))
+                if 'order_number' not in pos_order_cols:
+                    db.session.execute(text("ALTER TABLE pos_orders ADD COLUMN order_number VARCHAR(50)"))
+                    db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_pos_orders_order_number ON pos_orders (order_number)"))
                 db.session.commit()
                 app.logger.info("Checked/applied pos_orders custom order schema columns")
 
