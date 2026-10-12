@@ -3121,9 +3121,9 @@
                                             <button type="button" id="tp-clear-window" style="background: none; border: none; font-size: 11.5px; color: var(--muted); cursor: pointer; text-decoration: underline; padding: 0;">Clear window (no restriction)</button>
                                         </div>
                                         <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                                            <!-- Start Time (AM Only) -->
+                                            <!-- Start Time -->
                                             <div class="custom-tp-wrap" id="tp-wrap-start">
-                                                <div class="custom-tp-box" id="tp-box-start" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select start time (AM only)">
+                                                <div class="custom-tp-box" id="tp-box-start" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select start time">
                                                     <span id="tp-text-start">08:00 AM</span>
                                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" style="color: #666; flex-shrink: 0;">
                                                         <circle cx="8" cy="8" r="6.5"/>
@@ -3136,6 +3136,7 @@
                                                         <div class="custom-tp-col custom-tp-col-mins" id="tp-mins-start"></div>
                                                         <div class="custom-tp-col custom-tp-col-period" id="tp-period-start">
                                                             <div class="custom-tp-item selected" data-val="AM">AM</div>
+                                                            <div class="custom-tp-item" data-val="PM">PM</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -3144,9 +3145,9 @@
 
                                             <span style="color: var(--muted); font-weight: 600;">to</span>
 
-                                            <!-- Cutoff Time (PM Only) -->
+                                            <!-- Cutoff Time -->
                                             <div class="custom-tp-wrap" id="tp-wrap-cutoff">
-                                                <div class="custom-tp-box" id="tp-box-cutoff" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select cutoff time (PM only)">
+                                                <div class="custom-tp-box" id="tp-box-cutoff" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select cutoff time">
                                                     <span id="tp-text-cutoff">05:00 PM</span>
                                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" style="color: #666; flex-shrink: 0;">
                                                         <circle cx="8" cy="8" r="6.5"/>
@@ -3158,6 +3159,7 @@
                                                         <div class="custom-tp-col custom-tp-col-hours active-col" id="tp-hours-cutoff"></div>
                                                         <div class="custom-tp-col custom-tp-col-mins" id="tp-mins-cutoff"></div>
                                                         <div class="custom-tp-col custom-tp-col-period" id="tp-period-cutoff">
+                                                            <div class="custom-tp-item" data-val="AM">AM</div>
                                                             <div class="custom-tp-item selected" data-val="PM">PM</div>
                                                         </div>
                                                     </div>
@@ -3165,9 +3167,7 @@
                                                 <input type="hidden" id="delivery-cutoff-time" value="17:00">
                                             </div>
                                         </div>
-                                        <div class="form-hint" id="delivery-window-hint">Must fall within store
-                                            operating hours. Morning (AM) start and afternoon (PM) cutoff.
-                                        </div>
+                                        <div class="form-hint" id="delivery-window-hint">Must fall within store operating hours.</div>
                                     </div>
 
                                     <!-- ALLOW SAME-DAY DELIVERY TOGGLE -->
@@ -5621,24 +5621,25 @@
     const DAY_LABELS = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' };
     let scheduleEntries = [];
 
-    // ─── AM-ONLY & PM-ONLY CUSTOM TIME PICKERS ───
+    // ─── CUSTOM TIME PICKERS (AM & PM SUPPORTED) ───
     const TP_HOURS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
     const TP_MINS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
-    function parseTimeTo12(hhmm, fallbackHour, forcedPeriod) {
+    function parseTimeTo12(hhmm, fallbackHour, fallbackPeriod) {
         if (!hhmm || String(hhmm).indexOf(':') < 0) {
-            return { hour: fallbackHour, minute: '00', period: forcedPeriod };
+            return { hour: fallbackHour, minute: '00', period: fallbackPeriod || 'AM' };
         }
         const parts = String(hhmm).split(':');
         let h = parseInt(parts[0], 10);
         let m = parseInt(parts[1], 10);
         if (isNaN(h)) h = parseInt(fallbackHour, 10) || 8;
         if (isNaN(m)) m = 0;
+        let period = h >= 12 ? 'PM' : 'AM';
         let h12 = (h % 12) || 12;
         return {
             hour: String(h12).padStart(2, '0'),
             minute: String(m).padStart(2, '0'),
-            period: forcedPeriod
+            period: period
         };
     }
 
@@ -5690,30 +5691,44 @@
         periodCol,
         textEl,
         hiddenIn,
+        initialPeriod,
         period,
         fallbackH,
         onChange
     }) {
         if (!wrap || !box || !dropdown || !hoursCol || !minsCol) return null;
 
+        let currentPeriod = initialPeriod || period || 'AM';
+
         function updateDisplayAndHighlight(val24) {
             if (!val24) {
                 if (hiddenIn) hiddenIn.value = '';
-                if (textEl) textEl.textContent = '--:-- ' + period;
+                if (textEl) textEl.textContent = '--:-- ' + currentPeriod;
                 hoursCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
                 minsCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
+                if (periodCol) {
+                    periodCol.querySelectorAll('.custom-tp-item').forEach(el => {
+                        el.classList.toggle('selected', el.dataset.val === currentPeriod);
+                    });
+                }
                 return;
             }
-            const t12 = parseTimeTo12(val24, fallbackH, period);
-            const canonical24 = formatTimeTo24(t12.hour, t12.minute, period);
+            const t12 = parseTimeTo12(val24, fallbackH, currentPeriod);
+            currentPeriod = t12.period;
+            const canonical24 = formatTimeTo24(t12.hour, t12.minute, currentPeriod);
             if (hiddenIn) hiddenIn.value = canonical24;
-            if (textEl) textEl.textContent = `${t12.hour}:${t12.minute} ${period}`;
+            if (textEl) textEl.textContent = `${t12.hour}:${t12.minute} ${currentPeriod}`;
             hoursCol.querySelectorAll('.custom-tp-item').forEach(el => {
                 el.classList.toggle('selected', el.dataset.val === t12.hour);
             });
             minsCol.querySelectorAll('.custom-tp-item').forEach(el => {
                 el.classList.toggle('selected', el.dataset.val === t12.minute);
             });
+            if (periodCol) {
+                periodCol.querySelectorAll('.custom-tp-item').forEach(el => {
+                    el.classList.toggle('selected', el.dataset.val === currentPeriod);
+                });
+            }
         }
 
         // Populate hours (01 to 12, scrollbar slider hidden)
@@ -5731,7 +5746,7 @@
                 hoursCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
                 item.classList.add('selected');
                 const currMin = minsCol.querySelector('.custom-tp-item.selected')?.dataset.val || '00';
-                const val24 = formatTimeTo24(h, currMin, period);
+                const val24 = formatTimeTo24(h, currMin, currentPeriod);
                 updateDisplayAndHighlight(val24);
                 if (hiddenIn) hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
                 if (typeof onChange === 'function') onChange(val24);
@@ -5754,13 +5769,40 @@
                 minsCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
                 item.classList.add('selected');
                 const currHour = hoursCol.querySelector('.custom-tp-item.selected')?.dataset.val || fallbackH;
-                const val24 = formatTimeTo24(currHour, m, period);
+                const val24 = formatTimeTo24(currHour, m, currentPeriod);
                 updateDisplayAndHighlight(val24);
                 if (hiddenIn) hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
                 if (typeof onChange === 'function') onChange(val24);
             });
             minsCol.appendChild(item);
         });
+
+        // Populate period (AM / PM)
+        if (periodCol) {
+            periodCol.innerHTML = '';
+            ['AM', 'PM'].forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'custom-tp-item' + (p === currentPeriod ? ' selected' : '');
+                item.dataset.val = p;
+                item.textContent = p;
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    periodCol.classList.add('active-col');
+                    hoursCol.classList.remove('active-col');
+                    minsCol.classList.remove('active-col');
+                    periodCol.querySelectorAll('.custom-tp-item').forEach(el => el.classList.remove('selected'));
+                    item.classList.add('selected');
+                    currentPeriod = p;
+                    const currHour = hoursCol.querySelector('.custom-tp-item.selected')?.dataset.val || fallbackH;
+                    const currMin = minsCol.querySelector('.custom-tp-item.selected')?.dataset.val || '00';
+                    const val24 = formatTimeTo24(currHour, currMin, currentPeriod);
+                    updateDisplayAndHighlight(val24);
+                    if (hiddenIn) hiddenIn.dispatchEvent(new Event('change', { bubbles: true }));
+                    if (typeof onChange === 'function') onChange(val24);
+                });
+                periodCol.appendChild(item);
+            });
+        }
 
         // Initial display from hidden input
         if (hiddenIn && hiddenIn.value) {
@@ -5845,7 +5887,7 @@
             periodCol: document.getElementById('tp-period-start'),
             textEl: document.getElementById('tp-text-start'),
             hiddenIn: document.getElementById('delivery-start-time'),
-            period: 'AM',
+            initialPeriod: 'AM',
             fallbackH: '08',
             onChange: () => {
                 if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
@@ -5861,7 +5903,7 @@
             periodCol: document.getElementById('tp-period-cutoff'),
             textEl: document.getElementById('tp-text-cutoff'),
             hiddenIn: document.getElementById('delivery-cutoff-time'),
-            period: 'PM',
+            initialPeriod: 'PM',
             fallbackH: '05',
             onChange: () => {
                 if (typeof markStoreSettingsDirty === 'function') markStoreSettingsDirty('basic');
@@ -6017,10 +6059,10 @@
                     ${dayChipsHTML}
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                    <!-- Store Open Time (AM Only) -->
+                    <!-- Store Open Time -->
                     <div class="custom-tp-wrap" id="schedule-wrap-open-${idx}">
-                        <div class="custom-tp-box" id="schedule-box-open-${idx}" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select open time (AM only)">
-                            <span id="schedule-text-open-${idx}">${openT12.hour}:${openT12.minute} AM</span>
+                        <div class="custom-tp-box" id="schedule-box-open-${idx}" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select open time">
+                            <span id="schedule-text-open-${idx}">${openT12.hour}:${openT12.minute} ${openT12.period}</span>
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" style="color: #666; flex-shrink: 0;">
                                 <circle cx="8" cy="8" r="6.5"/>
                                 <path d="M8 4.5V8L10.5 9.5"/>
@@ -6031,7 +6073,8 @@
                                 <div class="custom-tp-col custom-tp-col-hours active-col" id="schedule-hours-open-${idx}"></div>
                                 <div class="custom-tp-col custom-tp-col-mins" id="schedule-mins-open-${idx}"></div>
                                 <div class="custom-tp-col custom-tp-col-period" id="schedule-period-open-${idx}">
-                                    <div class="custom-tp-item selected" data-val="AM">AM</div>
+                                    <div class="custom-tp-item ${openT12.period === 'AM' ? 'selected' : ''}" data-val="AM">AM</div>
+                                    <div class="custom-tp-item ${openT12.period === 'PM' ? 'selected' : ''}" data-val="PM">PM</div>
                                 </div>
                             </div>
                         </div>
@@ -6040,10 +6083,10 @@
 
                     <span style="color: var(--muted); font-weight: 600;">to</span>
 
-                    <!-- Store Close Time (PM Only) -->
+                    <!-- Store Close Time -->
                     <div class="custom-tp-wrap" id="schedule-wrap-close-${idx}">
-                        <div class="custom-tp-box" id="schedule-box-close-${idx}" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select close time (PM only)">
-                            <span id="schedule-text-close-${idx}">${closeT12.hour}:${closeT12.minute} PM</span>
+                        <div class="custom-tp-box" id="schedule-box-close-${idx}" tabindex="0" role="button" aria-haspopup="dialog" title="Click to select close time">
+                            <span id="schedule-text-close-${idx}">${closeT12.hour}:${closeT12.minute} ${closeT12.period}</span>
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" style="color: #666; flex-shrink: 0;">
                                 <circle cx="8" cy="8" r="6.5"/>
                                 <path d="M8 4.5V8L10.5 9.5"/>
@@ -6054,7 +6097,8 @@
                                 <div class="custom-tp-col custom-tp-col-hours active-col" id="schedule-hours-close-${idx}"></div>
                                 <div class="custom-tp-col custom-tp-col-mins" id="schedule-mins-close-${idx}"></div>
                                 <div class="custom-tp-col custom-tp-col-period" id="schedule-period-close-${idx}">
-                                    <div class="custom-tp-item selected" data-val="PM">PM</div>
+                                    <div class="custom-tp-item ${closeT12.period === 'AM' ? 'selected' : ''}" data-val="AM">AM</div>
+                                    <div class="custom-tp-item ${closeT12.period === 'PM' ? 'selected' : ''}" data-val="PM">PM</div>
                                 </div>
                             </div>
                         </div>
@@ -6082,7 +6126,7 @@
 
             container.appendChild(div);
 
-            // Initialize Open Time Picker (AM Only)
+            // Initialize Open Time Picker
             attachTimePickerInstance({
                 wrap: div.querySelector(`#schedule-wrap-open-${idx}`),
                 box: div.querySelector(`#schedule-box-open-${idx}`),
@@ -6092,7 +6136,7 @@
                 periodCol: div.querySelector(`#schedule-period-open-${idx}`),
                 textEl: div.querySelector(`#schedule-text-open-${idx}`),
                 hiddenIn: div.querySelector(`#schedule-input-open-${idx}`),
-                period: 'AM',
+                initialPeriod: openT12.period,
                 fallbackH: '07',
                 onChange: (val24) => {
                     entry.open = val24;
@@ -6102,7 +6146,7 @@
                 }
             });
 
-            // Initialize Close Time Picker (PM Only)
+            // Initialize Close Time Picker
             attachTimePickerInstance({
                 wrap: div.querySelector(`#schedule-wrap-close-${idx}`),
                 box: div.querySelector(`#schedule-box-close-${idx}`),
@@ -6112,7 +6156,7 @@
                 periodCol: div.querySelector(`#schedule-period-close-${idx}`),
                 textEl: div.querySelector(`#schedule-text-close-${idx}`),
                 hiddenIn: div.querySelector(`#schedule-input-close-${idx}`),
-                period: 'PM',
+                initialPeriod: closeT12.period,
                 fallbackH: '07',
                 onChange: (val24) => {
                     entry.close = val24;
@@ -6221,18 +6265,16 @@
     function applyDeliveryPickerBounds() {
         const span = getStoreHoursSpan();
 
-        // First box: AM only (max 11:59 so browser drops PM from dropdown)
         const startEl = document.getElementById('delivery-start-time');
         if (startEl) {
-            startEl.min = (span.minOpen && span.minOpen < '12:00') ? span.minOpen : '00:00';
-            startEl.max = '11:59';
+            startEl.min = span.minOpen ? span.minOpen : '00:00';
+            startEl.max = span.maxClose ? span.maxClose : '23:59';
         }
 
-        // Second box: PM only (min 12:00 so browser drops AM from dropdown)
         const cutoffEl = document.getElementById('delivery-cutoff-time');
         if (cutoffEl) {
-            cutoffEl.min = '12:00';
-            cutoffEl.max = (span.maxClose && span.maxClose >= '12:00') ? span.maxClose : '23:59';
+            cutoffEl.min = span.minOpen ? span.minOpen : '00:00';
+            cutoffEl.max = span.maxClose ? span.maxClose : '23:59';
         }
 
         const orderEl = document.getElementById('order-cutoff-time');
@@ -6247,7 +6289,7 @@
         const hintCut = document.getElementById('order-cutoff-hint');
         if (span.minOpen && span.maxClose) {
             const range = formatScheduleTime12(span.minOpen) + ' – ' + formatScheduleTime12(span.maxClose);
-            if (hintWin) hintWin.textContent = 'Must fall within store hours (' + range + '). Morning (AM) start and afternoon (PM) cutoff.';
+            if (hintWin) hintWin.textContent = 'Must fall within store hours (' + range + ').';
             if (hintCut) hintCut.textContent = 'Must be within store hours (' + range + '). After this time, customers cannot book same-day delivery.';
         } else {
             if (hintWin) hintWin.textContent = 'Must fall within store operating hours. Set hours first, then choose a delivery window.';
