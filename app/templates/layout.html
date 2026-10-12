@@ -1036,6 +1036,7 @@
         }
 
         .modal-overlay.active { display: flex; animation: fadeIn 0.2s ease; }
+        .modal-overlay.modal-topmost { z-index: 13000; }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
@@ -2344,6 +2345,41 @@
 </div>
 {% endif %}
 
+{% if session.get('role') in ['seller', 'store_admin', 'admin'] %}
+<!-- ══ CLEAR ALL NOTIFICATIONS CONFIRMATION MODAL ══ -->
+<div class="modal-overlay modal-topmost" id="clearNotifsModal" onclick="if(event.target===this) closeClearNotifsModal()" role="dialog" aria-modal="true" aria-labelledby="clearNotifsTitle">
+    <div class="modal modal-sm" style="max-width: 440px;" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 class="modal-title" id="clearNotifsTitle" style="font-size: 20px;">Clear notifications</h3>
+            <button type="button" class="modal-close" onclick="closeClearNotifsModal()" aria-label="Close">
+                <i class="ri-close-line"></i>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem 1.75rem;">
+            <div style="display: flex; gap: 1rem; align-items: flex-start;">
+                <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(194, 78, 104, 0.12); color: var(--deep-rose); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;">
+                    <i class="ri-delete-bin-line"></i>
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; font-size: 15px; color: var(--charcoal); margin-bottom: 4px;">
+                        Clear all notifications?
+                    </div>
+                    <p style="margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5;">
+                        Are you sure you want to clear your notification inbox? This will remove all notifications and cannot be undone.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeClearNotifsModal()">Cancel</button>
+            <button type="button" class="btn btn-rose" id="confirmClearNotifsBtn" onclick="confirmClearAllNotifs()" style="min-width: 110px;">
+                <i class="ri-delete-bin-line"></i> Clear all
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <script>
     const CURRENT_ROLE = {{ (session.get('role') or '')|tojson }};
     const STORE_ADMIN_PERMS = {{ (store_admin_perms if store_admin_perms is defined else {})|tojson }};
@@ -2760,9 +2796,33 @@
         if (markBtn) markBtn.style.display = 'none';
     }
 
-    async function clearAllNotifs() {
+    function openClearNotifsModal() {
+        const modal = document.getElementById('clearNotifsModal');
+        if (!modal) return;
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeClearNotifsModal() {
+        const modal = document.getElementById('clearNotifsModal');
+        if (!modal) return;
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    function clearAllNotifs() {
         if (!NOTIF_ENABLED) return;
-        if (!confirm('Are you sure you want to clear all notifications?')) return;
+        openClearNotifsModal();
+    }
+
+    async function confirmClearAllNotifs() {
+        if (!NOTIF_ENABLED) return;
+        const btn = document.getElementById('confirmClearNotifsBtn');
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Clearing…';
+        }
         try {
             const res = await fetch(`${NOTIF_API_BASE}/clear-all`, { method: 'POST' });
             if (!res.ok) throw new Error('Failed to clear');
@@ -2776,6 +2836,7 @@
             if (dot) dot.style.display = 'none';
             if (markBtn) markBtn.style.display = 'none';
             if (clearBtn) clearBtn.style.display = 'none';
+            closeClearNotifsModal();
             if (typeof showToast === 'function') {
                 showToast('All notifications cleared', 'success');
             }
@@ -2784,8 +2845,22 @@
             if (typeof showToast === 'function') {
                 showToast('Failed to clear notifications', 'error');
             }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
         }
     }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('clearNotifsModal');
+            if (modal && modal.classList.contains('active')) {
+                closeClearNotifsModal();
+            }
+        }
+    });
 
     async function deleteNotif(id, event) {
         if (!NOTIF_ENABLED || !id) return;
@@ -2793,9 +2868,15 @@
             event.preventDefault();
             event.stopPropagation();
         }
+        const item = document.querySelector(`.notif-item[data-notif-id="${id}"]`);
+        if (item) {
+            item.style.transition = 'all 0.22s ease';
+            item.style.opacity = '0';
+            item.style.transform = 'translateX(18px)';
+            item.style.pointerEvents = 'none';
+        }
         try {
             await fetch(`${NOTIF_API_BASE}/${id}`, { method: 'DELETE' });
-            const item = document.querySelector(`.notif-item[data-notif-id="${id}"]`);
             if (item) item.remove();
             const remaining = document.querySelectorAll('.notif-item');
             const unread = document.querySelectorAll('.notif-item.unread').length;
@@ -2814,6 +2895,11 @@
             }
         } catch (e) {
             console.error('Error deleting notification:', e);
+            if (item) {
+                item.style.opacity = '';
+                item.style.transform = '';
+                item.style.pointerEvents = '';
+            }
         }
     }
 
