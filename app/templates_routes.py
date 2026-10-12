@@ -23,7 +23,7 @@ from app.laguna_addresses import get_municipalities, get_barangays, get_coordina
 from app.models import UserAddress
 
 from app.utils.cloudinary_helper import upload_to_cloudinary, delete_from_cloudinary
-from app.utils.seller_notifications import notify_low_stock_if_crossed
+from app.utils.seller_notifications import notify_low_stock_if_crossed, clear_resolved_stock_notifications
 # app/templates_routes.py - Add these imports at the top
 from flask_wtf.csrf import generate_csrf
 from sqlalchemy.orm import joinedload, selectinload
@@ -8089,6 +8089,13 @@ def add_product_stock(product_id):
             product.updated_at = datetime.utcnow()
             db.session.commit()
             
+            # Clear stock alert notifications if replenished
+            clear_resolved_stock_notifications(
+                product_id=product.id,
+                current_stock=variant.stock_quantity,
+                store_id=store.id,
+            )
+            
             return jsonify({
                 'success': True,
                 'message': f'Stock added {amount} units for variant {variant.name}',
@@ -8113,6 +8120,13 @@ def add_product_stock(product_id):
             )
             db.session.add(addition)
             db.session.commit()
+            
+            # Clear stock alert notifications if replenished
+            clear_resolved_stock_notifications(
+                product_id=product.id,
+                current_stock=product.stock_quantity,
+                store_id=store.id,
+            )
             
             print(f"✅ Main product stock addition recorded:")
             print(f"   Product: {product.name} (ID: {product.id})")
@@ -10413,10 +10427,20 @@ def pos_void_order(order_id):
             variant = ProductVariant.query.get(item.variant_id)
             if variant:
                 variant.stock_quantity += item.quantity
+                clear_resolved_stock_notifications(
+                    product_id=variant.product_id,
+                    current_stock=variant.stock_quantity,
+                    store_id=store.id,
+                )
         else:
             product = Product.query.get(item.product_id)
             if product:
                 product.stock_quantity += item.quantity
+                clear_resolved_stock_notifications(
+                    product_id=product.id,
+                    current_stock=product.stock_quantity,
+                    store_id=store.id,
+                )
     
     # Mark order as voided - we'll add a status field if needed
     # For now, we'll just delete it, but better to add a 'status' field to POSOrder

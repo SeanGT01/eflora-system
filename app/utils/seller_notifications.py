@@ -138,6 +138,14 @@ def notify_low_stock_if_crossed(
                 type='low_stock',
                 reference_id=pid,
             )
+
+        # 3. Restocked above threshold -> automatically remove out_of_stock and low_stock alerts
+        if stock_after > threshold:
+            clear_resolved_stock_notifications(product_id=pid, current_stock=stock_after, store_id=sid)
+
+        # 4. Restocked from 0 to low stock (1..5) -> remove out_of_stock alert
+        elif stock_before <= 0 and 0 < stock_after <= threshold:
+            clear_resolved_stock_notifications(product_id=pid, current_stock=stock_after, store_id=sid)
     except Exception as exc:
         logger.exception('notify_low_stock_if_crossed failed: %s', exc)
     return None
@@ -146,10 +154,71 @@ def notify_low_stock_if_crossed(
 notify_stock_alerts_if_crossed = notify_low_stock_if_crossed
 
 
+def clear_resolved_stock_notifications(
+    *,
+    product_id: int,
+    current_stock: int = None,
+    store_id: int = None,
+    threshold: int = LOW_STOCK_THRESHOLD,
+):
+    """
+    Remove or resolve stock alerts once a product is restocked:
+    - If current_stock > threshold: completely remove 'out_of_stock' and 'low_stock' alerts.
+    - If 0 < current_stock <= threshold: remove 'out_of_stock' alert (since it now has stock).
+    """
+    try:
+        from app.models import Product
+        if not product_id:
+            return 0
+
+        product = Product.query.get(product_id)
+        if not product:
+            return 0
+
+        sid = store_id or getattr(product, 'store_id', None)
+        if not sid:
+            return 0
+
+        store = Store.query.get(sid)
+        if not store or not store.seller_id:
+            return 0
+
+        seller_id = store.seller_id
+        recipients = [seller_id]
+        staff = StoreAdmin.query.filter_by(store_id=store.id, is_active=True, is_archived=False).all()
+        recipients.extend([s.user_id for s in staff if s.user_id])
+        recipients = list(set([r for r in recipients if r]))
+
+        qty = current_stock if current_stock is not None else int(getattr(product, 'stock_quantity', 0) or 0)
+
+        deleted = 0
+        if qty > threshold:
+            deleted = Notification.query.filter(
+                Notification.user_id.in_(recipients),
+                Notification.type.in_(['out_of_stock', 'low_stock']),
+                Notification.reference_id == product.id,
+            ).delete(synchronize_session=False)
+            if deleted:
+                db.session.commit()
+        elif qty > 0:
+            deleted = Notification.query.filter(
+                Notification.user_id.in_(recipients),
+                Notification.type == 'out_of_stock',
+                Notification.reference_id == product.id,
+            ).delete(synchronize_session=False)
+            if deleted:
+                db.session.commit()
+        return deleted
+    except Exception as exc:
+        logger.exception('clear_resolved_stock_notifications failed: %s', exc)
+        return 0
+
+
 def sync_store_stock_notifications(store_id):
     """
     Ensure the store's seller and staff have active notifications for currently
-    out of stock (<= 0) and low stock (1..5) products without duplicate spam.
+    out of stock (<= 0) and low stock (1..5) products without duplicate spam,
+    and automatically remove alerts for products that have been restocked.
     """
     try:
         from app.models import Product, ProductVariant
@@ -163,9 +232,36 @@ def sync_store_stock_notifications(store_id):
         recipients.extend([s.user_id for s in staff if s.user_id])
         recipients = list(set(recipients))
 
+        # ── Step 0: Remove alerts for restocked products ─────────────
+        # A. Products restocked above threshold (> 5): remove both out_of_stock and low_stock
+        safe_products = Product.query.filter(
+            Product.store_id == store.id,
+            (Product.stock_quantity > LOW_STOCK_THRESHOLD) | (Product.is_archived == True)
+        ).with_entities(Product.id).all()
+        safe_ids = [p[0] for p in safe_products]
+        if safe_ids:
+            Notification.query.filter(
+                Notification.user_id.in_(recipients),
+                Notification.type.in_(['low_stock', 'out_of_stock']),
+                Notification.reference_id.in_(safe_ids),
+            ).delete(synchronize_session=False)
+
+        # B. Products with stock > 0: remove any obsolete out_of_stock alert
+        in_stock_products = Product.query.filter(
+            Product.store_id == store.id,
+            Product.stock_quantity > 0,
+        ).with_entities(Product.id).all()
+        in_stock_ids = [p[0] for p in in_stock_products]
+        if in_stock_ids:
+            Notification.query.filter(
+                Notification.user_id.in_(recipients),
+                Notification.type == 'out_of_stock',
+                Notification.reference_id.in_(in_stock_ids),
+            ).delete(synchronize_session=False)
+
         created_count = 0
 
-        # 1. Out of stock products
+        # ── Step 1: Out of stock products ───────────────────────────
         out_of_stock_products = Product.query.filter(
             Product.store_id == store.id,
             Product.is_archived == False,
@@ -189,7 +285,7 @@ def sync_store_stock_notifications(store_id):
                     ))
                 created_count += 1
 
-        # 2. Low stock products (top lowest stock, limit to 15 to prevent inbox flooding)
+        # ── Step 2: Low stock products (1..5) ────────────────────────
         low_stock_products = Product.query.filter(
             Product.store_id == store.id,
             Product.is_archived == False,
@@ -214,8 +310,7 @@ def sync_store_stock_notifications(store_id):
                     ))
                 created_count += 1
 
-        if created_count > 0:
-            db.session.commit()
+        db.session.commit()
         return created_count
     except Exception as exc:
         logger.exception('sync_store_stock_notifications failed: %s', exc)
