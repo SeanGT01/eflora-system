@@ -8712,9 +8712,16 @@ def session_notifications_api():
     user_id = _session_notification_inbox_user_id()
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
+
+    if session.get('role') in ('seller', 'store_admin'):
+        store = _seller_portal_manageable_store(session.get('user_id'))
+        if store:
+            from app.utils.seller_notifications import sync_store_stock_notifications
+            sync_store_stock_notifications(store.id)
+
     def _load_inbox():
         notes = (Notification.query.filter_by(user_id=user_id)
-                 .order_by(Notification.created_at.desc()).limit(20).all())
+                 .order_by(Notification.created_at.desc()).limit(50).all())
         unread = Notification.query.filter_by(user_id=user_id, is_read=False).count()
         return notes, unread
 

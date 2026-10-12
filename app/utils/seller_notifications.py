@@ -145,3 +145,79 @@ def notify_low_stock_if_crossed(
 
 notify_stock_alerts_if_crossed = notify_low_stock_if_crossed
 
+
+def sync_store_stock_notifications(store_id):
+    """
+    Ensure the store's seller and staff have active notifications for currently
+    out of stock (<= 0) and low stock (1..5) products without duplicate spam.
+    """
+    try:
+        from app.models import Product, ProductVariant
+        store = Store.query.get(store_id)
+        if not store or not store.seller_id:
+            return 0
+
+        seller_id = store.seller_id
+        recipients = [seller_id]
+        staff = StoreAdmin.query.filter_by(store_id=store.id, is_active=True, is_archived=False).all()
+        recipients.extend([s.user_id for s in staff if s.user_id])
+        recipients = list(set(recipients))
+
+        created_count = 0
+
+        # 1. Out of stock products
+        out_of_stock_products = Product.query.filter(
+            Product.store_id == store.id,
+            Product.is_archived == False,
+            Product.stock_quantity <= 0,
+        ).all()
+
+        for p in out_of_stock_products:
+            existing = Notification.query.filter_by(
+                user_id=seller_id,
+                type='out_of_stock',
+                reference_id=p.id,
+            ).first()
+            if not existing:
+                for uid in recipients:
+                    db.session.add(Notification(
+                        user_id=uid,
+                        title='Out of stock alert',
+                        message=f'"{p.name}" is now out of stock (0 left).',
+                        type='out_of_stock',
+                        reference_id=p.id,
+                    ))
+                created_count += 1
+
+        # 2. Low stock products (top lowest stock, limit to 15 to prevent inbox flooding)
+        low_stock_products = Product.query.filter(
+            Product.store_id == store.id,
+            Product.is_archived == False,
+            Product.stock_quantity > 0,
+            Product.stock_quantity <= LOW_STOCK_THRESHOLD,
+        ).order_by(Product.stock_quantity.asc()).limit(15).all()
+
+        for p in low_stock_products:
+            existing = Notification.query.filter_by(
+                user_id=seller_id,
+                type='low_stock',
+                reference_id=p.id,
+            ).first()
+            if not existing:
+                for uid in recipients:
+                    db.session.add(Notification(
+                        user_id=uid,
+                        title='Low stock alert',
+                        message=f'"{p.name}" is low on stock ({p.stock_quantity} left).',
+                        type='low_stock',
+                        reference_id=p.id,
+                    ))
+                created_count += 1
+
+        if created_count > 0:
+            db.session.commit()
+        return created_count
+    except Exception as exc:
+        logger.exception('sync_store_stock_notifications failed: %s', exc)
+        return 0
+
