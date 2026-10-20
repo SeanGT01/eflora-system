@@ -85,6 +85,10 @@ def notify_store_seller(
         return None
 
 
+_RECENT_STOCK_ALERT_EMAILS = {}
+STOCK_ALERT_EMAIL_COOLDOWN_SECONDS = 7200  # 2 hours cooldown between identical alerts to the same recipient
+
+
 def _send_stock_alert_emails(
     *,
     store_id: int,
@@ -97,8 +101,10 @@ def _send_stock_alert_emails(
 ):
     """
     Queue background stock alert email to store seller and active store admins via Gmail OAuth.
+    Includes edge-crossing, recipient deduplication, and a 2-hour cooldown debounce guard.
     """
     try:
+        import time
         from app.models import Store, StoreAdmin
         from app.utils.email_helper import send_stock_alert_email
 
@@ -144,7 +150,29 @@ def _send_stock_alert_emails(
         opt_name = getattr(addon_option, 'name', None) if addon_option else None
         pid = getattr(product, 'id', None)
 
+        now = time.time()
+        # Clean up stale cache entries older than 24h
+        if len(_RECENT_STOCK_ALERT_EMAILS) > 500:
+            cutoff = now - 86400
+            stale_keys = [k for k, ts in _RECENT_STOCK_ALERT_EMAILS.items() if ts < cutoff]
+            for k in stale_keys:
+                _RECENT_STOCK_ALERT_EMAILS.pop(k, None)
+
         for rec in recipients:
+            cache_key = (
+                rec['email'].lower(),
+                alert_type,
+                pid,
+                getattr(variant, 'id', None),
+                getattr(addon_option, 'id', None),
+            )
+            last_sent = _RECENT_STOCK_ALERT_EMAILS.get(cache_key, 0)
+            if now - last_sent < STOCK_ALERT_EMAIL_COOLDOWN_SECONDS:
+                logger.info('Suppressing duplicate stock alert email for %s (cooldown active)', cache_key)
+                continue
+
+            _RECENT_STOCK_ALERT_EMAILS[cache_key] = now
+
             send_stock_alert_email(
                 recipient_email=rec['email'],
                 seller_name=rec['name'],

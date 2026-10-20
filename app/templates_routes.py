@@ -10720,10 +10720,44 @@ def pos_create_order():
         traceback.print_exc()
         return jsonify({'error': f'Failed to process order: {str(e)}'}), 500
 
+    # Collect latest stock levels for all products, variants, and addons updated by this order
+    updated_stocks = {
+        'products': {},
+        'variants': {},
+        'addons': {}
+    }
+    for item in validated_items:
+        prod = item.get('product')
+        if prod:
+            updated_stocks['products'][str(prod.id)] = {
+                'id': prod.id,
+                'stock_quantity': int(prod.stock_quantity or 0),
+                'is_available': bool(prod.is_available),
+            }
+        var_id = item.get('variant_id')
+        if var_id:
+            v_rec = ProductVariant.query.get(var_id)
+            if v_rec:
+                updated_stocks['variants'][str(v_rec.id)] = {
+                    'id': v_rec.id,
+                    'product_id': v_rec.product_id,
+                    'stock_quantity': int(v_rec.stock_quantity or 0),
+                    'is_available': bool(v_rec.is_available),
+                }
+        for al in item.get('addon_lines', []):
+            al_opt = al.get('option')
+            if al_opt:
+                updated_stocks['addons'][str(al_opt.id)] = {
+                    'id': al_opt.id,
+                    'stock_quantity': int(al_opt.stock_quantity or 0),
+                    'is_available': bool(al_opt.is_available),
+                }
+
     return jsonify({
         'success': True,
         'pos_order_id': pos_order.id,
         'order_number': pos_order.order_number,
+        'updated_stocks': updated_stocks,
         'message': 'Order processed successfully.'
     }), 201
 

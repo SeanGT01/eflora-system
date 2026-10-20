@@ -986,19 +986,37 @@ html, body {
 }
 .qty-btn:hover { background: rgba(181,68,90,0.1); color: var(--deep-rose); }
 .qty-val {
-    min-width: 24px;
+    min-width: 28px;
+    width: 44px;
     text-align: center;
     font-family: var(--font-sans);
     font-size: 12px;
     font-weight: 700;
     color: var(--charcoal);
+    border: none;
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
     height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    line-height: 22px;
+    display: inline-block;
     padding: 0 2px;
+    outline: none;
+    box-sizing: border-box;
+    -moz-appearance: textfield;
+    appearance: textfield;
+    transition: var(--transition);
+}
+.qty-val::-webkit-outer-spin-button,
+.qty-val::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.qty-val:focus {
+    background: #ffffff;
+    color: var(--deep-rose);
+    box-shadow: inset 0 0 0 1px rgba(181,68,90,0.35);
 }
 
 .cart-item-right {
@@ -1431,7 +1449,8 @@ html, body {
         font-size: 12px;
     }
     .qty-val {
-        min-width: 22px;
+        min-width: 26px;
+        width: 38px;
         height: 22px;
         font-size: 11.5px;
     }
@@ -3375,6 +3394,165 @@ function closeVariantModal() {
     setTimeout(finishClose, 220);
 }
 
+function refreshPosTileState(tile) {
+    if (!tile) return;
+    const isAvail = tile.dataset.isAvailable !== 'false';
+    const mainStock = parseInt(tile.dataset.stock) || 0;
+    const variants = parseTileJson(tile, 'variants', []) || [];
+    const hasVariants = tile.dataset.hasVariants === 'true' && variants.length > 0;
+    const anyVariantInStock = hasVariants && variants.some(v => (v.stock_quantity || 0) > 0 && v.is_available !== false);
+
+    const mediaEl = tile.querySelector('.pos-tile-media');
+    const stockEl = tile.querySelector('.pos-tile-stock');
+
+    // Remove old OOS overlays in media
+    if (mediaEl) {
+        const oldOos = mediaEl.querySelectorAll('.pos-tile-oos');
+        oldOos.forEach(el => el.remove());
+    }
+
+    tile.classList.remove('unavailable', 'oos-no-variants', 'oos-has-variants');
+
+    if (!isAvail) {
+        tile.classList.add('unavailable');
+        if (mediaEl) {
+            mediaEl.insertAdjacentHTML('beforeend', '<div class="pos-tile-oos oos-unavailable">Unavailable</div>');
+        }
+        if (stockEl) stockEl.textContent = 'Unavailable';
+    } else if (mainStock <= 0 && !hasVariants) {
+        tile.classList.add('oos-no-variants');
+        if (mediaEl) {
+            mediaEl.insertAdjacentHTML('beforeend', '<div class="pos-tile-oos oos-locked">Out of Stock</div>');
+        }
+        if (stockEl) stockEl.textContent = 'Out of stock';
+    } else if (mainStock <= 0 && hasVariants) {
+        if (anyVariantInStock) {
+            tile.classList.add('oos-has-variants');
+            if (mediaEl) {
+                mediaEl.insertAdjacentHTML('beforeend', '<div class="pos-tile-oos oos-variants-only">Variants Only</div>');
+            }
+            if (stockEl) stockEl.textContent = 'See variants';
+        } else {
+            // All variants are out of stock too
+            tile.classList.add('oos-no-variants');
+            if (mediaEl) {
+                mediaEl.insertAdjacentHTML('beforeend', '<div class="pos-tile-oos oos-locked">Out of Stock</div>');
+            }
+            if (stockEl) stockEl.textContent = 'Out of stock';
+        }
+    } else {
+        // Main standard product has stock
+        if (stockEl) stockEl.textContent = `${mainStock} in stock`;
+    }
+}
+
+function updatePosStocks(updatedStocks, soldItems) {
+    if (!updatedStocks && (!soldItems || !soldItems.length)) return;
+
+    if (updatedStocks) {
+        // Products
+        if (updatedStocks.products) {
+            Object.values(updatedStocks.products).forEach(p => {
+                const tile = document.querySelector(`.pos-tile[data-id="${p.id}"]`);
+                if (tile) {
+                    tile.dataset.stock = String(p.stock_quantity);
+                    tile.dataset.isAvailable = p.is_available ? 'true' : 'false';
+                    refreshPosTileState(tile);
+                }
+            });
+        }
+
+        // Variants
+        if (updatedStocks.variants) {
+            Object.values(updatedStocks.variants).forEach(v => {
+                const tile = document.querySelector(`.pos-tile[data-id="${v.product_id}"]`);
+                if (tile) {
+                    const variants = parseTileJson(tile, 'variants', []) || [];
+                    const found = variants.find(x => Number(x.id) === Number(v.id));
+                    if (found) {
+                        found.stock_quantity = v.stock_quantity;
+                        found.is_available = v.is_available;
+                        tile.dataset.variants = JSON.stringify(variants);
+                        refreshPosTileState(tile);
+                    }
+                }
+            });
+        }
+
+        // Add-ons
+        if (updatedStocks.addons) {
+            // Update posYmalAddonsData
+            try {
+                const ymalEl = document.getElementById('posYmalAddonsData');
+                if (ymalEl) {
+                    const ymal = JSON.parse(ymalEl.textContent || '[]');
+                    Object.values(updatedStocks.addons).forEach(a => {
+                        const opt = ymal.find(x => Number(x.id) === Number(a.id));
+                        if (opt) {
+                            opt.stock_quantity = a.stock_quantity;
+                            opt.is_available = a.is_available;
+                        }
+                    });
+                    ymalEl.textContent = JSON.stringify(ymal);
+                }
+            } catch (e) {
+                console.error('Error updating YMAL addons data:', e);
+            }
+
+            // Update addonGroups on each tile
+            document.querySelectorAll('.pos-tile').forEach(tile => {
+                const groups = parseTileJson(tile, 'addonGroups', []) || [];
+                let changed = false;
+                groups.forEach(g => {
+                    (g.options || []).forEach(o => {
+                        const upd = updatedStocks.addons[String(o.id)];
+                        if (upd) {
+                            o.stock_quantity = upd.stock_quantity;
+                            o.is_available = upd.is_available;
+                            changed = true;
+                        }
+                    });
+                });
+                if (changed) {
+                    tile.dataset.addonGroups = JSON.stringify(groups);
+                }
+            });
+        }
+    } else if (soldItems && soldItems.length) {
+        // Fallback: deduct quantities directly based on sold items
+        soldItems.forEach(item => {
+            if (item.is_custom) return;
+            const tile = document.querySelector(`.pos-tile[data-id="${item.id}"]`);
+            if (!tile) return;
+            const qty = Number(item.qty) || 1;
+
+            if (item.variant_id) {
+                const variants = parseTileJson(tile, 'variants', []) || [];
+                const v = variants.find(x => Number(x.id) === Number(item.variant_id));
+                if (v) {
+                    v.stock_quantity = Math.max(0, (Number(v.stock_quantity) || 0) - qty);
+                    tile.dataset.variants = JSON.stringify(variants);
+                    refreshPosTileState(tile);
+                }
+            } else if (!item.addons_only) {
+                const curStock = parseInt(tile.dataset.stock) || 0;
+                tile.dataset.stock = String(Math.max(0, curStock - qty));
+                refreshPosTileState(tile);
+            }
+        });
+    }
+
+    // If variant picker modal is currently open, refresh it immediately
+    if (_posPickerState && _posPickerState.tile) {
+        renderPosPickerBody();
+    }
+
+    // Refresh any active search pills
+    if (typeof filterProducts === 'function') {
+        filterProducts();
+    }
+}
+
 /* ════════════════════════════════════════════
    FAMILIAR CUSTOMER AUTOCOMPLETE
 ════════════════════════════════════════════ */
@@ -3733,9 +3911,46 @@ function cartSubtotal() {
 function changeQtyAt(idx, delta) {
     const item = cart[idx];
     if (!item) return;
-    item.qty += delta;
-    if (item.qty <= 0) { removeItemAt(idx); return; }
-    if (item.qty > item.stock) { item.qty = item.stock; showToast('Max stock reached.', 'error'); }
+    const current = parseInt(item.qty, 10) || 1;
+    const nextQty = current + delta;
+    if (nextQty <= 0) {
+        removeItemAt(idx);
+        return;
+    }
+    const maxStock = (item.stock != null && item.stock !== '') ? Number(item.stock) : 999999;
+    if (nextQty > maxStock) {
+        item.qty = maxStock;
+        showToast(`Maximum available stock is ${maxStock}.`, 'error');
+    } else {
+        item.qty = nextQty;
+    }
+    renderCart();
+}
+
+function setQtyAt(idx, rawVal) {
+    const item = cart[idx];
+    if (!item) return;
+
+    const trimmed = String(rawVal).trim();
+    if (trimmed === '' || isNaN(parseInt(trimmed, 10))) {
+        item.qty = 1;
+        renderCart();
+        return;
+    }
+
+    let val = parseInt(trimmed, 10);
+    if (val <= 0) {
+        removeItemAt(idx);
+        return;
+    }
+
+    const maxStock = (item.stock != null && item.stock !== '') ? Number(item.stock) : 999999;
+    if (val > maxStock) {
+        val = maxStock;
+        showToast(`Maximum available stock is ${maxStock}.`, 'error');
+    }
+
+    item.qty = val;
     renderCart();
 }
 
@@ -4066,7 +4281,7 @@ function commitPosCustomOrderToCart() {
         dedication: dedication,
         addons: addons,
         addons_only: false,
-        stock: 9999,
+        stock: 999999,
         img: '',
         variant_id: null,
         variant_name: null
@@ -4152,9 +4367,19 @@ function renderCart() {
                 ${addonsInfo}
                 <div class="cart-item-unit">₱${unitPrice.toFixed(2)} each</div>
                 <div class="qty-stepper">
-                    <button class="qty-btn" onclick="changeQtyAt(${idx},-1)"><i class="ri-subtract-line"></i></button>
-                    <div class="qty-val">${item.qty}</div>
-                    <button class="qty-btn" onclick="changeQtyAt(${idx},1)"><i class="ri-add-line"></i></button>
+                    <button type="button" class="qty-btn" onclick="changeQtyAt(${idx},-1)" title="Decrease" aria-label="Decrease quantity"><i class="ri-subtract-line"></i></button>
+                    <input type="number"
+                           class="qty-val"
+                           value="${item.qty}"
+                           min="1"
+                           max="${item.stock != null ? item.stock : 999999}"
+                           step="1"
+                           onchange="setQtyAt(${idx}, this.value)"
+                           onkeydown="if(event.key==='Enter'){this.blur();}"
+                           onfocus="this.select()"
+                           title="Directly edit quantity"
+                           aria-label="Quantity">
+                    <button type="button" class="qty-btn" onclick="changeQtyAt(${idx},1)" title="Increase" aria-label="Increase quantity"><i class="ri-add-line"></i></button>
                 </div>
             </div>
             <div class="cart-item-right">
@@ -4355,6 +4580,11 @@ async function processOrder() {
             return;
         }
 
+        const soldItems = [...cart];
+
+        // Immediately update stocks of purchased products, variants, and addons
+        updatePosStocks(data.updated_stocks, soldItems);
+
         showReceipt({
             order_id:         data.pos_order_id,
             order_number:     data.order_number,
@@ -4368,7 +4598,7 @@ async function processOrder() {
             dedication_from:  payload.dedication_from,
             dedication_message: payload.dedication_message,
             florist_notes:    payload.florist_notes,
-            items:            [...cart],
+            items:            soldItems,
             subtotal:         sub,
             discount:         disc,
             total,
