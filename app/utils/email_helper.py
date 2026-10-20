@@ -708,18 +708,42 @@ def send_stock_alert_email(
         inventory_url = f"{base_url}/seller/inventory"
 
         # Item image markup
-        if image_url:
+        img_src = None
+        if image_url and str(image_url).strip():
+            clean_url = str(image_url).strip()
+            # If Cloudinary URL, convert to universal email-safe JPEG square thumbnail
+            if 'res.cloudinary.com' in clean_url and '/image/upload/' in clean_url:
+                try:
+                    import re
+                    parts = clean_url.split('/image/upload/')
+                    base_part = parts[0] + '/image/upload/'
+                    rest = parts[1]
+                    segments = rest.split('/')
+                    if len(segments) > 1 and not re.match(r'^v\d+$', segments[0]):
+                        rest = '/'.join(segments[1:])
+                    clean_url = f"{base_part}f_jpg,q_auto,w_160,h_160,c_fill/{rest}"
+                except Exception:
+                    pass
+            elif not clean_url.startswith(('http://', 'https://')):
+                clean_url = f"{base_url}/{clean_url.lstrip('/')}"
+            img_src = clean_url
+
+        if img_src:
             img_html = f"""
-            <td style="width: 80px; vertical-align: top; padding-right: 16px;">
-                <img src="{image_url}" alt="{product_name}" style="width: 76px; height: 76px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; display: block;" />
+            <td style="width: 80px; min-width: 80px; vertical-align: middle; padding-right: 16px;">
+                <a href="{inventory_url}" target="_blank" style="text-decoration: none; display: block;">
+                    <img src="{img_src}" alt="{product_name}" width="76" height="76" style="width: 76px; height: 76px; min-width: 76px; max-width: 76px; border-radius: 8px; border: 1px solid #e2e8f0; object-fit: cover; display: block;" />
+                </a>
             </td>
             """
         else:
             img_html = f"""
-            <td style="width: 60px; vertical-align: top; padding-right: 14px;">
-                <div style="width: 56px; height: 56px; border-radius: 8px; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-size: 24px; text-align: center; line-height: 56px;">
-                    &#127800;
-                </div>
+            <td style="width: 60px; min-width: 60px; vertical-align: middle; padding-right: 14px;">
+                <a href="{inventory_url}" target="_blank" style="text-decoration: none; display: block;">
+                    <div style="width: 56px; height: 56px; border-radius: 8px; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-size: 24px; text-align: center; line-height: 56px;">
+                        &#127800;
+                    </div>
+                </a>
             </td>
             """
 
@@ -758,7 +782,7 @@ def send_stock_alert_email(
                         <table style="width: 100%; border-collapse: collapse;">
                             <tr>
                                 {img_html}
-                                <td style="vertical-align: top;">
+                                <td style="vertical-align: middle;">
                                     <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">{product_name}</h3>
                                     {subdetail_html}
                                     <div style="margin-top: 10px;">

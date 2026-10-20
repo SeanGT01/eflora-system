@@ -136,14 +136,29 @@ def _send_stock_alert_emails(
         if not recipients:
             return
 
-        # Determine product image
+        # Determine product image (addon_option -> variant -> product fallback)
         image_url = None
-        if variant and getattr(variant, 'image_url', None):
-            image_url = variant.image_url
-        elif product and hasattr(product, 'images') and product.images:
-            sorted_imgs = sorted(product.images, key=lambda x: getattr(x, 'sort_order', 0))
-            primary = next((img for img in sorted_imgs if getattr(img, 'is_primary', False)), sorted_imgs[0])
-            image_url = getattr(primary, 'url', None)
+        if addon_option and getattr(addon_option, 'image_url', None) and str(addon_option.image_url).strip():
+            image_url = str(addon_option.image_url).strip()
+        elif variant and getattr(variant, 'image_url', None) and str(variant.image_url).strip():
+            image_url = str(variant.image_url).strip()
+
+        # If still no image, try the product's primary/thumbnail image
+        if not image_url and product:
+            if getattr(product, 'thumbnail_url', None):
+                image_url = product.thumbnail_url
+            elif getattr(product, 'image_url', None):
+                image_url = product.image_url
+            elif hasattr(product, 'images') and product.images:
+                sorted_imgs = sorted(product.images, key=lambda x: getattr(x, 'sort_order', 0))
+                primary = next((img for img in sorted_imgs if getattr(img, 'is_primary', False)), sorted_imgs[0] if sorted_imgs else None)
+                if primary:
+                    image_url = getattr(primary, 'cloudinary_url', None) or getattr(primary, 'image_url', None)
+
+        # Fallback to parent product if addon_option has no image
+        if not image_url and addon_option and getattr(addon_option, 'group', None) and getattr(addon_option.group, 'product', None):
+            parent_prod = addon_option.group.product
+            image_url = getattr(parent_prod, 'thumbnail_url', None) or getattr(parent_prod, 'image_url', None)
 
         prod_name = getattr(product, 'name', None) or 'Product'
         var_name = getattr(variant, 'name', None) if variant else None
