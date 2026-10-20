@@ -261,7 +261,7 @@
     .profile-onboarding-actions .btn-profile-soft:hover,
     #discardConfirmModal .btn-profile-soft:hover,
     #addressModal .form-actions .btn-profile-soft:hover,
-    .address-actions .btn-profile-soft:hover:not(.is-danger),
+    .address-actions .btn-profile-soft:hover:not(.is-danger):not(.is-default),
     .avatar-actions .btn-profile-soft:hover,
     .seller-account-actions .btn-profile-soft:hover {
         background: rgba(242, 196, 206, 0.35);
@@ -272,6 +272,27 @@
     .btn-profile-soft:hover i,
     .btn-profile-soft:hover svg {
         color: inherit;
+    }
+
+    .address-actions .btn-profile-soft.is-default {
+        background: linear-gradient(135deg, #c24e68 0%, #d878a0 55%, #b070c8 100%);
+        border-color: transparent;
+        color: #ffffff;
+        box-shadow: 0 2px 8px rgba(194, 78, 104, 0.35);
+        cursor: default;
+    }
+
+    .address-actions .btn-profile-soft.is-default:hover {
+        background: linear-gradient(135deg, #b5445a 0%, #cb6b93 55%, #a361bc 100%);
+        border-color: transparent;
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(194, 78, 104, 0.42);
+        transform: translateY(-1px);
+    }
+
+    .address-actions .btn-profile-soft.is-default i,
+    .address-actions .btn-profile-soft.is-default:hover i {
+        color: #ffffff !important;
     }
 
     .address-actions .btn-profile-soft.is-danger {
@@ -4439,13 +4460,19 @@ function renderAddressesPage() {
                     ${addr.is_default ? '<span class="status-badge badge-active" style="margin-left:0.5rem;font-size:10px;">Default</span>' : ''}
                 </div>
                 <div class="address-actions">
-                    ${!addr.is_default ? `<button class="btn btn-profile-soft btn-sm" onclick="setDefaultAddress(${addr.id})" title="Set as default">
-                        <i class="ri-checkbox-circle-line"></i>
-                    </button>` : ''}
-                    <button class="btn btn-profile-soft btn-sm" onclick="editAddress(${addr.id})">
+                    ${addr.is_default ? `
+                        <button type="button" class="btn btn-profile-soft btn-sm is-default" onclick="showToast('This address is already set as default', 'info')" title="Default address (Selected)" aria-label="Default address">
+                            <i class="ri-checkbox-circle-fill"></i>
+                        </button>
+                    ` : `
+                        <button type="button" class="btn btn-profile-soft btn-sm" onclick="setDefaultAddress(${addr.id})" title="Set as default" aria-label="Set as default">
+                            <i class="ri-checkbox-circle-line"></i>
+                        </button>
+                    `}
+                    <button type="button" class="btn btn-profile-soft btn-sm" onclick="editAddress(${addr.id})" title="Edit address" aria-label="Edit address">
                         <i class="ri-edit-line"></i>
                     </button>
-                    <button class="btn btn-profile-soft btn-sm is-danger" onclick="deleteAddress(${addr.id})">
+                    <button type="button" class="btn btn-profile-soft btn-sm is-danger" onclick="deleteAddress(${addr.id})" title="Delete address" aria-label="Delete address">
                         <i class="ri-delete-bin-line"></i>
                     </button>
                 </div>
@@ -5148,6 +5175,14 @@ async function deleteAddress(addressId) {
 
 async function setDefaultAddress(addressId) {
     try {
+        // Optimistically update address in place so the check button highlights immediately without layout shifting
+        if (Array.isArray(__addressesCache)) {
+            __addressesCache.forEach(a => {
+                a.is_default = (a.id === addressId);
+            });
+            renderAddressesPage();
+        }
+
         const r = await fetch(`/api/account/addresses/${addressId}/set-default`, { method: 'POST' });
         const d = await r.json();
         
@@ -5156,10 +5191,12 @@ async function setDefaultAddress(addressId) {
             loadAddresses();
         } else {
             showToast('Error: ' + (d.error || 'Failed to set default'), 'error');
+            loadAddresses();
         }
     } catch (error) {
         console.error('Error setting default:', error);
         showToast('Network error', 'error');
+        loadAddresses();
     }
 }
 

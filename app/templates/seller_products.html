@@ -122,7 +122,12 @@
             <div class="product-meta">
                 <div>
                     <div class="product-price">{{ price_tag(product, 'md') }}</div>
-                    <div class="product-stock-info">{{ product.stock_quantity }} units</div>
+                    <div class="product-stock-info">
+                        {{ product.stock_quantity }} units
+                        {% if product.cost_price is not none %}
+                            &bull; <span title="Wholesale / Capital Cost">Cost: ₱{{ '%.2f'|format(product.cost_price) }}</span>
+                        {% endif %}
+                    </div>
                 </div>
                 <label class="toggle-wrap" title="Toggle availability">
                     <input type="checkbox" class="toggle-input availability-toggle"
@@ -194,10 +199,14 @@
                             <label class="form-label">Product Name <span class="required-star">*</span></label>
                             <input type="text" class="form-control" name="name" required placeholder="e.g., Red Rose Bouquet">
                         </div>
-                        <div class="grid-2">
+                        <div class="grid-3" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
                             <div class="form-group">
                                 <label class="form-label">Price (₱) <span class="required-star">*</span></label>
                                 <input type="number" class="form-control" name="price" step="0.01" min="0" required placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Cost (₱) <span class="required-star">*</span></label>
+                                <input type="number" class="form-control" name="cost_price" step="0.01" min="0" required placeholder="0.00" title="Wholesale / Capital Cost">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">Stock Qty <span class="required-star">*</span></label>
@@ -832,10 +841,14 @@
                                 <label class="form-label">Product Name <span class="required-star">*</span></label>
                                 <input type="text" class="form-control" name="name" value="${escapeHtml(p.name)}" required>
                             </div>
-                            <div class="grid-2">
+                            <div class="grid-3" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
                                 <div class="form-group">
                                     <label class="form-label">Price (₱) <span class="required-star">*</span></label>
                                     <input type="number" class="form-control" name="price" step="0.01" min="0" value="${p.price}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Cost (₱) <span class="required-star">*</span></label>
+                                    <input type="number" class="form-control" name="cost_price" step="0.01" min="0" value="${p.cost_price != null ? p.cost_price : ''}" placeholder="0.00" title="Wholesale / Capital Cost">
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Stock Qty <span class="required-star">*</span></label>

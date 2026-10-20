@@ -127,15 +127,18 @@ def _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email):
 def _send_email_async(app, recipient_email, subject, html_body, sender_email):
     """Send email in background thread via Gmail OAuth2 API."""
     with app.app_context():
-        refresh_token = app.config.get('GMAIL_REFRESH_TOKEN', '')
-        
-        if not refresh_token:
-            current_app.logger.error(
-                f"❌ Gmail OAuth2 not configured. Please set GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, and GMAIL_CLIENT_SECRET environment variables."
-            )
-            return
-        
-        _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email)
+        try:
+            refresh_token = app.config.get('GMAIL_REFRESH_TOKEN', '')
+            
+            if not refresh_token:
+                current_app.logger.error(
+                    f"❌ Gmail OAuth2 not configured. Please set GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, and GMAIL_CLIENT_SECRET environment variables."
+                )
+                return
+            
+            _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email)
+        except Exception as e:
+            current_app.logger.error(f"❌ Error in _send_email_async for {recipient_email}: {e}")
 
 
 def send_rider_verification_email(recipient_email, verification_token, store_name, seller_name):
@@ -631,6 +634,188 @@ def send_store_admin_credentials_email(recipient_email, full_name, default_passw
         return True
     except Exception as e:
         current_app.logger.error(f"Failed to queue store admin credentials email: {e}")
+        return False
+
+
+def send_stock_alert_email(
+    recipient_email: str,
+    seller_name: str,
+    store_name: str,
+    product_name: str,
+    current_stock: int,
+    alert_type: str = 'low_stock',
+    threshold: int = 5,
+    variant_name: str = None,
+    addon_name: str = None,
+    product_id: int = None,
+    image_url: str = None,
+) -> bool:
+    """
+    Send low stock or out of stock email notification to seller via the same Gmail OAuth pipeline
+    used for registration OTPs.
+    """
+    try:
+        is_out_of_stock = (alert_type == 'out_of_stock' or current_stock <= 0)
+        
+        # Build display item name
+        if variant_name:
+            item_display_name = f"{product_name} ({variant_name})"
+            item_subdetail = f"Variant: <strong>{variant_name}</strong>"
+        elif addon_name:
+            item_display_name = f"{product_name} - {addon_name}"
+            item_subdetail = f"Add-on Option: <strong>{addon_name}</strong>"
+        else:
+            item_display_name = product_name
+            item_subdetail = None
+
+        if is_out_of_stock:
+            subject = f"🚨 [Out of Stock Alert] {item_display_name} has reached 0 units — {store_name}"
+            badge_bg = "#fee2e2"
+            badge_color = "#b91c1c"
+            badge_border = "#fca5a5"
+            badge_text = "0 Units (Out of Stock)"
+            banner_gradient = "linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #dc2626 100%)"
+            banner_icon = "&#128680;"  # 🚨
+            banner_title = "Out of Stock Alert"
+            banner_sub = f"Urgent restock needed for {store_name}"
+            notice_text = (
+                f"Your inventory item <strong>{item_display_name}</strong> has completely run out of stock "
+                f"(<strong>0 units remaining</strong>). Customers browsing your store cannot purchase this item until stock is replenished."
+            )
+        else:
+            subject = f"⚠️ [Low Stock Alert] {item_display_name} is running low ({current_stock} left) — {store_name}"
+            badge_bg = "#fef3c7"
+            badge_color = "#92400e"
+            badge_border = "#fcd34d"
+            badge_text = f"{current_stock} Units Remaining"
+            banner_gradient = "linear-gradient(135deg, #78350f 0%, #b45309 50%, #d97706 100%)"
+            banner_icon = "&#9888;&#65039;"  # ⚠️
+            banner_title = "Low Stock Alert"
+            banner_sub = f"Inventory threshold crossed for {store_name}"
+            notice_text = (
+                f"Your inventory item <strong>{item_display_name}</strong> has dropped to <strong>{current_stock} unit{'s' if current_stock != 1 else ''}</strong>, "
+                f"crossing your store's low stock threshold of <strong>{threshold} units</strong>. Please consider restocking soon to prevent stockouts."
+            )
+
+        # Base URL resolution
+        base_url = (current_app.config.get('APP_BASE_URL') or '').strip().rstrip('/')
+        if not base_url:
+            try:
+                base_url = request.host_url.rstrip('/')
+            except Exception:
+                base_url = 'https://eflowers.ph'
+
+        inventory_url = f"{base_url}/seller/inventory"
+
+        # Item image markup
+        if image_url:
+            img_html = f"""
+            <td style="width: 80px; vertical-align: top; padding-right: 16px;">
+                <img src="{image_url}" alt="{product_name}" style="width: 76px; height: 76px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; display: block;" />
+            </td>
+            """
+        else:
+            img_html = f"""
+            <td style="width: 60px; vertical-align: top; padding-right: 14px;">
+                <div style="width: 56px; height: 56px; border-radius: 8px; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-size: 24px; text-align: center; line-height: 56px;">
+                    &#127800;
+                </div>
+            </td>
+            """
+
+        subdetail_html = f'<p style="margin: 3px 0 0; font-size: 13px; color: #64748b;">{item_subdetail}</p>' if item_subdetail else ''
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{subject}</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            <div style="max-width: 600px; margin: 24px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);">
+                
+                <!-- Alert Banner -->
+                <div style="background: {banner_gradient}; padding: 28px 24px; text-align: center; color: #ffffff;">
+                    <div style="font-size: 36px; line-height: 1; margin-bottom: 8px;">{banner_icon}</div>
+                    <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: #ffffff;">{banner_title}</h1>
+                    <p style="margin: 6px 0 0; font-size: 14px; color: rgba(255, 255, 255, 0.9); font-weight: 500;">{banner_sub}</p>
+                </div>
+
+                <!-- Main Content -->
+                <div style="padding: 28px 24px;">
+                    <p style="margin: 0 0 14px; font-size: 16px; color: #1e293b; font-weight: 600;">
+                        Hi {seller_name or 'Store Manager'},
+                    </p>
+                    
+                    <p style="margin: 0 0 22px; font-size: 14px; color: #475569; line-height: 1.6;">
+                        {notice_text}
+                    </p>
+
+                    <!-- Item Summary Box -->
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; margin-bottom: 24px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                {img_html}
+                                <td style="vertical-align: top;">
+                                    <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">{product_name}</h3>
+                                    {subdetail_html}
+                                    <div style="margin-top: 10px;">
+                                        <span style="display: inline-block; background-color: {badge_bg}; color: {badge_color}; border: 1px solid {badge_border}; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 6px; letter-spacing: 0.02em;">
+                                            {badge_text}
+                                        </span>
+                                    </div>
+                                    <p style="margin: 8px 0 0; font-size: 12px; color: #64748b;">
+                                        <strong>Store:</strong> {store_name} &bull; <strong>Threshold:</strong> {threshold} units
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Call to action button -->
+                    <div style="text-align: center; margin: 26px 0 16px;">
+                        <a href="{inventory_url}" 
+                           style="display: inline-block; background: #15803d; color: #ffffff; text-decoration: none; padding: 13px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            &#128230; Open Seller Inventory
+                        </a>
+                    </div>
+
+                    <p style="margin: 0; font-size: 12px; color: #94a3b8; text-align: center; line-height: 1.5;">
+                        Clicking the button will take you directly to your inventory management screen where you can add stock.
+                    </p>
+                </div>
+
+                <!-- Footer -->
+                <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 24px; text-align: center;">
+                    <p style="margin: 0 0 4px; font-size: 12px; font-weight: 600; color: #64748b;">
+                        &#127800; E-Flora Online Delivery System
+                    </p>
+                    <p style="margin: 0; font-size: 11px; color: #94a3b8;">
+                        This automated notification was sent to <strong>{recipient_email}</strong> via E-Flora's Gmail alert service.
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
+
+        app = current_app._get_current_object()
+        thread = threading.Thread(
+            target=_send_email_async,
+            args=(app, recipient_email, subject, html_body, sender)
+        )
+        thread.daemon = True
+        thread.start()
+
+        current_app.logger.info(f"📧 Stock alert email ({alert_type}) queued for {recipient_email}")
+        return True
+
+    except Exception as e:
+        current_app.logger.error(f"❌ Failed to queue stock alert email for {recipient_email}: {e}")
         return False
 
 

@@ -470,6 +470,7 @@ def _period_catalog_sales(start, end, store_id=None):
             OrderItem.variant_id.label('variant_id'),
             func.coalesce(func.sum(OrderItem.quantity), 0).label('qty'),
             func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('revenue'),
+            func.coalesce(func.sum(OrderItem.quantity * func.coalesce(OrderItem.cost_price, OrderItem.price * 0.60)), 0).label('cogs'),
         )
         .join(Order, Order.id == OrderItem.order_id)
         .filter(
@@ -488,6 +489,7 @@ def _period_catalog_sales(start, end, store_id=None):
             POSOrderItem.variant_id.label('variant_id'),
             func.coalesce(func.sum(POSOrderItem.quantity), 0).label('qty'),
             func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('revenue'),
+            func.coalesce(func.sum(POSOrderItem.quantity * func.coalesce(POSOrderItem.cost_price, POSOrderItem.price * 0.60)), 0).label('cogs'),
         )
         .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id)
         .filter(
@@ -506,9 +508,10 @@ def _period_catalog_sales(start, end, store_id=None):
         if not r.product_id:
             continue
         key = (int(r.product_id), int(r.variant_id) if r.variant_id else None)
-        entry = pv.setdefault(key, {'qty': 0, 'revenue': 0.0})
+        entry = pv.setdefault(key, {'qty': 0, 'revenue': 0.0, 'cogs': 0.0})
         entry['qty'] += int(_to_float(r.qty))
         entry['revenue'] += _to_float(r.revenue)
+        entry['cogs'] += _to_float(r.cogs)
 
     # YMAL add-ons count on the product that created the option, not the
     # flower they were checked out with. Option id keeps same names apart.
@@ -519,6 +522,7 @@ def _period_catalog_sales(start, end, store_id=None):
             OrderItemAddon.addon_option_id.label('addon_option_id'),
             func.coalesce(func.sum(OrderItemAddon.quantity), 0).label('qty'),
             func.coalesce(func.sum(OrderItemAddon.quantity * OrderItemAddon.price), 0).label('revenue'),
+            func.coalesce(func.sum(OrderItemAddon.quantity * func.coalesce(OrderItemAddon.cost_price, OrderItemAddon.price * 0.60)), 0).label('cogs'),
         )
         .join(OrderItem, OrderItem.id == OrderItemAddon.order_item_id)
         .join(Order, Order.id == OrderItem.order_id)
@@ -539,9 +543,10 @@ def _period_catalog_sales(start, end, store_id=None):
         if not r.addon_option_id or not r.product_id:
             continue
         key = (int(r.product_id), int(r.addon_option_id))
-        entry = addons.setdefault(key, {'qty': 0, 'revenue': 0.0})
+        entry = addons.setdefault(key, {'qty': 0, 'revenue': 0.0, 'cogs': 0.0})
         entry['qty'] += int(_to_float(r.qty))
         entry['revenue'] += _to_float(r.revenue)
+        entry['cogs'] += _to_float(r.cogs)
 
     sr_q = StockReduction.query.filter(
         StockReduction.addon_option_id.isnot(None),
@@ -560,11 +565,13 @@ def _period_catalog_sales(start, end, store_id=None):
     }
     option_owner = {}
     option_price = {}
+    option_cost = {}
     if option_ids:
         for opt in ProductAddonOption.query.options(
             joinedload(ProductAddonOption.group)
         ).filter(ProductAddonOption.id.in_(option_ids)).all():
             option_price[int(opt.id)] = _to_float(opt.price)
+            option_cost[int(opt.id)] = _to_float(opt.cost_price if opt.cost_price is not None and opt.cost_price > 0 else (float(opt.price or 0) * 0.60))
             if opt.group and opt.group.product_id:
                 option_owner[int(opt.id)] = int(opt.group.product_id)
 
@@ -577,9 +584,11 @@ def _period_catalog_sales(start, end, store_id=None):
         if not owner:
             continue
         key = (int(owner), oid)
-        entry = addons.setdefault(key, {'qty': 0, 'revenue': 0.0})
+        entry = addons.setdefault(key, {'qty': 0, 'revenue': 0.0, 'cogs': 0.0})
         entry['qty'] += qty
         entry['revenue'] += qty * option_price.get(oid, 0.0)
+        batch_cogs = _to_float(r.total_cost) if r.total_cost is not None else (qty * option_cost.get(oid, 0.0))
+        entry['cogs'] += batch_cogs
 
     return pv, addons
 
@@ -606,6 +615,58 @@ def _pos_revenue(store_id: int, start: datetime, end: datetime) -> float:
         POSOrder.created_at < end,
     ).scalar()
     return _to_float(total)
+
+
+def _compute_period_cogs(start: datetime, end: datetime, store_id: Optional[int] = None) -> Tuple[float, float, float]:
+    """Compute (online_cogs, pos_cogs, total_cogs) for paid/completed orders in [start, end)."""
+    # 1. Online OrderItem COGS
+    q_oi = db.session.query(
+        func.coalesce(
+            func.sum(OrderItem.quantity * func.coalesce(OrderItem.cost_price, OrderItem.price * 0.60)),
+            0
+        )
+    ).join(Order, Order.id == OrderItem.order_id).filter(
+        _paid_order_status_filter(),
+        Order.created_at >= start,
+        Order.created_at < end,
+    )
+    if store_id is not None:
+        q_oi = q_oi.filter(Order.store_id == store_id)
+    online_item_cogs = _to_float(q_oi.scalar())
+
+    # 2. Online OrderItemAddon COGS
+    q_oia = db.session.query(
+        func.coalesce(
+            func.sum(OrderItemAddon.quantity * func.coalesce(OrderItemAddon.cost_price, OrderItemAddon.price * 0.60)),
+            0
+        )
+    ).join(OrderItem, OrderItem.id == OrderItemAddon.order_item_id) \
+     .join(Order, Order.id == OrderItem.order_id).filter(
+        _paid_order_status_filter(),
+        Order.created_at >= start,
+        Order.created_at < end,
+    )
+    if store_id is not None:
+        q_oia = q_oia.filter(Order.store_id == store_id)
+    online_addon_cogs = _to_float(q_oia.scalar())
+
+    online_cogs = online_item_cogs + online_addon_cogs
+
+    # 3. POS OrderItem COGS
+    q_pos = db.session.query(
+        func.coalesce(
+            func.sum(POSOrderItem.quantity * func.coalesce(POSOrderItem.cost_price, POSOrderItem.price * 0.60)),
+            0
+        )
+    ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id).filter(
+        POSOrder.created_at >= start,
+        POSOrder.created_at < end,
+    )
+    if store_id is not None:
+        q_pos = q_pos.filter(POSOrder.store_id == store_id)
+    pos_cogs = _to_float(q_pos.scalar())
+
+    return online_cogs, pos_cogs, (online_cogs + pos_cogs)
 
 
 def _online_order_count(store_id: int, start: datetime, end: datetime) -> int:
@@ -1295,6 +1356,10 @@ def compute_analytics(
     pos_rev = _pos_revenue(store.id, start, end)
     total_rev = online_rev + pos_rev
 
+    online_cogs, pos_cogs, total_cogs = _compute_period_cogs(start, end, store_id=store.id)
+    gross_profit = total_rev - total_cogs
+    gross_margin_pct = (gross_profit / total_rev * 100.0) if total_rev > 0 else 0.0
+
     online_orders = _online_order_count(store.id, start, end)
     completed_online = _completed_online_order_count(store.id, start, end)
     pos_orders = _pos_order_count(store.id, start, end)
@@ -1307,6 +1372,8 @@ def compute_analytics(
 
     # Previous-period comparisons for the % badges
     prev_rev = _online_revenue(store.id, prev_start, prev_end) + _pos_revenue(store.id, prev_start, prev_end)
+    prev_online_cogs, prev_pos_cogs, prev_total_cogs = _compute_period_cogs(prev_start, prev_end, store_id=store.id)
+    prev_profit = prev_rev - prev_total_cogs
     prev_completed = _completed_online_order_count(store.id, prev_start, prev_end) + _pos_order_count(store.id, prev_start, prev_end)
     prev_orders = _online_order_count(store.id, prev_start, prev_end) + _pos_order_count(store.id, prev_start, prev_end)
     prev_avg = (prev_rev / prev_completed) if prev_completed else 0.0
@@ -1334,6 +1401,11 @@ def compute_analytics(
         'totals': {
             'revenue': total_rev,
             'revenue_display': peso(total_rev),
+            'cogs': total_cogs,
+            'cogs_display': peso(total_cogs),
+            'gross_profit': gross_profit,
+            'gross_profit_display': peso(gross_profit),
+            'margin_pct': gross_margin_pct,
             'orders': total_orders,
             'avg_order': avg_order,
             'avg_order_display': peso(avg_order),
@@ -1345,6 +1417,8 @@ def compute_analytics(
         },
         'deltas': {
             'revenue_pct': pct_change(total_rev, prev_rev),
+            'profit_pct': pct_change(gross_profit, prev_profit),
+            'cogs_pct': pct_change(total_cogs, prev_total_cogs),
             'orders_pct': pct_change(total_orders, prev_orders),
             'avg_pct': pct_change(avg_order, prev_avg),
             'new_pct': pct_change(new_customers, prev_new_customers),
@@ -1626,6 +1700,9 @@ def _build_products_section(start, end, store_id=None, include_store=False):
     addon_count = 0
     flower_units = 0
     addon_units = 0
+    total_tied_capital = 0.0
+    total_revenue_all = 0.0
+    total_cogs_all = 0.0
 
     leftover_variant_ids = {
         vid for (pid, vid) in pv_sales.keys() if vid is not None
@@ -1661,8 +1738,8 @@ def _build_products_section(start, end, store_id=None, include_store=False):
         name = (getattr(cat, 'name', None) or '').strip().lower()
         return slug in ('other', 'others') or name in ('other', 'others')
 
-    def _append_row(product, kind, option_name, stock, price, sold, revenue):
-        nonlocal low_stock, out_of_stock, flower_units, addon_units
+    def _append_row(product, kind, option_name, stock, price, sold, revenue, cost_price=0.0, cogs=0.0):
+        nonlocal low_stock, out_of_stock, flower_units, addon_units, total_tied_capital, total_revenue_all, total_cogs_all
         stock, stock_label = _stock_status_label(stock)
         if stock_label == 'Out of Stock':
             out_of_stock += 1
@@ -1673,6 +1750,19 @@ def _build_products_section(start, end, store_id=None, include_store=False):
             addon_units += sold_n
         elif not _is_other_category(product):
             flower_units += sold_n
+
+        rev_val = float(revenue or 0)
+        cost_val = float(cost_price or 0)
+        cogs_val = float(cogs or 0)
+        profit_val = rev_val - cogs_val
+        margin_pct = f"{(profit_val / rev_val * 100):.1f}%" if rev_val > 0 else "0.0%"
+
+        stock_n = int(stock or 0)
+        if stock_n > 0 and cost_val > 0:
+            total_tied_capital += (stock_n * cost_val)
+        total_revenue_all += rev_val
+        total_cogs_all += cogs_val
+
         row = [_product_label(product)]
         if include_store:
             row.append(product.store.name if product.store else '—')
@@ -1681,7 +1771,11 @@ def _build_products_section(start, end, store_id=None, include_store=False):
             option_name or '—',
             product.main_category.name if product.main_category else 'Uncategorized',
             sold_n,
-            float(revenue or 0),
+            rev_val,
+            cost_val,
+            cogs_val,
+            profit_val,
+            margin_pct,
             stock,
             float(price or 0),
             stock_label,
@@ -1691,7 +1785,8 @@ def _build_products_section(start, end, store_id=None, include_store=False):
     for product in products:
         variants = list(product.variants or [])
         listed_variant_ids = set()
-        standard_sales = pv_sales.get((product.id, None), {'qty': 0, 'revenue': 0.0})
+        standard_sales = pv_sales.get((product.id, None), {'qty': 0, 'revenue': 0.0, 'cogs': 0.0})
+        p_cost = float(product.cost_price or (float(product.price or 0) * 0.60))
         _append_row(
             product,
             'Product',
@@ -1700,14 +1795,17 @@ def _build_products_section(start, end, store_id=None, include_store=False):
             product.price,
             standard_sales['qty'],
             standard_sales['revenue'],
+            p_cost,
+            standard_sales.get('cogs', 0.0),
         )
         for variant in sorted(variants, key=lambda v: (v.sort_order or 0, v.name or '')):
             variant_count += 1
             listed_variant_ids.add(variant.id)
-            sales = pv_sales.get((product.id, variant.id), {'qty': 0, 'revenue': 0.0})
+            sales = pv_sales.get((product.id, variant.id), {'qty': 0, 'revenue': 0.0, 'cogs': 0.0})
             price = variant.special_price if (
                 variant.special_price and variant.special_price < variant.price
             ) else variant.price
+            v_cost = float(variant.cost_price or product.cost_price or (float(variant.price or 0) * 0.60))
             _append_row(
                 product,
                 'Variant',
@@ -1716,6 +1814,8 @@ def _build_products_section(start, end, store_id=None, include_store=False):
                 price,
                 sales['qty'],
                 sales['revenue'],
+                v_cost,
+                sales.get('cogs', 0.0),
             )
 
         for (pid, vid), sales in pv_sales.items():
@@ -1724,6 +1824,7 @@ def _build_products_section(start, end, store_id=None, include_store=False):
             if not sales['qty'] and not sales['revenue']:
                 continue
             variant = leftover_variants.get(vid)
+            v_cost = float(variant.cost_price or product.cost_price or 0.0) if variant else float(product.cost_price or 0.0)
             _append_row(
                 product,
                 'Variant',
@@ -1732,6 +1833,8 @@ def _build_products_section(start, end, store_id=None, include_store=False):
                 variant.price if variant else 0,
                 sales['qty'],
                 sales['revenue'],
+                v_cost,
+                sales.get('cogs', 0.0),
             )
 
         listed_option_ids = set()
@@ -1739,8 +1842,9 @@ def _build_products_section(start, end, store_id=None, include_store=False):
             for opt in sorted(group.options or [], key=lambda o: o.sort_order or 0):
                 addon_count += 1
                 listed_option_ids.add(opt.id)
-                sales = addon_sales.get((product.id, opt.id), {'qty': 0, 'revenue': 0.0})
+                sales = addon_sales.get((product.id, opt.id), {'qty': 0, 'revenue': 0.0, 'cogs': 0.0})
                 label = f"{group.name} — {opt.name}" if group.name else opt.name
+                opt_cost = float(opt.cost_price or (float(opt.price or 0) * 0.60))
                 _append_row(
                     product,
                     'Add-on',
@@ -1749,6 +1853,8 @@ def _build_products_section(start, end, store_id=None, include_store=False):
                     opt.price,
                     sales['qty'],
                     sales['revenue'],
+                    opt_cost,
+                    sales.get('cogs', 0.0),
                 )
 
         for (pid, oid), sales in addon_sales.items():
@@ -1760,6 +1866,7 @@ def _build_products_section(start, end, store_id=None, include_store=False):
             group_name = opt.group.name if opt and opt.group else None
             opt_name = opt.name if opt else f'Add-on #{oid}'
             label = f"{group_name} — {opt_name}" if group_name else opt_name
+            opt_cost = float(opt.cost_price or 0.0) if opt else 0.0
             _append_row(
                 product,
                 'Add-on',
@@ -1768,12 +1875,18 @@ def _build_products_section(start, end, store_id=None, include_store=False):
                 opt.price if opt else 0,
                 sales['qty'],
                 sales['revenue'],
+                opt_cost,
+                sales.get('cogs', 0.0),
             )
 
     summary = [
         ('Catalogue Rows', f"{len(out_rows):,}"),
         ('Variants', f"{variant_count:,}"),
         ('Add-ons', f"{addon_count:,}"),
+        ('Tied Capital in Stock', peso(total_tied_capital)),
+        ('Total Product Revenue', peso(total_revenue_all)),
+        ('Total Product COGS', peso(total_cogs_all)),
+        ('Total Product Profit', peso(total_revenue_all - total_cogs_all)),
         ('Low Stock', f"{low_stock:,}"),
         ('Out of Stock', f"{out_of_stock:,}"),
         ('Flower & Plant Units Sold', f"{flower_units:,}"),
@@ -1784,7 +1897,8 @@ def _build_products_section(start, end, store_id=None, include_store=False):
         columns.append('Store')
     columns.extend([
         'Type', 'Variant / Add-on', 'Category', 'Units Sold',
-        'Revenue (₱)', 'Stock', 'Price (₱)', 'Status',
+        'Revenue (₱)', 'Unit Cost (₱)', 'COGS (₱)', 'Gross Profit (₱)', 'Margin (%)',
+        'Stock', 'Price (₱)', 'Status',
     ])
     return {
         'key': 'products',
@@ -1810,32 +1924,74 @@ def _revenue_section(store_id, start, end):
         Order.created_at < end,
     ).group_by(day).order_by(day).all()
 
+    daily_cogs_q = db.session.query(
+        day.label('d'),
+        func.coalesce(
+            func.sum(OrderItem.quantity * func.coalesce(OrderItem.cost_price, OrderItem.price * 0.60)),
+            0
+        ).label('item_cogs'),
+    ).join(Order, Order.id == OrderItem.order_id).filter(
+        Order.store_id == store_id,
+        _paid_order_status_filter(),
+        Order.created_at >= start,
+        Order.created_at < end,
+    ).group_by(day).all()
+    daily_cogs_map = {r.d: _to_float(r.item_cogs) for r in daily_cogs_q}
+
+    daily_addon_cogs_q = db.session.query(
+        day.label('d'),
+        func.coalesce(
+            func.sum(OrderItemAddon.quantity * func.coalesce(OrderItemAddon.cost_price, OrderItemAddon.price * 0.60)),
+            0
+        ).label('addon_cogs'),
+    ).join(OrderItem, OrderItem.id == OrderItemAddon.order_item_id) \
+     .join(Order, Order.id == OrderItem.order_id).filter(
+        Order.store_id == store_id,
+        _paid_order_status_filter(),
+        Order.created_at >= start,
+        Order.created_at < end,
+    ).group_by(day).all()
+    for r in daily_addon_cogs_q:
+        daily_cogs_map[r.d] = daily_cogs_map.get(r.d, 0.0) + _to_float(r.addon_cogs)
+
     rows = []
     total_rev = 0.0
     total_orders = 0
     for r in daily:
         rev = float(r.rev or 0)
         oc = int(r.orders or 0)
+        cogs = daily_cogs_map.get(r.d, 0.0)
+        profit = rev - cogs
         rows.append([
             r.d.strftime('%Y-%m-%d') if hasattr(r.d, 'strftime') else str(r.d),
             oc,
             rev,
+            cogs,
+            profit,
             (rev / oc) if oc else 0.0,
         ])
         total_rev += rev
         total_orders += oc
 
     pos_rev = _pos_revenue(store_id, start, end)
+    online_cogs, pos_cogs, total_cogs = _compute_period_cogs(start, end, store_id=store_id)
+    total_revenue_all = total_rev + pos_rev
+    gross_profit = total_revenue_all - total_cogs
+    margin_pct = (gross_profit / total_revenue_all * 100.0) if total_revenue_all > 0 else 0.0
+
     summary = [
         ('Online Revenue', peso(total_rev)),
         ('POS Revenue', peso(pos_rev)),
-        ('Total Revenue', peso(total_rev + pos_rev)),
+        ('Total Revenue', peso(total_revenue_all)),
+        ('Cost of Goods Sold (COGS)', peso(total_cogs)),
+        ('Gross Profit', peso(gross_profit)),
+        ('Gross Profit Margin', f"{margin_pct:.1f}%"),
         ('Online Orders', f"{total_orders:,}"),
     ]
     return {
         'key': 'revenue',
         'title': REPORT_TYPE_LABELS['revenue'],
-        'columns': ['Date', 'Orders', 'Revenue (₱)', 'Avg Order (₱)'],
+        'columns': ['Date', 'Orders', 'Revenue (₱)', 'COGS (₱)', 'Gross Profit (₱)', 'Avg Order (₱)'],
         'rows': rows,
         'summary': summary,
     }
@@ -1996,8 +2152,14 @@ def _year_end_section(store_id, start, end):
     top_products = _top_products(store_id, start, end, limit=3)
     top_products_label = ', '.join(p['name'] for p in top_products) if top_products else 'N/A'
 
+    online_cogs, pos_cogs, total_cogs = _compute_period_cogs(start, end, store_id=store_id)
+    gross_profit = total_rev - total_cogs
+    margin_pct = (gross_profit / total_rev * 100.0) if total_rev > 0 else 0.0
+
     rows = [
         ['KPI', 'Total Revenue', total_rev, f"Online {peso(online_rev)} + POS {peso(pos_rev)}"],
+        ['KPI', 'Cost of Goods Sold (COGS)', total_cogs, f"Online {peso(online_cogs)} + POS {peso(pos_cogs)}"],
+        ['KPI', 'Gross Profit', gross_profit, f"{margin_pct:.1f}% gross margin"],
         ['KPI', 'Total Orders', total_orders, f"Online {online_orders:,} + POS {pos_orders:,}"],
         ['KPI', 'Average Order Value', avg_order, 'Total completed revenue / completed orders'],
         ['KPI', 'New Customers', new_customers, 'Customers placing their first order in period'],
@@ -2026,6 +2188,9 @@ def _year_end_section(store_id, start, end):
 
     summary = [
         ('Total Revenue', peso(total_rev)),
+        ('Total COGS', peso(total_cogs)),
+        ('Gross Profit', peso(gross_profit)),
+        ('Gross Margin', f"{margin_pct:.1f}%"),
         ('Total Orders', f"{total_orders:,}"),
         ('Avg Order', peso(avg_order)),
         ('New Customers', f"{new_customers:,}"),
@@ -2077,7 +2242,7 @@ def build_report_payload(
 
 
 _MONEY_COL_RE = re.compile(
-    r'(amount|total|subtotal|revenue|sales|price|aov|average order value|earnings|fee|cost|income)',
+    r'(amount|total|subtotal|revenue|sales|price|aov|average order value|earnings|fee|cost|income|cogs|profit)',
     re.I,
 )
 
@@ -2317,10 +2482,10 @@ def render_pdf(payload: dict) -> bytes:
             return 'datetime'
         if 'joined' in h or 'last order' in h:
             return 'date'
-        if h.strip() in ('type',):
-            return 'center'
-        if any(k in h for k in ('amount', 'revenue', 'price', 'total', 'spent', 'avg', 'aov', 'fee', 'delivery', 'discount')):
+        if any(k in h for k in ('amount', 'revenue', 'price', 'total', 'spent', 'avg', 'aov', 'fee', 'delivery', 'discount', 'cost', 'cogs', 'profit')):
             return 'amount'
+        if any(k in h for k in ('margin', '%')):
+            return 'center'
         if h.strip() in ('items',) or any(k in h for k in ('qty', 'count', 'units sold', 'stock')):
             return 'center'
         if 'payment' in h and 'status' not in h:
@@ -3742,32 +3907,72 @@ def _admin_revenue_section(start, end):
         Order.created_at < end,
     ).group_by(day).order_by(day).all()
 
+    daily_cogs_q = db.session.query(
+        day.label('d'),
+        func.coalesce(
+            func.sum(OrderItem.quantity * func.coalesce(OrderItem.cost_price, OrderItem.price * 0.60)),
+            0
+        ).label('item_cogs'),
+    ).join(Order, Order.id == OrderItem.order_id).filter(
+        _paid_order_status_filter(),
+        Order.created_at >= start,
+        Order.created_at < end,
+    ).group_by(day).all()
+    daily_cogs_map = {r.d: _to_float(r.item_cogs) for r in daily_cogs_q}
+
+    daily_addon_cogs_q = db.session.query(
+        day.label('d'),
+        func.coalesce(
+            func.sum(OrderItemAddon.quantity * func.coalesce(OrderItemAddon.cost_price, OrderItemAddon.price * 0.60)),
+            0
+        ).label('addon_cogs'),
+    ).join(OrderItem, OrderItem.id == OrderItemAddon.order_item_id) \
+     .join(Order, Order.id == OrderItem.order_id).filter(
+        _paid_order_status_filter(),
+        Order.created_at >= start,
+        Order.created_at < end,
+    ).group_by(day).all()
+    for r in daily_addon_cogs_q:
+        daily_cogs_map[r.d] = daily_cogs_map.get(r.d, 0.0) + _to_float(r.addon_cogs)
+
     rows = []
     total_rev = 0.0
     total_orders = 0
     for r in daily:
         rev = float(r.rev or 0)
         oc = int(r.orders or 0)
+        cogs = daily_cogs_map.get(r.d, 0.0)
+        profit = rev - cogs
         rows.append([
             r.d.strftime('%Y-%m-%d') if hasattr(r.d, 'strftime') else str(r.d),
             oc,
             rev,
+            cogs,
+            profit,
             (rev / oc) if oc else 0.0,
         ])
         total_rev += rev
         total_orders += oc
 
     pos_rev = _platform_pos_revenue(start, end)
+    online_cogs, pos_cogs, total_cogs = _compute_period_cogs(start, end, store_id=None)
+    total_revenue_all = total_rev + pos_rev
+    gross_profit = total_revenue_all - total_cogs
+    margin_pct = (gross_profit / total_revenue_all * 100.0) if total_revenue_all > 0 else 0.0
+
     summary = [
         ('Online Revenue', peso(total_rev)),
         ('POS Revenue', peso(pos_rev)),
-        ('Total Revenue', peso(total_rev + pos_rev)),
+        ('Total Revenue', peso(total_revenue_all)),
+        ('Platform COGS', peso(total_cogs)),
+        ('Platform Gross Profit', peso(gross_profit)),
+        ('Platform Gross Margin', f"{margin_pct:.1f}%"),
         ('Online Orders', f"{total_orders:,}"),
     ]
     return {
         'key': 'revenue',
         'title': 'Platform Revenue Report',
-        'columns': ['Date', 'Orders', 'Revenue (₱)', 'Avg Order (₱)'],
+        'columns': ['Date', 'Orders', 'Revenue (₱)', 'COGS (₱)', 'Gross Profit (₱)', 'Avg Order (₱)'],
         'rows': rows,
         'summary': summary,
     }
@@ -3839,8 +4044,14 @@ def _admin_year_end_section(start, end):
     top_products = _platform_top_products(start, end, limit=3)
     top_products_label = ', '.join(p['name'] for p in top_products) if top_products else 'N/A'
 
+    online_cogs, pos_cogs, total_cogs = _compute_period_cogs(start, end, store_id=None)
+    gross_profit = total_rev - total_cogs
+    margin_pct = (gross_profit / total_rev * 100.0) if total_rev > 0 else 0.0
+
     rows = [
         ['KPI', 'Total Revenue', total_rev, f"Online {peso(online_rev)} + POS {peso(pos_rev)}"],
+        ['KPI', 'Platform COGS', total_cogs, f"Online {peso(online_cogs)} + POS {peso(pos_cogs)}"],
+        ['KPI', 'Platform Gross Profit', gross_profit, f"{margin_pct:.1f}% gross margin"],
         ['KPI', 'Total Orders', total_orders, f"Online {online_orders:,} + POS {pos_orders:,}"],
         ['KPI', 'Average Order Value', avg_order, 'Total completed revenue / completed orders'],
         ['KPI', 'New Customers', new_customers, 'Customers placing first order in period'],
@@ -3867,6 +4078,9 @@ def _admin_year_end_section(start, end):
 
     summary = [
         ('Total Revenue', peso(total_rev)),
+        ('Platform COGS', peso(total_cogs)),
+        ('Gross Profit', peso(gross_profit)),
+        ('Gross Margin', f"{margin_pct:.1f}%"),
         ('Total Orders', f"{total_orders:,}"),
         ('Avg Order', peso(avg_order)),
         ('New Customers', f"{new_customers:,}"),

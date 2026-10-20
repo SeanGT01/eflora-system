@@ -13,6 +13,10 @@ from .validators import (
     normalize_full_name,
     compose_full_name,
 )
+from app.cost_helpers import (
+    get_realistic_margin_rate,
+    calculate_realistic_cost,
+)
 
 __all__ = [
     'should_use_cloudinary',
@@ -24,4 +28,6 @@ __all__ = [
     'parse_and_validate_birthday',
     'normalize_full_name',
     'compose_full_name',
+    'get_realistic_margin_rate',
+    'calculate_realistic_cost',
 ]

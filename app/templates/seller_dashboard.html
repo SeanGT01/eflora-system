@@ -263,6 +263,12 @@
   margin-bottom: 1.35rem;
 }
 
+.kpi-row.kpi-row-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: -0.45rem;
+  margin-bottom: 1.35rem;
+}
+
 .kpi-card {
   background: #ffffff;
   border: 1px solid rgba(194, 78, 104, 0.14);
@@ -302,6 +308,36 @@
 .kpi-card.green::before  { background: linear-gradient(90deg, #6f9b74, #4a6b4e); }
 .kpi-card.terra::before  { background: linear-gradient(90deg, #d0875a, #a85a38); }
 .kpi-card.bark::before   { background: linear-gradient(90deg, #8a634f, #3d2c24); }
+
+.kpi-card.kpi-profit {
+  border-left: 3.5px solid var(--deep-sage);
+}
+.kpi-card.kpi-profit::before {
+  background: linear-gradient(90deg, #4a6b4e, #7a9e7e);
+}
+.kpi-card.kpi-profit .kpi-icon {
+  background: linear-gradient(135deg, rgba(74, 107, 78, 0.18), rgba(122, 158, 126, 0.12));
+  color: #38573c;
+}
+.kpi-card.kpi-profit .kpi-value {
+  color: #2e5932;
+}
+
+.kpi-card.kpi-cogs::before {
+  background: linear-gradient(90deg, #8a634f, #6b4c3b);
+}
+.kpi-card.kpi-cogs .kpi-icon {
+  background: linear-gradient(135deg, rgba(107, 76, 59, 0.16), rgba(138, 99, 79, 0.1));
+  color: #6b4c3b;
+}
+
+.kpi-card.kpi-margin::before {
+  background: linear-gradient(90deg, #d0875a, #a85a38);
+}
+.kpi-card.kpi-margin .kpi-icon {
+  background: linear-gradient(135deg, rgba(196, 113, 75, 0.18), rgba(168, 90, 56, 0.1));
+  color: #a85a38;
+}
 
 .kpi-top {
   display: flex;
@@ -1845,11 +1881,15 @@ table.dash-table {
   .dash-title { font-size: clamp(20px, 5.5vw, 26px); }
   .dash-date { font-size: 11px; padding: .25rem .65rem; align-self: flex-start; }
 
-  .kpi-row {
+  .kpi-row,
+  .kpi-row.kpi-row-3 {
     grid-template-columns: 1fr 1fr;
     gap: .4rem;
     margin-bottom: .75rem;
     padding: 0 .875rem;
+  }
+  .kpi-row.kpi-row-3 > .kpi-card:last-child {
+    grid-column: 1 / -1;
   }
   .kpi-card { padding: .65rem .7rem; border-radius: 12px; }
   .kpi-top { margin-bottom: .4rem; }
@@ -2003,7 +2043,13 @@ table.dash-table {
 
 @media (max-width: 1279px) {
   .dash .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash .kpi-row.kpi-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dash .analytics-grid-3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .dash .kpi-row.kpi-row-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash .kpi-row.kpi-row-3 > .kpi-card:last-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 1100px) {
@@ -2245,6 +2291,62 @@ table.dash-table {
     </div>
   </div>
 
+  <!-- ─── Profitability KPI Strip ────────────────────────── -->
+  <div class="kpi-row kpi-row-3">
+    <!-- Gross Profit -->
+    <div class="kpi-card kpi-profit">
+      <div class="kpi-top">
+        <div class="kpi-label">Gross Profit</div>
+        <div class="kpi-icon"><i class="ri-money-dollar-box-line"></i></div>
+      </div>
+      <div class="kpi-value">₱{{ '{:,.2f}'.format(profit_this_month|default(0)) }}</div>
+      <div class="kpi-sub">Revenue − Wholesale COGS · {{ period_label or 'Selected period' }}</div>
+      {% if profit_change > 0 %}
+        <span class="kpi-badge up"><i class="ri-arrow-up-line"></i> {{ profit_change }}%</span>
+      {% elif profit_change < 0 %}
+        <span class="kpi-badge down"><i class="ri-arrow-down-line"></i> {{ profit_change|abs }}%</span>
+      {% else %}
+        <span class="kpi-badge flat">—</span>
+      {% endif %}
+    </div>
+
+    <!-- COGS -->
+    <div class="kpi-card kpi-cogs">
+      <div class="kpi-top">
+        <div class="kpi-label">Cost of Goods Sold</div>
+        <div class="kpi-icon"><i class="ri-funds-box-line"></i></div>
+      </div>
+      <div class="kpi-value">₱{{ '{:,.2f}'.format(cogs_this_month|default(0)) }}</div>
+      <div class="kpi-sub">Total wholesale stock spent · {{ period_label or 'Selected period' }}</div>
+      {% if cogs_change > 0 %}
+        <span class="kpi-badge down"><i class="ri-arrow-up-line"></i> +{{ cogs_change }}%</span>
+      {% elif cogs_change < 0 %}
+        <span class="kpi-badge up"><i class="ri-arrow-down-line"></i> {{ cogs_change }}%</span>
+      {% else %}
+        <span class="kpi-badge flat">—</span>
+      {% endif %}
+    </div>
+
+    <!-- Profit Margin -->
+    <div class="kpi-card kpi-margin">
+      <div class="kpi-top">
+        <div class="kpi-label">Gross Profit Margin</div>
+        <div class="kpi-icon"><i class="ri-pie-chart-line"></i></div>
+      </div>
+      <div class="kpi-value">{% if margin_pct_this is not none %}{{ '%.1f'|format(margin_pct_this) }}%{% else %}0.0%{% endif %}</div>
+      <div class="kpi-sub">Gross profit ÷ Total revenue</div>
+      {% if margin_pct_this is none or margin_pct_this == 0 %}
+        <span class="kpi-badge flat">—</span>
+      {% elif margin_pct_this >= 50 %}
+        <span class="kpi-badge up"><i class="ri-check-line"></i> High margin</span>
+      {% elif margin_pct_this >= 25 %}
+        <span class="kpi-badge flat">Moderate margin</span>
+      {% else %}
+        <span class="kpi-badge down"><i class="ri-alert-line"></i> Low margin</span>
+      {% endif %}
+    </div>
+  </div>
+
   <!-- ─── Body: Chart + Top Products ─────────────────────── -->
   <div class="dash-body">
 
@@ -2267,6 +2369,9 @@ table.dash-table {
           </button>
           <button type="button" class="rev-toggle-btn" id="btnViewOrders" onclick="switchRevenueView('orders', this)">
             Orders
+          </button>
+          <button type="button" class="rev-toggle-btn" id="btnViewProfit" onclick="switchRevenueView('profit', this)">
+            Profit & COGS
           </button>
         </div>
       </div>
@@ -2341,6 +2446,9 @@ table.dash-table {
           <button type="button" class="rev-toggle-btn" id="btnTopSalesSeller" onclick="switchTopProducts('sales', this)">
             By Sales
           </button>
+          <button type="button" class="rev-toggle-btn" id="btnTopProfitSeller" onclick="switchTopProducts('profit', this)">
+            By Profit
+          </button>
         </div>
         <a href="{{ url_for('templates.seller_products') }}" class="panel-action">
           All <i class="ri-arrow-right-line"></i>
@@ -2403,6 +2511,36 @@ table.dash-table {
           <div class="empty-panel">
             <i class="ri-bar-chart-box-line"></i>
             No sales data yet
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- By Profit List -->
+      <div id="topProductsProfitList" class="top-products-list" style="display: none;">
+        {% set profit_list = top_products_by_profit or [] %}
+        {% if profit_list and profit_list|length > 0 %}
+          {% set rank_classes = ['gold', 'silver', 'bronze', 'plain', 'plain'] %}
+          {% for product in profit_list %}
+          <div class="product-rank">
+            <div class="rank-num {{ rank_classes[loop.index0] if loop.index0 < 5 else 'plain' }}">{{ loop.index }}</div>
+            <div class="rank-thumb">
+              {% if product.image_url %}
+              <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy">
+              {% else %}
+              <i class="ri-image-line"></i>
+              {% endif %}
+            </div>
+            <div class="rank-info">
+              <div class="rank-name" title="{{ product.name }}">{{ product.name }}</div>
+              <div class="rank-store">{{ product.category or 'General' }} &middot; <span style="color: var(--deep-sage, #4a6b4e); font-weight: 600;">{{ '{:.1f}'.format(product.margin_pct or 0) }}% margin</span></div>
+            </div>
+            <div class="rank-sold" style="color: var(--deep-sage, #4a6b4e); font-weight: 700;">₱{{ '{:,.2f}'.format(product.total_profit or 0) }} <span style="font-weight: 400; color: var(--muted, #9a8d85);">profit</span></div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-panel">
+            <i class="ri-bar-chart-box-line"></i>
+            No profit data yet
           </div>
         {% endif %}
       </div>
@@ -3062,15 +3200,12 @@ function setPeriod(period, btn) {
 function switchTopProducts(mode, triggerBtn) {
   const qtyList = document.getElementById('topProductsQtyList');
   const salesList = document.getElementById('topProductsSalesList');
-  if (!qtyList || !salesList) return;
+  const profitList = document.getElementById('topProductsProfitList');
+  if (!qtyList && !salesList && !profitList) return;
 
-  if (mode === 'sales') {
-    qtyList.style.display = 'none';
-    salesList.style.display = 'block';
-  } else {
-    qtyList.style.display = 'block';
-    salesList.style.display = 'none';
-  }
+  if (qtyList) qtyList.style.display = (mode === 'qty') ? 'block' : 'none';
+  if (salesList) salesList.style.display = (mode === 'sales') ? 'block' : 'none';
+  if (profitList) profitList.style.display = (mode === 'profit') ? 'block' : 'none';
 
   if (triggerBtn && triggerBtn.parentElement) {
     triggerBtn.parentElement.querySelectorAll('.rev-toggle-btn').forEach(b => b.classList.remove('active'));
@@ -3206,6 +3341,14 @@ const sageGrad = ctx.createLinearGradient(0,0,0,200);
 sageGrad.addColorStop(0,   'rgba(122,158,126,.20)');
 sageGrad.addColorStop(1,   'rgba(122,158,126,.01)');
 
+const deepSageGrad = ctx.createLinearGradient(0,0,0,200);
+deepSageGrad.addColorStop(0,   'rgba(74,107,78,.25)');
+deepSageGrad.addColorStop(1,   'rgba(74,107,78,.01)');
+
+const barkGrad = ctx.createLinearGradient(0,0,0,200);
+barkGrad.addColorStop(0,   'rgba(107,76,59,.20)');
+barkGrad.addColorStop(1,   'rgba(107,76,59,.01)');
+
 updateRevenueBreakdownTable(chartData);
 
 let currentRevenueView = 'combined';
@@ -3309,6 +3452,55 @@ function getRevenueDatasets(mode) {
         yAxisID: 'y',
       }
     ];
+  } else if (mode === 'profit') {
+    return [
+      {
+        label: 'Gross Profit (₱)',
+        data: chartData.profit || [],
+        borderColor: '#4a6b4e',
+        backgroundColor: deepSageGrad,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.38,
+        pointRadius: 3.5,
+        pointBackgroundColor: '#4a6b4e',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1.5,
+        pointHoverRadius: 6,
+        yAxisID: 'y',
+      },
+      {
+        label: 'COGS (₱)',
+        data: chartData.cogs || [],
+        borderColor: '#6b4c3b',
+        backgroundColor: barkGrad,
+        borderWidth: 2,
+        borderDash: [3, 3],
+        fill: false,
+        tension: 0.38,
+        pointRadius: 3,
+        pointBackgroundColor: '#6b4c3b',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1.5,
+        pointHoverRadius: 5,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Total Revenue (₱)',
+        data: chartData.revenue || [],
+        borderColor: 'rgba(181,68,90,0.65)',
+        borderWidth: 1.8,
+        borderDash: [4, 4],
+        fill: false,
+        tension: 0.38,
+        pointRadius: 2.5,
+        pointBackgroundColor: 'rgba(181,68,90,0.8)',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1.2,
+        pointHoverRadius: 5,
+        yAxisID: 'y',
+      }
+    ];
   } else {
     // 'combined'
     return [
@@ -3384,7 +3576,7 @@ let chart = new Chart(ctx, {
           label: function(c) {
             const label = c.dataset.label || '';
             const val = Number(c.parsed.y) || 0;
-            if (label.includes('₱') || label.includes('Revenue') || (currentRevenueView !== 'orders' && c.dataset.yAxisID !== 'y1')) {
+            if (label.includes('₱') || label.includes('Revenue') || label.includes('Profit') || label.includes('COGS') || (currentRevenueView !== 'orders' && c.dataset.yAxisID !== 'y1')) {
               return `  ${label}: ₱${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             }
             return `  ${label}: ${val.toLocaleString()}`;
@@ -3432,10 +3624,12 @@ function switchRevenueView(mode, triggerBtn) {
   const btnComb = document.getElementById('btnViewCombined');
   const btnChan = document.getElementById('btnViewChannels');
   const btnOrd = document.getElementById('btnViewOrders');
+  const btnProf = document.getElementById('btnViewProfit');
 
   if (btnComb) btnComb.classList.toggle('active', mode === 'combined');
   if (btnChan) btnChan.classList.toggle('active', mode === 'channels');
   if (btnOrd) btnOrd.classList.toggle('active', mode === 'orders');
+  if (btnProf) btnProf.classList.toggle('active', mode === 'profit');
 
   // Toggle bento cards active state
   document.querySelector('.rev-card-online')?.classList.toggle('active-mode', mode === 'channels');
@@ -3446,7 +3640,7 @@ function switchRevenueView(mode, triggerBtn) {
 
   chart.data.datasets = getRevenueDatasets(mode);
 
-  if (mode === 'orders') {
+  if (mode === 'orders' || mode === 'profit') {
     chart.options.scales.y1.display = false;
   } else {
     chart.options.scales.y1.display = true;

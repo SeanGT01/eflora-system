@@ -2055,11 +2055,15 @@ def checkout_custom_ticket(ticket_id):
         custom_product = Product.query.filter_by(store_id=ticket.store_id, is_archived=False).first()
         first_product_id = custom_product.id if custom_product else 1
 
+        base_price_val = float(base_price) if base_price else 0.0
+        custom_cost = round(base_price_val * 0.60, 2)
+
         custom_order_item = OrderItem(
             order_id=order.id,
             product_id=first_product_id,
             quantity=1,
             price=base_price,
+            cost_price=Decimal(str(custom_cost)),
             product_name=ticket.title or 'Custom Bouquet',
             product_image_url=ticket.image_url,
             variant_name=None,
@@ -2077,9 +2081,21 @@ def checkout_custom_ticket(ticket_id):
             if hasattr(opt, 'updated_at'):
                 opt.updated_at = datetime.utcnow()
 
+            # Determine option cost
+            opt_cost = None
+            if hasattr(opt, 'cost_price') and opt.cost_price is not None:
+                opt_cost = opt.cost_price
+            else:
+                try:
+                    opt_cost = round(float(sel['price']) * 0.60, 2)
+                except (ValueError, TypeError):
+                    opt_cost = 0.00
+
             # Log into StockReduction for Inventory History modal
             owner_product = opt.group.product if opt.group else None
             actor_id = stock_audit_actor_id(user.id, product=owner_product)
+            unit_c = getattr(opt, 'cost_price', None)
+            tot_c = (unit_c * qty) if unit_c is not None else None
             db.session.add(StockReduction(
                 product_id=opt.group.product_id if opt.group else first_product_id,
                 variant_id=None,
@@ -2088,14 +2104,17 @@ def checkout_custom_ticket(ticket_id):
                 reason='sale',
                 reason_notes=f'Custom order #{order.id} add-on: {ticket.title}',
                 reduced_by=actor_id,
+                unit_cost=unit_c,
+                total_cost=tot_c,
             ))
 
-            # Add OrderItemAddon record (image_public_id is not a DB column — image_url is enough)
+            # Add OrderItemAddon record
             db.session.add(OrderItemAddon(
                 order_item_id=custom_order_item.id,
                 addon_option_id=opt.id,
                 name=opt.name,
                 price=sel['price'],
+                cost_price=Decimal(str(opt_cost)) if opt_cost is not None else None,
                 quantity=qty,
                 image_url=opt.image_url,
             ))

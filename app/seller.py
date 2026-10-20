@@ -128,12 +128,25 @@ def create_product():
     
     data = request.form
     
+    price_val = float(data.get('price', 0))
+    cost_price_val = data.get('cost_price')
+    try:
+        if cost_price_val not in (None, ''):
+            cost_price = float(cost_price_val)
+        else:
+            from app.cost_helpers import calculate_realistic_cost
+            cost_price = calculate_realistic_cost(price_val, product_name=data.get('name', ''), category_path=data.get('category', 'flowers'))
+    except (ValueError, TypeError):
+        from app.cost_helpers import calculate_realistic_cost
+        cost_price = calculate_realistic_cost(price_val, product_name=data.get('name', ''), category_path=data.get('category', 'flowers'))
+
     # Simple product creation without image for now
     product = Product(
         store_id=store.id,
         name=data.get('name', 'New Product'),
         description=data.get('description', ''),
-        price=float(data.get('price', 0)),
+        price=price_val,
+        cost_price=cost_price,
         stock_quantity=int(data.get('stock_quantity', 0)),
         category=data.get('category', 'flowers'),
         is_available=data.get('is_available', 'true').lower() == 'true'

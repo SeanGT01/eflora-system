@@ -154,7 +154,8 @@
                                     <span class="input-group-text">₱</span>
                                     <input type="number" id="productPrice" name="price" class="form-control" 
                                            placeholder="0.00" step="0.01" min="0.01" 
-                                           value="{{ product.price if product else '' }}" required>
+                                           value="{{ product.price if product else '' }}" required
+                                           oninput="updateProfitMarginPreview()">
                                 </div>
                             </div>
                             <div class="form-group">
@@ -163,9 +164,22 @@
                                     <span class="input-group-text">₱</span>
                                     <input type="number" id="productSpecialPrice" name="special_price" class="form-control" 
                                            placeholder="Leave blank if no sale" step="0.01" min="0" 
-                                           value="{{ product.special_price if product and product.special_price else '' }}">
+                                           value="{{ product.special_price if product and product.special_price else '' }}"
+                                           oninput="updateProfitMarginPreview()">
                                 </div>
                                 <small class="form-hint">If set, this is the selling price — original will be shown struck-through.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Purchase Cost (₱) <span class="required">*</span> <span class="form-hint-inline">capital / wholesale</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">₱</span>
+                                    <input type="number" id="productCostPrice" name="cost_price" class="form-control" 
+                                           placeholder="0.00" step="0.01" min="0" 
+                                           value="{{ product.cost_price if product and product.cost_price is not none else '' }}" required
+                                           oninput="updateProfitMarginPreview()">
+                                </div>
+                                <small class="form-hint">Wholesale cost per unit to calculate your profit margin.</small>
                             </div>
 
                             {% if not is_edit %}
@@ -183,6 +197,14 @@
                                 <small class="form-hint">Use Reduce Stock or Add Stock buttons to modify</small>
                             </div>
                             {% endif %}
+                        </div>
+
+                        <!-- Live Profit Margin Preview -->
+                        <div id="profitMarginPreviewRow" class="profit-preview-row" style="display: none; margin-bottom: 1rem;">
+                            <div class="profit-preview-badge" id="profitMarginPreviewBadge">
+                                <i class="ri-line-chart-line"></i>
+                                <span id="profitMarginPreviewText"></span>
+                            </div>
                         </div>
                         {% if is_edit %}
                         <div class="stock-actions stock-actions-inline">
@@ -411,6 +433,7 @@
                                 <span class="vtc vtc-name">Variant Name</span>
                                 <span class="vtc vtc-price">Price (₱)</span>
                                 <span class="vtc vtc-special">Sale Price</span>
+                                <span class="vtc vtc-cost">Cost (₱)</span>
                                 <span class="vtc vtc-stock">Stock</span>
                                 <span class="vtc vtc-sku">SKU</span>
                                 <span class="vtc vtc-tags">Tags</span>
@@ -1531,6 +1554,532 @@
         border-top: 1px solid var(--border);
     }
 
+    /* Modal sizing for stock history */
+    #stockHistoryModal .modal {
+        max-width: 840px;
+        width: 95%;
+        margin: 1.5rem auto;
+    }
+
+    /* Modern Stock History Cards (Image Reference UI/UX) */
+    .hist-card {
+        border: 1px solid #eef2f6;
+        border-radius: 14px;
+        padding: 0.95rem 1.15rem;
+        margin-bottom: 0.85rem;
+        background: #ffffff;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .hist-card:hover {
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.07);
+    }
+    .hist-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .hist-card-left {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        min-width: 0;
+        flex: 1;
+    }
+    .hist-card-thumb, .hist-card-ph {
+        width: 44px;
+        height: 44px;
+        border-radius: 9px;
+        object-fit: cover;
+        flex-shrink: 0;
+    }
+    .hist-card-ph {
+        background: #f1f5f9;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.15rem;
+    }
+    .hist-card-info {
+        min-width: 0;
+        flex: 1;
+    }
+    .hist-card-title {
+        margin: 0;
+        font-size: 0.96rem;
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1.25;
+    }
+    .hist-card-subtitle {
+        font-size: 0.78rem;
+        color: #64748b;
+        margin-top: 2px;
+        font-weight: 400;
+    }
+    .hist-card-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        margin-top: 5px;
+    }
+    .hist-card-pill.pos {
+        background: #eaf5ee;
+        color: #15803d;
+        border: 1px solid #cce8d5;
+    }
+    .hist-card-pill.online {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+    }
+    .hist-card-pill.addition {
+        background: #f0fdf4;
+        color: #15803d;
+        border: 1px solid #bbf7d0;
+    }
+    .hist-card-pill.reduction {
+        background: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+    }
+    .hist-card-date {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.78rem;
+        color: #64748b;
+        font-weight: 500;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    /* Metrics Grid & Compact Sizing */
+    .hist-metrics-grid {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+        width: 100%;
+    }
+    .hist-metrics-grid.cols-3 {
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.92fr);
+    }
+    .hist-metrics-grid.cols-2 {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    }
+    .hist-metrics-grid.cols-1 {
+        grid-template-columns: 1fr;
+    }
+
+    .hist-metric-box {
+        border-radius: 10px;
+        padding: 7px 11px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+    .hist-metric-box.cost-box,
+    .hist-metric-box.sold-box {
+        background: #f3f8f4;
+        border: 1px solid #e1ede4;
+    }
+    .hist-metric-box.qty-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+    }
+    .hist-metric-box.profit-box {
+        background: #fff5ed;
+        border: 1px solid #fed7aa;
+    }
+    .hist-metric-box.profit-box.neg-profit {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+    }
+    .hist-metric-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.92rem;
+        flex-shrink: 0;
+    }
+    .hist-metric-icon.cost-icon { background: #2e7d32; }
+    .hist-metric-icon.sold-icon { background: #2e7d32; }
+    .hist-metric-icon.qty-icon.add { background: #16a34a; }
+    .hist-metric-icon.qty-icon.reduce { background: #dc2626; }
+    .hist-metric-icon.profit-icon { background: #ea580c; }
+    .hist-metric-icon.profit-icon.neg-profit { background: #dc2626; }
+
+    .hist-metric-col {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+    }
+    .hist-metric-label {
+        font-size: 0.67rem;
+        font-weight: 600;
+        color: #64748b;
+        margin-bottom: 1px;
+        white-space: nowrap;
+        line-height: 1.1;
+    }
+    .hist-metric-box.profit-box .hist-metric-label {
+        color: #1e293b;
+        font-weight: 700;
+    }
+    .hist-metric-val {
+        font-size: 0.98rem;
+        font-weight: 800;
+        color: #0b3d20;
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+        line-height: 1.15;
+        white-space: nowrap;
+    }
+    .hist-metric-val.total {
+        font-size: 0.95rem;
+    }
+    .hist-metric-val.profit-val {
+        color: #c2410c;
+        font-size: 1.08rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .hist-metric-val.profit-val.neg {
+        color: #dc2626;
+    }
+    .hist-metric-unit {
+        font-size: 0.68rem;
+        font-weight: 500;
+        color: #64748b;
+        margin-left: 2px;
+    }
+    .hist-metric-divider {
+        width: 1px;
+        height: 24px;
+        background: #d7e7dc;
+        margin: 0 5px;
+        flex-shrink: 0;
+    }
+    .hist-card-notes {
+        background: #f8fafc;
+        border: 1px solid #f1f5f9;
+        border-radius: 9px;
+        padding: 7px 11px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 9px;
+    }
+    .hist-notes-icon {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: #64748b;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+    }
+    .hist-notes-content {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .hist-notes-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: #334155;
+        line-height: 1.1;
+        margin-bottom: 1px;
+    }
+    .hist-notes-text {
+        font-size: 0.78rem;
+        color: #475569;
+        line-height: 1.25;
+        word-break: break-word;
+    }
+
+    /* Responsiveness for Laptop and Mobile screens */
+    @media (max-width: 768px) {
+        .hist-metrics-grid.cols-3 {
+            gap: 6px;
+        }
+        .hist-metric-box {
+            padding: 6px 8px;
+            gap: 6px;
+        }
+        .hist-metric-icon {
+            width: 26px;
+            height: 26px;
+            font-size: 0.82rem;
+        }
+        .hist-metric-val {
+            font-size: 0.90rem;
+        }
+        .hist-metric-val.total {
+            font-size: 0.88rem;
+        }
+        .hist-metric-val.profit-val {
+            font-size: 0.98rem;
+        }
+        .hist-metric-divider {
+            margin: 0 3px;
+        }
+    }
+
+    @media (max-width: 620px) {
+        .hist-metrics-grid.cols-3 {
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+        }
+        .hist-metrics-grid.cols-3 .profit-box {
+            grid-column: 1 / -1;
+        }
+        .hist-card-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        .hist-card-date {
+            font-size: 0.74rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .hist-card {
+            padding: 0.85rem 0.95rem;
+            border-radius: 12px;
+        }
+        .hist-card-left {
+            gap: 8px;
+        }
+        .hist-card-thumb, .hist-card-ph {
+            width: 38px;
+            height: 38px;
+        }
+        .hist-card-title {
+            font-size: 0.90rem;
+        }
+        .hist-metrics-grid.cols-3,
+        .hist-metrics-grid.cols-2 {
+            grid-template-columns: 1fr;
+            gap: 6px;
+        }
+        .hist-metric-box {
+            padding: 6px 9px;
+        }
+        .hist-metric-val {
+            font-size: 0.92rem;
+        }
+        .hist-card-notes {
+            padding: 6px 9px;
+            gap: 7px;
+        }
+    }
+
+    .hist-tabs {
+        display: flex; gap: 0.4rem; padding: 0.35rem;
+        background: #f4ede6; border-radius: 12px; margin-bottom: 1.15rem;
+        overflow-x: auto; scrollbar-width: none;
+    }
+    .hist-tabs::-webkit-scrollbar { display: none; }
+    .hist-tab {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        padding: 0.45rem 0.85rem; border-radius: 9px; border: none;
+        background: transparent; color: #3d312a; font-size: 12.5px; font-weight: 600;
+        cursor: pointer; white-space: nowrap; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .hist-tab:hover { background: rgba(255, 255, 255, 0.65); color: #c24e68; }
+    .hist-tab.active {
+        background: #ffffff; color: #c24e68;
+        box-shadow: 0 2px 8px rgba(107, 76, 59, 0.08), 0 1px 2px rgba(107, 76, 59, 0.04);
+    }
+    .hist-tab .tab-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+        font-size: 11px; font-weight: 700; background: rgba(107, 76, 59, 0.12); color: #3d312a;
+        transition: all 0.2s ease;
+    }
+    .hist-tab.active .tab-badge { background: rgba(194, 78, 104, 0.14); color: #c24e68; }
+    .hist-tab .tab-badge.add { background: rgba(46, 125, 50, 0.14); color: #2e7d32; }
+    .hist-tab .tab-badge.red { background: rgba(198, 40, 40, 0.14); color: #c62828; }
+    .hist-tab .tab-badge.online { background: rgba(25, 118, 210, 0.14); color: #1976d2; }
+    .hist-tab .tab-badge.pos { background: rgba(74, 107, 78, 0.16); color: #4a6b4e; }
+    .hist-tab.active .tab-badge.add { background: #2e7d32; color: #fff; }
+    .hist-tab.active .tab-badge.red { background: #c62828; color: #fff; }
+    .hist-tab.active .tab-badge.online { background: #1976d2; color: #fff; }
+    .hist-tab.active .tab-badge.pos { background: #4a6b4e; color: #fff; }
+    .hist-tab-empty {
+        text-align: center; padding: 2.2rem 1rem; color: #9a8d85;
+        background: #faf8f6; border-radius: 12px; border: 1px dashed rgba(107, 76, 59, 0.18);
+        margin-bottom: 1rem;
+    }
+    .hist-tab-empty i { font-size: 2rem; opacity: 0.4; display: block; margin-bottom: 0.4rem; }
+
+    /* Stock History Skeleton Loading */
+    .hist-skeleton-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 0.95rem;
+        pointer-events: none;
+        user-select: none;
+        padding-bottom: 0.5rem;
+    }
+    .hist-skeleton-box {
+        background: linear-gradient(
+            90deg,
+            rgba(237, 230, 222, 0.7) 0%,
+            rgba(255, 255, 255, 0.92) 50%,
+            rgba(237, 230, 222, 0.7) 100%
+        );
+        background-size: 200% 100%;
+        animation: histShimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        border-radius: 6px;
+    }
+    @keyframes histShimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .hist-skeleton-box {
+            animation: none;
+            background: rgba(237, 230, 222, 0.85);
+        }
+    }
+    .hist-skeleton-hero {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        padding: 0.9rem 1rem;
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(194, 78, 104, 0.05), rgba(255, 252, 248, 0.8));
+        border: 1px solid rgba(194, 78, 104, 0.1);
+    }
+    .hist-skeleton-hero-thumb {
+        width: 52px;
+        height: 52px;
+        border-radius: 10px;
+        flex-shrink: 0;
+    }
+    .hist-skeleton-hero-text {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 1;
+    }
+    .hist-skeleton-tabs {
+        display: flex;
+        gap: 0.4rem;
+        padding: 0.35rem;
+        background: #f4ede6;
+        border-radius: 12px;
+        overflow-x: hidden;
+    }
+    .hist-skeleton-tab {
+        height: 31px;
+        border-radius: 9px;
+    }
+    .hist-skeleton-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+    }
+    .hist-skeleton-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding-bottom: 0.45rem;
+        border-bottom: 1px solid rgba(107, 76, 59, 0.1);
+    }
+    .hist-skeleton-card {
+        border: 1px solid #eef2f6;
+        border-radius: 14px;
+        padding: 0.95rem 1.15rem;
+        background: #ffffff;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .hist-skeleton-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .hist-skeleton-card-left {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        flex: 1;
+    }
+    .hist-skeleton-card-thumb {
+        width: 44px;
+        height: 44px;
+        border-radius: 9px;
+        flex-shrink: 0;
+    }
+    .hist-skeleton-card-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1;
+    }
+    .hist-skeleton-metrics {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: 8px;
+    }
+    .hist-skeleton-metric-box {
+        border-radius: 10px;
+        padding: 8px 11px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .hist-skeleton-metric-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .hist-skeleton-notes {
+        border-radius: 9px;
+        padding: 8px 11px;
+        background: #f8fafc;
+        border: 1px solid #f1f5f9;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+    }
+    @media (max-width: 620px) {
+        .hist-skeleton-metrics {
+            grid-template-columns: 1fr;
+        }
+        .hist-skeleton-card-head {
+            flex-direction: column;
+            gap: 6px;
+        }
+    }
+
     .empty-state {
         text-align: center;
         padding: 2rem;
@@ -1960,7 +2509,7 @@
 
     .variant-table-head {
         display: grid;
-        grid-template-columns: 1.4fr 1fr 0.9fr 0.85fr 1fr 1.2fr 52px 54px 38px;
+        grid-template-columns: 1.3fr 0.95fr 0.85fr 0.85fr 0.8fr 0.95fr 1.1fr 52px 54px 38px;
         align-items: center;
         gap: 0.4rem;
         padding: 0.45rem 0.75rem;
@@ -1978,7 +2527,7 @@
 
     .variant-row {
         display: grid;
-        grid-template-columns: 1.4fr 1fr 0.9fr 0.85fr 1fr 1.2fr 52px 54px 38px;
+        grid-template-columns: 1.3fr 0.95fr 0.85fr 0.85fr 0.8fr 0.95fr 1.1fr 52px 54px 38px;
         align-items: center;
         gap: 0.4rem;
         padding: 0.4rem 0.75rem;
@@ -2166,9 +2715,37 @@
     .addon-options-head,
     .addon-option-row {
         display: grid;
-        grid-template-columns: minmax(140px, 1.6fr) 90px 70px 64px 44px 54px 36px;
+        grid-template-columns: minmax(130px, 1.5fr) 85px 85px 70px 64px 44px 54px 36px;
         gap: 0.4rem;
         align-items: center;
+    }
+
+    /* Profit margin badge styling */
+    .profit-preview-row {
+        margin-top: -0.25rem;
+        margin-bottom: 0.85rem;
+    }
+    .profit-preview-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 0.35rem 0.75rem;
+        border-radius: 8px;
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+    }
+    .profit-preview-badge.profit-low {
+        background: #fffbeb;
+        color: #b45309;
+        border-color: #fde68a;
+    }
+    .profit-preview-badge.profit-loss {
+        background: #fef2f2;
+        color: #b91c1c;
+        border-color: #fecaca;
     }
     .addon-options-head {
         font-size: 11px;
@@ -2455,12 +3032,50 @@
     let isEditMode = {% if is_edit %}true{% else %}false{% endif %};
     let productId = {% if product and product.id %}{{ product.id }}{% else %}null{% endif %};
 
+    function updateProfitMarginPreview() {
+        const priceInput = document.getElementById('productPrice');
+        const specialPriceInput = document.getElementById('productSpecialPrice');
+        const costInput = document.getElementById('productCostPrice');
+        const previewRow = document.getElementById('profitMarginPreviewRow');
+        const previewBadge = document.getElementById('profitMarginPreviewBadge');
+        const previewText = document.getElementById('profitMarginPreviewText');
+        
+        if (!priceInput || !costInput || !previewRow) return;
+        
+        const originalPrice = parseFloat(priceInput.value) || 0;
+        const specialPrice = parseFloat(specialPriceInput ? specialPriceInput.value : 0) || 0;
+        const sellingPrice = (specialPrice > 0 && specialPrice < originalPrice) ? specialPrice : originalPrice;
+        const costPrice = parseFloat(costInput.value) || 0;
+        
+        if (sellingPrice > 0 && costPrice > 0) {
+            const profit = sellingPrice - costPrice;
+            const marginPct = (profit / sellingPrice) * 100;
+            
+            previewRow.style.display = 'block';
+            previewBadge.className = 'profit-preview-badge';
+            
+            if (profit < 0) {
+                previewBadge.classList.add('profit-loss');
+                previewText.innerHTML = `⚠️ Selling at a loss! Loss: <strong>₱${Math.abs(profit).toFixed(2)}</strong> (${marginPct.toFixed(1)}% margin)`;
+            } else if (marginPct < 20) {
+                previewBadge.classList.add('profit-low');
+                previewText.innerHTML = `⚠️ Low margin. Estimated Profit: <strong>₱${profit.toFixed(2)}</strong> (${marginPct.toFixed(1)}% margin)`;
+            } else {
+                previewBadge.classList.add('profit-good');
+                previewText.innerHTML = `Estimated Profit: <strong>₱${profit.toFixed(2)}</strong> per unit (${marginPct.toFixed(1)}% margin)`;
+            }
+        } else {
+            previewRow.style.display = 'none';
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         console.log(`🚀 Page loaded. isEditMode: ${isEditMode}, productId: ${productId}`);
         initializeImageSlots();
         initializeCharacterCounts();
         initializeMainProductSkuAuto();
         initializeContentScore();
+        updateProfitMarginPreview();
         
         // Load existing images and variants if in edit mode
         if (isEditMode && productId) {
@@ -3092,6 +3707,12 @@
                         loadExistingVariants(product.variants);
                     }
 
+                    if (product.cost_price !== undefined && product.cost_price !== null) {
+                        const costInput = document.getElementById('productCostPrice');
+                        if (costInput && !costInput.value) costInput.value = product.cost_price;
+                        updateProfitMarginPreview();
+                    }
+
                     if (product.has_addons && product.addon_groups && product.addon_groups.length > 0) {
                         loadExistingAddonGroups(product.addon_groups);
                     } else if (product.addon_groups && product.addon_groups.length > 0) {
@@ -3141,6 +3762,7 @@
         const nameVal = variant ? escapeHtml(variant.name || '') : '';
         const priceVal = variant ? (variant.price || '') : '';
         const specialPriceVal = variant ? (variant.special_price || '') : '';
+        const costVal = variant ? (variant.cost_price !== undefined && variant.cost_price !== null ? variant.cost_price : '') : '';
         const stockVal = variant ? (variant.stock_quantity !== undefined ? variant.stock_quantity : '') : '';
         const skuVal = variant ? escapeHtml(variant.sku || '') : '';
         const imgSrc = variant && variant.image_url ? variant.image_url : '';
@@ -3158,6 +3780,9 @@
             </div>
             <div class="vf" data-label="Sale price">
                 <input type="number" class="form-control-sm" name="variant_special_price" step="0.01" min="0" value="${specialPriceVal}" placeholder="—">
+            </div>
+            <div class="vf" data-label="Cost (₱)">
+                <input type="number" class="form-control-sm" name="variant_cost_price" step="0.01" min="0" value="${costVal}" placeholder="0.00" title="Wholesale / Capital cost">
             </div>
             <div class="vf" data-label="Stock">
                 <input type="number" class="form-control-sm" name="variant_stock" min="0" value="${stockVal}" placeholder="0" ${stockDisabled} ${stockRequired} ${stockTitle}>
@@ -3862,7 +4487,11 @@
             row.id = rowId;
             row.variantId = null;
 
-            const fakeVariant = { name: ex.name, price: ex.price, stock_quantity: ex.stock, sku: '' };
+            const pCost = parseFloat(document.getElementById('productCostPrice')?.value || 0);
+            const pPrice = parseFloat(document.getElementById('productPrice')?.value || 0);
+            const parentRatio = (pPrice > 0 && pCost > 0) ? (pCost / pPrice) : 0.45;
+            const fakeCost = Math.round(parseFloat(ex.price) * parentRatio);
+            const fakeVariant = { name: ex.name, price: ex.price, cost_price: fakeCost, stock_quantity: ex.stock, sku: '' };
             row.innerHTML = buildVariantRowHTML(rowId, fakeVariant, ex.attr || '', false);
 
             container.appendChild(row);
@@ -3926,11 +4555,17 @@
                     : null;
                 const isAvailable = row.querySelector('[name="variant_available"]')?.checked ?? true;
 
+                const costPriceRaw = row.querySelector('[name="variant_cost_price"]')?.value;
+                const costPrice = costPriceRaw && parseFloat(costPriceRaw) >= 0
+                    ? parseFloat(costPriceRaw)
+                    : 0.0;
+
                 const variantData = {
                     id: variantId || null,
                     name: name,
                     price: parseFloat(price),
                     special_price: specialPrice,
+                    cost_price: isNaN(costPrice) ? 0.0 : costPrice,
                     stock_quantity: parseInt(finalStock),
                     sku: row.querySelector('[name="variant_sku"]')?.value || null,
                     attributes: attributes,
@@ -4046,6 +4681,7 @@
         formData.append('description', document.getElementById('productDescription').value.trim() || '');
         formData.append('price', document.getElementById('productPrice').value);
         formData.append('special_price', document.getElementById('productSpecialPrice')?.value || '');
+        formData.append('cost_price', document.getElementById('productCostPrice')?.value || '0.00');
         formData.append('sku', document.getElementById('productSku')?.value?.trim() || '');
         if (!isEditMode) {
             formData.append('stock_quantity', document.getElementById('productStock').value);
@@ -4849,12 +5485,114 @@ function updateVariantStockInData(variantId, newStock) {
         }
     }
 
+    function renderStockHistorySkeleton() {
+        return `
+            <div class="hist-skeleton-wrap" role="status" aria-label="Loading stock history" aria-busy="true">
+                <span style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Loading stock history…</span>
+                <!-- Hero skeleton -->
+                <div class="hist-skeleton-hero">
+                    <div class="hist-skeleton-box hist-skeleton-hero-thumb"></div>
+                    <div class="hist-skeleton-hero-text">
+                        <div class="hist-skeleton-box" style="width: 170px; height: 16px;"></div>
+                        <div class="hist-skeleton-box" style="width: 100px; height: 12px;"></div>
+                    </div>
+                </div>
+
+                <!-- Tabs skeleton -->
+                <div class="hist-skeleton-tabs">
+                    <div class="hist-skeleton-box hist-skeleton-tab" style="width: 66px;"></div>
+                    <div class="hist-skeleton-box hist-skeleton-tab" style="width: 96px;"></div>
+                    <div class="hist-skeleton-box hist-skeleton-tab" style="width: 104px;"></div>
+                    <div class="hist-skeleton-box hist-skeleton-tab" style="width: 86px;"></div>
+                    <div class="hist-skeleton-box hist-skeleton-tab" style="width: 76px;"></div>
+                </div>
+
+                <!-- Section & Cards skeleton -->
+                <div class="hist-skeleton-section">
+                    <div class="hist-skeleton-head">
+                        <div class="hist-skeleton-box" style="width: 18px; height: 18px; border-radius: 50%;"></div>
+                        <div class="hist-skeleton-box" style="width: 120px; height: 15px;"></div>
+                        <div class="hist-skeleton-box" style="width: 62px; height: 18px; border-radius: 999px; margin-left: auto;"></div>
+                    </div>
+
+                    <!-- Skeleton Card 1 -->
+                    <div class="hist-skeleton-card">
+                        <div class="hist-skeleton-card-head">
+                            <div class="hist-skeleton-card-left">
+                                <div class="hist-skeleton-box hist-skeleton-card-thumb"></div>
+                                <div class="hist-skeleton-card-meta">
+                                    <div class="hist-skeleton-box" style="width: 180px; height: 15px;"></div>
+                                    <div class="hist-skeleton-box" style="width: 110px; height: 11px;"></div>
+                                    <div class="hist-skeleton-box" style="width: 80px; height: 18px; border-radius: 9999px;"></div>
+                                </div>
+                            </div>
+                            <div class="hist-skeleton-box" style="width: 105px; height: 13px;"></div>
+                        </div>
+                        <div class="hist-skeleton-metrics">
+                            <div class="hist-skeleton-metric-box">
+                                <div class="hist-skeleton-box hist-skeleton-metric-icon"></div>
+                                <div style="display:flex;flex-direction:column;gap:5px;flex:1;">
+                                    <div class="hist-skeleton-box" style="width: 50px; height: 9px;"></div>
+                                    <div class="hist-skeleton-box" style="width: 85px; height: 14px;"></div>
+                                </div>
+                            </div>
+                            <div class="hist-skeleton-metric-box">
+                                <div class="hist-skeleton-box hist-skeleton-metric-icon"></div>
+                                <div style="display:flex;flex-direction:column;gap:5px;flex:1;">
+                                    <div class="hist-skeleton-box" style="width: 65px; height: 9px;"></div>
+                                    <div class="hist-skeleton-box" style="width: 70px; height: 14px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="hist-skeleton-notes">
+                            <div class="hist-skeleton-box" style="width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;"></div>
+                            <div style="display:flex;flex-direction:column;gap:4px;flex:1;">
+                                <div class="hist-skeleton-box" style="width: 40px; height: 8px;"></div>
+                                <div class="hist-skeleton-box" style="width: 60%; height: 11px;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Skeleton Card 2 -->
+                    <div class="hist-skeleton-card">
+                        <div class="hist-skeleton-card-head">
+                            <div class="hist-skeleton-card-left">
+                                <div class="hist-skeleton-box hist-skeleton-card-thumb"></div>
+                                <div class="hist-skeleton-card-meta">
+                                    <div class="hist-skeleton-box" style="width: 150px; height: 15px;"></div>
+                                    <div class="hist-skeleton-box" style="width: 95px; height: 11px;"></div>
+                                    <div class="hist-skeleton-box" style="width: 75px; height: 18px; border-radius: 9999px;"></div>
+                                </div>
+                            </div>
+                            <div class="hist-skeleton-box" style="width: 115px; height: 13px;"></div>
+                        </div>
+                        <div class="hist-skeleton-metrics">
+                            <div class="hist-skeleton-metric-box">
+                                <div class="hist-skeleton-box hist-skeleton-metric-icon"></div>
+                                <div style="display:flex;flex-direction:column;gap:5px;flex:1;">
+                                    <div class="hist-skeleton-box" style="width: 50px; height: 9px;"></div>
+                                    <div class="hist-skeleton-box" style="width: 75px; height: 14px;"></div>
+                                </div>
+                            </div>
+                            <div class="hist-skeleton-metric-box">
+                                <div class="hist-skeleton-box hist-skeleton-metric-icon"></div>
+                                <div style="display:flex;flex-direction:column;gap:5px;flex:1;">
+                                    <div class="hist-skeleton-box" style="width: 65px; height: 9px;"></div>
+                                    <div class="hist-skeleton-box" style="width: 60px; height: 14px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    }
+
     async function openStockHistoryModal() {
         const modal = document.getElementById('stockHistoryModal');
         const content = document.getElementById('stockHistoryContent');
         
         modal.style.display = 'flex';
-        content.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="ri-loader-4-line" style="font-size: 2rem; animation: spin 1s linear infinite;"></i><p>Loading history...</p></div>';
+        content.innerHTML = renderStockHistorySkeleton();
         
         await loadStockHistory();
     }
@@ -4892,6 +5630,64 @@ function updateVariantStockInData(variantId, newStock) {
         }
     }
 
+    function getStockReductionCategory(reduction) {
+        if (reduction.category) return reduction.category;
+        const reason = (reduction.reason || '').toLowerCase();
+        const notes = (reduction.reason_notes || '').toLowerCase();
+        if (reason === 'pos_sale' || notes.includes('pos sale') || notes.includes('pos order')) {
+            return 'pos';
+        }
+        if (notes.includes('online checkout') || notes.includes('buy now') || notes.includes('custom order') || reason === 'sale' || (notes.includes('order #') && !notes.includes('pos'))) {
+            return 'online';
+        }
+        if (['restock', 'found_stock', 'receiving_error'].includes(reason) || notes.includes('initial inventory') || notes.includes('initial stock') || notes.includes('restocked') || notes.includes('restored after cancellation')) {
+            return 'addition';
+        }
+        return 'reduction';
+    }
+
+    window.setHistoryTab = function(tabKey) {
+        const container = document.getElementById('stockHistoryContent');
+        if (!container) return;
+
+        container.querySelectorAll('.hist-tab').forEach(btn => {
+            btn.classList.toggle('active', btn.getAttribute('data-tab') === tabKey);
+        });
+
+        let totalVisible = 0;
+        container.querySelectorAll('.hist-section').forEach(section => {
+            let sectionVisible = 0;
+            section.querySelectorAll('.hist-card').forEach(card => {
+                const cardCat = card.getAttribute('data-category');
+                const show = (tabKey === 'all' || cardCat === tabKey);
+                card.style.display = show ? '' : 'none';
+                if (show) sectionVisible++;
+            });
+            section.style.display = sectionVisible > 0 ? '' : 'none';
+            const countBadge = section.querySelector('.hist-count');
+            if (countBadge) {
+                countBadge.textContent = `${sectionVisible} ${sectionVisible === 1 ? 'entry' : 'entries'}`;
+            }
+            totalVisible += sectionVisible;
+        });
+
+        const emptyNotice = document.getElementById('histTabEmptyNotice');
+        if (emptyNotice) {
+            emptyNotice.style.display = totalVisible === 0 ? 'block' : 'none';
+            const p = emptyNotice.querySelector('p');
+            if (p) {
+                const labels = {
+                    all: 'No records found for this product.',
+                    addition: 'No addition / restock records found.',
+                    reduction: 'No reduction / damage / write-off records found.',
+                    online: 'No online order records found.',
+                    pos: 'No POS counter sale records found.'
+                };
+                p.textContent = labels[tabKey] || 'No records found in this category';
+            }
+        }
+    };
+
     async function loadStockHistory() {
     const productId = document.getElementById('productId').value;
     const content = document.getElementById('stockHistoryContent');
@@ -4901,6 +5697,8 @@ function updateVariantStockInData(variantId, newStock) {
         content.innerHTML = '<p style="color: #f44336; padding: 20px;">Product ID not found. Please save product first.</p>';
         return;
     }
+    
+    content.innerHTML = renderStockHistorySkeleton();
     
     try {
         const response = await fetch(`/seller/products/${productId}/stock-history`, {
@@ -4916,29 +5714,69 @@ function updateVariantStockInData(variantId, newStock) {
             throw new Error(data.error || 'Failed to load history');
         }
         
-        if (!data.stock_history || (!data.stock_history.main && !data.stock_history.variants && !data.stock_history.addons) || 
-            (data.stock_history.main.length === 0 && data.stock_history.variants.length === 0 && (!(data.stock_history.addons) || data.stock_history.addons.length === 0))) {
+        const main = data.stock_history?.main || [];
+        const variants = data.stock_history?.variants || [];
+        const addons = data.stock_history?.addons || [];
+        const allReductions = [...main, ...variants, ...addons];
+        const totalCount = allReductions.length;
+
+        if (!totalCount) {
             content.innerHTML = `
                 <div style="text-align: center; padding: 40px 20px;">
                     <i class="ri-database-2-line" style="font-size: 3rem; color: #ccc;"></i>
-                    <p style="color: #999; font-size: 1.1rem;">No reduction history yet</p>
+                    <p style="color: #999; font-size: 1.1rem;">No stock history yet</p>
                 </div>
             `;
             return;
         }
+
+        let countAll = totalCount;
+        let countAddition = 0;
+        let countReduction = 0;
+        let countOnline = 0;
+        let countPos = 0;
+
+        allReductions.forEach(r => {
+            const cat = getStockReductionCategory(r);
+            if (cat === 'addition') countAddition++;
+            else if (cat === 'reduction') countReduction++;
+            else if (cat === 'online') countOnline++;
+            else if (cat === 'pos') countPos++;
+        });
         
         // Build product header with image
         let html = `
-            <div style="display: flex; gap: 15px; margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; border-left: 4px solid #2196F3;">
+            <div style="display: flex; gap: 15px; margin-bottom: 15px; padding: 15px; background: #f9f9f9; border-radius: 8px; border-left: 4px solid #2196F3;">
                 ${data.product.image ? `<img src="${data.product.image}" alt="${data.product.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px;">` : `<div style="width: 60px; height: 60px; background: #e0e0e0; border-radius: 6px; display: flex; align-items: center; justify-content: center;"><i class="ri-image-line" style="color: #999; font-size: 1.5rem;"></i></div>`}
                 <div>
                     <h4 style="margin: 0 0 5px 0; font-size: 1.1rem; color: #333;">${data.product.name}</h4>
-                    <p style="margin: 0; font-size: 0.9rem; color: #666;"><i class="ri-database-2-line" style="margin-right: 4px;"></i>${(data.main_product?.reduction_count || 0) + (data.variants?.reduction_count || 0) + (data.addons?.reduction_count || 0)} total reductions</p>
+                    <p style="margin: 0; font-size: 0.9rem; color: #666;"><i class="ri-history-line" style="margin-right: 4px;"></i>${totalCount} stock change${totalCount === 1 ? '' : 's'}</p>
                 </div>
             </div>
+
+            <div class="hist-tabs" id="histTabs">
+                <button type="button" class="hist-tab active" data-tab="all" onclick="setHistoryTab('all')">
+                    <i class="ri-list-check-2"></i> All <span class="tab-badge">${countAll}</span>
+                </button>
+                <button type="button" class="hist-tab" data-tab="addition" onclick="setHistoryTab('addition')">
+                    <i class="ri-add-circle-line"></i> Addition <span class="tab-badge add">${countAddition}</span>
+                </button>
+                <button type="button" class="hist-tab" data-tab="reduction" onclick="setHistoryTab('reduction')">
+                    <i class="ri-indeterminate-circle-line"></i> Reduction <span class="tab-badge red">${countReduction}</span>
+                </button>
+                <button type="button" class="hist-tab" data-tab="online" onclick="setHistoryTab('online')">
+                    <i class="ri-shopping-bag-3-line"></i> Online <span class="tab-badge online">${countOnline}</span>
+                </button>
+                <button type="button" class="hist-tab" data-tab="pos" onclick="setHistoryTab('pos')">
+                    <i class="ri-store-2-line"></i> POS <span class="tab-badge pos">${countPos}</span>
+                </button>
+            </div>
+
+            <div id="histTabEmptyNotice" class="hist-tab-empty" style="display:none;">
+                <i class="ri-filter-3-line"></i>
+                <p style="margin:0;font-weight:600;">No records found in this category</p>
+            </div>
         `;
-        
-        // REMOVED: The 3 summary cards (Current Stock, Main Product, Variants)
         
         // Helper function to build history section with variant image support
         function buildHistorySection(title, reductions, color, icon) {
@@ -4946,40 +5784,67 @@ function updateVariantStockInData(variantId, newStock) {
                 return '';
             }
             
-            let html = `<div style="margin-bottom: 20px;">
+            let html = `<div class="hist-section" style="margin-bottom: 20px;">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid ${color};">
                     <i class="${icon}" style="color: ${color}; font-size: 1.2rem;"></i>
                     <h5 style="margin: 0; color: ${color}; font-size: 1rem;">${title}</h5>
-                    <span style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-left: auto;">
-                        ${reductions.length} reduction${reductions.length !== 1 ? 's' : ''}
+                    <span class="hist-count" style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-left: auto;">
+                        ${reductions.length} ${reductions.length !== 1 ? 'entries' : 'entry'}
                     </span>
                 </div>`;
             
             reductions.forEach(reduction => {
                 const date = formatHistoryDateTime(reduction.created_at);
-                const reasonColors = {
-                    'spoilage': '#FFB74D',
-                    'damage': '#EF5350',
-                    'defect': '#AB47BC',
-                    'other': '#90A4AE',
-                    'pos_sale': '#4CAF50',
-                    'found_stock': '#2196F3',
-                    'receiving_error': '#FF9800',
-                    'restock': '#8BC34A'
-                };
-                const reasonIcons = {
-                    'spoilage': 'ri-leaf-line',
-                    'damage': 'ri-alert-line',
-                    'defect': 'ri-error-warning-line',
-                    'other': 'ri-question-line',
-                    'pos_sale': 'ri-shopping-cart-line',
-                    'found_stock': 'ri-search-line',
-                    'receiving_error': 'ri-error-warning-line',
-                    'restock': 'ri-inbox-archive-line'
-                };
-                
-                const reasonColor = reasonColors[reduction.reason] || '#90A4AE';
-                const reasonIcon = reasonIcons[reduction.reason] || 'ri-question-line';
+                const category = getStockReductionCategory(reduction);
+                const added = category === 'addition';
+
+                let reasonColor = '#90A4AE';
+                let reasonIcon = 'ri-question-line';
+                let reasonLabel = 'Other';
+
+                if (category === 'pos') {
+                    reasonColor = '#4CAF50';
+                    reasonIcon = 'ri-store-2-line';
+                    reasonLabel = 'POS Sale';
+                } else if (category === 'online') {
+                    reasonColor = '#1976D2';
+                    reasonIcon = 'ri-shopping-bag-3-line';
+                    reasonLabel = 'Online Order';
+                } else if (category === 'addition') {
+                    if (reduction.reason === 'found_stock') {
+                        reasonColor = '#2196F3';
+                        reasonIcon = 'ri-search-line';
+                        reasonLabel = 'Found Stock';
+                    } else if (reduction.reason === 'receiving_error') {
+                        reasonColor = '#FF9800';
+                        reasonIcon = 'ri-error-warning-line';
+                        reasonLabel = 'Receiving Error';
+                    } else if ((reduction.reason_notes || '').toLowerCase().includes('initial')) {
+                        reasonColor = '#4CAF50';
+                        reasonIcon = 'ri-archive-line';
+                        reasonLabel = 'Initial Stock';
+                    } else {
+                        reasonColor = '#4CAF50';
+                        reasonIcon = 'ri-inbox-archive-line';
+                        reasonLabel = 'Restock';
+                    }
+                } else {
+                    const reasonColors = {
+                        'spoilage': '#FFB74D',
+                        'damage': '#EF5350',
+                        'defect': '#AB47BC',
+                        'other': '#90A4AE'
+                    };
+                    const reasonIcons = {
+                        'spoilage': 'ri-leaf-line',
+                        'damage': 'ri-alert-line',
+                        'defect': 'ri-error-warning-line',
+                        'other': 'ri-indeterminate-circle-line'
+                    };
+                    reasonColor = reasonColors[reduction.reason] || '#90A4AE';
+                    reasonIcon = reasonIcons[reduction.reason] || 'ri-indeterminate-circle-line';
+                    reasonLabel = (reduction.reason || 'reduction').charAt(0).toUpperCase() + (reduction.reason || 'reduction').slice(1);
+                }
                 
                 // Get the appropriate image - prioritize variant image if available
                 let itemImage = reduction.product_image; // Default to product image
@@ -4987,55 +5852,211 @@ function updateVariantStockInData(variantId, newStock) {
                 
                 // If this is a variant reduction and variant_info exists, use variant image
                 if (reduction.variant_info && reduction.variant_info.id) {
-                    // Check if variant image URL is available in the reduction data
                     if (reduction.variant_image_url) {
                         itemImage = reduction.variant_image_url;
                     }
-                    // Add variant name to display
-                    itemName = `${reduction.product_name} - ${reduction.variant_info.name}`;
+                    itemName = `${reduction.product_name} – ${reduction.variant_info.name}`;
                 }
-                
-                html += `
-                    <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fafafa;">
-                        <!-- Product/Variant info header -->
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e0e0e0;">
-                            ${itemImage ? `<img src="${itemImage}" alt="${itemName}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; flex-shrink: 0;">` : `<div style="width: 40px; height: 40px; background: #e0e0e0; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><i class="ri-image-line" style="color: #999; font-size: 1rem;"></i></div>`}
-                            <div style="flex: 1;">
-                                <div style="font-size: 0.9rem; font-weight: 500; color: #333;">
-                                    ${itemName}
-                                    ${reduction.variant_info ? `<span style="font-size: 0.75rem; color: #9C27B0; margin-left: 6px;">(Variant)</span>` : ''}
+
+                const unitCostNum = (reduction.unit_cost != null && reduction.unit_cost !== undefined) ? parseFloat(reduction.unit_cost) : null;
+                const totalCostNum = (reduction.total_cost != null && reduction.total_cost !== undefined) ? parseFloat(reduction.total_cost) : null;
+                const unitPriceNum = (reduction.unit_price != null && reduction.unit_price !== undefined) ? parseFloat(reduction.unit_price) : null;
+                const totalPriceNum = (reduction.total_price != null && reduction.total_price !== undefined) ? parseFloat(reduction.total_price) : null;
+
+                let metricsHtml = '';
+
+                if (category === 'pos' || category === 'online') {
+                    const unitPriceStr = (unitPriceNum !== null && !isNaN(unitPriceNum))
+                        ? unitPriceNum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                        : '0.00';
+                    const totalSoldVal = totalPriceNum !== null ? totalPriceNum : ((unitPriceNum || 0) * reduction.reduction_amount);
+                    const totalSoldStr = totalSoldVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                    const unitCostStr = (unitCostNum !== null && !isNaN(unitCostNum))
+                        ? unitCostNum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                        : '0.00';
+                    const totalCostVal = totalCostNum !== null ? totalCostNum : ((unitCostNum || 0) * reduction.reduction_amount);
+                    const totalCostStr = totalCostVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                    let profitBoxHtml = '';
+                    if (unitPriceNum !== null && !isNaN(unitPriceNum) && unitCostNum !== null && !isNaN(unitCostNum)) {
+                        const profit = totalSoldVal - totalCostVal;
+                        const isProfit = profit >= 0;
+                        const profitFormatted = Math.abs(profit).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        profitBoxHtml = `
+                            <div class="hist-metric-box profit-box ${isProfit ? '' : 'neg-profit'}">
+                                <div class="hist-metric-icon profit-icon ${isProfit ? '' : 'neg-profit'}">
+                                    <i class="${isProfit ? 'ri-funds-line' : 'ri-arrow-down-circle-line'}"></i>
                                 </div>
-                                <div style="font-size: 0.75rem; color: #999;">${['found_stock', 'receiving_error', 'restock'].includes(reduction.reason) ? 'Added by' : 'Reduced by'} ${reduction.reduced_by_user || 'Unknown'}</div>
-                            </div>
-                            <div style="text-align: right; font-size: 0.75rem; color: #999; white-space: nowrap;">
-                                ${date}
-                            </div>
-                        </div>
-                        
-                        <!-- Amount details -->
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
-                                <div style="background: ${reasonColor}; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                    <i class="${reasonIcon}"></i>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Net Profit</span>
+                                    <div class="hist-metric-val profit-val ${isProfit ? '' : 'neg'}">
+                                        ${isProfit ? '+' : '−'}₱${profitFormatted}
+                                    </div>
                                 </div>
-                                <div style="flex: 1;">
-                                    <strong style="font-size: 1rem; color: ${['found_stock', 'receiving_error', 'restock'].includes(reduction.reason) ? '#4CAF50' : '#d32f2f'};">${['found_stock', 'receiving_error', 'restock'].includes(reduction.reason) ? '+' : '-'}${reduction.reduction_amount} units</strong>
-                                    <div style="font-size: 0.85rem; color: #666; margin-top: 2px;">
-                                        <span style="background: ${reasonColor}; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 500;">
-                                            ${
-                                                reduction.reason === 'pos_sale' ? 'POS Sale' :
-                                                reduction.reason === 'found_stock' ? 'Found Stock' :
-                                                reduction.reason === 'receiving_error' ? 'Receiving Error' :
-                                                reduction.reason === 'restock' ? 'Restock' :
-                                                reduction.reason.charAt(0).toUpperCase() + reduction.reason.slice(1)
-                                            }
-                                        </span>
+                            </div>`;
+                    }
+
+                    metricsHtml = `
+                        <div class="hist-metrics-grid ${profitBoxHtml ? 'cols-3' : 'cols-2'}">
+                            <div class="hist-metric-box cost-box">
+                                <div class="hist-metric-icon cost-icon">
+                                    <i class="ri-price-tag-3-line"></i>
+                                </div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Cost</span>
+                                    <div class="hist-metric-val">
+                                        ₱${unitCostStr} <span class="hist-metric-unit">/ item</span>
+                                    </div>
+                                </div>
+                                <div class="hist-metric-divider"></div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Total Cost</span>
+                                    <div class="hist-metric-val total">
+                                        ₱${totalCostStr}
                                     </div>
                                 </div>
                             </div>
+
+                            <div class="hist-metric-box sold-box">
+                                <div class="hist-metric-icon sold-icon">
+                                    <i class="${category === 'online' ? 'ri-shopping-cart-2-line' : 'ri-shopping-cart-2-line'}"></i>
+                                </div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Sold</span>
+                                    <div class="hist-metric-val">
+                                        ₱${unitPriceStr} <span class="hist-metric-unit">/ item</span>
+                                    </div>
+                                </div>
+                                <div class="hist-metric-divider"></div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Sale Total</span>
+                                    <div class="hist-metric-val total">
+                                        ₱${totalSoldStr}
+                                    </div>
+                                </div>
+                            </div>
+
+                            ${profitBoxHtml}
+                        </div>`;
+                } else if (category === 'addition') {
+                    const unitCostStr = (unitCostNum !== null && !isNaN(unitCostNum))
+                        ? unitCostNum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                        : null;
+                    const totalCostStr = (totalCostNum !== null && !isNaN(totalCostNum))
+                        ? totalCostNum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                        : null;
+
+                    metricsHtml = `
+                        <div class="hist-metrics-grid ${unitCostStr ? 'cols-2' : 'cols-1'}">
+                            ${unitCostStr ? `
+                            <div class="hist-metric-box cost-box">
+                                <div class="hist-metric-icon cost-icon">
+                                    <i class="ri-price-tag-3-line"></i>
+                                </div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Added Cost</span>
+                                    <div class="hist-metric-val">
+                                        ₱${unitCostStr} <span class="hist-metric-unit">/ item</span>
+                                    </div>
+                                </div>
+                                <div class="hist-metric-divider"></div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Batch Total</span>
+                                    <div class="hist-metric-val total">
+                                        ₱${totalCostStr || '—'}
+                                    </div>
+                                </div>
+                            </div>` : ''}
+
+                            <div class="hist-metric-box qty-box">
+                                <div class="hist-metric-icon qty-icon add">
+                                    <i class="ri-add-line"></i>
+                                </div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Quantity Added</span>
+                                    <div class="hist-metric-val" style="color:#16a34a;">
+                                        +${reduction.reduction_amount} <span class="hist-metric-unit">units</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                } else {
+                    const unitCostStr = (unitCostNum !== null && !isNaN(unitCostNum))
+                        ? unitCostNum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                        : null;
+                    const totalCostStr = (totalCostNum !== null && !isNaN(totalCostNum))
+                        ? totalCostNum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                        : null;
+
+                    metricsHtml = `
+                        <div class="hist-metrics-grid ${unitCostStr ? 'cols-2' : 'cols-1'}">
+                            ${unitCostStr ? `
+                            <div class="hist-metric-box" style="background:#fef2f2;border:1px solid #fee2e2;">
+                                <div class="hist-metric-icon" style="background:#dc2626;">
+                                    <i class="ri-price-tag-3-line"></i>
+                                </div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Cost</span>
+                                    <div class="hist-metric-val" style="color:#991b1b;">
+                                        ₱${unitCostStr} <span class="hist-metric-unit">/ item</span>
+                                    </div>
+                                </div>
+                                <div class="hist-metric-divider" style="background:#fecaca;"></div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Loss Total</span>
+                                    <div class="hist-metric-val total" style="color:#991b1b;">
+                                        ₱${totalCostStr || '—'}
+                                    </div>
+                                </div>
+                            </div>` : ''}
+
+                            <div class="hist-metric-box qty-box">
+                                <div class="hist-metric-icon qty-icon reduce">
+                                    <i class="ri-subtract-line"></i>
+                                </div>
+                                <div class="hist-metric-col">
+                                    <span class="hist-metric-label">Quantity Reduced</span>
+                                    <div class="hist-metric-val" style="color:#dc2626;">
+                                        −${reduction.reduction_amount} <span class="hist-metric-unit">units</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+
+                html += `
+                    <div class="hist-card" data-category="${category}">
+                        <div class="hist-card-header">
+                            <div class="hist-card-left">
+                                ${itemImage
+                                    ? `<img src="${itemImage}" class="hist-card-thumb" alt="${itemName}">`
+                                    : `<div class="hist-card-ph"><i class="ri-image-line"></i></div>`}
+                                <div class="hist-card-info">
+                                    <h4 class="hist-card-title">${itemName}</h4>
+                                    <div class="hist-card-subtitle">${added ? 'Added by' : 'Reduced by'} ${reduction.reduced_by_user || 'Unknown'}</div>
+                                    <div class="hist-card-pill ${category}">
+                                        <i class="${reasonIcon}"></i> ${reasonLabel}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="hist-card-date">
+                                <i class="ri-calendar-line"></i> ${date}
+                            </div>
                         </div>
-                        
-                        ${reduction.reason_notes ? `<div style="background: white; padding: 10px; border-radius: 4px; border-left: 3px solid ${reasonColor}; font-size: 0.9rem; color: #555; margin-top: 10px;"><strong>Notes:</strong> ${reduction.reason_notes}</div>` : ''}
+
+                        ${metricsHtml}
+
+                        ${reduction.reason_notes ? `
+                        <div class="hist-card-notes">
+                            <div class="hist-notes-icon">
+                                <i class="ri-file-text-line"></i>
+                            </div>
+                            <div class="hist-notes-content">
+                                <span class="hist-notes-label">Notes</span>
+                                <span class="hist-notes-text">${reduction.reason_notes}</span>
+                            </div>
+                        </div>` : ''}
                     </div>
                 `;
             });
@@ -5045,13 +6066,13 @@ function updateVariantStockInData(variantId, newStock) {
         }
         
         // Add main product history
-        html += buildHistorySection('Main Product', data.stock_history.main, '#4CAF50', 'ri-box-3-line');
+        html += buildHistorySection('Main Product', main, '#4CAF50', 'ri-box-3-line');
         
         // Add variants history
-        html += buildHistorySection('Variants', data.stock_history.variants, '#9C27B0', 'ri-layout-grid-line');
+        html += buildHistorySection('Variants', variants, '#9C27B0', 'ri-layout-grid-line');
 
         // Add add-ons history
-        html += buildHistorySection('Add-ons', data.stock_history.addons || [], '#7A9E7E', 'ri-gift-line');
+        html += buildHistorySection('Add-ons', addons, '#7A9E7E', 'ri-gift-line');
         
         content.innerHTML = html;
         
@@ -5280,7 +6301,7 @@ function updateVariantStockInData(variantId, newStock) {
                 </button>
             </div>
             <div class="addon-options-head">
-                <span>Option name</span><span>Price</span><span>Stock</span><span>Image *</span><span>YMAL</span><span>Active</span><span></span>
+                <span>Option name</span><span>Price</span><span>Cost</span><span>Stock</span><span>Image *</span><span>YMAL</span><span>Active</span><span></span>
             </div>
             <div class="addon-options-container" id="${gid}-options"></div>
             <button type="button" class="btn btn-outline btn-sm" style="margin-top:0.5rem;" onclick="addAddonOptionRow('${gid}')">
@@ -5319,6 +6340,7 @@ function updateVariantStockInData(variantId, newStock) {
         if (existing && existing.id) row.dataset.optionId = String(existing.id);
         const nameVal = existing ? escapeHtml(existing.name || '') : '';
         const priceVal = existing ? (existing.price ?? '') : '';
+        const costVal = existing ? (existing.cost_price ?? '') : '';
         const stockVal = existing ? (existing.stock_quantity ?? '') : '';
         const imgSrc = existing && existing.image_url ? existing.image_url : '';
         const hasImg = !!imgSrc;
@@ -5334,6 +6356,9 @@ function updateVariantStockInData(variantId, newStock) {
             </div>
             <div class="vf" data-label="Price (₱)">
                 <input type="number" class="form-control-sm" name="addon_opt_price" step="0.01" min="0" value="${priceVal}" placeholder="0.00" required>
+            </div>
+            <div class="vf" data-label="Cost (₱)">
+                <input type="number" class="form-control-sm" name="addon_opt_cost_price" step="0.01" min="0" value="${costVal}" placeholder="0.00" title="Wholesale / Capital cost">
             </div>
             <div class="vf" data-label="Stock">
                 <input type="number" class="form-control-sm" name="addon_opt_stock" min="0" value="${stockVal}" placeholder="0" ${stockDisabled} ${stockRequired} ${stockTitle}>
@@ -5480,6 +6505,8 @@ function updateVariantStockInData(variantId, newStock) {
                 }
                 const optName = row.querySelector('[name="addon_opt_name"]')?.value?.trim();
                 const price = parseFloat(row.querySelector('[name="addon_opt_price"]')?.value);
+                const costPriceRaw = row.querySelector('[name="addon_opt_cost_price"]')?.value;
+                const costPrice = costPriceRaw !== '' && costPriceRaw !== undefined ? parseFloat(costPriceRaw) : 0.0;
                 const stockInput = row.querySelector('[name="addon_opt_stock"]');
                 const stock = stockInput?.value;
                 const stockFromAttribute = stockInput?.getAttribute('value');
@@ -5491,6 +6518,7 @@ function updateVariantStockInData(variantId, newStock) {
                     id: optId ? parseInt(optId, 10) : null,
                     name: optName,
                     price: isNaN(price) ? 0 : price,
+                    cost_price: isNaN(costPrice) ? 0 : costPrice,
                     stock_quantity: isNaN(parsedStock) ? 0 : parsedStock,
                     sort_order: oIdx,
                     is_available: row.querySelector('[name="addon_opt_available"]')?.checked ?? true,

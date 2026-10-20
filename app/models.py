@@ -1031,6 +1031,19 @@ def stock_audit_actor_id(user_id, product=None, store=None):
     raise ValueError('Cannot record a stock change without a user id (reduced_by)')
 
 
+def _can_view_wholesale_cost(include_cost=False):
+    """Return True if caller explicitly requested cost or current session is seller/admin."""
+    if include_cost:
+        return True
+    try:
+        from flask import session, has_request_context
+        if has_request_context() and session:
+            return session.get('role') in ('seller', 'store_admin', 'admin')
+    except Exception:
+        pass
+    return False
+
+
 class Product(db.Model):
     __tablename__ = 'products'
     
@@ -1045,6 +1058,7 @@ class Product(db.Model):
     description = db.Column(db.Text)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     special_price = db.Column(db.Numeric(10, 2), nullable=True)  # Sale / discounted price
+    cost_price = db.Column(db.Numeric(10, 2), nullable=True, default=0.00)  # Purchase / capital cost per unit
     stock_quantity = db.Column(db.Integer, default=0)
     is_available = db.Column(db.Boolean, default=True)
     # When the flower is unavailable, keep its YMAL add-ons listed for other products
@@ -1142,7 +1156,7 @@ class Product(db.Model):
         self.archived_at = None
         self.archived_by = None
     
-    def reduce_stock(self, amount, reason, user_id, reason_notes=None, variant=None):
+    def reduce_stock(self, amount, reason, user_id, reason_notes=None, variant=None, unit_price=None, total_price=None):
         """
         Reduce stock with audit trail.
         
@@ -1152,6 +1166,8 @@ class Product(db.Model):
             user_id (int): ID of user making the reduction
             reason_notes (str): Optional additional context
             variant (ProductVariant, optional): If reducing variant stock
+            unit_price (float|Decimal, optional): Selling price per unit for sales
+            total_price (float|Decimal, optional): Total sold amount
             
         Returns:
             StockReduction: The created reduction record
@@ -1163,6 +1179,13 @@ class Product(db.Model):
             raise ValueError("Reduction amount must be positive")
 
         actor_id = stock_audit_actor_id(user_id, product=self)
+        unit_c = variant.cost_price if (variant and variant.cost_price is not None) else self.cost_price
+        tot_c = (unit_c * amount) if unit_c is not None else None
+
+        unit_p = unit_price
+        if unit_p is None and (reason in ('pos_sale', 'sale') or (reason_notes and any(w in (reason_notes or '').lower() for w in ('checkout', 'order', 'sold', 'sale')))):
+            unit_p = variant.price if (variant and getattr(variant, 'price', None) is not None) else getattr(self, 'effective_price', self.price)
+        tot_p = total_price if total_price is not None else ((Decimal(str(unit_p)) * amount) if unit_p is not None else None)
         
         if variant:
             # Reduce variant stock
@@ -1178,7 +1201,11 @@ class Product(db.Model):
                 reduction_amount=amount,
                 reason=reason,
                 reason_notes=reason_notes,
-                reduced_by=actor_id
+                reduced_by=actor_id,
+                unit_cost=unit_c,
+                total_cost=tot_c,
+                unit_price=unit_p,
+                total_price=tot_p,
             )
         else:
             # Reduce main product stock
@@ -1193,7 +1220,11 @@ class Product(db.Model):
                 reduction_amount=amount,
                 reason=reason,
                 reason_notes=reason_notes,
-                reduced_by=actor_id
+                reduced_by=actor_id,
+                unit_cost=unit_c,
+                total_cost=tot_c,
+                unit_price=unit_p,
+                total_price=tot_p,
             )
         
         db.session.add(reduction)
@@ -1210,6 +1241,8 @@ class Product(db.Model):
 
         actor_id = stock_audit_actor_id(user_id, product=self)
         notes = reason_notes or 'Order cancelled — stock restored'
+        unit_c = variant.cost_price if (variant and variant.cost_price is not None) else self.cost_price
+        tot_c = (unit_c * amount) if unit_c is not None else None
 
         if variant:
             variant.stock_quantity = int(variant.stock_quantity or 0) + amount
@@ -1221,6 +1254,8 @@ class Product(db.Model):
                 reason='restock',
                 reason_notes=notes,
                 reduced_by=actor_id,
+                unit_cost=unit_c,
+                total_cost=tot_c,
             )
         else:
             self.stock_quantity = int(self.stock_quantity or 0) + amount
@@ -1232,6 +1267,8 @@ class Product(db.Model):
                 reason='restock',
                 reason_notes=notes,
                 reduced_by=actor_id,
+                unit_cost=unit_c,
+                total_cost=tot_c,
             )
 
         db.session.add(reduction)
@@ -1251,11 +1288,12 @@ class Product(db.Model):
         
         db.session.delete(self)
     
-    def to_dict(self, include_inactive_addons=False):
+    def to_dict(self, include_inactive_addons=False, include_cost=False):
         sorted_images = sorted(self.images, key=lambda x: x.sort_order)
         primary_image = next((img for img in sorted_images if img.is_primary), sorted_images[0] if sorted_images else None)
         
         sorted_variants = sorted(self.variants, key=lambda v: v.sort_order)
+        can_see_cost = _can_view_wholesale_cost(include_cost)
         
         data = {
             'id': self.id,
@@ -1305,17 +1343,20 @@ class Product(db.Model):
             
             # Variant support
             'has_variants': len(self.variants) > 0,
-            'variants': [variant.to_dict() for variant in sorted_variants],
+            'variants': [variant.to_dict(include_cost=can_see_cost) for variant in sorted_variants],
 
             # Structured product add-ons (dropdown groups)
             'has_addons': any(g.is_active for g in self.addon_groups),
             'addon_groups': [
-                g.to_dict(include_inactive_options=include_inactive_addons)
+                g.to_dict(include_inactive_options=include_inactive_addons, include_cost=can_see_cost)
                 for g in sorted(self.addon_groups, key=lambda x: x.sort_order or 0)
                 if include_inactive_addons or g.is_active
             ],
         }
         
+        if can_see_cost:
+            data['cost_price'] = float(self.cost_price) if self.cost_price is not None else 0.0
+            
         return data
 
 
@@ -1402,6 +1443,7 @@ class ProductVariant(db.Model):
     name = db.Column(db.String(100), nullable=False)  # e.g., "Small", "Red Rose", "12 Stems"
     price = db.Column(db.Numeric(10, 2), nullable=False)  # Variant-specific price
     special_price = db.Column(db.Numeric(10, 2), nullable=True)  # Sale / discounted price
+    cost_price = db.Column(db.Numeric(10, 2), nullable=True, default=0.00)  # Variant-specific purchase / capital cost
     stock_quantity = db.Column(db.Integer, default=0)
     sku = db.Column(db.String(50), nullable=True)  # Stock Keeping Unit
     
@@ -1470,9 +1512,10 @@ class ProductVariant(db.Model):
         )
         return url
     
-    def to_dict(self):
+    def to_dict(self, include_cost=False):
         from app.utils.cloudinary_helper import optimize_cloudinary_url
-        return {
+        can_see_cost = _can_view_wholesale_cost(include_cost)
+        data = {
             'id': self.id,
             'product_id': self.product_id,
             'name': self.name,
@@ -1491,6 +1534,9 @@ class ProductVariant(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+        if can_see_cost:
+            data['cost_price'] = float(self.cost_price) if self.cost_price is not None else 0.0
+        return data
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1517,7 +1563,7 @@ class ProductAddonGroup(db.Model):
         order_by='ProductAddonOption.sort_order',
     )
 
-    def to_dict(self, include_inactive_options=False):
+    def to_dict(self, include_inactive_options=False, include_cost=False):
         opts = sorted(self.options, key=lambda o: o.sort_order or 0)
         if not include_inactive_options:
             opts = [o for o in opts if o.is_available]
@@ -1527,7 +1573,7 @@ class ProductAddonGroup(db.Model):
             'name': self.name,
             'sort_order': self.sort_order or 0,
             'is_active': self.is_active,
-            'options': [o.to_dict() for o in opts],
+            'options': [o.to_dict(include_cost=include_cost) for o in opts],
         }
 
 
@@ -1543,6 +1589,7 @@ class ProductAddonOption(db.Model):
     )
     name = db.Column(db.String(150), nullable=False)
     price = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    cost_price = db.Column(db.Numeric(10, 2), nullable=True, default=0.00)
     stock_quantity = db.Column(db.Integer, default=0, nullable=False)
     image_filename = db.Column(db.String(255), nullable=True)
     image_public_id = db.Column(db.String(255), nullable=True)
@@ -1557,9 +1604,10 @@ class ProductAddonOption(db.Model):
     cart_item_addons = db.relationship('CartItemAddon', back_populates='addon_option', lazy=True)
     order_item_addons = db.relationship('OrderItemAddon', back_populates='addon_option', lazy=True)
 
-    def to_dict(self):
+    def to_dict(self, include_cost=False):
         from app.utils.cloudinary_helper import optimize_cloudinary_url
-        return {
+        can_see_cost = _can_view_wholesale_cost(include_cost)
+        data = {
             'id': self.id,
             'group_id': self.group_id,
             'group_name': self.group.name if self.group else None,
@@ -1574,6 +1622,9 @@ class ProductAddonOption(db.Model):
             'is_oos': int(self.stock_quantity or 0) <= 0,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
+        if can_see_cost:
+            data['cost_price'] = float(self.cost_price) if self.cost_price is not None else 0.0
+        return data
 
 
 class CartItemAddon(db.Model):
@@ -1636,6 +1687,7 @@ class OrderItemAddon(db.Model):
     )
     name = db.Column(db.String(150), nullable=False)
     price = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    cost_price = db.Column(db.Numeric(10, 2), nullable=True, default=0.00)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     image_url = db.Column(db.String(500), nullable=True)
 
@@ -1653,8 +1705,9 @@ class OrderItemAddon(db.Model):
             return opt.image_url.strip()
         return None
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_cost=False):
+        can_see_cost = _can_view_wholesale_cost(include_cost)
+        data = {
             'id': self.id,
             'order_item_id': self.order_item_id,
             'addon_option_id': self.addon_option_id,
@@ -1664,6 +1717,9 @@ class OrderItemAddon(db.Model):
             'image_url': self.resolved_image_url,
             'total': float(self.quantity * self.price) if self.price is not None else 0,
         }
+        if can_see_cost:
+            data['cost_price'] = float(self.cost_price) if self.cost_price is not None else 0.0
+        return data
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1699,6 +1755,10 @@ class StockReduction(db.Model):
         nullable=True,
     )
     reduction_amount = db.Column(db.Integer, nullable=False)
+    unit_cost = db.Column(db.Numeric(10, 2), nullable=True)  # Cost per unit for restock batch
+    total_cost = db.Column(db.Numeric(10, 2), nullable=True)  # reduction_amount * unit_cost
+    unit_price = db.Column(db.Numeric(10, 2), nullable=True)  # Selling price per unit for sales
+    total_price = db.Column(db.Numeric(10, 2), nullable=True)  # reduction_amount * unit_price
     
     # Reason for reduction
     reason = db.Column(db.String(50), nullable=False)  # spoilage, damage, defect, other, pos_sale
@@ -1775,6 +1835,8 @@ class StockReduction(db.Model):
             'addon_info': addon_info,
             'addon_image_url': addon_image_url,
             'reduction_amount': self.reduction_amount,
+            'unit_cost': float(self.unit_cost) if self.unit_cost is not None else None,
+            'total_cost': float(self.total_cost) if self.total_cost is not None else None,
             'reason': self.reason,
             'reason_notes': self.display_reason_notes(),
             'reduced_by': self.reduced_by,
@@ -2047,6 +2109,7 @@ class OrderItem(db.Model):
     variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
     quantity = db.Column(db.Integer, default=1)
     price = db.Column(db.Numeric(10, 2))
+    cost_price = db.Column(db.Numeric(10, 2), nullable=True, default=0.00)
     product_name = db.Column(db.String(255), nullable=True)
     product_image_url = db.Column(db.String(500), nullable=True)
     variant_name = db.Column(db.String(255), nullable=True)
@@ -2079,12 +2142,13 @@ class OrderItem(db.Model):
     def addons_total(self):
         return sum(float(a.price or 0) * int(a.quantity or 1) for a in (self.addons or []))
     
-    def to_dict(self):
+    def to_dict(self, include_cost=False):
         product = self.product
         v_name = self.variant_name or (self.variant.name if self.variant else None)
+        can_see_cost = _can_view_wholesale_cost(include_cost)
 
         unit = float(self.price) if self.price else 0
-        addons_list = [a.to_dict() for a in (self.addons or [])]
+        addons_list = [a.to_dict(include_cost=can_see_cost) for a in (self.addons or [])]
         addons_sum = sum(float(a.get('total') or 0) for a in addons_list)
         
         # Override name for custom tickets
@@ -2099,7 +2163,7 @@ class OrderItem(db.Model):
             elif resolved_name.startswith('[Deleted'):
                 resolved_name = resolved_name.split(']', 1)[-1].strip(' -') or 'Product'
         
-        return {
+        data = {
             'id': self.id,
             'order_id': self.order_id,
             'product_id': self.product_id,
@@ -2114,6 +2178,9 @@ class OrderItem(db.Model):
             'addons': addons_list,
             'addons_total': addons_sum,
         }
+        if can_see_cost:
+            data['cost_price'] = float(self.cost_price) if self.cost_price is not None else 0.0
+        return data
 
 
 class RiderLocation(db.Model):
@@ -2214,6 +2281,7 @@ class POSOrderItem(db.Model):
     variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id', ondelete='SET NULL'), nullable=True)
     quantity = db.Column(db.Integer, default=1)
     price = db.Column(db.Numeric(10, 2))
+    cost_price = db.Column(db.Numeric(10, 2), nullable=True, default=0.00)
     # Snapshot label/image for add-on (or custom) lines — product_id alone shows the flower name
     line_name = db.Column(db.String(255), nullable=True)
     line_image_url = db.Column(db.String(500), nullable=True)
@@ -2252,9 +2320,10 @@ class POSOrderItem(db.Model):
             return primary.image_url if primary else None
         return None
     
-    def to_dict(self):
+    def to_dict(self, include_cost=False):
         product = self.product
         variant_name = None
+        can_see_cost = _can_view_wholesale_cost(include_cost)
         
         if self.variant:
             variant_name = self.variant.name
@@ -2270,7 +2339,7 @@ class POSOrderItem(db.Model):
         else:
             display_name = self.custom_title or 'Custom Arrangement'
         
-        return {
+        data = {
             'id': self.id,
             'pos_order_id': self.pos_order_id,
             'product_id': self.product_id,
@@ -2294,6 +2363,9 @@ class POSOrderItem(db.Model):
             'subcategory_name': product.store_category.name if product and product.store_category else None,
             'subcategory_id': product.store_category_id if product else None
         }
+        if can_see_cost:
+            data['cost_price'] = float(self.cost_price) if self.cost_price is not None else 0.0
+        return data
 
 
 class Testimonial(db.Model):

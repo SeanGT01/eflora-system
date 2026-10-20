@@ -115,6 +115,14 @@ def _sync_product_addon_groups(product, groups_data, delete_cloudinary_fn=None):
             except Exception:
                 price = Decimal('0')
             try:
+                raw_cp = opt_data.get('cost_price')
+                if raw_cp not in (None, ''):
+                    cost_price = Decimal(str(round(float(raw_cp), 2)))
+                else:
+                    cost_price = Decimal(str(round(float(price) * 0.60, 2)))
+            except Exception:
+                cost_price = Decimal(str(round(float(price) * 0.60, 2)))
+            try:
                 stock = int(opt_data.get('stock_quantity', 0) or 0)
             except (TypeError, ValueError):
                 stock = 0
@@ -131,6 +139,8 @@ def _sync_product_addon_groups(product, groups_data, delete_cloudinary_fn=None):
                     continue
                 opt.name = opt_name
                 opt.price = price
+                if opt_data.get('cost_price') not in (None, ''):
+                    opt.cost_price = cost_price
                 # Stock is managed only via Inventory Add/Reduce — do not overwrite here
                 opt.sort_order = int(opt_data.get('sort_order', o_idx) or o_idx)
                 opt.is_available = is_available
@@ -153,6 +163,7 @@ def _sync_product_addon_groups(product, groups_data, delete_cloudinary_fn=None):
                     group_id=group.id,
                     name=opt_name,
                     price=price,
+                    cost_price=cost_price,
                     stock_quantity=max(0, stock),
                     sort_order=int(opt_data.get('sort_order', o_idx) or o_idx),
                     is_available=is_available,
@@ -163,6 +174,20 @@ def _sync_product_addon_groups(product, groups_data, delete_cloudinary_fn=None):
                 )
                 db.session.add(opt)
                 db.session.flush()
+
+                if max(0, stock) > 0:
+                    from app.models import StockReduction
+                    seller_uid = session.get('user_id') or (product.store.seller_id if getattr(product, 'store', None) else 1)
+                    db.session.add(StockReduction(
+                        product_id=product.id,
+                        addon_option_id=opt.id,
+                        reduction_amount=max(0, stock),
+                        reason='restock',
+                        reason_notes=f"Initial inventory for add-on: {opt.name}",
+                        reduced_by=seller_uid,
+                        unit_cost=float(cost_price),
+                        total_cost=round(float(cost_price) * max(0, stock), 2)
+                    ))
 
             kept_option_ids.append(opt.id)
 
@@ -4826,6 +4851,7 @@ def _render_admin_dashboard():
         COMPLETED_ORDER_STATUSES,
         _not_cancelled_order_filter,
         _delivery_completion_rate,
+        _compute_period_cogs,
     )
 
     period = (request.args.get('period') or 'month').lower().strip()
@@ -4869,6 +4895,26 @@ def _render_admin_dashboard():
     revenue_change = 0
     if revenue_prev_month > 0:
         revenue_change = round(((revenue_this_month - revenue_prev_month) / revenue_prev_month) * 100, 1)
+
+    # ── Platform COGS & Profit ──
+    online_cogs_this, pos_cogs_this, cogs_this_month = _compute_period_cogs(range_start, range_end, store_id=None)
+    online_cogs_prev, pos_cogs_prev, cogs_prev_month = _compute_period_cogs(prev_start, prev_end, store_id=None)
+    profit_this_month = float(revenue_this_month) - float(cogs_this_month)
+    profit_prev_month = float(revenue_prev_month) - float(cogs_prev_month)
+
+    profit_change = 0
+    if profit_prev_month > 0:
+        profit_change = round(((profit_this_month - profit_prev_month) / profit_prev_month) * 100, 1)
+    elif profit_prev_month < 0 and profit_this_month > profit_prev_month:
+        profit_change = 100.0
+
+    cogs_change = 0
+    if cogs_prev_month > 0:
+        cogs_change = round(((cogs_this_month - cogs_prev_month) / cogs_prev_month) * 100, 1)
+
+    margin_pct_this = round((profit_this_month / revenue_this_month * 100), 1) if revenue_this_month > 0 else 0.0
+    margin_pct_prev = round((profit_prev_month / revenue_prev_month * 100), 1) if revenue_prev_month > 0 else 0.0
+    margin_change = round(margin_pct_this - margin_pct_prev, 1)
 
     # Orders KPI: online except cancelled + all POS
     online_orders_this = Order.query.filter(
@@ -4916,6 +4962,7 @@ def _render_admin_dashboard():
         Category.name.label('category_name'),
         func.coalesce(func.sum(OrderItem.quantity), 0).label('total_sold'),
         func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('total_sales'),
+        func.coalesce(func.sum(OrderItem.quantity * func.coalesce(OrderItem.cost_price, OrderItem.price * 0.60)), 0).label('total_cogs'),
     ).join(OrderItem, OrderItem.product_id == Product.id) \
      .join(Order, Order.id == OrderItem.order_id) \
      .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id) \
@@ -4937,6 +4984,7 @@ def _render_admin_dashboard():
         Category.name.label('category_name'),
         func.coalesce(func.sum(POSOrderItem.quantity), 0).label('total_sold'),
         func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('total_sales'),
+        func.coalesce(func.sum(POSOrderItem.quantity * func.coalesce(POSOrderItem.cost_price, POSOrderItem.price * 0.60)), 0).label('total_cogs'),
     ).join(POSOrderItem, POSOrderItem.product_id == Product.id) \
      .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
      .outerjoin(ProductVariant, ProductVariant.id == POSOrderItem.variant_id) \
@@ -4959,13 +5007,25 @@ def _render_admin_dashboard():
             'category': r.category_name or 'General',
             'total_sold': 0,
             'total_sales': 0.0,
+            'total_cogs': 0.0,
+            'total_profit': 0.0,
+            'margin_pct': 0.0,
         })
         entry['total_sold'] += int(r.total_sold or 0)
         entry['total_sales'] += float(r.total_sales or 0.0)
+        entry['total_cogs'] += float(r.total_cogs or 0.0)
+
+    for item in merged_top.values():
+        s = float(item['total_sales'] or 0.0)
+        c = float(item['total_cogs'] or 0.0)
+        p = s - c
+        item['total_profit'] = p
+        item['margin_pct'] = round((p / s * 100), 1) if s > 0 else 0.0
 
     _attach_listing_thumbs(list(merged_top.values()))
     top_products_by_qty = sorted(merged_top.values(), key=lambda x: (x['total_sold'], x['total_sales']), reverse=True)[:5]
     top_products_by_sales = sorted(merged_top.values(), key=lambda x: (x['total_sales'], x['total_sold']), reverse=True)[:5]
+    top_products_by_profit = sorted(merged_top.values(), key=lambda x: (x['total_profit'], x['total_sales']), reverse=True)[:5]
     top_products = top_products_by_qty
 
     # Recent orders: completed online + POS, sorted by real timestamp
@@ -5031,8 +5091,37 @@ def _render_admin_dashboard():
             POSOrder.created_at < ds_end,
         ).all()
 
+        oi_cogs_rows = db.session.query(
+            Order.created_at,
+            func.coalesce(OrderItem.quantity * func.coalesce(OrderItem.cost_price, OrderItem.price * 0.60), 0)
+        ).join(Order, Order.id == OrderItem.order_id).filter(
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
+            Order.created_at >= ds_start,
+            Order.created_at < ds_end,
+        ).all()
+
+        oia_cogs_rows = db.session.query(
+            Order.created_at,
+            func.coalesce(OrderItemAddon.quantity * func.coalesce(OrderItemAddon.cost_price, OrderItemAddon.price * 0.60), 0)
+        ).join(OrderItem, OrderItem.id == OrderItemAddon.order_item_id) \
+         .join(Order, Order.id == OrderItem.order_id).filter(
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
+            Order.created_at >= ds_start,
+            Order.created_at < ds_end,
+        ).all()
+
+        pos_cogs_rows = db.session.query(
+            POSOrder.created_at,
+            func.coalesce(POSOrderItem.quantity * func.coalesce(POSOrderItem.cost_price, POSOrderItem.price * 0.60), 0)
+        ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id).filter(
+            POSOrder.created_at >= ds_start,
+            POSOrder.created_at < ds_end,
+        ).all()
+
         o_map = defaultdict(lambda: [0.0, 0])
         p_map = defaultdict(lambda: [0.0, 0])
+        c_map = defaultdict(float)
+
         for ts, amt in online_rows:
             d = _pht_date(ts)
             if d:
@@ -5043,18 +5132,37 @@ def _render_admin_dashboard():
             if d:
                 p_map[d][0] += float(amt or 0)
                 p_map[d][1] += 1
+        for ts, c_amt in oi_cogs_rows:
+            d = _pht_date(ts)
+            if d:
+                c_map[d] += float(c_amt or 0)
+        for ts, c_amt in oia_cogs_rows:
+            d = _pht_date(ts)
+            if d:
+                c_map[d] += float(c_amt or 0)
+        for ts, c_amt in pos_cogs_rows:
+            d = _pht_date(ts)
+            if d:
+                c_map[d] += float(c_amt or 0)
 
         labels, rev, o_rev, p_rev, cnt, o_cnt, p_cnt = [], [], [], [], [], [], []
+        cogs_series, profit_series = [], []
         for day_val in _iter_pht_days(ds_start, ds_end):
             labels.append(day_val.strftime('%b %d'))
             or_v, oc = o_map.get(day_val, [0.0, 0])
             pr_v, pc = p_map.get(day_val, [0.0, 0])
+            day_rev = or_v + pr_v
+            day_cogs = c_map.get(day_val, 0.0)
+            day_profit = day_rev - day_cogs
+
             o_rev.append(or_v)
             p_rev.append(pr_v)
-            rev.append(or_v + pr_v)
+            rev.append(day_rev)
             o_cnt.append(oc)
             p_cnt.append(pc)
             cnt.append(oc + pc)
+            cogs_series.append(round(day_cogs, 2))
+            profit_series.append(round(day_profit, 2))
         return {
             'labels': labels,
             'revenue': rev,
@@ -5063,6 +5171,8 @@ def _render_admin_dashboard():
             'orders': cnt,
             'online_orders': o_cnt,
             'pos_orders': p_cnt,
+            'cogs': cogs_series,
+            'profit': profit_series,
         }
 
     chart_data = _admin_build_chart(range_start, range_end)
@@ -5131,6 +5241,12 @@ def _render_admin_dashboard():
         custom_to=custom_to,
         revenue_this_month=float(revenue_this_month),
         revenue_change=revenue_change,
+        cogs_this_month=float(cogs_this_month),
+        cogs_change=cogs_change,
+        profit_this_month=float(profit_this_month),
+        profit_change=profit_change,
+        margin_pct_this=float(margin_pct_this),
+        margin_change=margin_change,
         orders_this_month=orders_this_month,
         orders_change=orders_change,
         customers_this_month=customers_this_month,
@@ -5139,6 +5255,7 @@ def _render_admin_dashboard():
         top_products=top_products,
         top_products_by_qty=top_products_by_qty,
         top_products_by_sales=top_products_by_sales,
+        top_products_by_profit=top_products_by_profit,
         recent_orders=recent_orders_list,
         chart_data=chart_data,
         avg_rating=avg_rating,
@@ -5181,6 +5298,7 @@ def seller_dashboard():
         _customer_metrics,
         _to_pht,
         _peak_hours,
+        _compute_period_cogs,
     )
 
     user_id = session['user_id']
@@ -5252,6 +5370,26 @@ def seller_dashboard():
     if revenue_prev_month and float(revenue_prev_month) > 0:
         revenue_change = round(((float(revenue_this_month) - float(revenue_prev_month)) / float(revenue_prev_month)) * 100, 1)
 
+    # ── KPI: COGS & Profit ──
+    online_cogs_this, pos_cogs_this, cogs_this_month = _compute_period_cogs(range_start, range_end, store_id=store.id)
+    online_cogs_prev, pos_cogs_prev, cogs_prev_month = _compute_period_cogs(prev_start, prev_end, store_id=store.id)
+    profit_this_month = float(revenue_this_month) - float(cogs_this_month)
+    profit_prev_month = float(revenue_prev_month) - float(cogs_prev_month)
+
+    profit_change = 0
+    if profit_prev_month > 0:
+        profit_change = round(((profit_this_month - profit_prev_month) / profit_prev_month) * 100, 1)
+    elif profit_prev_month < 0 and profit_this_month > profit_prev_month:
+        profit_change = 100.0
+
+    cogs_change = 0
+    if cogs_prev_month > 0:
+        cogs_change = round(((cogs_this_month - cogs_prev_month) / cogs_prev_month) * 100, 1)
+
+    margin_pct_this = round((profit_this_month / revenue_this_month * 100), 1) if revenue_this_month > 0 else 0.0
+    margin_pct_prev = round((profit_prev_month / revenue_prev_month * 100), 1) if revenue_prev_month > 0 else 0.0
+    margin_change = round(margin_pct_this - margin_pct_prev, 1)
+
     # ── KPI: Total orders (online except cancelled + all POS) ──
     orders_this_month = Order.query.filter(
         Order.store_id == store.id,
@@ -5304,6 +5442,7 @@ def seller_dashboard():
         Category.name.label('category_name'),
         func.coalesce(func.sum(OrderItem.quantity), 0).label('total_sold'),
         func.coalesce(func.sum(OrderItem.quantity * OrderItem.price), 0).label('total_sales'),
+        func.coalesce(func.sum(OrderItem.quantity * func.coalesce(OrderItem.cost_price, OrderItem.price * 0.60)), 0).label('total_cogs'),
     ).join(OrderItem, OrderItem.product_id == Product.id) \
      .join(Order, Order.id == OrderItem.order_id) \
      .outerjoin(ProductVariant, ProductVariant.id == OrderItem.variant_id) \
@@ -5323,6 +5462,7 @@ def seller_dashboard():
         Category.name.label('category_name'),
         func.coalesce(func.sum(POSOrderItem.quantity), 0).label('total_sold'),
         func.coalesce(func.sum(POSOrderItem.quantity * POSOrderItem.price), 0).label('total_sales'),
+        func.coalesce(func.sum(POSOrderItem.quantity * func.coalesce(POSOrderItem.cost_price, POSOrderItem.price * 0.60)), 0).label('total_cogs'),
     ).join(POSOrderItem, POSOrderItem.product_id == Product.id) \
      .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id) \
      .outerjoin(ProductVariant, ProductVariant.id == POSOrderItem.variant_id) \
@@ -5336,6 +5476,9 @@ def seller_dashboard():
     tp_map = defaultdict(lambda: {
         'total_sold': 0,
         'total_sales': 0.0,
+        'total_cogs': 0.0,
+        'total_profit': 0.0,
+        'margin_pct': 0.0,
         'category': 'General',
         'variant_name': None,
         'id': None,
@@ -5350,6 +5493,7 @@ def seller_dashboard():
         tp_map[key]['category'] = r.category_name or 'General'
         tp_map[key]['total_sold'] += int(r.total_sold or 0)
         tp_map[key]['total_sales'] += float(r.total_sales or 0.0)
+        tp_map[key]['total_cogs'] += float(r.total_cogs or 0.0)
     for r in pos_top:
         key = (r.id, r.variant_id)
         tp_map[key]['id'] = r.id
@@ -5359,14 +5503,21 @@ def seller_dashboard():
         tp_map[key]['category'] = r.category_name or 'General'
         tp_map[key]['total_sold'] += int(r.total_sold or 0)
         tp_map[key]['total_sales'] += float(r.total_sales or 0.0)
+        tp_map[key]['total_cogs'] += float(r.total_cogs or 0.0)
 
     for tp in tp_map.values():
         if tp.get('variant_name'):
             tp['name'] = f"{tp['name']} — {tp['variant_name']}"
+        s = float(tp['total_sales'] or 0.0)
+        c = float(tp['total_cogs'] or 0.0)
+        p = s - c
+        tp['total_profit'] = p
+        tp['margin_pct'] = round((p / s * 100), 1) if s > 0 else 0.0
 
     _attach_listing_thumbs(list(tp_map.values()))
     top_products_by_qty = sorted(tp_map.values(), key=lambda x: (x['total_sold'], x['total_sales']), reverse=True)[:5]
     top_products_by_sales = sorted(tp_map.values(), key=lambda x: (x['total_sales'], x['total_sold']), reverse=True)[:5]
+    top_products_by_profit = sorted(tp_map.values(), key=lambda x: (x['total_profit'], x['total_sales']), reverse=True)[:5]
     top_products = top_products_by_qty
 
     # ── Recent orders (online + POS, last 10 combined) ──
@@ -5425,8 +5576,40 @@ def seller_dashboard():
             POSOrder.created_at < ds_end,
         ).all()
 
+        oi_cogs_rows = db.session.query(
+            Order.created_at,
+            func.coalesce(OrderItem.quantity * func.coalesce(OrderItem.cost_price, OrderItem.price * 0.60), 0)
+        ).join(Order, Order.id == OrderItem.order_id).filter(
+            Order.store_id == store_id,
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
+            Order.created_at >= ds_start,
+            Order.created_at < ds_end,
+        ).all()
+
+        oia_cogs_rows = db.session.query(
+            Order.created_at,
+            func.coalesce(OrderItemAddon.quantity * func.coalesce(OrderItemAddon.cost_price, OrderItemAddon.price * 0.60), 0)
+        ).join(OrderItem, OrderItem.id == OrderItemAddon.order_item_id) \
+         .join(Order, Order.id == OrderItem.order_id).filter(
+            Order.store_id == store_id,
+            Order.status.in_(COMPLETED_ORDER_STATUSES),
+            Order.created_at >= ds_start,
+            Order.created_at < ds_end,
+        ).all()
+
+        pos_cogs_rows = db.session.query(
+            POSOrder.created_at,
+            func.coalesce(POSOrderItem.quantity * func.coalesce(POSOrderItem.cost_price, POSOrderItem.price * 0.60), 0)
+        ).join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id).filter(
+            POSOrder.store_id == store_id,
+            POSOrder.created_at >= ds_start,
+            POSOrder.created_at < ds_end,
+        ).all()
+
         o_map = defaultdict(lambda: [0.0, 0])
         p_map = defaultdict(lambda: [0.0, 0])
+        c_map = defaultdict(float)
+
         for ts, amt in online_rows:
             d = _pht_date(ts)
             if d:
@@ -5437,18 +5620,38 @@ def seller_dashboard():
             if d:
                 p_map[d][0] += float(amt or 0)
                 p_map[d][1] += 1
+        for ts, c_amt in oi_cogs_rows:
+            d = _pht_date(ts)
+            if d:
+                c_map[d] += float(c_amt or 0)
+        for ts, c_amt in oia_cogs_rows:
+            d = _pht_date(ts)
+            if d:
+                c_map[d] += float(c_amt or 0)
+        for ts, c_amt in pos_cogs_rows:
+            d = _pht_date(ts)
+            if d:
+                c_map[d] += float(c_amt or 0)
 
         labels, rev, o_rev, p_rev, cnt, o_cnt, p_cnt = [], [], [], [], [], [], []
+        cogs_series, profit_series = [], []
         for d in _iter_pht_days(ds_start, ds_end):
             labels.append(d.strftime('%b %d'))
             or_v, oc = o_map.get(d, [0.0, 0])
             pr_v, pc = p_map.get(d, [0.0, 0])
-            o_rev.append(or_v); p_rev.append(pr_v); rev.append(or_v + pr_v)
+            day_rev = or_v + pr_v
+            day_cogs = c_map.get(d, 0.0)
+            day_profit = day_rev - day_cogs
+
+            o_rev.append(or_v); p_rev.append(pr_v); rev.append(day_rev)
             o_cnt.append(oc); p_cnt.append(pc); cnt.append(oc + pc)
+            cogs_series.append(round(day_cogs, 2))
+            profit_series.append(round(day_profit, 2))
         return {
             'labels': labels, 'revenue': rev,
             'online_revenue': o_rev, 'pos_revenue': p_rev,
             'orders': cnt, 'online_orders': o_cnt, 'pos_orders': p_cnt,
+            'cogs': cogs_series, 'profit': profit_series,
         }
 
     chart_data = _build_chart_dataset(store.id, range_start, range_end)
@@ -5745,6 +5948,12 @@ def seller_dashboard():
         custom_to=custom_to,
         revenue_this_month=float(revenue_this_month),
         revenue_change=revenue_change,
+        cogs_this_month=float(cogs_this_month),
+        cogs_change=cogs_change,
+        profit_this_month=float(profit_this_month),
+        profit_change=profit_change,
+        margin_pct_this=float(margin_pct_this),
+        margin_change=margin_change,
         orders_this_month=orders_this_month,
         orders_change=orders_change,
         customers_this_month=customers_this_month,
@@ -5753,6 +5962,7 @@ def seller_dashboard():
         top_products=top_products,
         top_products_by_qty=top_products_by_qty,
         top_products_by_sales=top_products_by_sales,
+        top_products_by_profit=top_products_by_profit,
         recent_orders=recent_orders_list,
         chart_data=chart_data,
         avg_rating=avg_rating,
@@ -6936,6 +7146,18 @@ def create_product():
         except ValueError:
             return jsonify({'error': 'Invalid price format'}), 400
         
+        cost_price_val = request.form.get('cost_price')
+        cost_price_float = None
+        if cost_price_val not in (None, ''):
+            try:
+                cp = float(cost_price_val)
+                if cp >= 0:
+                    cost_price_float = cp
+            except (ValueError, TypeError):
+                cost_price_float = None
+        if cost_price_float is None:
+            cost_price_float = round(price_float * 0.60, 2)
+
         try:
             stock_int = int(stock_quantity)
             if stock_int < 0:
@@ -7012,6 +7234,7 @@ def create_product():
             name=name.strip(),
             description=description.strip() if description else None,
             price=price_float,
+            cost_price=cost_price_float,
             special_price=special_price_float,
             stock_quantity=stock_int,
             main_category_id=int(main_category_id),
@@ -7026,6 +7249,21 @@ def create_product():
         
         db.session.add(product)
         db.session.flush()  # Get product ID
+
+        # Log initial inventory batch in StockReduction
+        from app.models import StockReduction
+        seller_user_id = session.get('user_id') or (store.seller_id if store else 1)
+        if stock_int > 0:
+            init_stock_log = StockReduction(
+                product_id=product.id,
+                reduction_amount=stock_int,
+                reason='restock',
+                reason_notes='Initial inventory on product creation',
+                reduced_by=seller_user_id,
+                unit_cost=cost_price_float,
+                total_cost=round(cost_price_float * stock_int, 2)
+            )
+            db.session.add(init_stock_log)
         
         print(f"Product created with ID: {product.id}")
         
@@ -7094,6 +7332,18 @@ def create_product():
                         
                         print(f"  Variant {idx}: {variant_data.get('name')}")
                         
+                        v_price_val = float(variant_data.get('price', price_float) or price_float)
+                        v_cost_price = None
+                        if variant_data.get('cost_price') not in (None, ''):
+                            try:
+                                vcp = float(variant_data['cost_price'])
+                                if vcp >= 0:
+                                    v_cost_price = Decimal(str(round(vcp, 2)))
+                            except (ValueError, TypeError):
+                                v_cost_price = None
+                        if v_cost_price is None:
+                            v_cost_price = Decimal(str(round(v_price_val * 0.60, 2)))
+
                         v_special_price = None
                         if variant_data.get('special_price'):
                             try:
@@ -7102,12 +7352,15 @@ def create_product():
                             except (ValueError, TypeError):
                                 pass
 
+                        v_stock_qty = int(variant_data.get('stock_quantity', 0))
+
                         variant = ProductVariant(
                             product_id=product.id,
                             name=variant_data.get('name'),
                             price=Decimal(str(variant_data.get('price'))),
+                            cost_price=v_cost_price,
                             special_price=v_special_price,
-                            stock_quantity=int(variant_data.get('stock_quantity', 0)),
+                            stock_quantity=v_stock_qty,
                             sku=variant_data.get('sku'),
                             attributes=variant_data.get('attributes'),
                             sort_order=idx,
@@ -7122,6 +7375,21 @@ def create_product():
                             print(f"    📸 Variant with Cloudinary image: {variant_data['cloudinary_public_id']}")
                         
                         db.session.add(variant)
+                        db.session.flush()
+
+                        if v_stock_qty > 0:
+                            v_unit_cost = float(v_cost_price or 0.0)
+                            seller_user_id = session.get('user_id') or (store.seller_id if store else 1)
+                            db.session.add(StockReduction(
+                                product_id=product.id,
+                                variant_id=variant.id,
+                                reduction_amount=v_stock_qty,
+                                reason='restock',
+                                reason_notes=f"Initial inventory for variant: {variant.name}",
+                                reduced_by=seller_user_id,
+                                unit_cost=v_unit_cost,
+                                total_cost=round(v_unit_cost * v_stock_qty, 2)
+                            ))
                     
                 except json.JSONDecodeError as e:
                     print(f"❌ JSON decode error: {e}")
@@ -7211,6 +7479,13 @@ def manage_product(product_id):
                     product.price = float(request.form['price'])
                 except ValueError:
                     return jsonify({'error': 'Invalid price format'}), 400
+            if 'cost_price' in request.form:
+                cp_val = request.form.get('cost_price')
+                if cp_val not in (None, ''):
+                    try:
+                        product.cost_price = max(0.0, float(cp_val))
+                    except (ValueError, TypeError):
+                        pass
             if 'special_price' in request.form:
                 sp_raw = request.form['special_price']
                 if sp_raw == '' or sp_raw is None:
@@ -7465,6 +7740,11 @@ def manage_product(product_id):
                                 if variant:
                                     variant.name = variant_data.get('name')
                                     variant.price = Decimal(str(variant_data.get('price')))
+                                    if variant_data.get('cost_price') not in (None, ''):
+                                        try:
+                                            variant.cost_price = Decimal(str(round(float(variant_data['cost_price']), 2)))
+                                        except (ValueError, TypeError):
+                                            pass
                                     # special_price
                                     v_sp_raw = variant_data.get('special_price')
                                     if v_sp_raw is not None and v_sp_raw != '':
@@ -7525,12 +7805,24 @@ def manage_product(product_id):
                                     except (ValueError, TypeError):
                                         pass
 
+                                v_cost_new = None
+                                if variant_data.get('cost_price') not in (None, ''):
+                                    try:
+                                        v_cost_new = Decimal(str(round(float(variant_data['cost_price']), 2)))
+                                    except (ValueError, TypeError):
+                                        pass
+                                if v_cost_new is None:
+                                    v_cost_new = Decimal(str(round(float(variant_data.get('price', 0)) * 0.60, 2)))
+
+                                v_stock_new = int(variant_data.get('stock_quantity', 0))
+
                                 variant = ProductVariant(
                                     product_id=product.id,
                                     name=variant_data.get('name'),
                                     price=Decimal(str(variant_data.get('price'))),
+                                    cost_price=v_cost_new,
                                     special_price=v_sp_new,
-                                    stock_quantity=int(variant_data.get('stock_quantity', 0)),
+                                    stock_quantity=v_stock_new,
                                     sku=variant_data.get('sku'),
                                     attributes=variant_data.get('attributes'),
                                     sort_order=idx,
@@ -7544,6 +7836,21 @@ def manage_product(product_id):
                                     print(f"      📸 New variant with Cloudinary image")
                                 
                                 db.session.add(variant)
+                                db.session.flush()
+
+                                if v_stock_new > 0:
+                                    v_unit_cost = float(v_cost_new or 0.0)
+                                    seller_user_id = session.get('user_id') or (store.seller_id if store else 1)
+                                    db.session.add(StockReduction(
+                                        product_id=product.id,
+                                        variant_id=variant.id,
+                                        reduction_amount=v_stock_new,
+                                        reason='restock',
+                                        reason_notes=f"Initial inventory for new variant: {variant.name}",
+                                        reduced_by=seller_user_id,
+                                        unit_cost=v_unit_cost,
+                                        total_cost=round(v_unit_cost * v_stock_new, 2)
+                                    ))
                                 db.session.flush()
                                 kept_variant_ids.append(variant.id)
                                 print(f"    ✅ Created new variant {variant.id}")
@@ -7995,6 +8302,13 @@ def add_product_stock(product_id):
         reason_notes = data.get('reason_notes', '')
         variant_id = data.get('variant_id')
         addon_option_id = data.get('addon_option_id')
+        unit_cost_val = data.get('unit_cost')
+        unit_cost = None
+        if unit_cost_val not in (None, ''):
+            try:
+                unit_cost = max(0.0, float(unit_cost_val))
+            except (TypeError, ValueError):
+                unit_cost = None
         
         if not amount:
             return jsonify({'error': 'Addition amount is required'}), 400
@@ -8032,14 +8346,25 @@ def add_product_stock(product_id):
             ):
                 return jsonify({'error': 'Add-on option not found'}), 404
 
-            addon_opt.stock_quantity = int(addon_opt.stock_quantity or 0) + amount
+            old_stock = max(0, int(addon_opt.stock_quantity or 0))
+            addon_opt.stock_quantity = old_stock + amount
             addon_opt.updated_at = datetime.utcnow()
+
+            # Weighted Moving Average Cost (AVCO)
+            batch_unit_cost = unit_cost if unit_cost is not None else float(addon_opt.cost_price or round(float(addon_opt.price or 0) * 0.60, 2))
+            old_cost = float(addon_opt.cost_price or batch_unit_cost)
+            total_units = old_stock + amount
+            if total_units > 0:
+                blended_cost = round(((old_stock * old_cost) + (amount * batch_unit_cost)) / total_units, 2)
+                addon_opt.cost_price = Decimal(str(blended_cost))
 
             addition = StockReduction(
                 product_id=product.id,
                 variant_id=None,
                 addon_option_id=addon_opt.id,
                 reduction_amount=amount,
+                unit_cost=batch_unit_cost,
+                total_cost=round(batch_unit_cost * amount, 2),
                 reason=reason,
                 reason_notes=reason_notes,
                 reduced_by=user_id,
@@ -8063,15 +8388,25 @@ def add_product_stock(product_id):
             if not variant:
                 return jsonify({'error': 'Variant not found'}), 404
             
-            # Add stock to variant
-            variant.stock_quantity += amount
+            old_stock = max(0, int(variant.stock_quantity or 0))
+            variant.stock_quantity = old_stock + amount
             variant.updated_at = datetime.utcnow()
+
+            # Weighted Moving Average Cost (AVCO)
+            batch_unit_cost = unit_cost if unit_cost is not None else float(variant.cost_price or round(float(variant.price or 0) * 0.60, 2))
+            old_cost = float(variant.cost_price or batch_unit_cost)
+            total_units = old_stock + amount
+            if total_units > 0:
+                blended_cost = round(((old_stock * old_cost) + (amount * batch_unit_cost)) / total_units, 2)
+                variant.cost_price = Decimal(str(blended_cost))
             
             # Create audit entry for stock addition
             addition = StockReduction(
                 product_id=product.id,
                 variant_id=variant.id,
                 reduction_amount=amount,  # Using the same field, positive for addition
+                unit_cost=batch_unit_cost,
+                total_cost=round(batch_unit_cost * amount, 2),
                 reason=reason,
                 reason_notes=reason_notes,
                 reduced_by=user_id
@@ -8081,7 +8416,7 @@ def add_product_stock(product_id):
             print(f"✅ Variant stock addition recorded:")
             print(f"   Product: {product.name} (ID: {product.id})")
             print(f"   Variant: {variant.name} (ID: {variant.id})")
-            print(f"   Added: {amount} units")
+            print(f"   Added: {amount} units @ ₱{batch_unit_cost} (Blended AVCO: ₱{variant.cost_price})")
             print(f"   Reason: {reason}")
             print(f"   New variant stock: {variant.stock_quantity}")
             
@@ -8105,15 +8440,25 @@ def add_product_stock(product_id):
             }), 200
             
         else:
-            # Add stock to main product
-            product.stock_quantity += amount
+            old_stock = max(0, int(product.stock_quantity or 0))
+            product.stock_quantity = old_stock + amount
             product.updated_at = datetime.utcnow()
+
+            # Weighted Moving Average Cost (AVCO)
+            batch_unit_cost = unit_cost if unit_cost is not None else float(product.cost_price or round(float(product.price or 0) * 0.60, 2))
+            old_cost = float(product.cost_price or batch_unit_cost)
+            total_units = old_stock + amount
+            if total_units > 0:
+                blended_cost = round(((old_stock * old_cost) + (amount * batch_unit_cost)) / total_units, 2)
+                product.cost_price = blended_cost
             
             # Create audit entry for stock addition
             addition = StockReduction(
                 product_id=product.id,
                 variant_id=None,
                 reduction_amount=amount,  # Using the same field, positive for addition
+                unit_cost=batch_unit_cost,
+                total_cost=round(batch_unit_cost * amount, 2),
                 reason=reason,
                 reason_notes=reason_notes,
                 reduced_by=user_id
@@ -8130,7 +8475,7 @@ def add_product_stock(product_id):
             
             print(f"✅ Main product stock addition recorded:")
             print(f"   Product: {product.name} (ID: {product.id})")
-            print(f"   Added: {amount} units")
+            print(f"   Added: {amount} units @ ₱{batch_unit_cost} (Blended AVCO: ₱{product.cost_price})")
             print(f"   Reason: {reason}")
             print(f"   New stock: {product.stock_quantity}")
             
@@ -8252,17 +8597,97 @@ def get_stock_history(product_id):
             if primary_image_obj:
                 primary_image = primary_image_obj.cloudinary_url or primary_image_obj.image_url
         
+        def classify_reduction(reason, notes):
+            r = (reason or '').lower()
+            n = (notes or '').lower()
+            if r == 'pos_sale' or 'pos sale' in n or 'pos order' in n:
+                return 'pos'
+            if 'online checkout' in n or 'buy now' in n or 'custom order' in n or r == 'sale' or ('order #' in n and 'pos' not in n):
+                return 'online'
+            if r in ('found_stock', 'receiving_error', 'restock') or 'initial inventory' in n or 'initial stock' in n or 'restocked' in n or 'restored after cancellation' in n:
+                return 'addition'
+            return 'reduction'
+
+        def resolve_selling_price(reduction, category, default_product, variant=None, addon_opt=None):
+            if getattr(reduction, 'unit_price', None) is not None and reduction.unit_price > 0:
+                up = float(reduction.unit_price)
+                tp = float(reduction.total_price) if getattr(reduction, 'total_price', None) is not None else round(up * reduction.reduction_amount, 2)
+                return up, tp
+
+            if category not in ('online', 'pos'):
+                return None, None
+
+            notes = reduction.display_reason_notes() or ''
+            import re
+            m = re.search(r'order\s*#?(\d+)', notes, re.IGNORECASE)
+            order_id = int(m.group(1)) if m else None
+
+            if category == 'pos' and order_id:
+                from app.models import POSOrderItem
+                query = POSOrderItem.query.filter_by(pos_order_id=order_id)
+                if reduction.addon_option_id:
+                    pos_item = query.filter_by(addon_option_id=reduction.addon_option_id).first()
+                elif reduction.variant_id:
+                    pos_item = query.filter_by(variant_id=reduction.variant_id).first()
+                else:
+                    pos_item = query.filter_by(product_id=reduction.product_id).first()
+                if pos_item and pos_item.price is not None:
+                    up = float(pos_item.price)
+                    return up, round(up * reduction.reduction_amount, 2)
+
+            if category == 'online' and order_id:
+                if reduction.addon_option_id:
+                    from app.models import OrderItemAddon, OrderItem
+                    addon_item = OrderItemAddon.query.join(OrderItem).filter(
+                        OrderItem.order_id == order_id,
+                        OrderItemAddon.addon_option_id == reduction.addon_option_id
+                    ).first()
+                    if addon_item and addon_item.price is not None:
+                        up = float(addon_item.price)
+                        return up, round(up * reduction.reduction_amount, 2)
+                else:
+                    from app.models import OrderItem
+                    oi = OrderItem.query.filter_by(
+                        order_id=order_id,
+                        product_id=reduction.product_id,
+                        variant_id=reduction.variant_id
+                    ).first()
+                    if oi and oi.price is not None:
+                        up = float(oi.price)
+                        return up, round(up * reduction.reduction_amount, 2)
+
+            if addon_opt and getattr(addon_opt, 'price', None) is not None:
+                up = float(addon_opt.price)
+            elif variant and getattr(variant, 'price', None) is not None:
+                up = float(getattr(variant, 'special_price', None) or variant.price)
+            elif default_product:
+                up = float(default_product.effective_price)
+            else:
+                up = None
+
+            if up is not None:
+                return up, round(up * reduction.reduction_amount, 2)
+            return None, None
+
         # Build main product reductions data
         main_history = []
         for r in main_reductions:
+            notes_str = r.display_reason_notes()
+            cat = classify_reduction(r.reason, notes_str)
+            unit_p, tot_p = resolve_selling_price(r, cat, product)
             reduction_data = {
                 'id': r.id,
                 'product_id': r.product_id,
                 'product_name': product.name,
                 'product_image': primary_image,
                 'reduction_amount': r.reduction_amount,
+                'unit_cost': float(r.unit_cost) if r.unit_cost is not None else (float(product.cost_price) if product.cost_price is not None else None),
+                'total_cost': float(r.total_cost) if r.total_cost is not None else (float(r.unit_cost * r.reduction_amount) if r.unit_cost is not None else None),
+                'unit_price': unit_p,
+                'total_price': tot_p,
                 'reason': r.reason,
-                'reason_notes': r.display_reason_notes(),
+                'reason_notes': notes_str,
+                'category': cat,
                 'reduced_by': r.reduced_by,
                 'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
@@ -8275,6 +8700,13 @@ def get_stock_history(product_id):
         for r in variant_reductions:
             # Get the variant from the variant_id field
             var = ProductVariant.query.filter_by(id=r.variant_id).first() if r.variant_id else None
+            var_cost = float(var.cost_price) if (var and var.cost_price is not None) else None
+            unit_c = float(r.unit_cost) if r.unit_cost is not None else var_cost
+            tot_c = float(r.total_cost) if r.total_cost is not None else ((unit_c * r.reduction_amount) if unit_c is not None else None)
+            notes_str = r.display_reason_notes()
+            cat = classify_reduction(r.reason, notes_str)
+            unit_p, tot_p = resolve_selling_price(r, cat, product, variant=var)
+
             if var:
                 variant_image = var.image_url  # Get variant's own image
                 reduction_data = {
@@ -8284,8 +8716,13 @@ def get_stock_history(product_id):
                     'product_name': f"{product.name} - {var.name}",
                     'product_image': variant_image,  # Use variant image
                     'reduction_amount': r.reduction_amount,
+                    'unit_cost': unit_c,
+                    'total_cost': tot_c,
+                    'unit_price': unit_p,
+                    'total_price': tot_p,
                     'reason': r.reason,
-                    'reason_notes': r.display_reason_notes(),
+                    'reason_notes': notes_str,
+                    'category': cat,
                     'reduced_by': r.reduced_by,
                     'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
                     'created_at': r.created_at.isoformat() if r.created_at else None,
@@ -8301,8 +8738,13 @@ def get_stock_history(product_id):
                     'product_name': f"{product.name} - Variant {r.variant_id}",
                     'product_image': None,
                     'reduction_amount': r.reduction_amount,
+                    'unit_cost': unit_c,
+                    'total_cost': tot_c,
+                    'unit_price': unit_p,
+                    'total_price': tot_p,
                     'reason': r.reason,
-                    'reason_notes': r.display_reason_notes(),
+                    'reason_notes': notes_str,
+                    'category': cat,
                     'reduced_by': r.reduced_by,
                     'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
                     'created_at': r.created_at.isoformat() if r.created_at else None,
@@ -8315,6 +8757,13 @@ def get_stock_history(product_id):
             opt = r.addon_option or (
                 ProductAddonOption.query.get(r.addon_option_id) if r.addon_option_id else None
             )
+            opt_cost = float(opt.cost_price) if (opt and opt.cost_price is not None) else None
+            unit_c = float(r.unit_cost) if r.unit_cost is not None else opt_cost
+            tot_c = float(r.total_cost) if r.total_cost is not None else ((unit_c * r.reduction_amount) if unit_c is not None else None)
+            notes_str = r.display_reason_notes()
+            cat = classify_reduction(r.reason, notes_str)
+            unit_p, tot_p = resolve_selling_price(r, cat, product, addon_opt=opt)
+
             if opt:
                 group_name = opt.group.name if opt.group else 'Add-on'
                 addon_history.append({
@@ -8324,8 +8773,13 @@ def get_stock_history(product_id):
                     'product_name': f"{product.name} — {group_name}: {opt.name}",
                     'product_image': opt.image_url,
                     'reduction_amount': r.reduction_amount,
+                    'unit_cost': unit_c,
+                    'total_cost': tot_c,
+                    'unit_price': unit_p,
+                    'total_price': tot_p,
                     'reason': r.reason,
-                    'reason_notes': r.display_reason_notes(),
+                    'reason_notes': notes_str,
+                    'category': cat,
                     'reduced_by': r.reduced_by,
                     'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
                     'created_at': r.created_at.isoformat() if r.created_at else None,
@@ -8339,8 +8793,13 @@ def get_stock_history(product_id):
                     'product_name': f"{product.name} — Add-on #{r.addon_option_id}",
                     'product_image': None,
                     'reduction_amount': r.reduction_amount,
+                    'unit_cost': unit_c,
+                    'total_cost': tot_c,
+                    'unit_price': unit_p,
+                    'total_price': tot_p,
                     'reason': r.reason,
-                    'reason_notes': r.display_reason_notes(),
+                    'reason_notes': notes_str,
+                    'category': cat,
                     'reduced_by': r.reduced_by,
                     'reduced_by_user': r.reducer_user.full_name if r.reducer_user else None,
                     'created_at': r.created_at.isoformat() if r.created_at else None,
@@ -10093,6 +10552,7 @@ def pos_create_order():
                     variant_id=None,
                     quantity=item['quantity'],
                     price=item['price'] + extra_per_unit,
+                    cost_price=Decimal(str(round(float(item['price']) * 0.60, 2))),
                     line_name=line_name,
                     line_image_url=None,
                     addon_option_id=None,
@@ -10144,9 +10604,35 @@ def pos_create_order():
                 unit_price = item['price'] if item['price'] and item['price'] > 0 else extra_per_unit
                 if (not unit_price or unit_price <= 0) and addon_lines:
                     unit_price = Decimal(str(addon_lines[0].get('price') or 0))
+                addon_cost = 0.0
+                if addon_option_id:
+                    opt_obj = ProductAddonOption.query.get(addon_option_id)
+                    if opt_obj and opt_obj.cost_price is not None:
+                        addon_cost = float(opt_obj.cost_price)
+                    else:
+                        addon_cost = round(float(unit_price) * 0.60, 2)
+                else:
+                    addon_cost = round(float(unit_price) * 0.60, 2)
+                item_unit_cost = addon_cost
+                base_stock_cost = addon_cost
             else:
                 # Flower/variant line: bake structured add-on cost into unit price for history totals
                 unit_price = item['price'] + extra_per_unit
+                if item.get('variant_id'):
+                    v_obj = ProductVariant.query.get(item['variant_id'])
+                    base_stock_cost = float(v_obj.cost_price if (v_obj and v_obj.cost_price is not None) else (item['product'].cost_price or round(float(unit_price) * 0.60, 2)))
+                else:
+                    base_stock_cost = float(item['product'].cost_price if item['product'].cost_price is not None else round(float(unit_price) * 0.60, 2))
+                
+                addon_lines_cost = 0.0
+                for al in addon_lines:
+                    al_opt = al.get('option')
+                    if al_opt and getattr(al_opt, 'cost_price', None) is not None:
+                        addon_lines_cost += float(al_opt.cost_price)
+                    else:
+                        addon_lines_cost += round(float(al.get('price') or 0) * 0.60, 2)
+                extra_cost_per_unit = (addon_lines_cost / float(qty)) if qty else 0.0
+                item_unit_cost = round(base_stock_cost + extra_cost_per_unit, 2)
 
             pos_item = POSOrderItem(
                 pos_order=pos_order,
@@ -10154,6 +10640,7 @@ def pos_create_order():
                 variant_id=item['variant_id'],
                 quantity=item['quantity'],
                 price=unit_price,
+                cost_price=Decimal(str(item_unit_cost)),
                 line_name=line_name,
                 line_image_url=line_image_url,
                 addon_option_id=addon_option_id,
@@ -10174,6 +10661,10 @@ def pos_create_order():
                         product_id=item['product'].id,
                         variant_id=item['variant_id'],
                         reduction_amount=item['quantity'],
+                        unit_cost=base_stock_cost,
+                        total_cost=round(base_stock_cost * item['quantity'], 2),
+                        unit_price=float(unit_price),
+                        total_price=round(float(unit_price) * item['quantity'], 2),
                         reason='pos_sale',
                         reason_notes=f'POS Sale - Order #{pos_order.id} by {cashier_name}',
                         reduced_by=user_id
@@ -10196,6 +10687,10 @@ def pos_create_order():
                         product_id=item['product'].id,
                         variant_id=None,
                         reduction_amount=item['quantity'],
+                        unit_cost=base_stock_cost,
+                        total_cost=round(base_stock_cost * item['quantity'], 2),
+                        unit_price=float(unit_price),
+                        total_price=round(float(unit_price) * item['quantity'], 2),
                         reason='pos_sale',
                         reason_notes=f'POS Sale - Order #{pos_order.id} by {cashier_name}',
                         reduced_by=user_id
@@ -13264,8 +13759,8 @@ def get_user_addresses():
     
     try:
         addresses = UserAddress.query.filter_by(user_id=user_id).order_by(
-            UserAddress.is_default.desc(),
-            UserAddress.created_at.desc()
+            UserAddress.created_at.asc(),
+            UserAddress.id.asc()
         ).all()
         
         print(f"✅ Retrieved {len(addresses)} addresses for user {user_id}")

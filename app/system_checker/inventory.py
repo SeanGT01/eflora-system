@@ -466,6 +466,52 @@ FEATURE_INVENTORY: List[Dict[str, Any]] = [
         "test_suite": "test_orders_inventory",
         "test_function": "test_order_status_state_machine"
     },
+    {
+        "id": "inventory_weighted_moving_average_costing",
+        "module": "Orders & Inventory",
+        "name": "Weighted Moving Average Costing (AVCO)",
+        "description": "Blended weighted average cost calculations on stock replenishment, 0-stock baseline reset, and unit cost tracking in StockReduction.",
+        "roles": ["seller", "system"],
+        "endpoints": [
+            "POST /api/seller/inventory/add-stock",
+            "POST /seller/products/add"
+        ],
+        "models": ["Product", "ProductVariant", "StockReduction"],
+        "has_test": True,
+        "test_suite": "test_orders_inventory",
+        "test_function": "test_weighted_moving_average_inventory_costing"
+    },
+    {
+        "id": "financials_cogs_profit_margin_calculation",
+        "module": "Payments & Financials",
+        "name": "COGS, Gross Profit & Margin Reporting",
+        "description": "Calculation of Cost of Goods Sold, Gross Profit, and Gross Profit Margin % across seller and admin financial reports with 60% fallback basis.",
+        "roles": ["seller", "admin"],
+        "endpoints": [
+            "GET /reports",
+            "GET /api/v1/admin/analytics"
+        ],
+        "models": ["OrderItem", "POSOrderItem", "OrderItemAddon"],
+        "has_test": True,
+        "test_suite": "test_orders_inventory",
+        "test_function": "test_profit_margin_and_cogs_calculation"
+    },
+    {
+        "id": "orders_cost_snapshotting",
+        "module": "Orders & Inventory",
+        "name": "Order Item Wholesale Cost Snapshotting",
+        "description": "Freezing cost price on order items, POS items, and add-ons at time of purchase to ensure historical profit margins are immutable.",
+        "roles": ["system", "customer", "seller"],
+        "endpoints": [
+            "POST /api/v1/checkout/create-orders",
+            "POST /api/v1/checkout/buy-now/create-order",
+            "POST /api/seller/pos/create-order"
+        ],
+        "models": ["OrderItem", "POSOrderItem", "OrderItemAddon"],
+        "has_test": True,
+        "test_suite": "test_orders_inventory",
+        "test_function": "test_order_item_cost_snapshotting"
+    },
 
     # ==========================================
     # 6. PAYMENTS & FINANCIALS

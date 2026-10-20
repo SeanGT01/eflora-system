@@ -1577,12 +1577,24 @@ def create_orders():
                 elif p_obj:
                     p_img = p_obj.image_url
 
+                item_cost = None
+                if v_obj and v_obj.cost_price is not None and v_obj.cost_price > 0:
+                    item_cost = v_obj.cost_price
+                elif p_obj and p_obj.cost_price is not None and p_obj.cost_price > 0:
+                    item_cost = p_obj.cost_price
+                elif item_data.get("price") is not None:
+                    try:
+                        item_cost = round(float(item_data["price"]) * 0.60, 2)
+                    except (ValueError, TypeError):
+                        item_cost = 0.00
+
                 order_item = OrderItem(
                     order_id=order.id,
                     product_id=item_data["product_id"],
                     variant_id=item_data.get("variant_id"),
                     quantity=item_data["quantity"],
                     price=item_data["price"],
+                    cost_price=Decimal(str(item_cost)) if item_cost is not None else None,
                     product_name=p_obj.name if p_obj else None,
                     product_image_url=p_img,
                     variant_name=v_obj.name if v_obj else None,
@@ -2038,12 +2050,24 @@ def process_checkout():
                 elif p_obj:
                     p_img = p_obj.image_url
 
+                item_cost = None
+                if v_obj and v_obj.cost_price is not None and v_obj.cost_price > 0:
+                    item_cost = v_obj.cost_price
+                elif p_obj and p_obj.cost_price is not None and p_obj.cost_price > 0:
+                    item_cost = p_obj.cost_price
+                elif item_data.get("price") is not None:
+                    try:
+                        item_cost = round(float(item_data["price"]) * 0.60, 2)
+                    except (ValueError, TypeError):
+                        item_cost = 0.00
+
                 order_item = OrderItem(
                     order_id=order.id,
                     product_id=item_data["product_id"],
                     variant_id=item_data["variant_id"],
                     quantity=item_data["quantity"],
                     price=item_data["price"],
+                    cost_price=Decimal(str(item_cost)) if item_cost is not None else None,
                     product_name=p_obj.name if p_obj else None,
                     product_image_url=p_img,
                     variant_name=v_obj.name if v_obj else None,
@@ -2680,12 +2704,24 @@ def buy_now_create_order():
             order.compute_total()
 
         main_img = variant.image_url if (variant and variant.image_url) else (product.image_url if product else None)
+        main_cost = None
+        if variant and variant.cost_price is not None and variant.cost_price > 0:
+            main_cost = variant.cost_price
+        elif product and product.cost_price is not None and product.cost_price > 0:
+            main_cost = product.cost_price
+        else:
+            try:
+                main_cost = round(float(item_price) * 0.60, 2)
+            except (ValueError, TypeError):
+                main_cost = 0.00
+
         main_order_item = OrderItem(
             order_id=order.id,
             product_id=product.id,
             variant_id=variant.id if variant else None,
             quantity=quantity,
             price=float(item_price),
+            cost_price=Decimal(str(main_cost)) if main_cost is not None else None,
             product_name=product.name if product else None,
             product_image_url=main_img,
             variant_name=variant.name if variant else None,
@@ -2696,12 +2732,21 @@ def buy_now_create_order():
 
         for line in addon_lines:
             line_prod = line["product"]
+            line_cost = None
+            if line_prod and line_prod.cost_price is not None and line_prod.cost_price > 0:
+                line_cost = line_prod.cost_price
+            else:
+                try:
+                    line_cost = round(float(line["price"]) * 0.60, 2)
+                except (ValueError, TypeError):
+                    line_cost = 0.00
             db.session.add(OrderItem(
                 order_id=order.id,
                 product_id=line_prod.id,
                 variant_id=None,
                 quantity=line["quantity"],
                 price=float(line["price"]),
+                cost_price=Decimal(str(line_cost)) if line_cost is not None else None,
                 product_name=line_prod.name if line_prod else None,
                 product_image_url=line_prod.image_url if line_prod else None,
                 variant_name=None,

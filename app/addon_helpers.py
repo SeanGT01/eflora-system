@@ -167,11 +167,21 @@ def attach_order_item_addons(order_item, lines):
     """Persist OrderItemAddon snapshots from resolved lines."""
     for line in lines or []:
         opt = line['option']
+        opt_cost = None
+        if hasattr(opt, 'cost_price') and opt.cost_price is not None:
+            opt_cost = opt.cost_price
+        elif line.get('price') is not None:
+            try:
+                opt_cost = round(float(line['price']) * 0.60, 2)
+            except (ValueError, TypeError):
+                opt_cost = 0.00
+
         db.session.add(OrderItemAddon(
             order_item_id=order_item.id,
             addon_option_id=opt.id,
             name=line['name'],
             price=line['price'],
+            cost_price=Decimal(str(opt_cost)) if opt_cost is not None else None,
             quantity=int(line['quantity']),
             image_url=line.get('image_url') or None,
         ))
@@ -191,7 +201,9 @@ def decrement_addon_option_stock(lines, user_id=None, reason='other', reason_not
             continue
         if int(opt.stock_quantity or 0) < qty:
             raise ValueError(f'Insufficient stock for "{opt.name}"')
-        opt.stock_quantity = int(opt.stock_quantity or 0) - qty
+        before = int(opt.stock_quantity or 0)
+        opt.stock_quantity = before - qty
+        after = int(opt.stock_quantity or 0)
         if hasattr(opt, 'updated_at'):
             from datetime import datetime
             opt.updated_at = datetime.utcnow()
@@ -201,6 +213,10 @@ def decrement_addon_option_stock(lines, user_id=None, reason='other', reason_not
         from app.models import stock_audit_actor_id
         owner = opt.group.product if getattr(opt.group, 'product', None) else None
         actor_id = stock_audit_actor_id(user_id, product=owner)
+        unit_c = getattr(opt, 'cost_price', None)
+        tot_c = (unit_c * qty) if unit_c is not None else None
+        unit_p = line.get('price') if line.get('price') is not None else getattr(opt, 'price', None)
+        tot_p = (unit_p * qty) if unit_p is not None else None
         db.session.add(StockReduction(
             product_id=opt.group.product_id,
             variant_id=None,
@@ -209,7 +225,24 @@ def decrement_addon_option_stock(lines, user_id=None, reason='other', reason_not
             reason=reason,
             reason_notes=reason_notes,
             reduced_by=actor_id,
+            unit_cost=unit_c,
+            total_cost=tot_c,
+            unit_price=unit_p,
+            total_price=tot_p,
         ))
+
+        if owner and getattr(owner, 'store_id', None):
+            try:
+                from app.utils.seller_notifications import notify_low_stock_if_crossed
+                notify_low_stock_if_crossed(
+                    store_id=owner.store_id,
+                    product=owner,
+                    stock_before=before,
+                    stock_after=after,
+                    addon_option=opt,
+                )
+            except Exception:
+                pass
 
 
 def ymal_addon_option_dicts(product):
