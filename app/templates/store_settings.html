@@ -3498,6 +3498,33 @@
                                                 many hours from now.</div>
                                         </div>
                                     </div>
+
+                                    <!-- ORDER LIMITING / CAPACITY PER SLOT TOGGLE -->
+                                    <div style="margin-top: 1.25rem; padding-top: 0.85rem; border-top: 1px dashed var(--border);">
+                                        <label class="cod-toggle-row" for="limit-orders-toggle" style="margin-bottom: 0.4rem;">
+                                            <span class="cod-toggle-copy">
+                                                <strong>Limit Orders per Delivery Window</strong>
+                                                <small>Cap the maximum orders your store accepts per delivery slot (e.g. 4 orders every 2 hours). Recommended for florist shops to prevent crafting overwhelm. Botanical nurseries and raw material shops can keep this OFF for unlimited orders.</small>
+                                            </span>
+                                            <span class="cod-toggle-switch">
+                                                <input type="checkbox" id="limit-orders-toggle" {% if store.store_schedule and store.store_schedule.limit_orders_per_slot %}checked{% endif %}>
+                                                <span class="cod-toggle-slider"></span>
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    <div style="margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 1rem;" id="limit-orders-controls-row">
+                                        <div id="max-orders-container">
+                                            <label class="form-label" style="margin-bottom: 0.35rem;">Max orders per window</label>
+                                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <input type="number" class="form-control" id="max-orders-per-slot" min="1" max="50" step="1"
+                                                    value="{{ (store.store_schedule.max_orders_per_slot if store.store_schedule and store.store_schedule.max_orders_per_slot is not none else 4) }}"
+                                                    style="width: 110px;">
+                                                <span style="font-size: 13px; color: var(--muted); font-weight: 500;">orders / slot</span>
+                                            </div>
+                                            <div class="form-hint" id="max-orders-hint">Once this limit is reached for a time slot, customers cannot select that window on checkout.</div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <!-- STORE LOCATION (address fields + map) -->
@@ -3880,6 +3907,16 @@
                                 <span style="color: var(--terracotta); font-weight: 600;"><i class="ri-close-circle-line"></i> Disabled (Next-day & advance pre-orders only)</span>
                                 {% else %}
                                 <span style="color: var(--deep-sage); font-weight: 600;"><i class="ri-checkbox-circle-line"></i> Enabled</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="summary-field">
+                            <div class="summary-label">Order Capacity Limit</div>
+                            <div class="summary-value" id="sum-order-limit">
+                                {% if store.store_schedule and store.store_schedule.limit_orders_per_slot and store.store_schedule.max_orders_per_slot %}
+                                <span style="color: var(--deep-sage); font-weight: 600;"><i class="ri-shield-check-line"></i> Max {{ store.store_schedule.max_orders_per_slot }} orders / window</span>
+                                {% else %}
+                                <span style="color: var(--muted);"><i class="ri-infinity-line"></i> Unlimited</span>
                                 {% endif %}
                             </div>
                         </div>
@@ -5310,6 +5347,8 @@
             orderCutoff: document.getElementById('order-cutoff-time')?.value || '',
             leadTimeHours: document.getElementById('lead-time-hours')?.value || '',
             allowSameDay: document.getElementById('allow-same-day-toggle')?.checked ?? true,
+            limitOrdersPerSlot: document.getElementById('limit-orders-toggle')?.checked ?? false,
+            maxOrdersPerSlot: document.getElementById('max-orders-per-slot')?.value || '',
             schedule: (typeof scheduleEntries !== 'undefined')
                 ? JSON.parse(JSON.stringify(scheduleEntries || []))
                 : [],
@@ -6362,6 +6401,29 @@
         allowSameDayToggle.addEventListener('change', updateSameDayControlsUI);
         updateSameDayControlsUI();
     }
+    const limitOrdersToggle = document.getElementById('limit-orders-toggle');
+    const maxOrdersInput = document.getElementById('max-orders-per-slot');
+    if (limitOrdersToggle && existingSchedule && existingSchedule.limit_orders_per_slot !== undefined) {
+        limitOrdersToggle.checked = Boolean(existingSchedule.limit_orders_per_slot);
+    }
+    if (maxOrdersInput && existingSchedule && existingSchedule.max_orders_per_slot !== undefined && existingSchedule.max_orders_per_slot !== null) {
+        maxOrdersInput.value = existingSchedule.max_orders_per_slot;
+    }
+    function updateLimitOrdersControlsUI() {
+        const isLimitEnabled = limitOrdersToggle ? limitOrdersToggle.checked : false;
+        const container = document.getElementById('max-orders-container');
+        if (container) {
+            container.style.opacity = isLimitEnabled ? '1' : '0.5';
+            container.style.pointerEvents = isLimitEnabled ? 'auto' : 'none';
+        }
+        if (maxOrdersInput) {
+            maxOrdersInput.disabled = !isLimitEnabled;
+        }
+    }
+    if (limitOrdersToggle) {
+        limitOrdersToggle.addEventListener('change', updateLimitOrdersControlsUI);
+        updateLimitOrdersControlsUI();
+    }
     const leadHoursEl = document.getElementById('lead-time-hours');
     if (leadHoursEl) {
         const savedLead = existingSchedule && existingSchedule.lead_time_hours != null
@@ -6755,6 +6817,15 @@
         let leadTimeHours = parseInt(document.getElementById('lead-time-hours')?.value, 10);
         if (!Number.isFinite(leadTimeHours) || leadTimeHours < 0) leadTimeHours = 1;
 
+        const limitOrdersPerSlot = document.getElementById('limit-orders-toggle')?.checked ?? false;
+        let maxOrdersPerSlot = parseInt(document.getElementById('max-orders-per-slot')?.value, 10);
+        if (!Number.isFinite(maxOrdersPerSlot) || maxOrdersPerSlot < 1) {
+            maxOrdersPerSlot = limitOrdersPerSlot ? 4 : null;
+        }
+        if (!limitOrdersPerSlot) {
+            maxOrdersPerSlot = null;
+        }
+
         return {
             schedules: validEntries.map(e => ({ days: e.days, open: e.open, close: e.close })),
             slot_duration: parseInt(document.getElementById('slot-duration').value) || 2,
@@ -6762,7 +6833,9 @@
             delivery_cutoff: deliveryCutoff || null,
             order_cutoff: orderCutoff || null,
             lead_time_hours: leadTimeHours,
-            allow_same_day: allowSameDay
+            allow_same_day: allowSameDay,
+            limit_orders_per_slot: limitOrdersPerSlot,
+            max_orders_per_slot: maxOrdersPerSlot
         };
     }
 
@@ -7089,6 +7162,14 @@
                     sumSameDay.innerHTML = '<span style="color: var(--terracotta); font-weight: 600;"><i class="ri-close-circle-line"></i> Disabled (Next-day & advance pre-orders only)</span>';
                 } else {
                     sumSameDay.innerHTML = '<span style="color: var(--deep-sage); font-weight: 600;"><i class="ri-checkbox-circle-line"></i> Enabled</span>';
+                }
+            }
+            const sumOrderLimit = document.getElementById('sum-order-limit');
+            if (sumOrderLimit) {
+                if (scheduleData && scheduleData.limit_orders_per_slot && scheduleData.max_orders_per_slot) {
+                    sumOrderLimit.innerHTML = `<span style="color: var(--deep-sage); font-weight: 600;"><i class="ri-shield-check-line"></i> Max ${scheduleData.max_orders_per_slot} orders / window</span>`;
+                } else {
+                    sumOrderLimit.innerHTML = '<span style="color: var(--muted);"><i class="ri-infinity-line"></i> Unlimited</span>';
                 }
             }
 

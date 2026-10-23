@@ -5871,6 +5871,9 @@ function buildTimeOptions() {
         if (reason === 'slots_passed') {
             return '<p class="time-slot-notice" style="color: var(--terracotta);"><i class="ri-time-line"></i> All delivery slots for today have passed. Please select another date.</p>';
         }
+        if (reason === 'slots_full') {
+            return '<p class="time-slot-notice" style="color: var(--terracotta);"><i class="ri-calendar-close-line"></i> All delivery windows for this date are fully booked. Please select another date.</p>';
+        }
         if (reason === 'closed') {
             return '<p class="time-slot-notice" style="color: var(--terracotta);"><i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.</p>';
         }
@@ -5890,9 +5893,17 @@ function buildTimeOptions() {
         const div = document.createElement('div');
         div.className = 'time-option';
         div.dataset.time = slot.value;
-        div.innerHTML = `<i class="ri-time-line"></i> ${slot.label}`;
-        if (!firstAvailable) firstAvailable = div;
-        div.addEventListener('click', () => selectTime(div));
+        if (slot.is_full) {
+            div.classList.add('disabled', 'is-full');
+            div.style.opacity = '0.45';
+            div.style.cursor = 'not-allowed';
+            div.style.pointerEvents = 'none';
+            div.innerHTML = `<i class="ri-close-circle-line"></i> ${slot.label}`;
+        } else {
+            div.innerHTML = `<i class="ri-time-line"></i> ${slot.label}`;
+            if (!firstAvailable) firstAvailable = div;
+            div.addEventListener('click', () => selectTime(div));
+        }
         container.appendChild(div);
     });
 

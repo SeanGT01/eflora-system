@@ -4,6 +4,7 @@ All "now / today" checks use Asia/Manila so Railway UTC does not shift
 weekdays or hide/show slots incorrectly.
 """
 from datetime import datetime, date, timedelta
+import re
 
 import pytz
 
@@ -11,6 +12,7 @@ PHT = pytz.timezone('Asia/Manila')
 DEFAULT_LEAD_TIME_HOURS = 1
 MAX_LEAD_TIME_HOURS = 12
 MAX_BOOKING_DAYS = 14
+DEFAULT_MAX_ORDERS_PER_SLOT = 4
 
 
 def now_pht():
@@ -26,6 +28,13 @@ def as_date(value):
         return None
     if isinstance(value, datetime):
         return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value.strip(), '%Y-%m-%d').date()
+        except Exception:
+            return None
     return value
 
 
@@ -56,6 +65,37 @@ def format_hhmm_value(value):
     if not parsed:
         return None
     return format_hhmm_label(*parsed)
+
+
+def normalize_slot_key(val):
+    """Normalize any 12h or 24h slot string to canonical HH:MM-HH:MM format for matching."""
+    if not val:
+        return None
+    raw = str(val).strip()
+    m24 = re.match(r"^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$", raw)
+    if m24:
+        h1, m1, h2, m2 = int(m24.group(1)), int(m24.group(2)), int(m24.group(3)), int(m24.group(4))
+        return f"{h1:02d}:{m1:02d}-{h2:02d}:{m2:02d}"
+    m12 = re.match(
+        r"^(\d{1,2}):(\d{2})\s*([AaPp][Mm])\s*-\s*(\d{1,2}):(\d{2})\s*([AaPp][Mm])$",
+        raw,
+    )
+    if m12:
+        try:
+            h1, m1, p1 = int(m12.group(1)), int(m12.group(2)), m12.group(3).upper()
+            h2, m2, p2 = int(m12.group(4)), int(m12.group(5)), m12.group(6).upper()
+            if p1 == 'PM' and h1 != 12:
+                h1 += 12
+            elif p1 == 'AM' and h1 == 12:
+                h1 = 0
+            if p2 == 'PM' and h2 != 12:
+                h2 += 12
+            elif p2 == 'AM' and h2 == 12:
+                h2 = 0
+            return f"{h1:02d}:{m1:02d}-{h2:02d}:{m2:02d}"
+        except Exception:
+            return None
+    return raw
 
 
 def format_store_hours_parts(schedule):
@@ -160,6 +200,25 @@ def sanitize_store_schedule(payload):
     else:
         allow_same_day = bool(allow_same_day)
 
+    limit_orders_raw = payload.get('limit_orders_per_slot')
+    max_orders_raw = payload.get('max_orders_per_slot')
+    parsed_max_orders = None
+    if max_orders_raw is not None and str(max_orders_raw).strip() != '':
+        try:
+            parsed_max_orders = max(1, min(100, int(max_orders_raw)))
+        except (TypeError, ValueError):
+            parsed_max_orders = None
+
+    if limit_orders_raw is None:
+        limit_orders_bool = parsed_max_orders is not None
+    else:
+        limit_orders_bool = bool(limit_orders_raw)
+
+    if limit_orders_bool and parsed_max_orders is None:
+        parsed_max_orders = DEFAULT_MAX_ORDERS_PER_SLOT
+    elif not limit_orders_bool:
+        parsed_max_orders = None
+
     if (delivery_start and not delivery_cutoff) or (delivery_cutoff and not delivery_start):
         delivery_start = delivery_cutoff = None
     if delivery_start and delivery_cutoff and delivery_start >= delivery_cutoff:
@@ -178,6 +237,8 @@ def sanitize_store_schedule(payload):
         ),
         'lead_time_hours': lead_hours,
         'allow_same_day': allow_same_day,
+        'limit_orders_per_slot': limit_orders_bool,
+        'max_orders_per_slot': parsed_max_orders,
     }
 
 
@@ -298,11 +359,47 @@ def _iter_raw_slots(schedule, target_date):
     return slots, day_name, slot_duration
 
 
-def _slot_payload(start_h, start_m, end_h, end_m):
+def _slot_payload(start_h, start_m, end_h, end_m, is_full=False, booked_count=0, max_orders=None):
+    raw_label = f'{format_hhmm_label(start_h, start_m)} - {format_hhmm_label(end_h, end_m)}'
     return {
-        'label': f'{format_hhmm_label(start_h, start_m)} - {format_hhmm_label(end_h, end_m)}',
+        'label': f'{raw_label} (Fully Booked)' if is_full else raw_label,
+        'raw_label': raw_label,
         'value': f'{start_h:02d}:{start_m:02d}-{end_h:02d}:{end_m:02d}',
+        'is_full': is_full,
+        'booked_count': booked_count,
+        'max_orders': max_orders,
     }
+
+
+def _get_slot_order_counts(store_id, target_date):
+    """Return dict of {canonical_slot_value: count} of active (uncancelled) orders."""
+    counts = {}
+    if not store_id or not target_date:
+        return counts
+    try:
+        from app.models import Order
+        from sqlalchemy import func
+        rows = (
+            Order.query.with_entities(
+                Order.requested_delivery_time,
+                func.count(Order.id)
+            )
+            .filter(
+                Order.store_id == store_id,
+                Order.requested_delivery_date == target_date,
+                Order.status != 'cancelled',
+                Order.requested_delivery_time.isnot(None)
+            )
+            .group_by(Order.requested_delivery_time)
+            .all()
+        )
+        for raw_val, cnt in rows:
+            norm = normalize_slot_key(raw_val)
+            if norm:
+                counts[norm] = counts.get(norm, 0) + cnt
+    except Exception:
+        pass
+    return counts
 
 
 def build_store_time_slots(store, target_date=None):
@@ -318,6 +415,12 @@ def build_store_time_slots(store, target_date=None):
     delivery_cutoff = schedule.get('delivery_cutoff')
     open_days = open_days_from_schedule(schedule)
     configured = bool(schedule.get('schedules'))
+    limit_orders_enabled = bool(schedule.get('limit_orders_per_slot'))
+    max_orders_per_slot = schedule.get('max_orders_per_slot')
+    try:
+        max_orders_per_slot = int(max_orders_per_slot) if max_orders_per_slot is not None else None
+    except (TypeError, ValueError):
+        max_orders_per_slot = None
 
     result = {
         'success': True,
@@ -332,6 +435,8 @@ def build_store_time_slots(store, target_date=None):
         'order_cutoff': schedule.get('order_cutoff'),
         'lead_time_hours': lead_hours,
         'allow_same_day': bool(schedule.get('allow_same_day', True) if schedule.get('allow_same_day') is not None else True),
+        'limit_orders_per_slot': limit_orders_enabled,
+        'max_orders_per_slot': max_orders_per_slot,
         'block_reason': None,
     }
 
@@ -361,6 +466,10 @@ def build_store_time_slots(store, target_date=None):
             result['block_reason'] = 'order_cutoff'
             return result
 
+    slot_counts = {}
+    if limit_orders_enabled and max_orders_per_slot and getattr(store, 'id', None):
+        slot_counts = _get_slot_order_counts(store.id, target)
+
     earliest_start = now + timedelta(hours=lead_hours)
     bookable = []
     started_count = 0
@@ -373,7 +482,17 @@ def build_store_time_slots(store, target_date=None):
         if start_at < earliest_start:
             lead_blocked_count += 1
             continue
-        bookable.append(_slot_payload(start_h, start_m, end_h, end_m))
+        canonical_val = f'{start_h:02d}:{start_m:02d}-{end_h:02d}:{end_m:02d}'
+        booked = slot_counts.get(canonical_val, 0)
+        is_full = bool(limit_orders_enabled and max_orders_per_slot and booked >= max_orders_per_slot)
+        bookable.append(
+            _slot_payload(
+                start_h, start_m, end_h, end_m,
+                is_full=is_full,
+                booked_count=booked,
+                max_orders=max_orders_per_slot if limit_orders_enabled else None
+            )
+        )
 
     result['time_slots'] = bookable
     if not bookable:
@@ -383,11 +502,17 @@ def build_store_time_slots(store, target_date=None):
             result['block_reason'] = 'slots_passed'
         else:
             result['block_reason'] = 'closed'
+    elif limit_orders_enabled and max_orders_per_slot and all(s.get('is_full') for s in bookable):
+        result['block_reason'] = 'slots_full'
     return result
 
 
-def slot_values(result):
-    return [slot['value'] for slot in (result or {}).get('time_slots') or []]
+def slot_values(result, include_full=False):
+    return [
+        slot['value']
+        for slot in (result or {}).get('time_slots') or []
+        if include_full or not slot.get('is_full')
+    ]
 
 
 def validate_delivery_slot(store, requested_date, requested_time):
@@ -396,6 +521,8 @@ def validate_delivery_slot(store, requested_date, requested_time):
         return None
 
     target = as_date(requested_date)
+    if not target:
+        return 'Invalid delivery date provided.'
     today = today_pht()
     if target < today:
         return 'Selected delivery date has already passed.'
@@ -426,8 +553,19 @@ def validate_delivery_slot(store, requested_date, requested_time):
         )
     if reason == 'slots_passed':
         return f'All delivery slots for {store_name} have already passed. Please choose another date.'
+    if reason == 'slots_full':
+        return f'All delivery slots for {store_name} on the selected date are fully booked. Please choose another date.'
     if not result.get('is_open') or reason == 'closed':
         return f'{store_name} is closed on the selected date.'
+
+    target_slot = next((s for s in (result.get('time_slots') or []) if s.get('value') == requested_time), None)
+    if target_slot and target_slot.get('is_full'):
+        slot_label = target_slot.get('raw_label') or target_slot.get('label') or requested_time
+        return (
+            f'The selected delivery window ({slot_label}) is now fully booked for {store_name}. '
+            'Please select another delivery time slot or date.'
+        )
+
     if requested_time not in slots:
         return (
             f'Selected delivery time is no longer available for {store_name}. '

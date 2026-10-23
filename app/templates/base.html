@@ -4762,6 +4762,7 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                 if (code === 'order_cutoff') return '<i class="ri-time-line"></i> Same-day ordering is closed. Please choose another open day.';
                 if (code === 'lead_time') return '<i class="ri-time-line"></i> Remaining slots are inside the prep window. Please choose a later slot or another date.';
                 if (code === 'slots_passed') return '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another open day.';
+                if (code === 'slots_full') return '<i class="ri-calendar-close-line"></i> All delivery windows for this date are fully booked. Please choose another date.';
                 return '<i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.';
             };
 
@@ -4779,24 +4780,41 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
             if (data.time_slots && data.time_slots.length > 0) {
                 timeSelect.innerHTML = '';
                 let foundPreferred = false;
+                let bookableCount = 0;
                 data.time_slots.forEach(slot => {
                     const opt = document.createElement('option');
                     opt.value = slot.value;
                     opt.textContent = slot.label;
-                    if (slot.value === preferredTime) {
-                        opt.selected = true;
-                        foundPreferred = true;
+                    if (slot.is_full) {
+                        opt.disabled = true;
+                        opt.style.color = 'var(--muted)';
+                    } else {
+                        bookableCount++;
+                        if (slot.value === preferredTime) {
+                            opt.selected = true;
+                            foundPreferred = true;
+                        }
                     }
                     timeSelect.appendChild(opt);
                 });
                 if (!foundPreferred) {
-                    const firstAvail = [...timeSelect.options].find(o => o.value);
+                    const firstAvail = [...timeSelect.options].find(o => o.value && !o.disabled);
                     if (firstAvail) firstAvail.selected = true;
                 }
-                timeSelect.disabled = false;
-                if (closedMsg) closedMsg.style.display = 'none';
-                setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
-                return;
+                if (bookableCount > 0) {
+                    timeSelect.disabled = false;
+                    if (closedMsg) closedMsg.style.display = 'none';
+                    setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
+                    return;
+                } else {
+                    timeSelect.disabled = true;
+                    if (closedMsg) {
+                        closedMsg.style.display = 'block';
+                        closedMsg.innerHTML = reasonMessage(reason || 'slots_full');
+                    }
+                    setStoreDeliveryPreference(tempId, dateStr, '');
+                    return;
+                }
             }
 
             timeSelect.innerHTML = '<option value="">No slots</option>';

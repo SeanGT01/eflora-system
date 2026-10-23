@@ -4956,8 +4956,9 @@
                         data.block_reason === 'same_day_disabled' ? 'Same-day delivery is not offered by this store' :
                             (data.block_reason === 'order_cutoff' || data.block_reason === 'cutoff_passed') ? 'Order cutoff has passed for this day' :
                                 data.block_reason === 'slots_passed' ? 'All delivery slots for today have passed' :
-                                    data.block_reason === 'lead_time' ? 'Remaining slots are inside prep window' :
-                                        data.block_reason === 'no_schedule' ? 'Delivery hours not set' : 'No available slots';
+                                    data.block_reason === 'slots_full' ? 'All delivery windows are fully booked for this day' :
+                                        data.block_reason === 'lead_time' ? 'Remaining slots are inside prep window' :
+                                            data.block_reason === 'no_schedule' ? 'Delivery hours not set' : 'No available slots';
                     timeSelect.innerHTML = `<option value="">${reason}</option>`;
                     return;
                 }
@@ -4965,7 +4966,9 @@
                 timeSelect.innerHTML = rawSlots.map((slot, idx) => {
                     const val = typeof slot === 'object' && slot !== null ? (slot.value || slot.label || '') : slot;
                     const lbl = typeof slot === 'object' && slot !== null ? (slot.label || slot.value || '') : slot;
-                    return `<option value="${_esc(val)}" ${idx === 0 ? 'selected' : ''}>${_esc(lbl)}</option>`;
+                    const isFull = typeof slot === 'object' && slot !== null && slot.is_full;
+                    const disabledAttr = isFull ? 'disabled style="color: var(--muted);"' : '';
+                    return `<option value="${_esc(val)}" ${disabledAttr} ${idx === 0 && !isFull ? 'selected' : ''}>${_esc(lbl)}</option>`;
                 }).join('');
             } catch (err) {
                 console.error('Failed to fetch time slots:', err);

@@ -13,6 +13,9 @@ rider_bp = Blueprint('rider', __name__)
 # Customer confirmation moves delivered → completed; both count as fulfilled deliveries.
 _DELIVERED_STATUSES = ('delivered', 'completed')
 
+# Maximum simultaneous active deliveries per rider to prevent overload
+MAX_RIDER_ACTIVE_DELIVERIES = 2
+
 
 def rider_required(fn):
     @jwt_required()
@@ -235,9 +238,17 @@ def get_available_orders():
             # Location extraction failed, skip distance calculation
             pass
         
-        order_data.append(order_dict)
-    
-    return jsonify({'orders': order_data}), 200
+    active_deliveries_count = Order.query.filter_by(
+        rider_id=rider.id,
+        status='on_delivery'
+    ).count()
+
+    return jsonify({
+        'orders': order_data,
+        'active_deliveries_count': active_deliveries_count,
+        'max_active_deliveries': MAX_RIDER_ACTIVE_DELIVERIES,
+        'can_accept_more': active_deliveries_count < MAX_RIDER_ACTIVE_DELIVERIES
+    }), 200
 
 @rider_bp.route('/orders/<int:order_id>/accept', methods=['POST'])
 @rider_required
@@ -257,6 +268,16 @@ def accept_order(order_id):
 
     if getattr(order, 'fulfillment_type', '') == 'pickup':
         return jsonify({'error': 'Store pickup orders cannot be accepted by riders'}), 400
+
+    # Rider workload guardrail: limit simultaneous active deliveries
+    active_deliveries = Order.query.filter(
+        Order.rider_id == rider.id,
+        Order.status == 'on_delivery'
+    ).count()
+    if active_deliveries >= MAX_RIDER_ACTIVE_DELIVERIES:
+        return jsonify({
+            'error': f'Active delivery limit reached ({active_deliveries}/{MAX_RIDER_ACTIVE_DELIVERIES}). Please deliver your ongoing orders before accepting another.'
+        }), 400
     
     order.rider_id = rider.id
     order.set_status('on_delivery')
