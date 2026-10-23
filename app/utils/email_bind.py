@@ -24,7 +24,9 @@ from app.utils.otp_service import (
 )
 from app.utils.phone_utils import is_synthetic_account_email
 
-EMAIL_REGEX = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+EMAIL_REGEX = re.compile(
+    r'^[a-zA-Z0-9.!#$%&\'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$'
+)
 
 
 def email_bind_otp_key(user_id: int) -> str:
@@ -34,15 +36,31 @@ def email_bind_otp_key(user_id: int) -> str:
 
 def _validate_target_email(target_email_raw: str, current_user_id: int):
     """Validate email format and check for duplicates across existing users."""
-    if not target_email_raw:
+    if not target_email_raw or not str(target_email_raw).strip():
         return None, (jsonify({'success': False, 'error': 'Please enter a valid email address.'}), 400)
 
     clean_email = str(target_email_raw).strip().lower()
 
+    if len(clean_email) > 254 or '..' in clean_email or clean_email.endswith('.'):
+        return None, (jsonify({'success': False, 'error': 'Please enter a valid email address format (e.g. name@gmail.com).'}), 400)
+
     if not EMAIL_REGEX.match(clean_email):
         return None, (jsonify({'success': False, 'error': 'Please enter a valid email address format (e.g. name@gmail.com).'}), 400)
 
-    if is_synthetic_account_email(clean_email):
+    parts = clean_email.split('@')
+    if len(parts) != 2:
+        return None, (jsonify({'success': False, 'error': 'Please enter a valid email address format (e.g. name@gmail.com).'}), 400)
+
+    local_part, domain_part = parts
+    if len(local_part) > 64:
+        return None, (jsonify({'success': False, 'error': 'Email username is too long.'}), 400)
+
+    domain_parts = domain_part.split('.')
+    tld = domain_parts[-1]
+    if len(tld) < 2 or not tld.isalpha():
+        return None, (jsonify({'success': False, 'error': 'Please enter a valid email domain (e.g. name@gmail.com).'}), 400)
+
+    if is_synthetic_account_email(clean_email) or clean_email.endswith('@eflora.internal') or 'otp.eflora.internal' in clean_email:
         return None, (jsonify({'success': False, 'error': 'Invalid email address. Please use a real email like Gmail.'}), 400)
 
     # Check if this email is already registered to another account

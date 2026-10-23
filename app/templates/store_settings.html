@@ -9776,7 +9776,18 @@
         document.body.style.overflow = 'hidden';
         backToEmailBindStep1();
         const input = document.getElementById('targetEmailInput');
-        if (input) setTimeout(() => input.focus(), 150);
+        if (input) {
+            input.style.borderColor = '';
+            if (!input.dataset.hasEmailBindListener) {
+                input.dataset.hasEmailBindListener = 'true';
+                input.addEventListener('input', () => {
+                    input.style.borderColor = '';
+                    const err = document.getElementById('emailBindStep1Error');
+                    if (err) { err.style.display = 'none'; err.textContent = ''; }
+                });
+            }
+            setTimeout(() => input.focus(), 150);
+        }
     }
 
     function closeEmailBindModal() {
@@ -9805,6 +9816,52 @@
         if (step3) step3.style.display = 'none';
         const err = document.getElementById('emailBindStep1Error');
         if (err) { err.style.display = 'none'; err.textContent = ''; }
+        const input = document.getElementById('targetEmailInput');
+        if (input) input.style.borderColor = '';
+    }
+
+    function validateSellerEmailFormat(email) {
+        if (!email || typeof email !== 'string') {
+            return { valid: false, message: 'Please enter your email address.' };
+        }
+        const clean = email.trim();
+        if (!clean) {
+            return { valid: false, message: 'Please enter your email address.' };
+        }
+        if (clean.length > 254) {
+            return { valid: false, message: 'Email address is too long.' };
+        }
+        
+        // Disallow spaces, consecutive dots, or trailing dots
+        if (clean.includes(' ') || clean.includes('..') || clean.endsWith('.')) {
+            return { valid: false, message: 'Please enter a valid email address format (e.g. name@gmail.com).' };
+        }
+
+        const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+        if (!emailRegex.test(clean)) {
+            return { valid: false, message: 'Please enter a valid email address format (e.g. name@gmail.com).' };
+        }
+        
+        const parts = clean.split('@');
+        if (parts.length !== 2) {
+            return { valid: false, message: 'Please enter a valid email address format (e.g. name@gmail.com).' };
+        }
+        const local = parts[0];
+        const domain = parts[1];
+        if (local.length > 64) {
+            return { valid: false, message: 'Email username is too long.' };
+        }
+        const domainParts = domain.split('.');
+        const tld = domainParts[domainParts.length - 1];
+        if (!tld || tld.length < 2 || !/^[a-zA-Z]+$/.test(tld)) {
+            return { valid: false, message: 'Please enter a valid email domain (e.g. name@gmail.com).' };
+        }
+        
+        if (clean.toLowerCase().endsWith('@eflora.internal') || clean.toLowerCase().includes('otp.eflora.internal')) {
+            return { valid: false, message: 'Please use a real email address such as Gmail.' };
+        }
+
+        return { valid: true, email: clean };
     }
 
     function setEmailBindCooldown(seconds) {
@@ -9839,17 +9896,31 @@
         if (!input || !btn) return;
 
         const emailVal = (input.value || '').trim();
-        if (!emailVal) return;
+        const validation = validateSellerEmailFormat(emailVal);
+        if (!validation.valid) {
+            if (errEl) {
+                errEl.textContent = validation.message;
+                errEl.style.display = 'block';
+            }
+            input.focus();
+            input.style.borderColor = '#c0392b';
+            return;
+        }
+
+        input.style.borderColor = '';
+        if (errEl) {
+            errEl.style.display = 'none';
+            errEl.textContent = '';
+        }
 
         btn.disabled = true;
         btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Sending code...';
-        if (errEl) errEl.style.display = 'none';
 
         try {
             const res = await fetch('/api/seller/email/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: emailVal })
+                body: JSON.stringify({ email: validation.email })
             });
             const data = await res.json();
 
@@ -9860,6 +9931,8 @@
                 }
                 btn.disabled = false;
                 btn.innerHTML = '<i class="ri-send-plane-fill"></i> Send 6-Digit Code';
+                input.focus();
+                input.style.borderColor = '#c0392b';
                 return;
             }
 
