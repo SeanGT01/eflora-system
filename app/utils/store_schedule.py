@@ -98,6 +98,26 @@ def normalize_slot_key(val):
     return raw
 
 
+def parse_slot_interval_minutes(val):
+    """
+    Parse any slot string (e.g. '16:00-18:00' or '4:00 PM - 6:00 PM')
+    into (start_minutes, end_minutes) from midnight (0..1440).
+    Returns (start_min, end_min) or None if cannot parse.
+    """
+    norm = normalize_slot_key(val)
+    if not norm:
+        return None
+    m = re.match(r"^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$", norm)
+    if not m:
+        return None
+    h1, m1, h2, m2 = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+    start_min = h1 * 60 + m1
+    end_min = h2 * 60 + m2
+    if start_min >= end_min:
+        return None
+    return start_min, end_min
+
+
 def format_store_hours_parts(schedule):
     """Labeled 12-hour PH store-open vs delivery window for dashboard Store Info."""
     schedule = schedule or {}
@@ -315,7 +335,7 @@ def _clip_range(open_h, open_m, close_h, close_m, delivery_start, delivery_cutof
     return open_h, open_m, close_h, close_m
 
 
-def _iter_raw_slots(schedule, target_date):
+def _iter_raw_slots(schedule, target_date, fulfillment_type='delivery'):
     day_name = datetime(target_date.year, target_date.month, target_date.day).strftime('%A').lower()
     try:
         slot_duration = int(schedule.get('slot_duration') or 2)
@@ -324,6 +344,7 @@ def _iter_raw_slots(schedule, target_date):
     slot_duration = max(1, min(12, slot_duration))
     delivery_start = parse_hhmm(schedule.get('delivery_start'))
     delivery_cutoff = parse_hhmm(schedule.get('delivery_cutoff'))
+    is_pickup = str(fulfillment_type or '').strip().lower() == 'pickup'
 
     slots = []
     for entry in schedule.get('schedules') or []:
@@ -334,14 +355,21 @@ def _iter_raw_slots(schedule, target_date):
         close_parsed = parse_hhmm(entry.get('close'))
         if not open_parsed or not close_parsed:
             continue
-        clipped = _clip_range(
-            open_parsed[0], open_parsed[1],
-            close_parsed[0], close_parsed[1],
-            delivery_start, delivery_cutoff,
-        )
-        if not clipped:
-            continue
-        open_h, open_m, close_h, close_m = clipped
+        if is_pickup:
+            # Pickup follows full physical store operating hours
+            if open_parsed >= close_parsed:
+                continue
+            open_h, open_m = open_parsed
+            close_h, close_m = close_parsed
+        else:
+            clipped = _clip_range(
+                open_parsed[0], open_parsed[1],
+                close_parsed[0], close_parsed[1],
+                delivery_start, delivery_cutoff,
+            )
+            if not clipped:
+                continue
+            open_h, open_m, close_h, close_m = clipped
         current_h, current_m = open_h, open_m
         while True:
             end_h = current_h + slot_duration
@@ -402,13 +430,87 @@ def _get_slot_order_counts(store_id, target_date):
     return counts
 
 
-def build_store_time_slots(store, target_date=None):
+def _get_active_order_intervals(store_id, target_date):
+    """
+    Return list of tuples for active (uncancelled) orders on target_date:
+    [(start_minutes, end_minutes, count, raw_str), ...]
+    """
+    intervals = []
+    if not store_id or not target_date:
+        return intervals
+    try:
+        from app.models import Order
+        from sqlalchemy import func
+        rows = (
+            Order.query.with_entities(
+                Order.requested_delivery_time,
+                func.count(Order.id)
+            )
+            .filter(
+                Order.store_id == store_id,
+                Order.requested_delivery_date == target_date,
+                Order.status != 'cancelled',
+                Order.requested_delivery_time.isnot(None)
+            )
+            .group_by(Order.requested_delivery_time)
+            .all()
+        )
+        for raw_val, cnt in rows:
+            interval = parse_slot_interval_minutes(raw_val)
+            if interval:
+                intervals.append((interval[0], interval[1], cnt, raw_val))
+            else:
+                intervals.append((None, None, cnt, raw_val))
+    except Exception:
+        pass
+    return intervals
+
+
+def _compute_slot_booked_count(start_min, end_min, canonical_val, order_intervals):
+    """
+    Compute peak concurrent order count during [start_min, end_min].
+    Accounts for time-interval overlaps across all active orders (both pickup & delivery).
+    """
+    if not order_intervals:
+        return 0
+
+    overlapping = []
+    fallback_exact_count = 0
+    for o_start, o_end, cnt, raw_val in order_intervals:
+        if o_start is not None and o_end is not None:
+            # Overlap condition: start1 < end2 and end1 > start2
+            if start_min < o_end and end_min > o_start:
+                overlapping.append((max(start_min, o_start), min(end_min, o_end), cnt))
+        else:
+            norm_raw = normalize_slot_key(raw_val)
+            if norm_raw == canonical_val or raw_val == canonical_val:
+                fallback_exact_count += cnt
+
+    if not overlapping:
+        return fallback_exact_count
+
+    # Check concurrent order count at all critical sub-interval start points inside [start_min, end_min]
+    check_points = set()
+    for s_sub, e_sub, _ in overlapping:
+        check_points.add(s_sub)
+
+    peak = 0
+    for pt in check_points:
+        concurrent = sum(cnt for s_sub, e_sub, cnt in overlapping if s_sub <= pt < e_sub)
+        if concurrent > peak:
+            peak = concurrent
+
+    return peak + fallback_exact_count
+
+
+def build_store_time_slots(store, target_date=None, fulfillment_type='delivery'):
     """Return bookable slots for a calendar date in Philippine time."""
     schedule = (getattr(store, 'store_schedule', None) or {}) if store else {}
     target = as_date(target_date) or today_pht()
     now = now_pht()
     today = now.date()
     is_today = target == today
+    is_pickup = str(fulfillment_type or '').strip().lower() == 'pickup'
     lead_hours = _lead_time_hours(schedule)
     order_cutoff = parse_hhmm(schedule.get('order_cutoff'))
     delivery_start = schedule.get('delivery_start')
@@ -437,6 +539,7 @@ def build_store_time_slots(store, target_date=None):
         'allow_same_day': bool(schedule.get('allow_same_day', True) if schedule.get('allow_same_day') is not None else True),
         'limit_orders_per_slot': limit_orders_enabled,
         'max_orders_per_slot': max_orders_per_slot,
+        'fulfillment_type': 'pickup' if is_pickup else 'delivery',
         'block_reason': None,
     }
 
@@ -444,7 +547,7 @@ def build_store_time_slots(store, target_date=None):
         result['block_reason'] = 'no_schedule'
         return result
 
-    raw_slots, day_name, slot_duration = _iter_raw_slots(schedule, target)
+    raw_slots, day_name, slot_duration = _iter_raw_slots(schedule, target, fulfillment_type=fulfillment_type)
     result['day'] = day_name
     result['slot_duration'] = slot_duration
 
@@ -454,21 +557,25 @@ def build_store_time_slots(store, target_date=None):
 
     result['is_open'] = True
 
-    if is_today and not result['allow_same_day']:
-        result['time_slots'] = []
-        result['block_reason'] = 'same_day_disabled'
-        return result
-
-    if is_today and order_cutoff:
-        cutoff_at = _combine_pht(today, order_cutoff[0], order_cutoff[1])
-        if now >= cutoff_at:
+    # Same-day delivery lock & order cutoff apply ONLY to delivery orders.
+    # Pickup orders follow physical store hours and allow same-day ordering
+    # as long as the store is open and can fulfill within lead_time_hours.
+    if not is_pickup:
+        if is_today and not result['allow_same_day']:
             result['time_slots'] = []
-            result['block_reason'] = 'order_cutoff'
+            result['block_reason'] = 'same_day_disabled'
             return result
 
-    slot_counts = {}
+        if is_today and order_cutoff:
+            cutoff_at = _combine_pht(today, order_cutoff[0], order_cutoff[1])
+            if now >= cutoff_at:
+                result['time_slots'] = []
+                result['block_reason'] = 'order_cutoff'
+                return result
+
+    order_intervals = []
     if limit_orders_enabled and max_orders_per_slot and getattr(store, 'id', None):
-        slot_counts = _get_slot_order_counts(store.id, target)
+        order_intervals = _get_active_order_intervals(store.id, target)
 
     earliest_start = now + timedelta(hours=lead_hours)
     bookable = []
@@ -482,8 +589,10 @@ def build_store_time_slots(store, target_date=None):
         if start_at < earliest_start:
             lead_blocked_count += 1
             continue
+        start_min = start_h * 60 + start_m
+        end_min = end_h * 60 + end_m
         canonical_val = f'{start_h:02d}:{start_m:02d}-{end_h:02d}:{end_m:02d}'
-        booked = slot_counts.get(canonical_val, 0)
+        booked = _compute_slot_booked_count(start_min, end_min, canonical_val, order_intervals)
         is_full = bool(limit_orders_enabled and max_orders_per_slot and booked >= max_orders_per_slot)
         bookable.append(
             _slot_payload(
@@ -515,27 +624,36 @@ def slot_values(result, include_full=False):
     ]
 
 
-def validate_delivery_slot(store, requested_date, requested_time):
+def validate_delivery_slot(store, requested_date, requested_time, fulfillment_type='delivery'):
     """Return an error string if the slot cannot be booked, else None."""
     if not requested_date or not requested_time:
         return None
 
+    is_pickup = str(fulfillment_type or '').strip().lower() == 'pickup'
     target = as_date(requested_date)
     if not target:
-        return 'Invalid delivery date provided.'
+        return 'Invalid pickup date provided.' if is_pickup else 'Invalid delivery date provided.'
     today = today_pht()
     if target < today:
-        return 'Selected delivery date has already passed.'
+        return 'Selected pickup date has already passed.' if is_pickup else 'Selected delivery date has already passed.'
     if target > today + timedelta(days=MAX_BOOKING_DAYS):
-        return 'Selected delivery date must be within 14 days from today.'
+        return (
+            'Selected pickup date must be within 14 days from today.'
+            if is_pickup else
+            'Selected delivery date must be within 14 days from today.'
+        )
 
-    result = build_store_time_slots(store, target)
+    result = build_store_time_slots(store, target, fulfillment_type=fulfillment_type)
     store_name = getattr(store, 'name', None) or 'This store'
     reason = result.get('block_reason')
     slots = slot_values(result)
 
     if not result.get('has_schedule'):
-        return f'{store_name} has not configured delivery hours yet.'
+        return (
+            f'{store_name} has not configured operating hours yet.'
+            if is_pickup else
+            f'{store_name} has not configured delivery hours yet.'
+        )
     if reason == 'same_day_disabled':
         return f'{store_name} does not offer same-day delivery. Please choose another delivery date.'
     if reason == 'order_cutoff':
@@ -548,26 +666,48 @@ def validate_delivery_slot(store, requested_date, requested_time):
         hours = result.get('lead_time_hours') or DEFAULT_LEAD_TIME_HOURS
         unit = 'hour' if hours == 1 else 'hours'
         return (
+            f'Please book at least {hours} {unit} in advance for pickup at {store_name}. '
+            'Choose a later pickup slot or another date.'
+            if is_pickup else
             f'Please book at least {hours} {unit} in advance for {store_name}. '
             'Choose a later slot or another date.'
         )
     if reason == 'slots_passed':
-        return f'All delivery slots for {store_name} have already passed. Please choose another date.'
+        return (
+            f'All pickup slots for {store_name} have already passed. Please choose another date.'
+            if is_pickup else
+            f'All delivery slots for {store_name} have already passed. Please choose another date.'
+        )
     if reason == 'slots_full':
-        return f'All delivery slots for {store_name} on the selected date are fully booked. Please choose another date.'
+        return (
+            f'All pickup slots for {store_name} on the selected date are fully booked. Please choose another date.'
+            if is_pickup else
+            f'All delivery slots for {store_name} on the selected date are fully booked. Please choose another date.'
+        )
     if not result.get('is_open') or reason == 'closed':
         return f'{store_name} is closed on the selected date.'
 
-    target_slot = next((s for s in (result.get('time_slots') or []) if s.get('value') == requested_time), None)
+    norm_req = normalize_slot_key(requested_time) or str(requested_time).strip()
+    target_slot = next(
+        (s for s in (result.get('time_slots') or [])
+         if s.get('value') == norm_req or s.get('value') == requested_time or s.get('raw_label') == requested_time),
+        None
+    )
     if target_slot and target_slot.get('is_full'):
         slot_label = target_slot.get('raw_label') or target_slot.get('label') or requested_time
         return (
+            f'The selected pickup window ({slot_label}) is now fully booked for {store_name}. '
+            'Please select another pickup time slot or date.'
+            if is_pickup else
             f'The selected delivery window ({slot_label}) is now fully booked for {store_name}. '
             'Please select another delivery time slot or date.'
         )
 
-    if requested_time not in slots:
+    if norm_req not in slots and requested_time not in slots:
         return (
+            f'Selected pickup time is no longer available for {store_name}. '
+            'It may have passed or is inside the prep window.'
+            if is_pickup else
             f'Selected delivery time is no longer available for {store_name}. '
             'It may have passed or is inside the prep window.'
         )

@@ -181,6 +181,23 @@ def _store_allows_gcash(store_id):
     return _store_payment_flags(store_id)[0]
 
 
+def _store_allows_pickup(store):
+    """
+    Store allows in-store pickup only if:
+    1. store.allow_pickup is True (seller enabled in-store pickup in store settings).
+    2. At least one pickup payment method is available:
+       - GCash (has QR code image uploaded and allow_gcash != False)
+       - Cash on Pickup (COP, allow_cop == True)
+    If both GCash and Cash on Pickup are disabled, in-store pickup cannot be completed.
+    """
+    if not store:
+        return False
+    if not bool(getattr(store, "allow_pickup", True)):
+        return False
+    allow_gcash, _cod, allow_cop = _store_payment_flags(store.id)
+    return bool(allow_gcash or allow_cop)
+
+
 def _free_delivery_fields(store, subtotal, delivery_fee):
     """Checkout payload fields for free-delivery min / applied state."""
     enabled = bool(getattr(store, 'free_delivery_enabled', True))
@@ -589,9 +606,9 @@ def _generate_store_time_slots_for_date(store, target_date):
     return slot_values(build_store_time_slots(store, target_date))
 
 
-def _validate_requested_delivery_slot(store, requested_delivery_date, requested_delivery_time):
+def _validate_requested_delivery_slot(store, requested_delivery_date, requested_delivery_time, fulfillment_type='delivery'):
     """
-    Validate requested slot against store schedule, delivery window, cutoff, and lead time.
+    Validate requested slot against store schedule, delivery/pickup window, cutoff, and lead time.
     Returns None if valid/skip; otherwise returns error message.
     """
     from app.utils.store_schedule import validate_delivery_slot
@@ -601,9 +618,10 @@ def _validate_requested_delivery_slot(store, requested_delivery_date, requested_
 
     normalized_slot = _normalize_requested_delivery_time(requested_delivery_time)
     if not normalized_slot:
-        return "Invalid delivery time format."
+        is_pickup = str(fulfillment_type or '').strip().lower() == 'pickup'
+        return "Invalid pickup time format." if is_pickup else "Invalid delivery time format."
 
-    return validate_delivery_slot(store, requested_delivery_date, normalized_slot)
+    return validate_delivery_slot(store, requested_delivery_date, normalized_slot, fulfillment_type=fulfillment_type)
 
 
 def _normalize_requested_delivery_time(value):
@@ -1134,12 +1152,19 @@ def validate_checkout():
                     "addons_total": float(addons_sum),
                 })
 
+            can_pickup = _store_allows_pickup(store)
             if fulfillment_type == "pickup":
-                if not bool(getattr(store, "allow_pickup", True)):
+                if not can_pickup:
+                    has_pickup_setting = bool(getattr(store, "allow_pickup", True))
+                    reason = (
+                        "This store does not offer in-store pickup."
+                        if not has_pickup_setting
+                        else f"In-store pickup is currently unavailable for {store.name} because no pickup payment methods (GCash or Cash on Pickup) are active."
+                    )
                     undeliverable_stores.append({
                         "store_id": store.id,
                         "store_name": store.name,
-                        "reason": "This store does not offer in-store pickup.",
+                        "reason": reason,
                         "distance_km": None,
                     })
                 else:
@@ -1157,7 +1182,7 @@ def validate_checkout():
                         "allow_cod": False,
                         "allow_cop": _store_allows_cop(store.id),
                         "allow_gcash": _store_allows_gcash(store.id),
-                        "allow_pickup": bool(getattr(store, "allow_pickup", True)),
+                        "allow_pickup": can_pickup,
                         "fulfillment_type": "pickup",
                         "store_address": store.usable_address or store.address,
                         "store_phone": store.contact_number or "",
@@ -1190,7 +1215,7 @@ def validate_checkout():
                         "allow_cod": _store_allows_cod(store.id),
                         "allow_cop": _store_allows_cop(store.id),
                         "allow_gcash": _store_allows_gcash(store.id),
-                        "allow_pickup": bool(getattr(store, "allow_pickup", True)),
+                        "allow_pickup": can_pickup,
                         "fulfillment_type": "delivery",
                         "store_address": store.usable_address or store.address,
                         "store_phone": store.contact_number or "",
@@ -1436,8 +1461,8 @@ def create_orders():
             if order_fulfillment not in {"delivery", "pickup"}:
                 order_fulfillment = "delivery"
 
-            if order_fulfillment == "pickup" and not bool(getattr(store, "allow_pickup", True)):
-                return jsonify({"error": f"{store.name} does not offer in-store pickup."}), 400
+            if order_fulfillment == "pickup" and not _store_allows_pickup(store):
+                return jsonify({"error": f"In-store pickup is not available for {store.name}"}), 400
 
             payment_method = str(order_data.get("payment_method") or "gcash").strip().lower()
             if payment_method not in {"gcash", "cod", "cop"}:
@@ -1477,6 +1502,7 @@ def create_orders():
                 store,
                 order_delivery_date,
                 order_delivery_time,
+                fulfillment_type=order_fulfillment,
             )
             if slot_error:
                 return jsonify({"error": slot_error}), 400
@@ -1979,6 +2005,7 @@ def process_checkout():
                 store,
                 requested_delivery_date_obj,
                 requested_delivery_time,
+                fulfillment_type=data.get('fulfillment_type', 'delivery'),
             )
             if slot_error:
                 return jsonify({"error": slot_error}), 400
@@ -2319,14 +2346,16 @@ def buy_now_validate():
         if not store:
             return jsonify({"error": "Store not found"}), 404
 
-        if fulfillment_type == "pickup" and not bool(getattr(store, "allow_pickup", True)):
+        if fulfillment_type == "pickup" and not _store_allows_pickup(store):
+            has_pickup_setting = bool(getattr(store, "allow_pickup", True))
+            reason = "This store does not offer in-store pickup." if not has_pickup_setting else f"In-store pickup is currently unavailable for {store.name} because no pickup payment methods (GCash or Cash on Pickup) are active."
             return jsonify({
                 "success": False,
                 "error": "Cannot fulfill via in-store pickup.",
                 "undeliverable_stores": [{
                     "store_id": store.id,
                     "store_name": store.name,
-                    "reason": "This store does not offer in-store pickup.",
+                    "reason": reason,
                     "distance_km": None,
                 }],
             }), 400
@@ -2451,7 +2480,7 @@ def buy_now_validate():
                 "allow_cod": _store_allows_cod(store.id) if fulfillment_type == "delivery" else False,
                 "allow_cop": _store_allows_cop(store.id),
                 "allow_gcash": _store_allows_gcash(store.id),
-                "allow_pickup": bool(getattr(store, "allow_pickup", True)),
+                "allow_pickup": _store_allows_pickup(store),
                 "fulfillment_type": fulfillment_type,
                 "store_address": store.usable_address or store.address,
                 "store_phone": store.contact_number or "",
@@ -2592,8 +2621,8 @@ def buy_now_create_order():
         if not store:
             return jsonify({"error": "Store not found"}), 404
 
-        if fulfillment_type == "pickup" and not bool(getattr(store, "allow_pickup", True)):
-            return jsonify({"error": "In-store pickup is not enabled for this store"}), 400
+        if fulfillment_type == "pickup" and not _store_allows_pickup(store):
+            return jsonify({"error": "In-store pickup is not available for this shop"}), 400
 
         if payment_method == "cop" and not _store_allows_cop(store.id):
             return jsonify({"error": "Cash on Pickup is not enabled for this store"}), 400
@@ -2662,6 +2691,7 @@ def buy_now_create_order():
             store,
             requested_delivery_date,
             requested_delivery_time,
+            fulfillment_type=fulfillment_type,
         )
         if slot_error:
             return jsonify({"error": slot_error}), 400
@@ -2831,7 +2861,7 @@ def buy_now_create_order():
         order_dict["allow_cod"] = _store_allows_cod(store.id) if fulfillment_type == "delivery" else False
         order_dict["allow_cop"] = _store_allows_cop(store.id)
         order_dict["allow_gcash"] = _store_allows_gcash(store.id)
-        order_dict["allow_pickup"] = bool(getattr(store, "allow_pickup", True))
+        order_dict["allow_pickup"] = _store_allows_pickup(store)
         order_dict["fulfillment_type"] = fulfillment_type
         order_dict["distance_km"] = round(distance, 2) if distance is not None else None
         order_dict["selected_address"] = address.to_dict() if address else None

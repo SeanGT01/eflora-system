@@ -250,6 +250,208 @@ def run_tests():
                 db.session.commit()
             print(" [PASS] Rider workload safeguard verified.")
 
+        print("\n=== TEST 5: Pickup vs Delivery Window & Cutoff Differentiation ===")
+        # Configure store with operating hours 08:00-20:00, delivery window 10:00-16:00, cutoff 14:00
+        test_store.store_schedule = {
+            'schedules': [{'days': ALL_DAYS, 'open': '08:00', 'close': '20:00'}],
+            'slot_duration': 2,
+            'delivery_start': '10:00',
+            'delivery_cutoff': '16:00',
+            'order_cutoff': '14:00',
+            'lead_time_hours': 1,
+            'allow_same_day': True,
+            'limit_orders_per_slot': True,
+            'max_orders_per_slot': 2,
+        }
+        db.session.commit()
+
+        # Step 5.1: Verify delivery slot window vs pickup slot window
+        delivery_slots = build_store_time_slots(test_store, future_date, fulfillment_type='delivery')
+        pickup_slots = build_store_time_slots(test_store, future_date, fulfillment_type='pickup')
+
+        deliv_values = [s['value'] for s in delivery_slots['time_slots']]
+        pickup_values = [s['value'] for s in pickup_slots['time_slots']]
+
+        print(f" Delivery slots (clipped to 10:00-16:00): {deliv_values}")
+        print(f" Pickup slots (full store hours 08:00-20:00): {pickup_values}")
+
+        assert '08:00-10:00' not in deliv_values, "Delivery slots must not include 08:00-10:00 (before delivery_start)"
+        assert '16:00-18:00' not in deliv_values, "Delivery slots must not include 16:00-18:00 (after delivery_cutoff)"
+        assert '08:00-10:00' in pickup_values, "Pickup slots must include 08:00-10:00 (store opening)"
+        assert '16:00-18:00' in pickup_values, "Pickup slots must include 16:00-18:00 (store operating hours)"
+        assert '18:00-20:00' in pickup_values, "Pickup slots must include 18:00-20:00 (until store close)"
+        print(" [PASS] Pickup slots use full store operating hours; delivery slots clipped to delivery window.")
+
+        # Step 5.2: Verify API endpoint returns fulfillment_type parameter
+        client = app.test_client()
+        res_deliv = client.get(f'/api/store/{test_store.id}/time-slots?date={future_date_str}&fulfillment_type=delivery')
+        data_deliv = res_deliv.get_json()
+        assert data_deliv['fulfillment_type'] == 'delivery'
+        assert len(data_deliv['time_slots']) == len(deliv_values)
+
+        res_pickup = client.get(f'/api/store/{test_store.id}/time-slots?date={future_date_str}&fulfillment_type=pickup')
+        data_pickup = res_pickup.get_json()
+        assert data_pickup['fulfillment_type'] == 'pickup'
+        assert len(data_pickup['time_slots']) == len(pickup_values)
+        print(" [PASS] Web & mobile API endpoints correctly accept and process fulfillment_type.")
+
+        # Step 5.3: Pickup slot capacity limiting
+        # Add 2 pickup orders to the 18:00-20:00 slot
+        pickup_slot_val = '18:00-20:00'
+        pickup_order1 = Order(
+            customer_id=cust.id if cust else 1,
+            store_id=test_store.id,
+            status='accepted',
+            total_amount=90.0,
+            requested_delivery_date=future_date,
+            requested_delivery_time=pickup_slot_val,
+            fulfillment_type='pickup'
+        )
+        pickup_order2 = Order(
+            customer_id=cust.id if cust else 1,
+            store_id=test_store.id,
+            status='preparing',
+            total_amount=110.0,
+            requested_delivery_date=future_date,
+            requested_delivery_time=pickup_slot_val,
+            fulfillment_type='pickup'
+        )
+        db.session.add(pickup_order1)
+        db.session.add(pickup_order2)
+        db.session.commit()
+
+        pickup_slots_check = build_store_time_slots(test_store, future_date, fulfillment_type='pickup')
+        slot_18_20 = [s for s in pickup_slots_check['time_slots'] if s['value'] == pickup_slot_val][0]
+        assert slot_18_20['is_full'] is True, "Pickup slot at capacity must be marked is_full=True"
+
+        # Validate delivery slot should reject with pickup wording
+        pickup_err = validate_delivery_slot(test_store, future_date_str, pickup_slot_val, fulfillment_type='pickup')
+        assert pickup_err is not None
+        assert 'pickup window' in pickup_err.lower() and 'fully booked' in pickup_err.lower(), f"Unexpected error: {pickup_err}"
+        print(f" [PASS] Pickup capacity validation blocks checkout when full: '{pickup_err}'")
+
+        # Cleanup
+        db.session.delete(pickup_order1)
+        db.session.delete(pickup_order2)
+        db.session.commit()
+
+        print("\n=== TEST 6: Pickup Payment Methods Safeguard ===")
+        from app.checkout_routes import _store_allows_pickup
+        from app.models import StorePaymentSetting, GCashQR
+
+        # Ensure payment setting exists
+        ps = StorePaymentSetting.query.filter_by(store_id=test_store.id).first()
+        if not ps:
+            ps = StorePaymentSetting(store_id=test_store.id, allow_cop=False, allow_cod=True, allow_gcash=True)
+            db.session.add(ps)
+            db.session.commit()
+
+        # Temporarily clear QR codes and disable COP
+        ps.allow_cop = False
+        ps.allow_gcash = True
+        test_store.allow_pickup = True
+        existing_qrs = list(test_store.gcash_qr_images)
+        for qr in existing_qrs:
+            db.session.delete(qr)
+        db.session.commit()
+
+        db.session.refresh(test_store)
+        assert _store_allows_pickup(test_store) is False, "Pickup must be False when no QR code and COP disabled"
+        assert test_store.can_accept_pickup() is False
+        assert test_store.to_dict()['allow_pickup'] is False
+        print(" [PASS] In-store pickup correctly disabled when no GCash QR and COP is disabled.")
+
+        # Enable COP
+        ps.allow_cop = True
+        db.session.commit()
+        db.session.refresh(test_store)
+        assert _store_allows_pickup(test_store) is True, "Pickup must be True when COP is enabled"
+        assert test_store.can_accept_pickup() is True
+        print(" [PASS] In-store pickup allowed when Cash on Pickup (COP) is enabled.")
+
+        # Disable allow_pickup at store level
+        test_store.allow_pickup = False
+        db.session.commit()
+        db.session.refresh(test_store)
+        assert _store_allows_pickup(test_store) is False, "Pickup must be False when allow_pickup is False"
+        print(" [PASS] In-store pickup disabled when store.allow_pickup is False.")
+
+        # Restore
+        test_store.allow_pickup = True
+        ps.allow_cop = False
+        # re-add dummy QR if needed or leave clean
+        dummy_qr = GCashQR(store_id=test_store.id, filename="dummy.png", public_id="dummy_qr", cloudinary_url="https://res.cloudinary.com/dummy.png")
+        db.session.add(dummy_qr)
+        db.session.commit()
+        db.session.refresh(test_store)
+        assert _store_allows_pickup(test_store) is True
+        # Cleanup dummy QR
+        db.session.delete(dummy_qr)
+        db.session.commit()
+
+        print("\n=== TEST 7: Time-Interval Overlap Detection (e.g. 4pm-6pm vs 5pm-6pm) ===")
+        from app.utils.store_schedule import parse_slot_interval_minutes, _compute_slot_booked_count, _get_active_order_intervals
+        
+        # Verify interval parsing
+        assert parse_slot_interval_minutes("16:00-18:00") == (960, 1080)
+        assert parse_slot_interval_minutes("4:00 PM - 6:00 PM") == (960, 1080)
+        assert parse_slot_interval_minutes("5:00 PM - 6:00 PM") == (1020, 1080)
+        print(" [PASS] parse_slot_interval_minutes correctly parses 12h and 24h slots into minutes.")
+
+        # Set store limit to 1 order per slot
+        test_store.store_schedule = {
+            'schedules': [{'days': ALL_DAYS, 'open': '08:00', 'close': '20:00'}],
+            'slot_duration': 1,  # 1-hour slots: 16:00-17:00, 17:00-18:00, 18:00-19:00
+            'limit_orders_per_slot': True,
+            'max_orders_per_slot': 1,
+            'allow_same_day': True,
+        }
+        db.session.commit()
+
+        # Add 1 order spanning 4:00 PM - 6:00 PM (16:00-18:00)
+        overlap_order = Order(
+            customer_id=cust.id if cust else 1,
+            store_id=test_store.id,
+            status='accepted',
+            total_amount=150.0,
+            requested_delivery_date=future_date,
+            requested_delivery_time='16:00-18:00',
+            fulfillment_type='pickup'
+        )
+        db.session.add(overlap_order)
+        db.session.commit()
+
+        try:
+            # When customer checks slots with 1-hour intervals:
+            slots_1h = build_store_time_slots(test_store, future_date, fulfillment_type='delivery')
+            slot_map = {s['value']: s for s in slots_1h['time_slots']}
+
+            # 16:00-17:00 (4pm-5pm) overlaps with 4pm-6pm -> MUST BE FULL
+            assert '16:00-17:00' in slot_map
+            assert slot_map['16:00-17:00']['is_full'] is True, "16:00-17:00 must be marked full due to 16:00-18:00 order"
+            assert slot_map['16:00-17:00']['booked_count'] == 1
+
+            # 17:00-18:00 (5pm-6pm) overlaps with 4pm-6pm -> MUST BE FULL
+            assert '17:00-18:00' in slot_map
+            assert slot_map['17:00-18:00']['is_full'] is True, "17:00-18:00 must be marked full due to 16:00-18:00 order"
+            assert slot_map['17:00-18:00']['booked_count'] == 1
+            print(" [PASS] Overlapping slots (16:00-17:00 and 17:00-18:00) correctly detected as fully booked!")
+
+            # 18:00-19:00 (6pm-7pm) does NOT overlap -> MUST BE OPEN
+            assert '18:00-19:00' in slot_map
+            assert slot_map['18:00-19:00']['is_full'] is False, "18:00-19:00 must be open"
+            assert slot_map['18:00-19:00']['booked_count'] == 0
+            print(" [PASS] Non-overlapping slot (18:00-19:00) remains open for orders.")
+
+            # Checkout validation must block 17:00-18:00
+            val_err = validate_delivery_slot(test_store, future_date_str, '17:00-18:00', fulfillment_type='delivery')
+            assert val_err is not None
+            assert 'fully booked' in val_err.lower(), f"Expected fully booked error, got: {val_err}"
+            print(f" [PASS] Checkout validation blocks overlapping order: '{val_err}'")
+        finally:
+            db.session.delete(overlap_order)
+            db.session.commit()
+
         print("\n==================================================")
         print(" ALL VERIFICATION TESTS PASSED SUCCESSFULLY!")
         print("==================================================")

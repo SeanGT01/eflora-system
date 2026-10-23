@@ -1804,6 +1804,7 @@ def get_store_time_slots(store_id):
         return jsonify({'error': 'Store not found'}), 404
 
     date_str = request.args.get('date')
+    fulfillment_type = request.args.get('fulfillment_type', 'delivery')
     target_date = None
     if date_str:
         try:
@@ -1811,7 +1812,7 @@ def get_store_time_slots(store_id):
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
-    return jsonify(build_store_time_slots(store, target_date))
+    return jsonify(build_store_time_slots(store, target_date, fulfillment_type=fulfillment_type))
 
 
 # ── Wishlist ─────────────────────────────────────────────────────────────────

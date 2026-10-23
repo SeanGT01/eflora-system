@@ -12189,7 +12189,7 @@ def get_cart():
                 'is_selected': item.is_selected,
                 'product': product_dict,  # Full product dict with all image data
                 'store_name': product.store.name if product.store else None,
-                'allow_pickup': bool(getattr(product.store, 'allow_pickup', True)) if product.store else True,
+                'allow_pickup': product.store.can_accept_pickup() if product.store else True,
                 'price': price,
                 'original_price': original_price,
                 'discount_pct': discount_pct,
@@ -13019,6 +13019,7 @@ def get_store_time_slots_web(store_id):
         return jsonify({'error': 'Store not found'}), 404
 
     date_str = request.args.get('date')
+    fulfillment_type = request.args.get('fulfillment_type', 'delivery')
     target_date = None
     if date_str:
         try:
@@ -13026,7 +13027,7 @@ def get_store_time_slots_web(store_id):
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
-    return jsonify(build_store_time_slots(store, target_date))
+    return jsonify(build_store_time_slots(store, target_date, fulfillment_type=fulfillment_type))
 
 
 @templates_bp.route('/seller/store-settings')

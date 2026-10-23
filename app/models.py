@@ -600,10 +600,30 @@ class Store(db.Model):
             # GCash fields
             'gcash_qr_codes': [qr.to_dict() for qr in self.gcash_qr_images],
             'gcash_instructions': self.gcash_instructions,
-            'allow_pickup': bool(getattr(self, 'allow_pickup', True)),
+            'allow_pickup': self.can_accept_pickup(),
             # Store schedule
             'store_schedule': self.store_schedule
         }
+
+    def can_accept_pickup(self):
+        """
+        Return True only if store has enabled in-store pickup AND
+        at least one pickup payment method is available:
+        - GCash (has QR code image uploaded and allow_gcash != False)
+        - Cash on Pickup (COP, allow_cop == True)
+        If both GCash and Cash on Pickup are disabled, in-store pickup cannot be completed.
+        """
+        if not bool(getattr(self, 'allow_pickup', True)):
+            return False
+        try:
+            from app.checkout_routes import _store_allows_pickup
+            return _store_allows_pickup(self)
+        except Exception:
+            has_qr = bool(getattr(self, 'gcash_qr_images', None))
+            ps = getattr(self, 'payment_setting', None)
+            allow_gcash = has_qr and (ps is None or getattr(ps, 'allow_gcash', True))
+            allow_cop = bool(ps and getattr(ps, 'allow_cop', False))
+            return bool(allow_gcash or allow_cop)
     
     def _get_current_delivery_geojson(self):
         """Get GeoJSON for the current active delivery area"""
@@ -1299,7 +1319,7 @@ class Product(db.Model):
             'id': self.id,
             'store_id': self.store_id,
             'store_name': self.store.name if self.store else 'Unknown Store',
-            'allow_pickup': bool(getattr(self.store, 'allow_pickup', True)) if self.store else True,
+            'allow_pickup': self.store.can_accept_pickup() if self.store else True,
             'name': self.name,
             'description': self.description,
             'price': float(self.price) if self.price else 0,

@@ -3622,7 +3622,7 @@
                         <button type="button" class="btn btn-sm checkout-fulfillment-btn active" id="fulfillmentDeliveryBtn" onclick="setCheckoutFulfillmentType('delivery')" style="flex: 1; border-radius: var(--radius-sm); font-weight: 600; padding: 8px 12px; border: none; background: white; color: var(--charcoal); box-shadow: 0 1px 3px rgba(0,0,0,0.08); transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
                             <i class="ri-truck-line"></i> Delivery
                         </button>
-                        <button type="button" class="btn btn-sm checkout-fulfillment-btn" id="fulfillmentPickupBtn" onclick="if(!checkoutPickupAllowed){showToast('In-store pickup is not offered by this shop','error');return;}setCheckoutFulfillmentType('pickup')" style="flex: 1; border-radius: var(--radius-sm); font-weight: 600; padding: 8px 12px; border: none; background: transparent; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <button type="button" class="btn btn-sm checkout-fulfillment-btn" id="fulfillmentPickupBtn" onclick="if(!checkoutPickupAllowed){showToast('In-store pickup is not available for this shop','error');return;}setCheckoutFulfillmentType('pickup')" style="flex: 1; border-radius: var(--radius-sm); font-weight: 600; padding: 8px 12px; border: none; background: transparent; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;">
                             <i class="ri-store-2-line"></i> Store Pickup
                         </button>
                     </div>
@@ -4085,7 +4085,7 @@ let buyNowItem = null;   // { product_id, variant_id, quantity, price, name, sto
 let checkoutFulfillmentType = 'delivery'; // 'delivery' or 'pickup'
 let checkoutPickupAllowed = true;
 
-function updateCheckoutFulfillmentOptions(allowPickup) {
+function updateCheckoutFulfillmentOptions(allowPickup, reason = null) {
     checkoutPickupAllowed = (allowPickup !== false);
     const pickupBtn = document.getElementById('fulfillmentPickupBtn');
     if (!pickupBtn) return;
@@ -4094,7 +4094,7 @@ function updateCheckoutFulfillmentOptions(allowPickup) {
         pickupBtn.setAttribute('aria-disabled', 'true');
         pickupBtn.style.opacity = '0.45';
         pickupBtn.style.cursor = 'not-allowed';
-        pickupBtn.title = 'In-store pickup is not offered by this shop';
+        pickupBtn.title = reason || 'In-store pickup is not available for this shop';
         if (checkoutFulfillmentType === 'pickup') {
             setCheckoutFulfillmentType('delivery');
         }
@@ -4108,7 +4108,7 @@ function updateCheckoutFulfillmentOptions(allowPickup) {
 
 function setCheckoutFulfillmentType(type) {
     if (type === 'pickup' && !checkoutPickupAllowed) {
-        showToast('In-store pickup is not offered by this shop', 'error');
+        showToast('In-store pickup is not available for this shop', 'error');
         return;
     }
     checkoutFulfillmentType = type === 'pickup' ? 'pickup' : 'delivery';
@@ -4153,6 +4153,18 @@ function setCheckoutFulfillmentType(type) {
         if (selectedCheckoutAddressId && !isCheckoutAddressDeliverable(selectedCheckoutAddressId)) {
             renderCheckoutDeliveryIssues(getCheckoutAddressDeliveryIssues(selectedCheckoutAddressId));
         }
+    }
+
+    // Refresh time slots if orders and dates are already displayed
+    if (Array.isArray(checkoutOrders) && checkoutOrders.length > 0) {
+        checkoutOrders.forEach(order => {
+            order.fulfillment_type = checkoutFulfillmentType;
+            const tempId = order.temp_id;
+            const dateInput = document.getElementById(`storeDeliveryDate_${tempId}`);
+            if (dateInput && dateInput.value) {
+                fetchCheckoutTimeSlots(order.store_id, tempId, dateInput.value);
+            }
+        });
     }
 }
 
@@ -4324,7 +4336,8 @@ function getFirstOpenCheckoutDate(scheduleOrOpenDays, preferredDateStr = null, a
     return allowSameDay ? todayStr : formatDateISOLocal(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
 }
 
-async function fetchStoreOpenDays(storeId, scheduleHint = null) {
+async function fetchStoreOpenDays(storeId, scheduleHint = null, fulfillmentType = null) {
+    const ft = fulfillmentType || checkoutFulfillmentType || 'delivery';
     let hintAllowSameDay = true;
     if (scheduleHint && scheduleHint.allow_same_day !== undefined) {
         hintAllowSameDay = Boolean(scheduleHint.allow_same_day);
@@ -4336,7 +4349,7 @@ async function fetchStoreOpenDays(storeId, scheduleHint = null) {
 
     let allowSameDay = hintAllowSameDay;
     try {
-        const resp = await fetch('/api/store/' + storeId + '/time-slots?date=' + getPhilippineTodayStr());
+        const resp = await fetch('/api/store/' + storeId + '/time-slots?date=' + getPhilippineTodayStr() + '&fulfillment_type=' + encodeURIComponent(ft));
         const data = await resp.json();
         if (data && data.allow_same_day !== undefined) {
             allowSameDay = Boolean(data.allow_same_day);
@@ -4362,7 +4375,7 @@ async function fetchStoreOpenDays(storeId, scheduleHint = null) {
         const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
         const dateStr = formatDateISOLocal(d);
         try {
-            const resp = await fetch('/api/store/' + storeId + '/time-slots?date=' + dateStr);
+            const resp = await fetch('/api/store/' + storeId + '/time-slots?date=' + dateStr + '&fulfillment_type=' + encodeURIComponent(ft));
             const data = await resp.json();
             if (!data || !data.success) return;
             if (data.has_schedule) sawSchedule = true;
@@ -4408,7 +4421,7 @@ async function initCheckoutDeliveryDatePicker(order, initialDateStr) {
     const input = document.getElementById('storeDeliveryDate_' + order.temp_id);
     if (!input) return initialDateStr;
 
-    const fetched = await fetchStoreOpenDays(order.store_id, order.store_schedule || null);
+    const fetched = await fetchStoreOpenDays(order.store_id, order.store_schedule || null, order.fulfillment_type || checkoutFulfillmentType || 'delivery');
     const openDays = fetched.openDays;
     const hasSchedule = fetched.hasSchedule;
     const allowSameDay = fetched.allowSameDay !== false;
@@ -4751,18 +4764,34 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
     }
     
     try {
-        const resp = await fetch(`/api/store/${storeId}/time-slots?date=${dateStr}`);
+        const order = (checkoutOrders || []).find(o => o.temp_id === tempId) || null;
+        const fulfillmentType = (order && order.fulfillment_type) || checkoutFulfillmentType || 'delivery';
+        const isPickup = (fulfillmentType === 'pickup');
+
+        const resp = await fetch(`/api/store/${storeId}/time-slots?date=${dateStr}&fulfillment_type=${encodeURIComponent(fulfillmentType)}`);
         const data = await resp.json();
         
         if (data.success) {
             const reason = data.block_reason || null;
             const reasonMessage = (code) => {
-                if (code === 'no_schedule') return '<i class="ri-alert-line"></i> This store has not set delivery hours yet.';
+                if (code === 'no_schedule') {
+                    return isPickup
+                        ? '<i class="ri-alert-line"></i> This store has not set operating hours yet.'
+                        : '<i class="ri-alert-line"></i> This store has not set delivery hours yet.';
+                }
                 if (code === 'same_day_disabled') return '<i class="ri-time-line"></i> Same-day delivery is not offered by this store. Please choose tomorrow or a later date.';
                 if (code === 'order_cutoff') return '<i class="ri-time-line"></i> Same-day ordering is closed. Please choose another open day.';
                 if (code === 'lead_time') return '<i class="ri-time-line"></i> Remaining slots are inside the prep window. Please choose a later slot or another date.';
-                if (code === 'slots_passed') return '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another open day.';
-                if (code === 'slots_full') return '<i class="ri-calendar-close-line"></i> All delivery windows for this date are fully booked. Please choose another date.';
+                if (code === 'slots_passed') {
+                    return isPickup
+                        ? '<i class="ri-time-line"></i> All pickup slots for today have passed. Please select another open day.'
+                        : '<i class="ri-time-line"></i> All delivery slots for today have passed. Please select another open day.';
+                }
+                if (code === 'slots_full') {
+                    return isPickup
+                        ? '<i class="ri-calendar-close-line"></i> All pickup windows for this date are fully booked. Please choose another date.'
+                        : '<i class="ri-calendar-close-line"></i> All delivery windows for this date are fully booked. Please choose another date.';
+                }
                 return '<i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.';
             };
 
@@ -6574,7 +6603,7 @@ async function probeCheckoutAddressDelivery(addressId) {
 
         const result = await response.json();
         if (result.orders && Array.isArray(result.orders) && result.orders.length > 0) {
-            const canPickup = result.orders.every(o => o.allow_pickup !== false);
+            const canPickup = result.orders.every(o => o.allow_pickup !== false && (o.allow_cop === true || o.allow_gcash === true));
             updateCheckoutFulfillmentOptions(canPickup);
         }
         if (result.success) {
@@ -6830,7 +6859,7 @@ async function proceedCheckout() {
             
             if (result.success && result.orders) {
                 checkoutOrders = result.orders;
-                const canPickup = checkoutOrders.every(o => o.allow_pickup !== false);
+                const canPickup = checkoutOrders.every(o => o.allow_pickup !== false && (o.allow_cop === true || o.allow_gcash === true));
                 updateCheckoutFulfillmentOptions(canPickup);
                 uploadedProofs = {};
                 uploadedProofData = {};
