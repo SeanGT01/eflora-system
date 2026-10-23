@@ -2339,6 +2339,30 @@ def account_phone_verify():
     data = request.get_json(silent=True) or {}
     return verify_phone_bind_otp(user, data.get('otp_code') or data.get('otp'))
 
+
+@templates_bp.route('/api/seller/email/send-otp', methods=['POST'])
+@templates_bp.route('/api/account/profile/email/send-otp', methods=['POST'])
+def seller_email_send_otp():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+    from app.utils.email_bind import send_email_bind_otp
+    user = User.query.get(session['user_id'])
+    store = _seller_portal_manageable_store(user.id) if user else None
+    data = request.get_json(silent=True) or {}
+    return send_email_bind_otp(user, data.get('email'), store=store)
+
+
+@templates_bp.route('/api/seller/email/verify-otp', methods=['POST'])
+@templates_bp.route('/api/account/profile/email/verify', methods=['POST'])
+def seller_email_verify_otp():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+    from app.utils.email_bind import verify_email_bind_otp
+    user = User.query.get(session['user_id'])
+    data = request.get_json(silent=True) or {}
+    return verify_email_bind_otp(user, data.get('email'), data.get('otp_code') or data.get('otp'))
+
+
 @templates_bp.route('/api/account/profile', methods=['GET'])
 def get_profile():
     """Get user profile data"""
@@ -5937,11 +5961,20 @@ def seller_dashboard():
         repeat_customers_is_all_time = True
 
     from app.utils.store_schedule import format_store_hours_parts
+    from app.utils.phone_utils import is_synthetic_account_email
     store_hours_parts = format_store_hours_parts(store.store_schedule)
+    seller_user = store.seller if store else None
+    raw_seller_email = (seller_user.email or '').strip() if seller_user else ''
+    seller_has_synthetic_email = is_synthetic_account_email(raw_seller_email)
+    seller_phone = (seller_user.phone or '').strip() if seller_user else ''
+    seller_email = '' if seller_has_synthetic_email else raw_seller_email
 
     return render_template('seller_dashboard.html',
         store=store,
         store_hours_parts=store_hours_parts,
+        seller_has_synthetic_email=seller_has_synthetic_email,
+        seller_phone=seller_phone,
+        seller_email=seller_email,
         period=period,
         period_label=period_label,
         custom_from=custom_from,
@@ -13047,6 +13080,13 @@ def store_settings():
         if not allow_gcash and not allow_cod and not allow_cop:
             allow_gcash = True
 
+        from app.utils.seller_notifications import is_synthetic_account_email
+        current_user = User.query.get(session['user_id'])
+        seller_raw_email = (current_user.email or '') if current_user else ''
+        seller_has_synthetic_email = is_synthetic_account_email(seller_raw_email)
+        seller_email = '' if seller_has_synthetic_email else seller_raw_email
+        seller_phone = (current_user.phone or '') if current_user else ''
+
         return render_template('store_settings.html', 
                              store=store,
                              municipalities=municipalities,
@@ -13054,7 +13094,10 @@ def store_settings():
                              gcash_qr_data=gcash_qr_data,
                              allow_cod=allow_cod,
                              allow_cop=allow_cop,
-                             allow_gcash=allow_gcash)
+                             allow_gcash=allow_gcash,
+                             seller_has_synthetic_email=seller_has_synthetic_email,
+                             seller_email=seller_email,
+                             seller_phone=seller_phone)
     
     except Exception as e:
         print(f"❌ Error in store_settings: {str(e)}")

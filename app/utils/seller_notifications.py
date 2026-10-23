@@ -6,6 +6,7 @@ import logging
 
 from app.extensions import db
 from app.models import Notification, Store, StoreAdmin
+from app.utils.phone_utils import is_synthetic_account_email
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +108,14 @@ def _send_stock_alert_emails(
         import time
         from app.models import Store, StoreAdmin
         from app.utils.email_helper import send_stock_alert_email
+        from app.utils.phone_utils import is_synthetic_account_email
 
         store = Store.query.get(store_id) if store_id else None
         if not store:
             return
 
         recipients = []
-        if store.seller and store.seller.email:
+        if store.seller and store.seller.email and not is_synthetic_account_email(store.seller.email):
             recipients.append({
                 'email': store.seller.email.strip(),
                 'name': store.seller.full_name or store.name,
@@ -125,7 +127,7 @@ def _send_stock_alert_emails(
             is_archived=False,
         ).all()
         for sa in admins:
-            if sa.user and sa.user.email:
+            if sa.user and sa.user.email and not is_synthetic_account_email(sa.user.email):
                 em = sa.user.email.strip()
                 if not any(r['email'].lower() == em.lower() for r in recipients):
                     recipients.append({

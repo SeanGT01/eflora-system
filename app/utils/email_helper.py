@@ -843,7 +843,98 @@ def send_stock_alert_email(
         return False
 
 
+
+def send_email_bind_otp_email(recipient_email, otp_code, full_name=None, store_name=None, expiry_minutes=10):
+    """
+    Send a 6-digit OTP code to verify and bind a Gmail address to a seller account.
+    Once verified, inventory alerts and business notifications are delivered to this email.
+    """
+    try:
+        subject = "E-Flora — Verify your store alert email"
+        greeting = f"Hi {full_name}!" if full_name else "Hello!"
+        store_clause = f" for <strong>{store_name}</strong>" if store_name else ""
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{subject}</title>
+        </head>
+        <body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #faf6f0; color: #2c2520;">
+            <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(44, 37, 32, 0.08); border: 1px solid rgba(181, 68, 90, 0.15);">
+                
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #2c2520 0%, #b5445a 100%); padding: 26px 24px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px;">
+                        &#127800; E-FLORA SELLER PORTAL
+                    </h1>
+                    <p style="color: rgba(255, 255, 255, 0.88); margin: 6px 0 0; font-size: 13px;">
+                        Store Notification Email Verification
+                    </p>
+                </div>
+
+                <!-- Body -->
+                <div style="padding: 28px 24px;">
+                    <h2 style="color: #2c2520; font-size: 18px; margin: 0 0 12px; font-weight: 600;">{greeting}</h2>
+
+                    <p style="margin: 0 0 14px; font-size: 14px; color: #554841; line-height: 1.6;">
+                        You requested to connect this Gmail address to your E-Flora seller account{store_clause}.
+                        Once connected, you will receive real-time <strong>low-stock</strong> and <strong>out-of-stock</strong> picture alerts directly in this inbox.
+                    </p>
+
+                    <p style="margin: 0 0 20px; font-size: 14px; color: #554841; line-height: 1.6;">
+                        Please enter the 6-digit verification code below in your seller dashboard to complete the connection:
+                    </p>
+
+                    <!-- OTP Code Box -->
+                    <div style="text-align: center; margin: 24px 0;">
+                        <div style="display: inline-block; background: #fff5f7; border: 2px dashed #b5445a; border-radius: 12px; padding: 18px 36px;">
+                            <span style="font-family: 'Courier New', Courier, monospace; font-size: 34px; font-weight: 700; letter-spacing: 8px; color: #b5445a;">{otp_code}</span>
+                        </div>
+                    </div>
+
+                    <p style="margin: 0; font-size: 13px; color: #9a8d85; text-align: center;">
+                        This code will expire in <strong>{expiry_minutes} minutes</strong>.
+                    </p>
+
+                    <div style="margin: 24px 0 0; padding-top: 18px; border-top: 1px solid #f1ece5;">
+                        <p style="margin: 0; font-size: 12px; color: #9a8d85; line-height: 1.5;">
+                            &#128274; <strong>Security note:</strong> If you did not request to connect this email to an E-Flora store, please ignore this message. No changes will be made to any account without this verification code.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="background-color: #fbf8f5; border-top: 1px solid #f1ece5; padding: 16px 24px; text-align: center;">
+                    <p style="margin: 0 0 4px; font-size: 12px; font-weight: 600; color: #6b4c3b;">
+                        &#127800; E-Flora Online Flower Marketplace
+                    </p>
+                    <p style="margin: 0; font-size: 11px; color: #9a8d85;">
+                        Automated verification email sent via E-Flora's Gmail notification service.
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
+        ok = _send_email_gmail_oauth(recipient_email, subject, html_body, sender)
+        if ok:
+            current_app.logger.info(f"📧 Email bind OTP sent to {recipient_email}")
+        else:
+            current_app.logger.error(f"❌ Failed to send email bind OTP to {recipient_email}")
+        return ok
+
+    except Exception as e:
+        current_app.logger.error(f"❌ Error in send_email_bind_otp_email for {recipient_email}: {e}")
+        return False
+
+
 def _send_smtp_only_async(app, recipient_email, subject, html_body, sender_email):
     """Deprecated: SMTP is blocked on Railway. Use SendGrid instead."""
     with app.app_context():
         current_app.logger.warning(f"⚠️  SMTP not available on production. Ensure SENDGRID_API_KEY is configured.")
+
