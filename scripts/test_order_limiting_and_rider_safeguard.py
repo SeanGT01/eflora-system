@@ -452,6 +452,53 @@ def run_tests():
             db.session.delete(overlap_order)
             db.session.commit()
 
+        print("\n=== TEST 8: Configurable Pickup Cutoff & Dynamic Closing Notice ===")
+        # Configure store open 08:00 - 20:00, 2h slots, no pickup cutoff initially
+        test_store.store_schedule = {
+            'schedules': [{'days': ALL_DAYS, 'open': '08:00', 'close': '20:00'}],
+            'slot_duration': 2,
+            'limit_orders_per_slot': False,
+            'allow_same_day': True,
+        }
+        db.session.commit()
+
+        # Step 8.1: Test default pickup slots and dynamic closing notice
+        res_default = build_store_time_slots(test_store, future_date, fulfillment_type='pickup')
+        default_vals = [s['value'] for s in res_default['time_slots']]
+        assert '18:00-20:00' in default_vals, "Without cutoff, pickup should extend to store close 20:00"
+        assert res_default['store_close'] == '8:00 PM'
+        assert '8:00 PM' in res_default['pickup_notice']
+        print(f" [PASS] Default pickup slots extend to store close: {default_vals[-1]}")
+        print(f" [PASS] Dynamic closing notice generated: '{res_default['pickup_notice']}'")
+
+        # Step 8.2: Set pickup_cutoff to 19:00 (7:00 PM) - 1 hour before store close
+        test_store.store_schedule = {
+            'schedules': [{'days': ALL_DAYS, 'open': '08:00', 'close': '20:00'}],
+            'slot_duration': 2,
+            'pickup_cutoff': '19:00',
+            'limit_orders_per_slot': False,
+            'allow_same_day': True,
+        }
+        db.session.commit()
+
+        res_cutoff = build_store_time_slots(test_store, future_date, fulfillment_type='pickup')
+        cutoff_vals = [s['value'] for s in res_cutoff['time_slots']]
+        assert '18:00-20:00' not in cutoff_vals, "Slots past 19:00 must be clipped"
+        assert any(s.endswith('19:00') for s in cutoff_vals), f"Last slot must end at pickup_cutoff 19:00, got: {cutoff_vals}"
+        assert res_cutoff['pickup_cutoff'] == '19:00'
+        assert res_cutoff['store_close'] == '8:00 PM'
+        assert '8:00 PM' in res_cutoff['pickup_notice']
+        print(f" [PASS] Pickup cutoff clipped final slot: {cutoff_vals[-1]} (store closes at 8:00 PM)")
+
+        # Step 8.3: Verify API returns pickup_notice and pickup_cutoff
+        client = app.test_client()
+        api_res = client.get(f'/api/store/{test_store.id}/time-slots?date={future_date_str}&fulfillment_type=pickup')
+        api_data = api_res.get_json()
+        assert api_data['pickup_cutoff'] == '19:00'
+        assert api_data['store_close'] == '8:00 PM'
+        assert api_data['pickup_notice'] is not None
+        print(" [PASS] API response includes pickup_cutoff, store_close, and pickup_notice.")
+
         print("\n==================================================")
         print(" ALL VERIFICATION TESTS PASSED SUCCESSFULLY!")
         print("==================================================")

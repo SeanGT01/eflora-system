@@ -214,6 +214,7 @@ def sanitize_store_schedule(payload):
     delivery_start = parse_hhmm(payload.get('delivery_start'))
     delivery_cutoff = parse_hhmm(payload.get('delivery_cutoff'))
     order_cutoff = parse_hhmm(payload.get('order_cutoff'))
+    pickup_cutoff = parse_hhmm(payload.get('pickup_cutoff'))
     allow_same_day = payload.get('allow_same_day')
     if allow_same_day is None:
         allow_same_day = True
@@ -254,6 +255,9 @@ def sanitize_store_schedule(payload):
         ),
         'order_cutoff': (
             f'{order_cutoff[0]:02d}:{order_cutoff[1]:02d}' if order_cutoff else None
+        ),
+        'pickup_cutoff': (
+            f'{pickup_cutoff[0]:02d}:{pickup_cutoff[1]:02d}' if pickup_cutoff else None
         ),
         'lead_time_hours': lead_hours,
         'allow_same_day': allow_same_day,
@@ -356,11 +360,14 @@ def _iter_raw_slots(schedule, target_date, fulfillment_type='delivery'):
         if not open_parsed or not close_parsed:
             continue
         if is_pickup:
-            # Pickup follows full physical store operating hours
+            # Pickup follows physical store operating hours, optionally clipped by pickup_cutoff
             if open_parsed >= close_parsed:
                 continue
             open_h, open_m = open_parsed
             close_h, close_m = close_parsed
+            pickup_cutoff = parse_hhmm(schedule.get('pickup_cutoff'))
+            if pickup_cutoff and (open_h, open_m) < pickup_cutoff < (close_h, close_m):
+                close_h, close_m = pickup_cutoff
         else:
             clipped = _clip_range(
                 open_parsed[0], open_parsed[1],
@@ -550,6 +557,22 @@ def build_store_time_slots(store, target_date=None, fulfillment_type='delivery')
     raw_slots, day_name, slot_duration = _iter_raw_slots(schedule, target, fulfillment_type=fulfillment_type)
     result['day'] = day_name
     result['slot_duration'] = slot_duration
+
+    store_close_str = None
+    for entry in schedule.get('schedules') or []:
+        days = [str(d).lower() for d in (entry.get('days') or [])]
+        if day_name in days:
+            close_parsed = parse_hhmm(entry.get('close'))
+            if close_parsed:
+                store_close_str = format_hhmm_label(*close_parsed)
+            break
+
+    result['store_close'] = store_close_str
+    result['pickup_cutoff'] = schedule.get('pickup_cutoff')
+    if is_pickup and store_close_str:
+        result['pickup_notice'] = f"Store doors close promptly at {store_close_str}. Please arrive with sufficient time to claim your bouquet."
+    else:
+        result['pickup_notice'] = None
 
     if not raw_slots:
         result['block_reason'] = 'closed'

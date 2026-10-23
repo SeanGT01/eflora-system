@@ -4795,7 +4795,11 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                 return '<i class="ri-close-circle-line"></i> Store is closed on this day. Please select a different date.';
             };
 
+            const pickupNoticeEl = document.getElementById(`storePickupNotice_${tempId}`);
+            const pickupNoticeTextEl = document.getElementById(`storePickupNoticeText_${tempId}`);
+
             if (!data.has_schedule) {
+                if (pickupNoticeEl) pickupNoticeEl.style.display = 'none';
                 timeSelect.innerHTML = '<option value="">Hours not set</option>';
                 timeSelect.disabled = true;
                 if (closedMsg) {
@@ -4833,10 +4837,19 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                 if (bookableCount > 0) {
                     timeSelect.disabled = false;
                     if (closedMsg) closedMsg.style.display = 'none';
+                    if (pickupNoticeEl && pickupNoticeTextEl) {
+                        if (isPickup && data.pickup_notice) {
+                            pickupNoticeTextEl.textContent = data.pickup_notice;
+                            pickupNoticeEl.style.display = 'block';
+                        } else {
+                            pickupNoticeEl.style.display = 'none';
+                        }
+                    }
                     setStoreDeliveryPreference(tempId, dateStr, timeSelect.value);
                     return;
                 } else {
                     timeSelect.disabled = true;
+                    if (pickupNoticeEl) pickupNoticeEl.style.display = 'none';
                     if (closedMsg) {
                         closedMsg.style.display = 'block';
                         closedMsg.innerHTML = reasonMessage(reason || 'slots_full');
@@ -4846,6 +4859,7 @@ async function fetchCheckoutTimeSlots(storeId, tempId, dateStr) {
                 }
             }
 
+            if (pickupNoticeEl) pickupNoticeEl.style.display = 'none';
             timeSelect.innerHTML = '<option value="">No slots</option>';
             timeSelect.disabled = true;
             if (closedMsg) {
@@ -7506,6 +7520,9 @@ async function displayGCashPayment() {
                         <option value="">Loading...</option>
                     </select>
                 </div>
+            </div>
+            <div id="storePickupNotice_${order.temp_id}" style="display:none; font-size:12px; color:var(--charcoal); background:rgba(212,120,138,0.1); border-left:3px solid var(--rose); padding:8px 10px; border-radius:4px; margin-top:8px;">
+                <i class="ri-information-line" style="color:var(--rose);"></i> <span id="storePickupNoticeText_${order.temp_id}"></span>
             </div>
             <div style="font-size:11px; color:var(--muted); margin-top:8px;">
                 Closed days, past dates, and past hours are locked based on this store's open schedule.

@@ -3494,8 +3494,11 @@
                                                 <option value="4">4 hours</option>
                                                 <option value="6">6 hours</option>
                                             </select>
-                                            <div class="form-hint">Customers must book a slot that starts at least this
-                                                many hours from now.</div>
+                                        <div id="pickup-cutoff-container">
+                                            <label class="form-label" style="margin-bottom: 0.35rem;">In-store pickup cutoff (Optional)</label>
+                                            <input type="time" class="form-control" id="pickup-cutoff-time"
+                                                style="width: auto; min-width: 140px;">
+                                            <div class="form-hint" id="pickup-cutoff-hint">Optional. Stop in-store pickups earlier than shop closing (e.g. 7:30 PM if shop closes at 8:00 PM). If empty, pickup runs until shop close.</div>
                                         </div>
                                     </div>
 
@@ -5345,6 +5348,7 @@
             deliveryStart: document.getElementById('delivery-start-time')?.value || '',
             deliveryCutoff: document.getElementById('delivery-cutoff-time')?.value || '',
             orderCutoff: document.getElementById('order-cutoff-time')?.value || '',
+            pickupCutoff: document.getElementById('pickup-cutoff-time')?.value || '',
             leadTimeHours: document.getElementById('lead-time-hours')?.value || '',
             allowSameDay: document.getElementById('allow-same-day-toggle')?.checked ?? true,
             limitOrdersPerSlot: document.getElementById('limit-orders-toggle')?.checked ?? false,
@@ -6375,6 +6379,9 @@
     if (existingSchedule && existingSchedule.order_cutoff) {
         document.getElementById('order-cutoff-time').value = existingSchedule.order_cutoff;
     }
+    if (existingSchedule && existingSchedule.pickup_cutoff) {
+        document.getElementById('pickup-cutoff-time').value = existingSchedule.pickup_cutoff;
+    }
     const allowSameDayToggle = document.getElementById('allow-same-day-toggle');
     if (allowSameDayToggle && existingSchedule && existingSchedule.allow_same_day !== undefined) {
         allowSameDayToggle.checked = Boolean(existingSchedule.allow_same_day);
@@ -6808,6 +6815,7 @@
         }
 
         const orderCutoff = (document.getElementById('order-cutoff-time')?.value || '').trim();
+        const pickupCutoff = (document.getElementById('pickup-cutoff-time')?.value || '').trim();
         const allowSameDay = document.getElementById('allow-same-day-toggle')?.checked ?? true;
         const hoursErr = validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff);
         if (hoursErr) {
@@ -6832,6 +6840,7 @@
             delivery_start: deliveryStart || null,
             delivery_cutoff: deliveryCutoff || null,
             order_cutoff: orderCutoff || null,
+            pickup_cutoff: pickupCutoff || null,
             lead_time_hours: leadTimeHours,
             allow_same_day: allowSameDay,
             limit_orders_per_slot: limitOrdersPerSlot,
@@ -6841,7 +6850,7 @@
 
     // Initialize schedule UI
     renderScheduleEntries();
-    ['delivery-start-time', 'delivery-cutoff-time', 'order-cutoff-time'].forEach(function (id) {
+    ['delivery-start-time', 'delivery-cutoff-time', 'order-cutoff-time', 'pickup-cutoff-time'].forEach(function (id) {
         document.getElementById(id)?.addEventListener('change', function () {
             const deliveryStart = (document.getElementById('delivery-start-time')?.value || '').trim();
             const deliveryCutoff = (document.getElementById('delivery-cutoff-time')?.value || '').trim();
