@@ -3196,13 +3196,15 @@ def register():
             phone = None
             channel = 'email'
             if '@' in identifier:
-                email = identifier.lower()
-                if is_synthetic_account_email(email) or '@' not in email or '.' not in email.split('@')[-1]:
+                from app.utils.validators import validate_email_format
+                clean_email, email_err = validate_email_format(identifier)
+                if email_err:
                     return render_template(
                         'register.html',
-                        error='Enter a valid email address.' if not allow_phone_reg else 'Enter a valid email address or Philippine mobile number.',
+                        error=email_err,
                         form_data=request.form,
                     )
+                email = clean_email
                 channel = 'email'
             elif is_valid_ph_mobile(identifier):
                 if not allow_phone_reg:

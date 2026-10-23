@@ -29,6 +29,9 @@ EMAIL_REGEX = re.compile(
 )
 
 
+from app.utils.validators import validate_email_format
+
+
 def email_bind_otp_key(user_id: int) -> str:
     """Internal key stored in CustomerOTP table for email binding requests."""
     return f'emailbind.{int(user_id)}@otp.eflora.internal'
@@ -36,32 +39,9 @@ def email_bind_otp_key(user_id: int) -> str:
 
 def _validate_target_email(target_email_raw: str, current_user_id: int):
     """Validate email format and check for duplicates across existing users."""
-    if not target_email_raw or not str(target_email_raw).strip():
-        return None, (jsonify({'success': False, 'error': 'Please enter a valid email address.'}), 400)
-
-    clean_email = str(target_email_raw).strip().lower()
-
-    if len(clean_email) > 254 or '..' in clean_email or clean_email.endswith('.'):
-        return None, (jsonify({'success': False, 'error': 'Please enter a valid email address format (e.g. name@gmail.com).'}), 400)
-
-    if not EMAIL_REGEX.match(clean_email):
-        return None, (jsonify({'success': False, 'error': 'Please enter a valid email address format (e.g. name@gmail.com).'}), 400)
-
-    parts = clean_email.split('@')
-    if len(parts) != 2:
-        return None, (jsonify({'success': False, 'error': 'Please enter a valid email address format (e.g. name@gmail.com).'}), 400)
-
-    local_part, domain_part = parts
-    if len(local_part) > 64:
-        return None, (jsonify({'success': False, 'error': 'Email username is too long.'}), 400)
-
-    domain_parts = domain_part.split('.')
-    tld = domain_parts[-1]
-    if len(tld) < 2 or not tld.isalpha():
-        return None, (jsonify({'success': False, 'error': 'Please enter a valid email domain (e.g. name@gmail.com).'}), 400)
-
-    if is_synthetic_account_email(clean_email) or clean_email.endswith('@eflora.internal') or 'otp.eflora.internal' in clean_email:
-        return None, (jsonify({'success': False, 'error': 'Invalid email address. Please use a real email like Gmail.'}), 400)
+    clean_email, err = validate_email_format(target_email_raw)
+    if err:
+        return None, (jsonify({'success': False, 'error': err}), 400)
 
     # Check if this email is already registered to another account
     existing = User.query.filter(

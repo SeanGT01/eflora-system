@@ -9820,11 +9820,36 @@
         if (input) input.style.borderColor = '';
     }
 
+    const VALID_EMAIL_TLDS = new Set([
+        'com', 'org', 'net', 'edu', 'gov', 'mil', 'int',
+        'info', 'biz', 'name', 'pro', 'coop', 'aero', 'museum',
+        'app', 'dev', 'io', 'ai', 'me', 'co', 'store', 'online', 'shop',
+        'site', 'tech', 'cloud', 'xyz', 'top', 'club', 'live', 'email',
+        'space', 'website', 'media', 'agency', 'design', 'digital',
+        'world', 'global', 'solutions', 'services', 'systems', 'network',
+        'ph', 'us', 'uk', 'ca', 'au', 'nz', 'de', 'fr', 'jp', 'sg', 'my',
+        'id', 'th', 'vn', 'in', 'cn', 'hk', 'tw', 'kr', 'es', 'it', 'nl',
+        'se', 'no', 'fi', 'dk', 'ch', 'at', 'be', 'ie', 'ru', 'br', 'mx',
+        'za', 'ae', 'sa', 'il', 'tr', 'gr', 'pt', 'pl', 'cz', 'eu', 'asia'
+    ]);
+
+    const COMMON_DOMAIN_TYPOS = {
+        'gmai.com': 'gmail.com',
+        'gamil.com': 'gmail.com',
+        'gmial.com': 'gmail.com',
+        'gmaill.com': 'gmail.com',
+        'gmail.co': 'gmail.com',
+        'yaho.com': 'yahoo.com',
+        'yahooo.com': 'yahoo.com',
+        'outlok.com': 'outlook.com',
+        'hotmial.com': 'hotmail.com'
+    };
+
     function validateSellerEmailFormat(email) {
         if (!email || typeof email !== 'string') {
             return { valid: false, message: 'Please enter your email address.' };
         }
-        const clean = email.trim();
+        const clean = email.trim().toLowerCase();
         if (!clean) {
             return { valid: false, message: 'Please enter your email address.' };
         }
@@ -9851,13 +9876,55 @@
         if (local.length > 64) {
             return { valid: false, message: 'Email username is too long.' };
         }
+
+        // Username cannot be all numbers (e.g. 112222)
+        if (!/[a-z]/.test(local)) {
+            return { valid: false, message: 'Email username cannot be all numbers. Please enter a valid email address.' };
+        }
+
+        // Check common domain typos
+        if (COMMON_DOMAIN_TYPOS[domain]) {
+            return { valid: false, message: `Did you mean @${COMMON_DOMAIN_TYPOS[domain]}?` };
+        }
+
         const domainParts = domain.split('.');
         const tld = domainParts[domainParts.length - 1];
-        if (!tld || tld.length < 2 || !/^[a-zA-Z]+$/.test(tld)) {
-            return { valid: false, message: 'Please enter a valid email domain (e.g. name@gmail.com).' };
+        if (!tld || !VALID_EMAIL_TLDS.has(tld)) {
+            return { valid: false, message: `".${tld}" is not a valid domain extension. Please check your email address.` };
+        }
+
+        // Strict validation for Gmail addresses
+        if (domain.includes('gmail') || domain.includes('googlemail')) {
+            if (domain !== 'gmail.com' && domain !== 'googlemail.com') {
+                return { valid: false, message: 'Invalid Gmail domain. Did you mean @gmail.com?' };
+            }
+            if (local.includes('+') && local.indexOf('+') !== local.lastIndexOf('+')) {
+                return { valid: false, message: 'Gmail address can only contain one plus (+) extension tag.' };
+            }
+            const baseUser = local.split('+')[0];
+            const tagPart = local.includes('+') ? local.split('+')[1] : null;
+
+            const cleanUser = baseUser.replace(/\./g, '');
+            if (cleanUser.length < 6) {
+                return { valid: false, message: 'Gmail usernames must be at least 6 characters long.' };
+            }
+            if (cleanUser.length > 30) {
+                return { valid: false, message: 'Gmail usernames cannot exceed 30 characters.' };
+            }
+            if (!/^[a-z0-9.]+$/.test(baseUser)) {
+                return { valid: false, message: 'Gmail usernames can only contain letters, numbers, and periods.' };
+            }
+            if (baseUser.startsWith('.') || baseUser.endsWith('.') || baseUser.includes('..')) {
+                return { valid: false, message: 'Gmail usernames cannot start, end, or contain consecutive periods.' };
+            }
+            if (tagPart !== null) {
+                if (!tagPart || !/^[a-z0-9._-]+$/.test(tagPart)) {
+                    return { valid: false, message: 'Invalid Gmail plus extension tag format.' };
+                }
+            }
         }
         
-        if (clean.toLowerCase().endsWith('@eflora.internal') || clean.toLowerCase().includes('otp.eflora.internal')) {
+        if (clean.endsWith('@eflora.internal') || clean.includes('otp.eflora.internal')) {
             return { valid: false, message: 'Please use a real email address such as Gmail.' };
         }
 

@@ -276,12 +276,13 @@ def _validate_registration_payload(data, require_password=True):
             return None, (pw_error, 400)
 
     if '@' in raw_id:
-        email = _normalize_email(raw_id)
-        if is_synthetic_account_email(email) or not EMAIL_REGEX.match(email):
-            return None, ('A valid email is required', 400)
+        from app.utils.validators import validate_email_format
+        clean_email, email_err = validate_email_format(raw_id)
+        if email_err:
+            return None, (email_err, 400)
         return {
             'full_name': full_name,
-            'email': email,
+            'email': clean_email,
             'password': password,
             'phone': None,
             'otp_channel': 'email',
@@ -1095,17 +1096,21 @@ def register():
     if pw_error:
         return jsonify({'error': pw_error}), 400
 
-    from app.utils.validators import normalize_full_name
+    from app.utils.validators import normalize_full_name, validate_email_format
     full_name, name_err = normalize_full_name(data.get('full_name'))
     if name_err:
         return jsonify({'error': name_err}), 400
 
-    if User.query.filter_by(email=data['email'].lower()).first():
+    clean_email, email_err = validate_email_format(data.get('email'))
+    if email_err:
+        return jsonify({'error': email_err}), 400
+
+    if User.query.filter_by(email=clean_email).first():
         return jsonify({'error': 'Email already registered'}), 409
 
     user = User(
         full_name=full_name,
-        email=data['email'].lower().strip(),
+        email=clean_email,
         role='customer',
         status='active',
     )

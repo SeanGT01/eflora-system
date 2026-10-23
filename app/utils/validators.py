@@ -111,3 +111,105 @@ def normalize_ph_license_plate(raw):
         return f'{match.group(1)} {match.group(2)}', None
     return f'{match.group(3)} {match.group(4)}', None
 
+
+EMAIL_REGEX = re.compile(
+    r'^[a-zA-Z0-9.!#$%&\'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$'
+)
+
+VALID_EMAIL_TLDS = {
+    'com', 'org', 'net', 'edu', 'gov', 'mil', 'int',
+    'info', 'biz', 'name', 'pro', 'coop', 'aero', 'museum',
+    'app', 'dev', 'io', 'ai', 'me', 'co', 'store', 'online', 'shop',
+    'site', 'tech', 'cloud', 'xyz', 'top', 'club', 'live', 'email',
+    'space', 'website', 'media', 'agency', 'design', 'digital',
+    'world', 'global', 'solutions', 'services', 'systems', 'network',
+    'ph', 'us', 'uk', 'ca', 'au', 'nz', 'de', 'fr', 'jp', 'sg', 'my',
+    'id', 'th', 'vn', 'in', 'cn', 'hk', 'tw', 'kr', 'es', 'it', 'nl',
+    'se', 'no', 'fi', 'dk', 'ch', 'at', 'be', 'ie', 'ru', 'br', 'mx',
+    'za', 'ae', 'sa', 'il', 'tr', 'gr', 'pt', 'pl', 'cz', 'eu', 'asia'
+}
+
+COMMON_DOMAIN_TYPOS = {
+    'gmai.com': 'gmail.com',
+    'gamil.com': 'gmail.com',
+    'gmial.com': 'gmail.com',
+    'gmaill.com': 'gmail.com',
+    'gmail.co': 'gmail.com',
+    'yaho.com': 'yahoo.com',
+    'yahooo.com': 'yahoo.com',
+    'outlok.com': 'outlook.com',
+    'hotmial.com': 'hotmail.com',
+}
+
+
+def validate_email_format(email_raw: str) -> tuple[str | None, str | None]:
+    """
+    Validate email address format strictly.
+    Returns (cleaned_email, None) on success or (None, error_message) on failure.
+    Enforces valid RFC structure, real IANA TLDs, no all-numeric usernames,
+    typo prevention, and strict Gmail constraints (6-30 chars, no illegal symbols,
+    official domains, plus-tag validation).
+    """
+    if not email_raw or not str(email_raw).strip():
+        return None, 'Please enter a valid email address.'
+
+    clean_email = str(email_raw).strip().lower()
+
+    if len(clean_email) > 254 or '..' in clean_email or clean_email.endswith('.') or ' ' in clean_email:
+        return None, 'Please enter a valid email address format (e.g. name@gmail.com).'
+
+    if not EMAIL_REGEX.match(clean_email):
+        return None, 'Please enter a valid email address format (e.g. name@gmail.com).'
+
+    parts = clean_email.split('@')
+    if len(parts) != 2:
+        return None, 'Please enter a valid email address format (e.g. name@gmail.com).'
+
+    local_part, domain_part = parts
+    if len(local_part) > 64:
+        return None, 'Email username is too long.'
+
+    # Username cannot be all digits (e.g. 112222)
+    if not re.search(r'[a-z]', local_part):
+        return None, 'Email username cannot be all numbers. Please enter a valid email address.'
+
+    # Check common domain typos
+    if domain_part in COMMON_DOMAIN_TYPOS:
+        return None, f"Did you mean @{COMMON_DOMAIN_TYPOS[domain_part]}?"
+
+    domain_parts = domain_part.split('.')
+    tld = domain_parts[-1]
+    if len(tld) < 2 or not tld.isalpha() or tld not in VALID_EMAIL_TLDS:
+        return None, f"'.{tld}' is not a valid domain extension. Please check your email address."
+
+    # Specific strict validation for Gmail
+    if 'gmail' in domain_part or 'googlemail' in domain_part:
+        if domain_part not in ('gmail.com', 'googlemail.com'):
+            return None, 'Invalid Gmail domain. Did you mean @gmail.com?'
+
+        if '+' in local_part and local_part.count('+') > 1:
+            return None, 'Gmail address can only contain one plus (+) extension tag.'
+
+        base_user = local_part.split('+')[0]
+        tag_part = local_part.split('+')[1] if '+' in local_part else None
+
+        clean_user = base_user.replace('.', '')
+        if len(clean_user) < 6:
+            return None, 'Gmail usernames must be at least 6 characters long.'
+        if len(clean_user) > 30:
+            return None, 'Gmail usernames cannot exceed 30 characters.'
+        if not re.match(r'^[a-z0-9.]+$', base_user):
+            return None, 'Gmail usernames can only contain letters (a-z), numbers (0-9), and periods (.).'
+        if base_user.startswith('.') or base_user.endswith('.') or '..' in base_user:
+            return None, 'Gmail usernames cannot start, end, or contain consecutive periods.'
+        if tag_part is not None:
+            if not tag_part or not re.match(r'^[a-z0-9._-]+$', tag_part):
+                return None, 'Invalid Gmail plus extension tag format.'
+
+    from app.utils.phone_utils import is_synthetic_account_email
+    if is_synthetic_account_email(clean_email) or clean_email.endswith('@eflora.internal') or 'otp.eflora.internal' in clean_email:
+        return None, 'Invalid email address. Please use a real email like Gmail.'
+
+    return clean_email, None
+
+
