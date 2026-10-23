@@ -2763,7 +2763,15 @@
 
     async function clearAllNotifs() {
         if (!NOTIF_ENABLED) return;
-        if (!confirm('Are you sure you want to clear all notifications? This action cannot be undone.')) {
+        const confirmed = typeof window.openConfirmModal === 'function'
+            ? await window.openConfirmModal('Are you sure you want to clear all notifications? This action cannot be undone.', {
+                title: 'Clear All Notifications',
+                confirmText: 'Clear All',
+                cancelText: 'Cancel',
+                danger: true
+            })
+            : confirm('Are you sure you want to clear all notifications? This action cannot be undone.');
+        if (!confirmed) {
             return;
         }
         const clearBtn = document.getElementById('clearAllNotifsBtn');
@@ -3109,7 +3117,7 @@
 
         const style = document.createElement('style');
         style.textContent = `
-            .app-confirm-overlay{position:fixed;inset:0;background:rgba(42,35,30,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:clamp(.75rem,3vw,1.25rem);z-index:12000}
+            .app-confirm-overlay{position:fixed;inset:0;background:rgba(42,35,30,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:clamp(.75rem,3vw,1.25rem);z-index:13000}
             .app-confirm-overlay.show{display:flex}
             .app-confirm-card{width:min(20.5rem,100%);max-width:100%;background:rgba(255,253,249,.94);border:1px solid rgba(255,255,255,.72);border-radius:18px;box-shadow:0 20px 48px rgba(90,40,80,.16),inset 0 1px 0 rgba(255,255,255,.8);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);padding:1.15rem 1.15rem 1.05rem}
             .app-confirm-title{font-family:var(--font-display),Georgia,serif;font-size:1.35rem;font-weight:500;color:var(--charcoal,#2c2520);margin:0 0 .45rem;letter-spacing:-0.02em;line-height:1.25}
@@ -3119,6 +3127,8 @@
             .app-confirm-btn:hover{background:rgba(255,245,248,.96);border-color:var(--deep-rose,#b5445a);color:var(--deep-rose,#b5445a)}
             .app-confirm-btn.primary{background:linear-gradient(135deg,#c24e68 0%,#d878a0 55%,#b070c8 100%);border-color:rgba(255,255,255,.35);color:#fff;box-shadow:0 6px 16px rgba(181,68,90,.22)}
             .app-confirm-btn.primary:hover{background:linear-gradient(135deg,#b04058 0%,#c86890 55%,#9f60b8 100%);border-color:rgba(255,255,255,.35);color:#fff}
+            .app-confirm-btn.danger{background:linear-gradient(135deg,#e53e3e 0%,#c53030 100%);border-color:rgba(255,255,255,.35);color:#fff;box-shadow:0 6px 16px rgba(229,62,62,.24)}
+            .app-confirm-btn.danger:hover{background:linear-gradient(135deg,#c53030 0%,#9b2c2c 100%);border-color:rgba(255,255,255,.35);color:#fff}
             @media (max-width:380px){
                 .app-confirm-card{padding:1rem .95rem .9rem;border-radius:16px}
                 .app-confirm-title{font-size:1.2rem}
@@ -3153,6 +3163,11 @@
             msgEl.textContent = message || 'Are you sure you want to continue?';
             cancelBtn.textContent = options.cancelText || 'Cancel';
             okBtn.textContent = options.confirmText || 'Confirm';
+            if (options.danger) {
+                okBtn.className = 'app-confirm-btn danger';
+            } else {
+                okBtn.className = 'app-confirm-btn primary';
+            }
             return new Promise(function(resolve) {
                 overlay.classList.add('show');
                 const close = function(result) {
@@ -3184,7 +3199,7 @@
 
         const style = document.createElement('style');
         style.textContent = `
-            .app-prompt-overlay{position:fixed;inset:0;background:rgba(42,35,30,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:clamp(.75rem,3vw,1.25rem);z-index:12001}
+            .app-prompt-overlay{position:fixed;inset:0;background:rgba(42,35,30,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:clamp(.75rem,3vw,1.25rem);z-index:13001}
             .app-prompt-overlay.show{display:flex}
             .app-prompt-card{width:min(22rem,100%);max-width:100%;background:rgba(255,253,249,.94);border:1px solid rgba(255,255,255,.72);border-radius:18px;box-shadow:0 20px 48px rgba(90,40,80,.16),inset 0 1px 0 rgba(255,255,255,.8);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);padding:1.15rem 1.15rem 1.05rem}
             .app-prompt-title{font-family:var(--font-display),Georgia,serif;font-size:1.35rem;font-weight:500;color:var(--charcoal,#2c2520);margin:0 0 .45rem;letter-spacing:-0.02em;line-height:1.25}
