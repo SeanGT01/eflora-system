@@ -290,11 +290,12 @@ def schedule_constraint_error(cleaned):
     delivery_start = parse_hhmm(cleaned.get('delivery_start'))
     delivery_cutoff = parse_hhmm(cleaned.get('delivery_cutoff'))
     order_cutoff = parse_hhmm(cleaned.get('order_cutoff'))
+    pickup_cutoff = parse_hhmm(cleaned.get('pickup_cutoff'))
     earliest, latest = store_hours_span(schedules)
 
     if not earliest:
-        if delivery_start or delivery_cutoff or order_cutoff:
-            return 'Set store operating hours before setting a delivery window or same-day cutoff.'
+        if delivery_start or delivery_cutoff or order_cutoff or pickup_cutoff:
+            return 'Set store operating hours before setting a delivery window or cutoff time.'
         return None
 
     open_label = format_hhmm_label(*earliest)
@@ -317,6 +318,13 @@ def schedule_constraint_error(cleaned):
             )
         if delivery_cutoff and order_cutoff > delivery_cutoff:
             return 'Same-day cutoff must be at or before the delivery window end.'
+
+    if pickup_cutoff:
+        if pickup_cutoff > latest:
+            return f'In-store pickup cutoff cannot be after store closing ({close_label}).'
+        if pickup_cutoff < earliest:
+            return f'In-store pickup cutoff must be at or after store opening ({open_label}).'
+
     return None
 
 

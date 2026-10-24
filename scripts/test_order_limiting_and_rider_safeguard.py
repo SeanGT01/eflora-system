@@ -14,6 +14,7 @@ from app import create_app, db
 from app.models import User, Store, Order, Rider
 from app.utils.store_schedule import (
     sanitize_store_schedule,
+    schedule_constraint_error,
     build_store_time_slots,
     validate_delivery_slot,
     DEFAULT_MAX_ORDERS_PER_SLOT
@@ -498,6 +499,34 @@ def run_tests():
         assert api_data['store_close'] == '8:00 PM'
         assert api_data['pickup_notice'] is not None
         print(" [PASS] API response includes pickup_cutoff, store_close, and pickup_notice.")
+
+        # Step 8.4: Verify pickup_cutoff cannot exceed store closing time or precede opening
+        sched_past_close = {
+            'schedules': [{'days': ALL_DAYS, 'open': '08:00', 'close': '20:00'}],
+            'pickup_cutoff': '20:30',
+        }
+        err_close = schedule_constraint_error(sanitize_store_schedule(sched_past_close))
+        assert err_close is not None, "pickup_cutoff past closing must return constraint error"
+        assert 'cannot be after store closing' in err_close
+        print(f" [PASS] Blocked pickup_cutoff past closing: '{err_close}'")
+
+        sched_before_open = {
+            'schedules': [{'days': ALL_DAYS, 'open': '08:00', 'close': '20:00'}],
+            'pickup_cutoff': '07:30',
+        }
+        err_open = schedule_constraint_error(sanitize_store_schedule(sched_before_open))
+        assert err_open is not None, "pickup_cutoff before opening must return constraint error"
+        assert 'must be at or after store opening' in err_open
+        print(f" [PASS] Blocked pickup_cutoff before opening: '{err_open}'")
+
+        # Step 8.5: Verify valid pickup_cutoff within store hours passes validation
+        sched_valid = {
+            'schedules': [{'days': ALL_DAYS, 'open': '08:00', 'close': '20:00'}],
+            'pickup_cutoff': '19:30',
+        }
+        err_valid = schedule_constraint_error(sanitize_store_schedule(sched_valid))
+        assert err_valid is None, f"Valid pickup_cutoff must pass validation, got: {err_valid}"
+        print(" [PASS] Valid pickup_cutoff within hours passed validation without error.")
 
         print("\n==================================================")
         print(" ALL VERIFICATION TESTS PASSED SUCCESSFULLY!")

@@ -6739,23 +6739,48 @@
             else orderEl.removeAttribute('max');
         }
 
+        const pickupEl = document.getElementById('pickup-cutoff-time');
+        if (pickupEl) {
+            if (span.minOpen) pickupEl.min = span.minOpen;
+            else pickupEl.removeAttribute('min');
+            if (span.maxClose) pickupEl.max = span.maxClose;
+            else pickupEl.removeAttribute('max');
+
+            // If an entered cutoff time exceeds newly updated store closing time, clamp it
+            if (pickupEl.value && span.maxClose && pickupEl.value > span.maxClose) {
+                pickupEl.value = span.maxClose;
+                if (typeof showToast === 'function') {
+                    showToast('In-store pickup cutoff adjusted to store closing time (' + formatScheduleTime12(span.maxClose) + ').', 'info');
+                }
+            } else if (pickupEl.value && span.minOpen && pickupEl.value < span.minOpen) {
+                pickupEl.value = span.minOpen;
+                if (typeof showToast === 'function') {
+                    showToast('In-store pickup cutoff adjusted to store opening time (' + formatScheduleTime12(span.minOpen) + ').', 'info');
+                }
+            }
+        }
+
         const hintWin = document.getElementById('delivery-window-hint');
         const hintCut = document.getElementById('order-cutoff-hint');
+        const hintPickup = document.getElementById('pickup-cutoff-hint');
         if (span.minOpen && span.maxClose) {
             const range = formatScheduleTime12(span.minOpen) + ' – ' + formatScheduleTime12(span.maxClose);
+            const closeFormatted = formatScheduleTime12(span.maxClose);
             if (hintWin) hintWin.textContent = 'Must fall within store hours (' + range + ').';
             if (hintCut) hintCut.textContent = 'Must be within store hours (' + range + '). After this time, customers cannot book same-day delivery.';
+            if (hintPickup) hintPickup.textContent = 'Optional. Stop in-store pickups earlier than shop closing (latest allowed: ' + closeFormatted + '). If empty, pickup runs until shop close.';
         } else {
             if (hintWin) hintWin.textContent = 'Must fall within store operating hours. Set hours first, then choose a delivery window.';
             if (hintCut) hintCut.textContent = 'Must be within store hours. Set operating hours first.';
+            if (hintPickup) hintPickup.textContent = 'Optional. Stop in-store pickups earlier than shop closing. Set store operating hours first.';
         }
     }
 
-    function validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff) {
+    function validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff, pickupCutoff) {
         const span = getStoreHoursSpan();
         if (!span.minOpen || !span.maxClose) {
-            if (deliveryStart || deliveryCutoff || orderCutoff) {
-                return 'Set store operating hours before setting a delivery window or same-day cutoff.';
+            if (deliveryStart || deliveryCutoff || orderCutoff || pickupCutoff) {
+                return 'Set store operating hours before setting a delivery window or cutoff time.';
             }
             return null;
         }
@@ -6773,6 +6798,14 @@
             }
             if (deliveryCutoff && orderCutoff > deliveryCutoff) {
                 return 'Same-day cutoff must be at or before the delivery window end.';
+            }
+        }
+        if (pickupCutoff) {
+            if (pickupCutoff > span.maxClose) {
+                return 'In-store pickup cutoff cannot be after store closing (' + closeLabel + ').';
+            }
+            if (pickupCutoff < span.minOpen) {
+                return 'In-store pickup cutoff must be at or after store opening (' + openLabel + ').';
             }
         }
         return null;
@@ -6817,7 +6850,7 @@
         const orderCutoff = (document.getElementById('order-cutoff-time')?.value || '').trim();
         const pickupCutoff = (document.getElementById('pickup-cutoff-time')?.value || '').trim();
         const allowSameDay = document.getElementById('allow-same-day-toggle')?.checked ?? true;
-        const hoursErr = validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff);
+        const hoursErr = validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff, pickupCutoff);
         if (hoursErr) {
             showToast(hoursErr, 'error');
             return 'INVALID';
@@ -6851,18 +6884,47 @@
     // Initialize schedule UI
     renderScheduleEntries();
     ['delivery-start-time', 'delivery-cutoff-time', 'order-cutoff-time', 'pickup-cutoff-time'].forEach(function (id) {
-        document.getElementById(id)?.addEventListener('change', function () {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const handleTimeChange = function () {
+            const span = getStoreHoursSpan();
             const deliveryStart = (document.getElementById('delivery-start-time')?.value || '').trim();
             const deliveryCutoff = (document.getElementById('delivery-cutoff-time')?.value || '').trim();
             const orderCutoff = (document.getElementById('order-cutoff-time')?.value || '').trim();
+            const pickupCutoff = (document.getElementById('pickup-cutoff-time')?.value || '').trim();
+
+            if (id === 'pickup-cutoff-time') {
+                if (pickupCutoff) {
+                    if (!span.maxClose) {
+                        showToast('Please set store operating hours before setting a pickup cutoff.', 'error');
+                        el.value = '';
+                        return;
+                    }
+                    if (span.maxClose && pickupCutoff > span.maxClose) {
+                        showToast('In-store pickup cutoff cannot be after store closing (' + formatScheduleTime12(span.maxClose) + ').', 'error');
+                        el.value = span.maxClose;
+                        return;
+                    }
+                    if (span.minOpen && pickupCutoff < span.minOpen) {
+                        showToast('In-store pickup cutoff must be at or after store opening (' + formatScheduleTime12(span.minOpen) + ').', 'error');
+                        el.value = span.minOpen;
+                        return;
+                    }
+                }
+            }
+
             if ((deliveryStart && !deliveryCutoff) || (!deliveryStart && deliveryCutoff)) return;
             if (deliveryStart && deliveryCutoff && deliveryStart >= deliveryCutoff) {
                 showToast('Delivery cutoff must be after delivery start.', 'error');
                 return;
             }
-            const hoursErr = validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff);
+            const hoursErr = validateTimesAgainstStoreHours(deliveryStart, deliveryCutoff, orderCutoff, pickupCutoff);
             if (hoursErr) showToast(hoursErr, 'error');
-        });
+        };
+        el.addEventListener('change', handleTimeChange);
+        if (id === 'pickup-cutoff-time') {
+            el.addEventListener('blur', handleTimeChange);
+        }
     });
 
     // Edit button
