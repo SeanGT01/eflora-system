@@ -36,6 +36,7 @@ from urllib.request import urlopen
 from sqlalchemy import func, text
 from sqlalchemy.orm import joinedload
 
+from app.utils.forecasting import holt_winters_forecast
 from app.utils.phone_utils import display_login_id
 from app.extensions import db
 from app.models import (
@@ -1336,6 +1337,313 @@ def _recent_reviews(store_id, limit=3):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sales & demand forecasting (Holt-Winters)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_FORECAST_HISTORY_DAYS = 60
+_FORECAST_HORIZON = 7
+_FORECAST_CHART_HISTORY_DAYS = 14
+_FORECAST_PRODUCT_LIMIT = 8
+
+
+def _method_display(method: str) -> str:
+    return {
+        'holt_winters_additive': 'Holt-Winters (7-day seasonality)',
+        'holt_linear': 'Linear trend',
+        'simple_exponential': 'Simple average',
+    }.get(method, method)
+
+
+def _top_product_ids_for_forecast(
+    store_id: Optional[int],
+    start,
+    end,
+    limit: int = _FORECAST_PRODUCT_LIMIT,
+) -> List[int]:
+    """Product IDs with the highest combined online + POS unit volume in the window."""
+    qty_by_id: dict[int, int] = defaultdict(int)
+
+    oq = (
+        db.session.query(
+            Product.id,
+            func.coalesce(func.sum(OrderItem.quantity), 0),
+        )
+        .join(OrderItem, OrderItem.product_id == Product.id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(
+            _paid_order_status_filter(),
+            Order.created_at >= start,
+            Order.created_at < end,
+        )
+    )
+    if store_id is not None:
+        oq = oq.filter(Order.store_id == store_id)
+    for pid, qty in oq.group_by(Product.id).all():
+        qty_by_id[int(pid)] += int(qty or 0)
+
+    pq = (
+        db.session.query(
+            Product.id,
+            func.coalesce(func.sum(POSOrderItem.quantity), 0),
+        )
+        .join(POSOrderItem, POSOrderItem.product_id == Product.id)
+        .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id)
+        .filter(
+            POSOrderItem.product_id.isnot(None),
+            POSOrder.created_at >= start,
+            POSOrder.created_at < end,
+        )
+    )
+    if store_id is not None:
+        pq = pq.filter(POSOrder.store_id == store_id)
+    for pid, qty in pq.group_by(Product.id).all():
+        qty_by_id[int(pid)] += int(qty or 0)
+
+    ranked = sorted(qty_by_id.items(), key=lambda item: item[1], reverse=True)
+    return [pid for pid, total in ranked[:limit] if total > 0]
+
+
+def _product_daily_qty_series(
+    store_id: Optional[int],
+    product_id: int,
+    start,
+    end,
+) -> List[float]:
+    days = list(_iter_pht_days(start, end))
+    by_day = {d: 0 for d in days}
+    if not days:
+        return []
+
+    day_col = pht_sql_date(Order.created_at)
+    oq = (
+        db.session.query(
+            day_col.label('day'),
+            func.coalesce(func.sum(OrderItem.quantity), 0),
+        )
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(
+            OrderItem.product_id == product_id,
+            _paid_order_status_filter(),
+            Order.created_at >= start,
+            Order.created_at < end,
+        )
+        .group_by(day_col)
+    )
+    if store_id is not None:
+        oq = oq.filter(Order.store_id == store_id)
+    for day_val, qty in oq.all():
+        if day_val in by_day:
+            by_day[day_val] += int(qty or 0)
+
+    pos_day = pht_sql_date(POSOrder.created_at)
+    pq = (
+        db.session.query(
+            pos_day.label('day'),
+            func.coalesce(func.sum(POSOrderItem.quantity), 0),
+        )
+        .join(POSOrder, POSOrder.id == POSOrderItem.pos_order_id)
+        .filter(
+            POSOrderItem.product_id == product_id,
+            POSOrder.created_at >= start,
+            POSOrder.created_at < end,
+        )
+        .group_by(pos_day)
+    )
+    if store_id is not None:
+        pq = pq.filter(POSOrder.store_id == store_id)
+    for day_val, qty in pq.all():
+        if day_val in by_day:
+            by_day[day_val] += int(qty or 0)
+
+    return [float(by_day[d]) for d in days]
+
+
+def _product_demand_forecasts(
+    store_id: Optional[int],
+    start,
+    end,
+    forecast_labels: List[str],
+) -> List[dict]:
+    product_ids = _top_product_ids_for_forecast(store_id, start, end)
+    if not product_ids:
+        return []
+
+    products = {
+        p.id: p
+        for p in Product.query.filter(Product.id.in_(product_ids)).all()
+    }
+    cat_names = {}
+    try:
+        for c in Category.query.all():
+            if c.id:
+                cat_names[c.id] = c.name
+    except Exception:
+        pass
+
+    out: List[dict] = []
+    for pid in product_ids:
+        product = products.get(pid)
+        if not product:
+            continue
+        series = _product_daily_qty_series(store_id, pid, start, end)
+        if not series or sum(series) <= 0:
+            continue
+        result = holt_winters_forecast(series, seasonal_period=7, horizon=_FORECAST_HORIZON)
+        forecast_vals = result.get('forecast') or []
+        projected = round(sum(forecast_vals), 1)
+        peak_idx = (
+            max(range(len(forecast_vals)), key=lambda i: forecast_vals[i])
+            if forecast_vals else 0
+        )
+        out.append({
+            'product_id': pid,
+            'name': product.name,
+            'category': cat_names.get(product.main_category_id) or 'Uncategorized',
+            'projected_units': projected,
+            'daily_forecast': forecast_vals,
+            'method': result.get('method'),
+            'method_label': _method_display(result.get('method') or ''),
+            'peak_projected_day': forecast_labels[peak_idx] if forecast_labels else None,
+            'is_insufficient_data': bool(result.get('is_insufficient_data')),
+        })
+
+    out.sort(key=lambda row: row['projected_units'], reverse=True)
+    return out
+
+
+def _forecasting_context(store_id: Optional[int] = None) -> dict:
+    """Build 7-day revenue + order demand forecasts from the last 60 PHT calendar days."""
+    today_pht = datetime.now(PHT).date()
+    end = _pht_midnight_utc_naive(today_pht + timedelta(days=1))
+    start = _pht_midnight_utc_naive(today_pht - timedelta(days=_FORECAST_HISTORY_DAYS - 1))
+
+    if store_id is None:
+        history = _platform_revenue_series(start, end)
+    else:
+        history = _revenue_series(store_id, start, end)
+
+    rev_series = [float(v or 0) for v in (history.get('revenue') or [])]
+    ord_series = [float(v or 0) for v in (history.get('orders') or [])]
+
+    rev_result = holt_winters_forecast(rev_series, seasonal_period=7, horizon=_FORECAST_HORIZON)
+    ord_result = holt_winters_forecast(ord_series, seasonal_period=7, horizon=_FORECAST_HORIZON)
+
+    forecast_labels = [
+        (today_pht + timedelta(days=i)).strftime('%b %d')
+        for i in range(1, _FORECAST_HORIZON + 1)
+    ]
+
+    def _pack(series: List[float], result: dict) -> dict:
+        last_7 = series[-7:] if len(series) >= 7 else list(series)
+        baseline = sum(last_7)
+        projected = sum(result.get('forecast') or [])
+        growth = round(((projected - baseline) / baseline) * 100, 1) if baseline > 0 else None
+        forecast_vals = result.get('forecast') or []
+        peak_idx = (
+            max(range(len(forecast_vals)), key=lambda i: forecast_vals[i])
+            if forecast_vals else 0
+        )
+        return {
+            'labels': forecast_labels,
+            'values': forecast_vals,
+            'lower': result.get('lower_bound') or [],
+            'upper': result.get('upper_bound') or [],
+            'method': result.get('method'),
+            'method_label': _method_display(result.get('method') or ''),
+            'projected_total': round(projected, 2),
+            'growth_rate_pct': growth,
+            'peak_projected_day': forecast_labels[peak_idx] if forecast_labels else None,
+            'is_insufficient_data': bool(result.get('is_insufficient_data')),
+            'metrics': result.get('metrics') or {},
+        }
+
+    hist_n = min(_FORECAST_CHART_HISTORY_DAYS, len(history.get('labels') or []))
+
+    return {
+        'revenue': _pack(rev_series, rev_result),
+        'demand': _pack(ord_series, ord_result),
+        'history': {
+            'labels': (history.get('labels') or [])[-hist_n:],
+            'revenue': rev_series[-hist_n:],
+            'orders': [int(round(v)) for v in ord_series[-hist_n:]],
+        },
+        'is_insufficient_data': bool(
+            rev_result.get('is_insufficient_data') or ord_result.get('is_insufficient_data')
+        ),
+        'products': _product_demand_forecasts(store_id, start, end, forecast_labels),
+    }
+
+
+def _forecast_section(store_id: Optional[int], start, end) -> dict:
+    """PDF/CSV section: 7-day revenue, order, and top-product unit forecasts."""
+    fc = _forecasting_context(store_id)
+    rev = fc['revenue']
+    dem = fc['demand']
+    rows = []
+    for i, lbl in enumerate(rev.get('labels') or []):
+        rows.append([
+            lbl,
+            rev['values'][i],
+            rev['lower'][i],
+            rev['upper'][i],
+            dem['values'][i],
+            dem['lower'][i],
+            dem['upper'][i],
+        ])
+
+    rev_metrics = rev.get('metrics') or {}
+    dem_metrics = dem.get('metrics') or {}
+    summary = [
+        ('Revenue model', rev.get('method_label') or '—'),
+        ('Order demand model', dem.get('method_label') or '—'),
+        ('7-day projected revenue', peso(rev.get('projected_total') or 0)),
+        ('7-day projected orders', f"{int(round(dem.get('projected_total') or 0)):,}"),
+        ('Revenue vs prior 7 days', f"{rev['growth_rate_pct']:+.1f}%" if rev.get('growth_rate_pct') is not None else '—'),
+        ('Orders vs prior 7 days', f"{dem['growth_rate_pct']:+.1f}%" if dem.get('growth_rate_pct') is not None else '—'),
+        ('Peak revenue day', rev.get('peak_projected_day') or '—'),
+        ('Peak order day', dem.get('peak_projected_day') or '—'),
+        ('Revenue RMSE (in-sample)', f"{rev_metrics.get('rmse', 0):.2f}"),
+        ('Order RMSE (in-sample)', f"{dem_metrics.get('rmse', 0):.2f}"),
+        ('History window', f'Last {_FORECAST_HISTORY_DAYS} calendar days (Asia/Manila)'),
+        ('Note', 'Forecasts are independent of the report period selector above.'),
+    ]
+
+    product_rows = [
+        [
+            p['name'],
+            p['category'],
+            p['method_label'],
+            p['projected_units'],
+            p.get('peak_projected_day') or '—',
+        ]
+        for p in (fc.get('products') or [])
+    ]
+
+    return {
+        'key': 'forecast',
+        'title': REPORT_TYPE_LABELS['forecast'],
+        'columns': [
+            'Date',
+            'Revenue Forecast (₱)',
+            'Rev. Low (95%)',
+            'Rev. High (95%)',
+            'Orders Forecast',
+            'Orders Low (95%)',
+            'Orders High (95%)',
+        ],
+        'rows': rows,
+        'summary': summary,
+        'pos_title': 'Top product unit demand (7-day projection)' if product_rows else None,
+        'pos_columns': ['Product', 'Category', 'Model', 'Projected units (7d)', 'Peak day'],
+        'pos_rows': product_rows if product_rows else None,
+    }
+
+
+def _admin_forecast_section(start, end) -> dict:
+    return _forecast_section(None, start, end)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public: analytics context
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1434,6 +1742,7 @@ def compute_analytics(
         'recent_orders': _recent_orders(store.id, limit=5),
         'rating': _store_rating(store.id),
         'reviews': _recent_reviews(store.id, limit=3),
+        'forecasting': _forecasting_context(store.id),
     }
 
 
@@ -1442,13 +1751,14 @@ def compute_analytics(
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Canonical set of report types (also drives the multi-select UI).
-REPORT_TYPES = ['orders', 'customers', 'products', 'revenue', 'riders', 'year_end']
+REPORT_TYPES = ['orders', 'customers', 'products', 'revenue', 'forecast', 'riders', 'year_end']
 
 REPORT_TYPE_LABELS = {
     'orders':    'Orders Report',
     'customers': 'Customers Report',
     'products':  'Products Report',
     'revenue':   'Revenue Report',
+    'forecast':  'Sales & Demand Forecast (7 Days)',
     'riders':    'Riders Report',
     'year_end':  'Year-End Summary Report',
 }
@@ -2222,6 +2532,7 @@ def build_report_payload(
         'customers': _customers_section,
         'products':  _products_section,
         'revenue':   _revenue_section,
+        'forecast':  _forecast_section,
         'riders':    _riders_section,
         'year_end':  _year_end_section,
     }
@@ -3615,6 +3926,7 @@ def compute_admin_analytics(
         'recent_orders': _platform_recent_orders(limit=5),
         'rating': _platform_rating(),
         'reviews': _platform_recent_reviews(limit=3),
+        'forecasting': _forecasting_context(None),
     }
 
 
@@ -4096,7 +4408,7 @@ def _admin_year_end_section(start, end):
     }
 
 
-ADMIN_REPORT_TYPES = ['orders', 'customers', 'stores', 'products', 'revenue', 'users', 'year_end']
+ADMIN_REPORT_TYPES = ['orders', 'customers', 'stores', 'products', 'revenue', 'forecast', 'users', 'year_end']
 
 ADMIN_REPORT_TYPE_LABELS = {
     'orders':    'Orders Report (All Stores)',
@@ -4104,6 +4416,7 @@ ADMIN_REPORT_TYPE_LABELS = {
     'stores':    'Stores Performance Report',
     'products':  'Products Report (All Stores)',
     'revenue':   'Platform Revenue Report',
+    'forecast':  'Platform Sales & Demand Forecast (7 Days)',
     'users':     'New Users Report',
     'year_end':  'Year-End Summary (Platform)',
 }
@@ -4138,6 +4451,7 @@ def build_admin_report_payload(
         'stores':    _admin_stores_section,
         'products':  _admin_products_section,
         'revenue':   _admin_revenue_section,
+        'forecast':  _admin_forecast_section,
         'users':     _admin_users_section,
         'year_end':  _admin_year_end_section,
     }

@@ -568,6 +568,46 @@
 .mini-stat-value.sage { color: var(--deep-sage); }
 .mini-stat-value.terra { color: var(--terracotta); }
 
+/* ─── Forecasting ───────────────────────────────────────── */
+.forecast-section { margin-bottom: 0.95rem; }
+
+.forecast-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.forecast-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 0.3rem 0.75rem;
+  border-radius: 100px;
+  background: rgba(122, 158, 126, 0.14);
+  color: var(--deep-sage);
+  border: 1px solid rgba(122, 158, 126, 0.25);
+}
+
+.forecast-badge.collecting {
+  background: rgba(196, 113, 75, 0.12);
+  color: var(--terracotta);
+  border-color: rgba(196, 113, 75, 0.22);
+}
+
+.forecast-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.chart-canvas-forecast { height: 240px; position: relative; }
+
 /* ─── Delivery stats ────────────────────────────────────── */
 .delivery-stats {
   display: grid;
@@ -1141,10 +1181,6 @@ table.ana-table {
 
 {% block content %}
 {% set admin_view = is_admin or (session.get('role') == 'admin') %}
-{% set online_rev_total = (revenue_series.online_revenue|sum) if revenue_series.online_revenue is defined else 0 %}
-{% set pos_rev_total = (revenue_series.pos_revenue|sum) if revenue_series.pos_revenue is defined else 0 %}
-{% set online_ord_total = (revenue_series.online_orders|sum) if revenue_series.online_orders is defined else 0 %}
-{% set pos_ord_total = (revenue_series.pos_orders|sum) if revenue_series.pos_orders is defined else 0 %}
 <div class="ana">
 
   <!-- ─── Header ──────────────────────────────────────────── -->
@@ -1207,6 +1243,9 @@ table.ana-table {
     {% endif %}
   {%- endmacro %}
 
+  {# KPI cards below duplicate the Seller Dashboard KPI strip, so they are
+     only shown on the admin (platform) analytics view. #}
+  {% if admin_view %}
   <!-- ─── Primary KPIs ────────────────────────────────────── -->
   <div class="kpi-row">
     <div class="kpi-card">
@@ -1216,7 +1255,7 @@ table.ana-table {
       </div>
       <div class="kpi-value" id="kpiRevenue">{{ totals.revenue_display }}</div>
       <div class="kpi-sub">{{ period_label }}</div>
-      {{ delta_badge(deltas.revenue_pct) }}
+      {{ delta_badge(deltas.get('revenue_pct') if deltas else None) }}
     </div>
 
     <div class="kpi-card green">
@@ -1226,7 +1265,7 @@ table.ana-table {
       </div>
       <div class="kpi-value" id="kpiOrders">{{ '{:,}'.format(totals.orders) }}</div>
       <div class="kpi-sub">{{ period_label }} (excluding cancelled)</div>
-      {{ delta_badge(deltas.orders_pct) }}
+      {{ delta_badge(deltas.get('orders_pct') if deltas else None) }}
     </div>
 
     <div class="kpi-card terra">
@@ -1236,7 +1275,7 @@ table.ana-table {
       </div>
       <div class="kpi-value" id="kpiAvg">{{ totals.avg_order_display }}</div>
       <div class="kpi-sub">Per completed order</div>
-      {{ delta_badge(deltas.avg_pct) }}
+      {{ delta_badge(deltas.get('avg_pct') if deltas else None) }}
     </div>
 
     <div class="kpi-card bark">
@@ -1246,7 +1285,7 @@ table.ana-table {
       </div>
       <div class="kpi-value" id="kpiNew">{{ '{:,}'.format(totals.new_customers) }}</div>
       <div class="kpi-sub">{{ period_label }}</div>
-      {{ delta_badge(deltas.new_pct) }}
+      {{ delta_badge(deltas.get('new_pct') if deltas else None) }}
     </div>
   </div>
 
@@ -1321,135 +1360,133 @@ table.ana-table {
     </div>
     {% endif %}
   </div>
+  {% endif %}{# /admin_view KPI cards #}
 
-  <!-- ─── Revenue + Top list ──────────────────────────────── -->
-  <div class="ana-body">
-    <div class="chart-panel">
-      <div class="chart-panel-head">
-        <div>
-          <div class="chart-panel-title">Revenue Overview</div>
-          <div class="chart-panel-subtitle">{{ period_label }}</div>
-        </div>
-        <button class="custom-btn" type="button" onclick="toggleChartType()" title="Toggle chart type">
-          <i class="ri-bar-chart-2-line" id="chartTypeIcon"></i>
-        </button>
+  {% if not no_store and forecasting is defined %}
+  {% set fc_rev = forecasting.revenue %}
+  {% set fc_ord = forecasting.demand %}
+  <div class="forecast-section">
+    <div class="forecast-head">
+      <div>
+        <div class="ana-eyebrow">Performance forecasting</div>
+        <h2 class="ana-title" style="font-size:clamp(20px,2.4vw,26px);">Next 7 days, <em>projected</em></h2>
       </div>
-      <div class="chart-panel-body">
-        <div class="chart-canvas-md">
-          <canvas id="revenueChart"></canvas>
-        </div>
-        <div class="mini-stats">
-          <div class="mini-stat">
-            <span class="mini-stat-label">Online</span>
-            <span class="mini-stat-value rose">₱{{ '{:,.2f}'.format(online_rev_total) }}</span>
-          </div>
-          <div class="mini-stat">
-            <span class="mini-stat-label">POS</span>
-            <span class="mini-stat-value sage">₱{{ '{:,.2f}'.format(pos_rev_total) }}</span>
-          </div>
-          <div class="mini-stat">
-            <span class="mini-stat-label">Orders</span>
-            <span class="mini-stat-value">{{ '{:,}'.format((online_ord_total + pos_ord_total)|int) }}</span>
-          </div>
-        </div>
-        <div class="table-scroll" style="margin-top:.85rem;">
-          <table class="ana-table">
-            <thead>
-              <tr>
-                <th>Channel</th>
-                <th>Revenue</th>
-                <th>Orders</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td data-label="Channel">Online</td>
-                <td data-label="Revenue">₱{{ '{:,.2f}'.format(online_rev_total) }}</td>
-                <td data-label="Orders">{{ '{:,}'.format(online_ord_total|int) }}</td>
-              </tr>
-              <tr>
-                <td data-label="Channel">POS</td>
-                <td data-label="Revenue">₱{{ '{:,.2f}'.format(pos_rev_total) }}</td>
-                <td data-label="Orders">{{ '{:,}'.format(pos_ord_total|int) }}</td>
-              </tr>
-              <tr>
-                <td data-label="Channel"><strong>Total</strong></td>
-                <td data-label="Revenue"><strong>₱{{ '{:,.2f}'.format(online_rev_total + pos_rev_total) }}</strong></td>
-                <td data-label="Orders"><strong>{{ '{:,}'.format((online_ord_total + pos_ord_total)|int) }}</strong></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head">
-        {% if admin_view and top_stores is defined and top_stores %}
-          <span class="panel-title">Top Stores</span>
-          <a href="{{ url_for('templates.admin_stores') }}" class="panel-action">Stores <i class="ri-arrow-right-line"></i></a>
-        {% else %}
-          <span class="panel-title">Top Products</span>
-          {% if admin_view %}
-            <a href="{{ url_for('templates.admin_stores') }}" class="panel-action">Stores <i class="ri-arrow-right-line"></i></a>
-          {% else %}
-            <a href="{{ url_for('templates.seller_products') }}" class="panel-action">All <i class="ri-arrow-right-line"></i></a>
-          {% endif %}
-        {% endif %}
-      </div>
-
-      {% if admin_view and top_stores is defined and top_stores %}
-        {% for s in top_stores %}
-          {% set rank_class = 'gold' if loop.index == 1 else ('silver' if loop.index == 2 else ('bronze' if loop.index == 3 else 'plain')) %}
-          <div class="prod-rank">
-            <div class="rk-num {{ rank_class }}">{{ loop.index }}</div>
-            <div class="rk-info">
-              <div class="rk-name">{{ s.name }}</div>
-              <div class="rk-cat">{{ '{:,}'.format(s.orders) }} orders</div>
-            </div>
-            <div class="rk-right">
-              <div class="rk-rev">₱{{ '{:,.2f}'.format(s.revenue) }}</div>
-            </div>
-          </div>
-        {% endfor %}
-      {% elif top_products %}
-        {% for p in top_products %}
-          {% set rank_class = 'gold' if loop.index == 1 else ('silver' if loop.index == 2 else ('bronze' if loop.index == 3 else 'plain')) %}
-          <div class="prod-rank">
-            <div class="rk-num {{ rank_class }}">{{ loop.index }}</div>
-            <div class="rk-info">
-              <div class="rk-name">{{ p.name }}</div>
-              <div class="rk-cat">{{ p.category }}</div>
-            </div>
-            <div class="rk-right">
-              <div class="rk-rev">₱{{ '{:,.2f}'.format(p.revenue) }}</div>
-              <div class="rk-qty">{{ '{:,}'.format(p.quantity) }} sold</div>
-            </div>
-          </div>
-        {% endfor %}
+      {% if forecasting.is_insufficient_data %}
+        <span class="forecast-badge collecting"><i class="ri-time-line"></i> Collecting data</span>
       {% else %}
-        <div class="empty-panel">
-          <i class="ri-plant-line"></i>
-          No completed sales yet for this period.
-        </div>
+        <span class="forecast-badge"><i class="ri-line-chart-line"></i> {{ fc_rev.method_label }}</span>
       {% endif %}
     </div>
-  </div>
 
-  <!-- ─── Chart grid ──────────────────────────────────────── -->
-  <div class="analytics-grid-3">
-    <div class="chart-panel">
-      <div class="chart-panel-head">
-        <div>
-          <div class="chart-panel-title">Order Status</div>
-          <div class="chart-panel-subtitle">{{ period_label }}</div>
+    <div class="forecast-kpi-row">
+      <div class="kpi-card green">
+        <div class="kpi-top">
+          <span class="kpi-label">Projected Revenue (7d)</span>
+          <div class="kpi-icon"><i class="ri-funds-line"></i></div>
         </div>
+        <div class="kpi-value">₱{{ '{:,.2f}'.format(fc_rev.projected_total|default(0)) }}</div>
+        <div class="kpi-sub">Peak day: {{ fc_rev.peak_projected_day or '—' }}</div>
+        {% if fc_rev.growth_rate_pct is not none %}
+          {% if fc_rev.growth_rate_pct >= 0 %}
+            <span class="kpi-badge up"><i class="ri-arrow-up-line"></i>{{ '%.1f' % fc_rev.growth_rate_pct }}% vs prior 7d</span>
+          {% else %}
+            <span class="kpi-badge down"><i class="ri-arrow-down-line"></i>{{ '%.1f' % (fc_rev.growth_rate_pct|abs) }}% vs prior 7d</span>
+          {% endif %}
+        {% else %}
+          <span class="kpi-badge flat">— vs prior 7d</span>
+        {% endif %}
       </div>
-      <div class="chart-panel-body">
-        <div class="chart-doughnut-wrap"><canvas id="statusChart"></canvas></div>
+      <div class="kpi-card terra">
+        <div class="kpi-top">
+          <span class="kpi-label">Projected Orders (7d)</span>
+          <div class="kpi-icon"><i class="ri-shopping-basket-line"></i></div>
+        </div>
+        <div class="kpi-value">{{ '{:,.0f}'.format(fc_ord.projected_total|default(0)) }}</div>
+        <div class="kpi-sub">Peak day: {{ fc_ord.peak_projected_day or '—' }}</div>
+        {% if fc_ord.growth_rate_pct is not none %}
+          {% if fc_ord.growth_rate_pct >= 0 %}
+            <span class="kpi-badge up"><i class="ri-arrow-up-line"></i>{{ '%.1f' % fc_ord.growth_rate_pct }}% vs prior 7d</span>
+          {% else %}
+            <span class="kpi-badge down"><i class="ri-arrow-down-line"></i>{{ '%.1f' % (fc_ord.growth_rate_pct|abs) }}% vs prior 7d</span>
+          {% endif %}
+        {% else %}
+          <span class="kpi-badge flat">— vs prior 7d</span>
+        {% endif %}
       </div>
     </div>
 
+    <div style="display:flex;justify-content:flex-end;gap:.45rem;flex-wrap:wrap;margin-bottom:.65rem;">
+      <button class="exp-btn" type="button" onclick="exportForecast('csv')">
+        <i class="ri-file-excel-2-line"></i> Export forecast CSV
+      </button>
+      <button class="exp-btn primary" type="button" onclick="exportForecast('pdf')">
+        <i class="ri-file-pdf-2-line"></i> Export forecast PDF
+      </button>
+    </div>
+
+    <div class="analytics-grid">
+      <div class="chart-panel">
+        <div class="chart-panel-head">
+          <div>
+            <div class="chart-panel-title">Revenue Forecast</div>
+            <div class="chart-panel-subtitle">Last 14 days actual · next 7 days projected (95% band)</div>
+          </div>
+        </div>
+        <div class="chart-panel-body">
+          <div class="chart-canvas-forecast"><canvas id="forecastRevenueChart"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-panel-head">
+          <div>
+            <div class="chart-panel-title">Order Demand Forecast</div>
+            <div class="chart-panel-subtitle">Combined online + POS · Holt-Winters smoothing</div>
+          </div>
+        </div>
+        <div class="chart-panel-body">
+          <div class="chart-canvas-forecast"><canvas id="forecastDemandChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    {% if forecasting.products %}
+    <div class="panel" style="margin-top:0.85rem;">
+      <div class="panel-head">
+        <span class="panel-title">Top product unit demand</span>
+        <span class="chart-panel-subtitle">Next 7 days · by historical volume (60d)</span>
+      </div>
+      <div class="table-scroll">
+        <table class="ana-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Category</th>
+              <th>Projected units (7d)</th>
+              <th>Peak day</th>
+              <th>Model</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in forecasting.products %}
+            <tr>
+              <td data-label="Product">{{ p.name }}</td>
+              <td data-label="Category">{{ p.category }}</td>
+              <td data-label="Projected units (7d)"><strong>{{ '%.1f'|format(p.projected_units) }}</strong></td>
+              <td data-label="Peak day">{{ p.peak_projected_day or '—' }}</td>
+              <td data-label="Model" style="font-size:11px;color:var(--muted);">{{ p.method_label }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ─── Sales by Category (admin only) & Delivery Performance ── -->
+  <div class="analytics-grid"{% if not admin_view %} style="grid-template-columns:1fr;"{% endif %}>
+    {% if admin_view %}
     <div class="chart-panel">
       <div class="chart-panel-head">
         <div>
@@ -1489,22 +1526,8 @@ table.ana-table {
         </div>
       </div>
     </div>
+    {% endif %}{# /admin_view Sales by Category #}
 
-    <div class="chart-panel">
-      <div class="chart-panel-head">
-        <div>
-          <div class="chart-panel-title">Peak Hours</div>
-          <div class="chart-panel-subtitle">{{ period_label }}</div>
-        </div>
-      </div>
-      <div class="chart-panel-body">
-        <div class="chart-canvas-md"><canvas id="peakChart"></canvas></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ─── Delivery + Reviews ──────────────────────────────── -->
-  <div class="analytics-grid">
     <div class="chart-panel">
       <div class="chart-panel-head">
         <div>
@@ -1530,37 +1553,43 @@ table.ana-table {
         <div class="chart-canvas-md"><canvas id="deliveryChart"></canvas></div>
       </div>
     </div>
+  </div>
 
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">Customer Reviews</span>
-      </div>
+  {% if admin_view %}
+  <!-- ─── Customer Reviews ─────────────────────────────────── -->
+  <div class="panel" style="margin-top:1.15rem;margin-bottom:1.15rem;">
+    <div class="panel-head">
+      <span class="panel-title">Customer Reviews & Experience</span>
+    </div>
 
-      <div class="rating-big">
-        <div class="rating-num">{{ '%.1f' % rating.average }}</div>
-        <div class="stars-row">
-          {% set full = rating.average|round(0,'floor')|int %}
-          {% set has_half = (rating.average - full) >= 0.25 and (rating.average - full) < 0.75 %}
-          {% set effective_full = full if has_half else (rating.average|round(0)|int) %}
-          {% for _ in range(effective_full) %}<i class="ri-star-fill star-full"></i>{% endfor %}
-          {% if has_half %}<i class="ri-star-half-fill star-half"></i>{% endif %}
-          {% set empties = 5 - effective_full - (1 if has_half else 0) %}
-          {% if empties > 0 %}{% for _ in range(empties) %}<i class="ri-star-line star-empty"></i>{% endfor %}{% endif %}
-        </div>
-        <div class="rating-count">Based on {{ '{:,}'.format(rating.total) }} review{{ '' if rating.total == 1 else 's' }}</div>
-      </div>
-
-      <div class="rating-bars">
-        {% set total_r = rating.total or 1 %}
-        {% for star in [5, 4, 3, 2, 1] %}
-          {% set count = rating.distribution[star] %}
-          {% set pct = (count / total_r * 100) if rating.total else 0 %}
-          <div class="rbar-row">
-            <span class="rbar-label">{{ star }} <i class="ri-star-fill"></i></span>
-            <div class="rbar-track"><div class="rbar-fill" style="width:{{ '%.1f' % pct }}%"></div></div>
-            <span class="rbar-count">{{ '{:,}'.format(count) }}</span>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:1.5rem;align-items:start;">
+      <div>
+        <div class="rating-big">
+          <div class="rating-num">{{ '%.1f' % rating.average }}</div>
+          <div class="stars-row">
+            {% set full = rating.average|round(0,'floor')|int %}
+            {% set has_half = (rating.average - full) >= 0.25 and (rating.average - full) < 0.75 %}
+            {% set effective_full = full if has_half else (rating.average|round(0)|int) %}
+            {% for _ in range(effective_full) %}<i class="ri-star-fill star-full"></i>{% endfor %}
+            {% if has_half %}<i class="ri-star-half-fill star-half"></i>{% endif %}
+            {% set empties = 5 - effective_full - (1 if has_half else 0) %}
+            {% if empties > 0 %}{% for _ in range(empties) %}<i class="ri-star-line star-empty"></i>{% endfor %}{% endif %}
           </div>
-        {% endfor %}
+          <div class="rating-count">Based on {{ '{:,}'.format(rating.total) }} review{{ '' if rating.total == 1 else 's' }}</div>
+        </div>
+
+        <div class="rating-bars">
+          {% set total_r = rating.total or 1 %}
+          {% for star in [5, 4, 3, 2, 1] %}
+            {% set count = rating.distribution[star] %}
+            {% set pct = (count / total_r * 100) if rating.total else 0 %}
+            <div class="rbar-row">
+              <span class="rbar-label">{{ star }} <i class="ri-star-fill"></i></span>
+              <div class="rbar-track"><div class="rbar-fill" style="width:{{ '%.1f' % pct }}%"></div></div>
+              <span class="rbar-count">{{ '{:,}'.format(count) }}</span>
+            </div>
+          {% endfor %}
+        </div>
       </div>
 
       <div class="reviews-feed">
@@ -1598,65 +1627,7 @@ table.ana-table {
       </div>
     </div>
   </div>
-
-  <!-- ─── Recent Orders ───────────────────────────────────── -->
-  <div class="panel" style="margin-bottom:0.95rem;">
-    <div class="panel-head">
-      <span class="panel-title">Recent Orders</span>
-      {% if admin_view %}
-        <a href="{{ url_for('templates.admin_stores') }}" class="panel-action">All stores <i class="ri-arrow-right-line"></i></a>
-      {% else %}
-        <a href="{{ url_for('templates.seller_orders') }}" class="panel-action">View all <i class="ri-arrow-right-line"></i></a>
-      {% endif %}
-    </div>
-    <div class="table-scroll">
-      <table class="ana-table">
-        <thead>
-          <tr>
-            <th>Order</th>
-            <th>Customer</th>
-            <th>Amount</th>
-            <th>Status</th>
-            <th>Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% if recent_orders %}
-            {% for o in recent_orders %}
-              {% set st = (o.status or 'pending').lower() %}
-              {% set pill_class = {
-                'delivered':   'sp-delivered',
-                'on_delivery': 'sp-delivery',
-                'preparing':   'sp-processing',
-                'pending':     'sp-processing',
-                'cancelled':   'sp-cancel',
-              }.get(st, 'sp-processing') %}
-              <tr>
-                <td data-label="Order"><span class="oid">{{ o.order_no }}</span></td>
-                <td data-label="Customer">
-                  <div class="cust-cell">
-                    {% set color_keys = ['pink', 'lavender', 'peach', 'yellow', 'blue', 'mint'] %}
-                    {% set color_idx = ((o.customer_id if o.customer_id else o.id if o.id else loop.index) % 6) %}
-                    <div class="c-av"><img src="{{ url_for('static', filename='images/default-customer-avatar-' ~ color_keys[color_idx] ~ '.svg') }}" alt="" style="width:100%;height:100%;object-fit:cover;"></div>
-                    <span class="c-nm">{{ o.customer_name }}</span>
-                  </div>
-                </td>
-                <td data-label="Amount"><span class="amt-cell">₱{{ '{:,.2f}'.format(o.amount) }}</span></td>
-                <td data-label="Status"><span class="s-pill {{ pill_class }}">{{ st.replace('_',' ')|title }}</span></td>
-                <td data-label="Time" style="color:var(--muted);font-size:12px;">{{ o.created_at_display if o.created_at_display is defined else (o.created_at.strftime('%b %d, %Y %I:%M %p') if o.created_at else '') }}</td>
-              </tr>
-            {% endfor %}
-          {% else %}
-            <tr>
-              <td colspan="5" style="text-align:center;color:var(--muted);padding:1.5rem 1rem;font-size:13px;">
-                {% if admin_view %}No orders yet for this period.{% else %}No orders yet for this store.{% endif %}
-              </td>
-            </tr>
-          {% endif %}
-        </tbody>
-      </table>
-    </div>
-  </div>
+  {% endif %}{# /admin_view Customer Reviews #}
 
   <!-- ─── Export Bar ──────────────────────────────────────── -->
   <div class="export-bar">
@@ -1762,137 +1733,133 @@ const tooltipDefaults = {
 
 /* ── Live data injected from the backend ───────────────── */
 const ANALYTICS_DATA = {{ {
-  'period': period,
-  'period_label': period_label,
-  'revenue_series': revenue_series,
-  'order_status': order_status,
-  'sales_by_category': sales_by_category,
-  'peak_hours': peak_hours,
-  'delivery_series': delivery.series,
+  'period': period if period is defined else '',
+  'period_label': period_label if period_label is defined else '',
+  'sales_by_category': sales_by_category if sales_by_category is defined else [],
+  'delivery_series': delivery.series if (delivery is defined and delivery.series is defined) else (delivery if delivery is defined else []),
+  'forecasting': forecasting if forecasting is defined else none,
 }|tojson }};
 
-/* ── Revenue Chart ─────────────────────────────────────── */
-const rCtx = document.getElementById('revenueChart').getContext('2d');
-const rGrad = rCtx.createLinearGradient(0,0,0,230);
-rGrad.addColorStop(0,'rgba(181,68,90,.18)');
-rGrad.addColorStop(1,'rgba(181,68,90,.02)');
 
-let chartType = 'line';
-let revenueChart = null;
-revenueChart = buildRevenueChart('line');
+/* ── Holt-Winters forecast charts ──────────────────────── */
+function buildForecastChart(canvasId, historyKey, forecastKey, isCurrency) {
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  const fc = ANALYTICS_DATA.forecasting;
+  if (!fc || !fc.history) return;
 
-function buildRevenueChart(type) {
-  if (revenueChart) revenueChart.destroy();
-  const series = ANALYTICS_DATA.revenue_series || { labels: [], revenue: [] };
-  return new Chart(rCtx, {
-    type,
+  const histLabels = fc.history.labels || [];
+  const histValues = fc.history[historyKey] || [];
+  const fcData = fc[forecastKey] || {};
+  const fcLabels = fcData.labels || [];
+  const fcValues = fcData.values || [];
+  const fcLower = fcData.lower || [];
+  const fcUpper = fcData.upper || [];
+
+  const bridge = histValues.length ? histValues[histValues.length - 1] : null;
+  const actualExtended = histValues.concat([bridge]).concat(Array(fcValues.length).fill(null));
+  const forecastExtended = Array(histValues.length).fill(null).concat([bridge]).concat(fcValues);
+  const lowerExtended = Array(histValues.length + 1).fill(null).concat(fcLower);
+  const upperExtended = Array(histValues.length + 1).fill(null).concat(fcUpper);
+  const labels = histLabels.concat(['']).concat(fcLabels);
+
+  const fmt = v => isCurrency
+    ? '₱' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : Number(v || 0).toLocaleString();
+
+  new Chart(el.getContext('2d'), {
+    type: 'line',
     data: {
-      labels: series.labels,
-      datasets: [{
-        label: 'Revenue (₱)',
-        data: series.revenue,
-        borderColor: C.rose,
-        backgroundColor: type === 'line' ? rGrad : C.roseA,
-        borderWidth: 2.5,
-        fill: type === 'line',
-        tension: 0.42,
-        pointRadius: 4,
-        pointBackgroundColor: C.rose,
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2,
-        pointHoverRadius: 6,
-        borderRadius: type === 'bar' ? 6 : 0,
-      }]
+      labels,
+      datasets: [
+        {
+          label: 'Actual',
+          data: actualExtended,
+          borderColor: C.rose,
+          backgroundColor: 'transparent',
+          borderWidth: 2.5,
+          tension: 0.35,
+          pointRadius: 3,
+          spanGaps: false,
+        },
+        {
+          label: 'Forecast',
+          data: forecastExtended,
+          borderColor: C.sage,
+          borderDash: [6, 4],
+          backgroundColor: 'transparent',
+          borderWidth: 2.5,
+          tension: 0.35,
+          pointRadius: 3,
+          spanGaps: false,
+        },
+        {
+          label: 'Upper (95%)',
+          data: upperExtended,
+          borderColor: 'rgba(122,158,126,.35)',
+          backgroundColor: 'rgba(122,158,126,.08)',
+          fill: '+1',
+          borderWidth: 1,
+          pointRadius: 0,
+          tension: 0.35,
+        },
+        {
+          label: 'Lower (95%)',
+          data: lowerExtended,
+          borderColor: 'rgba(122,158,126,.2)',
+          backgroundColor: 'rgba(122,158,126,.04)',
+          fill: false,
+          borderWidth: 1,
+          pointRadius: 0,
+          tension: 0.35,
+        },
+      ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
+        legend: {
+          labels: {
+            filter: item => !item.text.startsWith('Lower'),
+            font: { family: FONT_SANS, size: 11 },
+            color: '#9a8d85',
+          },
+        },
         tooltip: {
           ...tooltipDefaults,
-          callbacks: { label: c => `  ₱${Number(c.parsed.y || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` }
-        }
+          callbacks: { label: c => c.parsed.y == null ? null : `  ${c.dataset.label}: ${fmt(c.parsed.y)}` },
+        },
       },
       scales: {
         x: {
           grid: { color: 'rgba(107,76,59,.05)' },
-          ticks: { font: { family: FONT_SANS, size: 11 }, color: '#9a8d85' }
+          ticks: { font: { family: FONT_SANS, size: 10 }, color: '#9a8d85', maxRotation: 45 },
         },
         y: {
+          beginAtZero: true,
           grid: { color: 'rgba(107,76,59,.06)' },
           ticks: {
             font: { family: FONT_SANS, size: 11 },
             color: '#9a8d85',
-            callback: v => '₱' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-          }
-        }
-      }
-    }
+            callback: v => isCurrency ? '₱' + Number(v).toLocaleString() : v,
+          },
+        },
+      },
+    },
   });
 }
 
-function toggleChartType() {
-  chartType = chartType === 'line' ? 'bar' : 'line';
-  document.getElementById('chartTypeIcon').className =
-    chartType === 'line' ? 'ri-bar-chart-2-line' : 'ri-line-chart-line';
-  revenueChart = buildRevenueChart(chartType);
-}
+buildForecastChart('forecastRevenueChart', 'revenue', 'revenue', true);
+buildForecastChart('forecastDemandChart', 'orders', 'demand', false);
 
-/* ── Status Doughnut ───────────────────────────────────── */
-const statusMap = ANALYTICS_DATA.order_status || {};
-const statusLabels = ['Delivered / Picked Up', 'On Delivery', 'Preparing / Ready', 'Pending', 'Cancelled'];
-const statusValues = [
-  statusMap.delivered   || 0,
-  statusMap.on_delivery || 0,
-  statusMap.preparing   || 0,
-  statusMap.pending     || 0,
-  statusMap.cancelled   || 0,
-];
-const statusTotal = statusValues.reduce((a,b)=>a+b, 0);
-new Chart(document.getElementById('statusChart'), {
-  type: 'doughnut',
-  data: {
-    labels: statusLabels,
-    datasets: [{
-      data: statusTotal ? statusValues : [1],
-      backgroundColor: statusTotal
-        ? [C.sage, C.terra, C.rose, C.bark, C.muted]
-        : ['rgba(154,141,133,.20)'],
-      borderColor: '#fffdf9',
-      borderWidth: 3,
-      hoverOffset: 6,
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: '65%',
-    plugins: {
-      legend: {
-        position: 'bottom',
-        labels: {
-          font:  { family: FONT_SANS, size: 11 },
-          color: '#9a8d85',
-          boxWidth: 10,
-          padding: 12,
-        }
-      },
-      tooltip: {
-        ...tooltipDefaults,
-        callbacks: {
-          label: c => statusTotal ? `  ${c.label}: ${c.parsed} order(s)` : '  No orders yet'
-        }
-      }
-    }
-  }
-});
-
-/* ── Category Bar ──────────────────────────────────────── */
+/* ── Category Bar (admin view only) ────────────────────── */
 const cats = ANALYTICS_DATA.sales_by_category || [];
 const catColours = [C.roseA, C.sageA, C.dustyA, C.terraA, 'rgba(107,76,59,.13)'];
 const catBorders = [C.rose,  C.sage,  C.dusty,  C.terra,  C.bark];
-new Chart(document.getElementById('categoryChart'), {
+const catEl = document.getElementById('categoryChart');
+if (catEl) new Chart(catEl, {
   type: 'bar',
   data: {
     labels: cats.map(c => c.name),
@@ -1917,39 +1884,6 @@ new Chart(document.getElementById('categoryChart'), {
     scales: {
       x: { grid: { display:false }, ticks: { font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } },
       y: { grid:{ color:'rgba(107,76,59,.05)' }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85', callback: v => '₱' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } }
-    }
-  }
-});
-
-/* ── Peak Hours ────────────────────────────────────────── */
-const peaks = ANALYTICS_DATA.peak_hours || [];
-const peakMax = peaks.reduce((m, p) => Math.max(m, p.count || 0), 0) || 1;
-new Chart(document.getElementById('peakChart'), {
-  type: 'bar',
-  data: {
-    labels: peaks.map(p => p.label),
-    datasets: [{
-      data: peaks.map(p => p.count),
-      backgroundColor: ctx => {
-        const v = ctx.parsed?.y ?? 0;
-        const ratio = v / peakMax;
-        if (ratio >= 0.75) return C.rose;
-        if (ratio >= 0.45) return C.dusty;
-        return C.roseA;
-      },
-      borderRadius: 6,
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: tooltipDefaults
-    },
-    scales: {
-      x: { grid:{ display:false }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85' } },
-      y: { beginAtZero: true, grid:{ color:'rgba(107,76,59,.05)' }, ticks:{ font:{ family:FONT_SANS, size:11 }, color:'#9a8d85', precision: 0 } }
     }
   }
 });
@@ -2033,6 +1967,15 @@ function applyCustom() {
 }
 
 /* ── Quick export from analytics page ──────────────────── */
+function exportForecast(fmt) {
+  const url = new URL("{{ url_for('templates.reports_generate') }}", window.location.origin);
+  url.searchParams.set('format', fmt);
+  url.searchParams.set('types', 'forecast');
+  url.searchParams.set('skip_save', '1');
+  showToast(fmt === 'pdf' ? 'Generating forecast PDF…' : 'Generating forecast CSV…');
+  window.location.href = url.toString();
+}
+
 function exportAnalytics(fmt) {
   const url = new URL("{{ url_for('templates.reports_generate') }}", window.location.origin);
   url.searchParams.set('format', fmt);

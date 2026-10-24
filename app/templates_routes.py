@@ -11351,6 +11351,23 @@ def analytics():
                       'series': {'labels': [], 'rates': []}},
             recent_orders=[], rating={'average': 0, 'total': 0, 'distribution': {1:0,2:0,3:0,4:0,5:0}},
             reviews=[],
+            forecasting={
+                'revenue': {
+                    'labels': [], 'values': [], 'lower': [], 'upper': [],
+                    'method': 'simple_exponential', 'method_label': 'Collecting data',
+                    'projected_total': 0, 'growth_rate_pct': None,
+                    'peak_projected_day': None, 'is_insufficient_data': True, 'metrics': {},
+                },
+                'demand': {
+                    'labels': [], 'values': [], 'lower': [], 'upper': [],
+                    'method': 'simple_exponential', 'method_label': 'Collecting data',
+                    'projected_total': 0, 'growth_rate_pct': None,
+                    'peak_projected_day': None, 'is_insufficient_data': True, 'metrics': {},
+                },
+                'history': {'labels': [], 'revenue': [], 'orders': []},
+                'products': [],
+                'is_insufficient_data': True,
+            },
             no_store=True,
         )
 
@@ -11407,6 +11424,7 @@ def analytics_data():
             'created_at': _fmt_pht(o.get('created_at')) if o.get('created_at') else '',
         } for o in ctx['recent_orders']],
         'rating': ctx['rating'],
+        'forecasting': ctx.get('forecasting'),
     })
 
 
