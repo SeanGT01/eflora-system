@@ -13,8 +13,8 @@ rider_bp = Blueprint('rider', __name__)
 # Customer confirmation moves delivered → completed; both count as fulfilled deliveries.
 _DELIVERED_STATUSES = ('delivered', 'completed')
 
-# Maximum simultaneous active deliveries per rider to prevent overload
-MAX_RIDER_ACTIVE_DELIVERIES = 2
+# Maximum simultaneous active deliveries per rider to prevent overload (1 at a time)
+MAX_RIDER_ACTIVE_DELIVERIES = 1
 
 
 def rider_required(fn):
@@ -180,6 +180,104 @@ def get_assigned_orders():
     
     return jsonify({'orders': order_data}), 200
 
+def _parse_order_time_priority(order_dict):
+    """
+    Extracts a chronological sort key (date_str, start_minutes) for an order.
+    Orders with earlier requested dates and earlier start windows are delivered first.
+    """
+    date_val = str(order_dict.get('requested_delivery_date') or '').strip()
+    if not date_val:
+        date_val = '0000-00-00'
+    
+    time_slot = order_dict.get('requested_delivery_time')
+    start_min = 720  # default midday if no window specified
+    if time_slot:
+        from app.utils.store_schedule import parse_slot_interval_minutes
+        parsed = parse_slot_interval_minutes(time_slot)
+        if parsed:
+            start_min = parsed[0]
+            
+    return (date_val, start_min)
+
+
+def optimize_rider_itinerary(orders_data, store_lat=None, store_lng=None):
+    """
+    Arranges available orders into an optimal delivery itinerary.
+    Prioritizes:
+    1. Requested delivery date & start time window (customer preferred time).
+    2. Geographic distance from the store / previous stop (Nearest Neighbor TSP).
+    
+    Annotates each order with:
+    - itinerary_sequence (1, 2, 3...)
+    - is_recommended_first (True for stop 1)
+    - leg_distance_km (distance from previous stop or store)
+    - cumulative_distance_km (total route distance up to this stop)
+    """
+    if not orders_data:
+        return []
+
+    from app.map_utils import calculate_distance
+
+    # Group into time buckets so delivery window deadlines are strictly respected
+    buckets = {}
+    for od in orders_data:
+        key = _parse_order_time_priority(od)
+        buckets.setdefault(key, []).append(od)
+
+    sorted_keys = sorted(buckets.keys())
+
+    optimized = []
+    current_lat = store_lat
+    current_lng = store_lng
+    cumulative_dist = 0.0
+
+    for bucket_key in sorted_keys:
+        bucket_orders = list(buckets[bucket_key])
+        
+        while bucket_orders:
+            best_idx = 0
+            best_dist = None
+            
+            for idx, cand in enumerate(bucket_orders):
+                cand_lat = cand.get('customer_latitude')
+                cand_lng = cand.get('customer_longitude')
+                
+                if current_lat is not None and current_lng is not None and cand_lat is not None and cand_lng is not None:
+                    try:
+                        d = calculate_distance(current_lat, current_lng, cand_lat, cand_lng)
+                    except Exception:
+                        d = 9999.0
+                else:
+                    d = 9999.0
+                    
+                if best_dist is None or d < best_dist:
+                    best_dist = d
+                    best_idx = idx
+
+            chosen = bucket_orders.pop(best_idx)
+            leg_dist = best_dist if (best_dist is not None and best_dist < 9000.0) else (chosen.get('distance_from_store_km') or 0.0)
+            cumulative_dist += leg_dist
+
+            chosen['leg_distance_km'] = round(leg_dist, 2)
+            chosen['cumulative_distance_km'] = round(cumulative_dist, 2)
+
+            # Advance current position to this stop
+            c_lat = chosen.get('customer_latitude')
+            c_lng = chosen.get('customer_longitude')
+            if c_lat is not None and c_lng is not None:
+                current_lat = c_lat
+                current_lng = c_lng
+
+            optimized.append(chosen)
+
+    # Assign 1-indexed itinerary sequence numbers and recommendation flag
+    for i, od in enumerate(optimized):
+        od['itinerary_sequence'] = i + 1
+        od['is_recommended_first'] = (i == 0)
+
+    return optimized
+
+
 @rider_bp.route('/orders/available', methods=['GET'])
 @rider_required
 def get_available_orders():
@@ -208,6 +306,13 @@ def get_available_orders():
         .all()
     )
     
+    store = Store.query.get(rider.store_id)
+    store_lat = None
+    store_lng = None
+    if store:
+        store_lat = float(store.latitude) if store.latitude is not None else (float(store.location.y) if store.location else None)
+        store_lng = float(store.longitude) if store.longitude is not None else (float(store.location.x) if store.location else None)
+
     order_data = []
     for order in orders:
         from app.utils.phone_bind import attach_order_customer_contact
@@ -218,35 +323,54 @@ def get_available_orders():
         order_dict['delivery_address'] = order.delivery_address
         
         # Include store coordinates for map routing
-        store = Store.query.get(rider.store_id)
         if store:
-            order_dict['store_latitude'] = store.latitude
-            order_dict['store_longitude'] = store.longitude
+            order_dict['store_latitude'] = store_lat
+            order_dict['store_longitude'] = store_lng
             order_dict['store_address'] = store.address
+            order_dict['store_name'] = store.name
+
+        # Extract or fallback customer coordinates
+        cust_lat = order_dict.get('customer_latitude')
+        cust_lng = order_dict.get('customer_longitude')
+        if (cust_lat is None or cust_lng is None) and order.delivery_location:
+            try:
+                cust_lat = float(order.delivery_location.y)
+                cust_lng = float(order.delivery_location.x)
+                order_dict['customer_latitude'] = cust_lat
+                order_dict['customer_longitude'] = cust_lng
+            except Exception:
+                pass
 
         # Calculate distance from store to delivery location
-        store = Store.query.get(rider.store_id)
-        try:
-            if store and store.location and order.delivery_location:
+        if store_lat is not None and store_lng is not None and cust_lat is not None and cust_lng is not None:
+            try:
                 from app.map_utils import calculate_distance
-                distance = calculate_distance(
-                    store.location.x, store.location.y,
-                    order.delivery_location.x, order.delivery_location.y
-                )
+                distance = calculate_distance(store_lat, store_lng, cust_lat, cust_lng)
                 order_dict['distance_from_store_km'] = round(distance, 2)
-        except (AttributeError, TypeError):
-            # Location extraction failed, skip distance calculation
-            pass
+            except (AttributeError, TypeError, Exception):
+                pass
         
         order_data.append(order_dict)
+
+    # Sort and structure orders into an optimal delivery itinerary
+    optimized_orders = optimize_rider_itinerary(order_data, store_lat=store_lat, store_lng=store_lng)
         
     active_deliveries_count = Order.query.filter_by(
         rider_id=rider.id,
         status='on_delivery'
     ).count()
 
+    total_route_distance = round(sum(o.get('leg_distance_km', 0.0) for o in optimized_orders), 2)
+
     return jsonify({
-        'orders': order_data,
+        'orders': optimized_orders,
+        'itinerary_summary': {
+            'total_stops': len(optimized_orders),
+            'total_distance_km': total_route_distance,
+            'store_latitude': store_lat,
+            'store_longitude': store_lng,
+            'store_name': store.name if store else 'Store',
+        },
         'active_deliveries_count': active_deliveries_count,
         'max_active_deliveries': MAX_RIDER_ACTIVE_DELIVERIES,
         'can_accept_more': active_deliveries_count < MAX_RIDER_ACTIVE_DELIVERIES
@@ -271,14 +395,14 @@ def accept_order(order_id):
     if getattr(order, 'fulfillment_type', '') == 'pickup':
         return jsonify({'error': 'Store pickup orders cannot be accepted by riders'}), 400
 
-    # Rider workload guardrail: limit simultaneous active deliveries
+    # Rider workload guardrail: limit to 1 active delivery at a time
     active_deliveries = Order.query.filter(
         Order.rider_id == rider.id,
         Order.status == 'on_delivery'
     ).count()
     if active_deliveries >= MAX_RIDER_ACTIVE_DELIVERIES:
         return jsonify({
-            'error': f'Active delivery limit reached ({active_deliveries}/{MAX_RIDER_ACTIVE_DELIVERIES}). Please deliver your ongoing orders before accepting another.'
+            'error': f'Active delivery limit reached ({active_deliveries}/{MAX_RIDER_ACTIVE_DELIVERIES}). Please deliver your ongoing order before accepting another.'
         }), 400
     
     order.rider_id = rider.id

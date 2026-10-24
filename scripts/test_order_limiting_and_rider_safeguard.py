@@ -185,8 +185,8 @@ def run_tests():
             db.session.delete(o)
         db.session.commit()
 
-        print("\n=== TEST 4: Rider Active Delivery Safeguard ===")
-        assert MAX_RIDER_ACTIVE_DELIVERIES == 2, "MAX_RIDER_ACTIVE_DELIVERIES must be 2"
+        print("\n=== TEST 4: Rider Active Delivery Safeguard (1 at a time) & Optimal Itinerary ===")
+        assert MAX_RIDER_ACTIVE_DELIVERIES == 1, "MAX_RIDER_ACTIVE_DELIVERIES must be 1"
         print(f" [PASS] MAX_RIDER_ACTIVE_DELIVERIES is set to {MAX_RIDER_ACTIVE_DELIVERIES}.")
 
         rider = Rider.query.first()
@@ -203,9 +203,19 @@ def run_tests():
                 store_id=rider.store_id,
                 status='done_preparing',
                 total_amount=200.0,
-                fulfillment_type='delivery'
+                fulfillment_type='delivery',
+                requested_delivery_time='08:00 - 10:00'
+            )
+            mock_order2 = Order(
+                customer_id=cust.id if cust else 1,
+                store_id=rider.store_id,
+                status='done_preparing',
+                total_amount=350.0,
+                fulfillment_type='delivery',
+                requested_delivery_time='14:00 - 16:00'
             )
             db.session.add(mock_order)
+            db.session.add(mock_order2)
             db.session.commit()
 
             fake_active1 = Order(
@@ -215,15 +225,7 @@ def run_tests():
                 status='on_delivery',
                 total_amount=150.0
             )
-            fake_active2 = Order(
-                customer_id=cust.id if cust else 1,
-                store_id=rider.store_id,
-                rider_id=rider.id,
-                status='on_delivery',
-                total_amount=180.0
-            )
             db.session.add(fake_active1)
-            db.session.add(fake_active2)
             db.session.commit()
 
             try:
@@ -231,37 +233,46 @@ def run_tests():
                     Order.rider_id == rider.id,
                     Order.status == 'on_delivery'
                 ).count()
-                assert active_now >= 2
+                assert active_now >= 1
 
                 from flask_jwt_extended import create_access_token
                 access_token = create_access_token(identity=str(rider.user_id))
 
-                # Verify done_preparing delivery order appears in available orders
+                # Verify done_preparing delivery order appears in available orders and is sequenced
                 avail_res = client.get(
                     '/api/v1/rider/orders/available',
                     headers={'Authorization': f'Bearer {access_token}'}
                 )
                 assert avail_res.status_code == 200
                 avail_data = avail_res.get_json()
-                avail_ids = [o['id'] for o in avail_data.get('orders', [])]
+                avail_orders = avail_data.get('orders', [])
+                avail_ids = [o['id'] for o in avail_orders]
                 assert mock_order.id in avail_ids, f"mock_order #{mock_order.id} must be in available orders, got {avail_ids}"
-                print(f" [PASS] Rider available orders correctly includes done_preparing delivery order #{mock_order.id}.")
+                assert mock_order2.id in avail_ids, f"mock_order2 #{mock_order2.id} must be in available orders, got {avail_ids}"
+                
+                # Verify that 8:00-10:00 order comes before 14:00-16:00 order in itinerary
+                idx1 = next(i for i, o in enumerate(avail_orders) if o['id'] == mock_order.id)
+                idx2 = next(i for i, o in enumerate(avail_orders) if o['id'] == mock_order2.id)
+                assert idx1 < idx2, f"Expected 08:00 slot (idx {idx1}) to precede 14:00 slot (idx {idx2})"
+                assert avail_orders[idx1].get('itinerary_sequence') is not None
+                print(f" [PASS] Itinerary correctly prioritized earlier customer preferred time (order #{mock_order.id} before #{mock_order2.id}).")
 
+                # Verify 1-at-a-time acceptance safeguard
                 res = client.post(
                     f'/api/v1/rider/orders/{mock_order.id}/accept',
                     headers={'Authorization': f'Bearer {access_token}'}
                 )
-                assert res.status_code == 400, f"Expected 400 when rider at limit, got {res.status_code} - {res.get_json()}"
+                assert res.status_code == 400, f"Expected 400 when rider at limit (1), got {res.status_code} - {res.get_json()}"
                 data = res.get_json()
                 assert 'limit reached' in data.get('error', '').lower(), f"Expected limit reached error, got: {data}"
-                print(f" [PASS] Rider endpoint blocked 3rd active delivery: {data['error']}")
+                print(f" [PASS] Rider endpoint blocked 2nd active delivery: {data['error']}")
             finally:
                 # Guaranteed Cleanup
                 db.session.delete(mock_order)
+                db.session.delete(mock_order2)
                 db.session.delete(fake_active1)
-                db.session.delete(fake_active2)
                 db.session.commit()
-            print(" [PASS] Rider workload safeguard verified.")
+            print(" [PASS] Rider 1-delivery safeguard & optimal itinerary verified.")
 
         print("\n=== TEST 5: Pickup vs Delivery Window & Cutoff Differentiation ===")
         # Configure store with operating hours 08:00-20:00, delivery window 10:00-16:00, cutoff 14:00
