@@ -2,7 +2,8 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import User, Rider, Order, OrderItem, RiderLocation, Store, Product
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+import pytz
 from sqlalchemy import func
 from app.utils.report_service import period_range
 from sqlalchemy.orm import joinedload, selectinload
@@ -180,102 +181,189 @@ def get_assigned_orders():
     
     return jsonify({'orders': order_data}), 200
 
-def _parse_order_time_priority(order_dict):
+PHT = pytz.timezone('Asia/Manila')
+
+def _classify_order_delivery_date(order_dict):
     """
-    Extracts a chronological sort key (date_str, start_minutes) for an order.
-    Orders with earlier requested dates and earlier start windows are delivered first.
+    Classifies an order's delivery date against Philippine Time (Asia/Manila).
+    Returns a dict with delivery_date_key (YYYY-MM-DD), date_label, is_today, is_tomorrow, is_past_due.
     """
-    date_val = str(order_dict.get('requested_delivery_date') or '').strip()
-    if not date_val:
-        date_val = '0000-00-00'
+    now_pht = datetime.now(PHT)
+    today_pht = now_pht.date()
+    tomorrow_pht = today_pht + timedelta(days=1)
     
-    time_slot = order_dict.get('requested_delivery_time')
-    start_min = 720  # default midday if no window specified
-    if time_slot:
-        from app.utils.store_schedule import parse_slot_interval_minutes
-        parsed = parse_slot_interval_minutes(time_slot)
-        if parsed:
-            start_min = parsed[0]
-            
-    return (date_val, start_min)
+    raw_date = str(order_dict.get('requested_delivery_date') or '').strip()
+    order_date = None
+    if raw_date and raw_date.lower() != 'none':
+        try:
+            order_date = datetime.strptime(raw_date[:10], '%Y-%m-%d').date()
+        except Exception:
+            order_date = None
+
+    if order_date is None:
+        # No delivery date specified -> immediate / same-day delivery today
+        date_key = today_pht.isoformat()
+        return {
+            'delivery_date_key': date_key,
+            'delivery_date_label': 'Today',
+            'is_today': True,
+            'is_tomorrow': False,
+            'is_past_due': False,
+            'date_priority': 0,
+        }
+
+    if order_date < today_pht:
+        # Overdue order from previous date: must be fulfilled today with urgent priority
+        date_key = today_pht.isoformat()
+        formatted_orig = order_date.strftime('%b %d')
+        return {
+            'delivery_date_key': date_key,
+            'delivery_date_label': f'Today • Overdue ({formatted_orig})',
+            'is_today': True,
+            'is_tomorrow': False,
+            'is_past_due': True,
+            'date_priority': -1,  # top urgent ahead of normal today
+        }
+    elif order_date == today_pht:
+        date_key = today_pht.isoformat()
+        return {
+            'delivery_date_key': date_key,
+            'delivery_date_label': 'Today',
+            'is_today': True,
+            'is_tomorrow': False,
+            'is_past_due': False,
+            'date_priority': 0,
+        }
+    elif order_date == tomorrow_pht:
+        date_key = tomorrow_pht.isoformat()
+        return {
+            'delivery_date_key': date_key,
+            'delivery_date_label': 'Tomorrow',
+            'is_today': False,
+            'is_tomorrow': True,
+            'is_past_due': False,
+            'date_priority': 1,
+        }
+    else:
+        date_key = order_date.isoformat()
+        formatted = order_date.strftime('%b %d, %Y')
+        return {
+            'delivery_date_key': date_key,
+            'delivery_date_label': formatted,
+            'is_today': False,
+            'is_tomorrow': False,
+            'is_past_due': False,
+            'date_priority': (order_date - today_pht).days,
+        }
 
 
 def optimize_rider_itinerary(orders_data, store_lat=None, store_lng=None):
     """
-    Arranges available orders into an optimal delivery itinerary.
-    Prioritizes:
-    1. Requested delivery date & start time window (customer preferred time).
-    2. Geographic distance from the store / previous stop (Nearest Neighbor TSP).
+    Arranges available orders into optimal delivery itineraries strictly divided by delivery date.
     
-    Annotates each order with:
-    - itinerary_sequence (1, 2, 3...)
-    - is_recommended_first (True for stop 1)
-    - leg_distance_km (distance from previous stop or store)
-    - cumulative_distance_km (total route distance up to this stop)
+    1. Groups orders by delivery date (Today/Overdue, Tomorrow, Upcoming).
+    2. Within each date group, optimizes the route starting fresh from the store:
+       - Prioritizes customer preferred time window (start minutes).
+       - Overdue orders from past days get top priority (start_min = -1).
+       - Solves Nearest Neighbor TSP from store / previous stop on that same date.
+    3. Numbers stops (1, 2, 3...) and computes cumulative distance independently per date.
     """
     if not orders_data:
         return []
 
     from app.map_utils import calculate_distance
+    from app.utils.store_schedule import parse_slot_interval_minutes
 
-    # Group into time buckets so delivery window deadlines are strictly respected
-    buckets = {}
+    # Annotate all orders with date classification and time priority
+    date_buckets = {}
     for od in orders_data:
-        key = _parse_order_time_priority(od)
-        buckets.setdefault(key, []).append(od)
-
-    sorted_keys = sorted(buckets.keys())
-
-    optimized = []
-    current_lat = store_lat
-    current_lng = store_lng
-    cumulative_dist = 0.0
-
-    for bucket_key in sorted_keys:
-        bucket_orders = list(buckets[bucket_key])
+        info = _classify_order_delivery_date(od)
+        od['delivery_date_key'] = info['delivery_date_key']
+        od['delivery_date_label'] = info['delivery_date_label']
+        od['is_today'] = info['is_today']
+        od['is_tomorrow'] = info['is_tomorrow']
+        od['is_past_due'] = info['is_past_due']
         
-        while bucket_orders:
-            best_idx = 0
-            best_dist = None
+        # Priority within the date:
+        if info['is_past_due']:
+            start_min = -1  # Emergency priority: delivered first
+        else:
+            time_slot = od.get('requested_delivery_time')
+            start_min = 720  # default midday if no window specified
+            if time_slot:
+                parsed = parse_slot_interval_minutes(time_slot)
+                if parsed:
+                    start_min = parsed[0]
+        
+        od['_time_start_min'] = start_min
+        date_key = info['delivery_date_key']
+        date_buckets.setdefault(date_key, []).append(od)
+
+    sorted_date_keys = sorted(date_buckets.keys())
+    all_optimized = []
+
+    for date_key in sorted_date_keys:
+        date_orders = date_buckets[date_key]
+        
+        # Sub-group by time window within this date
+        time_windows = {}
+        for od in date_orders:
+            time_windows.setdefault(od['_time_start_min'], []).append(od)
+
+        sorted_time_keys = sorted(time_windows.keys())
+        date_optimized = []
+        current_lat = store_lat
+        current_lng = store_lng
+        cumulative_dist = 0.0
+
+        for t_key in sorted_time_keys:
+            bucket_orders = list(time_windows[t_key])
             
-            for idx, cand in enumerate(bucket_orders):
-                cand_lat = cand.get('customer_latitude')
-                cand_lng = cand.get('customer_longitude')
+            while bucket_orders:
+                best_idx = 0
+                best_dist = None
                 
-                if current_lat is not None and current_lng is not None and cand_lat is not None and cand_lng is not None:
-                    try:
-                        d = calculate_distance(current_lat, current_lng, cand_lat, cand_lng)
-                    except Exception:
-                        d = 9999.0
-                else:
-                    d = 9999.0
+                for idx, cand in enumerate(bucket_orders):
+                    cand_lat = cand.get('customer_latitude')
+                    cand_lng = cand.get('customer_longitude')
                     
-                if best_dist is None or d < best_dist:
-                    best_dist = d
-                    best_idx = idx
+                    if current_lat is not None and current_lng is not None and cand_lat is not None and cand_lng is not None:
+                        try:
+                            d = calculate_distance(current_lat, current_lng, cand_lat, cand_lng)
+                        except Exception:
+                            d = 9999.0
+                    else:
+                        d = 9999.0
+                        
+                    if best_dist is None or d < best_dist:
+                        best_dist = d
+                        best_idx = idx
 
-            chosen = bucket_orders.pop(best_idx)
-            leg_dist = best_dist if (best_dist is not None and best_dist < 9000.0) else (chosen.get('distance_from_store_km') or 0.0)
-            cumulative_dist += leg_dist
+                chosen = bucket_orders.pop(best_idx)
+                leg_dist = best_dist if (best_dist is not None and best_dist < 9000.0) else (chosen.get('distance_from_store_km') or 0.0)
+                cumulative_dist += leg_dist
 
-            chosen['leg_distance_km'] = round(leg_dist, 2)
-            chosen['cumulative_distance_km'] = round(cumulative_dist, 2)
+                chosen['leg_distance_km'] = round(leg_dist, 2)
+                chosen['cumulative_distance_km'] = round(cumulative_dist, 2)
 
-            # Advance current position to this stop
-            c_lat = chosen.get('customer_latitude')
-            c_lng = chosen.get('customer_longitude')
-            if c_lat is not None and c_lng is not None:
-                current_lat = c_lat
-                current_lng = c_lng
+                # Advance current position to this stop
+                c_lat = chosen.get('customer_latitude')
+                c_lng = chosen.get('customer_longitude')
+                if c_lat is not None and c_lng is not None:
+                    current_lat = c_lat
+                    current_lng = c_lng
 
-            optimized.append(chosen)
+                date_optimized.append(chosen)
 
-    # Assign 1-indexed itinerary sequence numbers and recommendation flag
-    for i, od in enumerate(optimized):
-        od['itinerary_sequence'] = i + 1
-        od['is_recommended_first'] = (i == 0)
+        # Assign 1-indexed itinerary sequence numbers and recommendation flag FOR THIS DATE
+        for i, od in enumerate(date_optimized):
+            od['itinerary_sequence'] = i + 1
+            od['is_recommended_first'] = (i == 0)
+            od.pop('_time_start_min', None)
 
-    return optimized
+        all_optimized.extend(date_optimized)
+
+    return all_optimized
 
 
 @rider_bp.route('/orders/available', methods=['GET'])
@@ -362,8 +450,27 @@ def get_available_orders():
 
     total_route_distance = round(sum(o.get('leg_distance_km', 0.0) for o in optimized_orders), 2)
 
+    # Build date groups summary
+    date_groups = []
+    seen_dates = []
+    for od in optimized_orders:
+        dk = od.get('delivery_date_key')
+        if dk and dk not in seen_dates:
+            seen_dates.append(dk)
+            group_orders = [o for o in optimized_orders if o.get('delivery_date_key') == dk]
+            date_groups.append({
+                'date_key': dk,
+                'label': group_orders[0].get('delivery_date_label') or dk,
+                'count': len(group_orders),
+                'total_distance_km': round(sum(o.get('leg_distance_km', 0.0) for o in group_orders), 2),
+                'is_today': any(o.get('is_today') for o in group_orders),
+                'is_tomorrow': any(o.get('is_tomorrow') for o in group_orders),
+                'has_past_due': any(o.get('is_past_due') for o in group_orders),
+            })
+
     return jsonify({
         'orders': optimized_orders,
+        'date_groups': date_groups,
         'itinerary_summary': {
             'total_stops': len(optimized_orders),
             'total_distance_km': total_route_distance,
