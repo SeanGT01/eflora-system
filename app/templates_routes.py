@@ -12189,7 +12189,11 @@ def get_cart():
                 'is_selected': item.is_selected,
                 'product': product_dict,  # Full product dict with all image data
                 'store_name': product.store.name if product.store else None,
-                'allow_pickup': product.store.can_accept_pickup() if product.store else True,
+                'allow_pickup': (
+                    product.store.can_accept_pickup()
+                    if hasattr(product.store, 'can_accept_pickup')
+                    else (product.store.get('allow_pickup', True) if isinstance(product.store, dict) else bool(getattr(product.store, 'allow_pickup', True)))
+                ) if product.store else True,
                 'price': price,
                 'original_price': original_price,
                 'discount_pct': discount_pct,
