@@ -1854,6 +1854,15 @@
     }
     
     function showAlert(type, message) {
+        const toastType = (type === 'danger' || type === 'error') ? 'error' : (type === 'success' ? 'success' : (type || ''));
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, toastType);
+            return;
+        }
+        if (typeof showToast === 'function') {
+            showToast(message, toastType);
+            return;
+        }
         const alert = document.createElement('div');
         alert.className = `alert alert-${type}`;
         alert.innerHTML = `

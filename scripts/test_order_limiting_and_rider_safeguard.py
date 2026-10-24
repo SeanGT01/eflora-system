@@ -235,6 +235,18 @@ def run_tests():
 
                 from flask_jwt_extended import create_access_token
                 access_token = create_access_token(identity=str(rider.user_id))
+
+                # Verify done_preparing delivery order appears in available orders
+                avail_res = client.get(
+                    '/api/v1/rider/orders/available',
+                    headers={'Authorization': f'Bearer {access_token}'}
+                )
+                assert avail_res.status_code == 200
+                avail_data = avail_res.get_json()
+                avail_ids = [o['id'] for o in avail_data.get('orders', [])]
+                assert mock_order.id in avail_ids, f"mock_order #{mock_order.id} must be in available orders, got {avail_ids}"
+                print(f" [PASS] Rider available orders correctly includes done_preparing delivery order #{mock_order.id}.")
+
                 res = client.post(
                     f'/api/v1/rider/orders/{mock_order.id}/accept',
                     headers={'Authorization': f'Bearer {access_token}'}

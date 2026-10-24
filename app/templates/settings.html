@@ -1679,15 +1679,30 @@ Thank you,
     });
     
     function showAlert(type, message) {
-        const alert = document.createElement('div');
-        alert.className = `alert alert-${type} alert-dismissible fade show`;
-        alert.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        document.querySelector('.main-content').insertBefore(alert, document.querySelector('.main-content').firstChild);
-        
-        setTimeout(() => alert.remove(), 5000);
+        const toastType = (type === 'danger' || type === 'error') ? 'error' : (type === 'success' ? 'success' : (type || ''));
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, toastType);
+            return;
+        }
+        if (typeof showToast === 'function') {
+            showToast(message, toastType);
+            return;
+        }
+        let stack = document.getElementById('toastStack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.className = 'toast-stack';
+            stack.id = 'toastStack';
+            document.body.appendChild(stack);
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast ${toastType ? 'toast-' + toastType : ''} show`;
+        toast.textContent = message;
+        stack.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 350);
+        }, 3200);
     }
 </script>
 

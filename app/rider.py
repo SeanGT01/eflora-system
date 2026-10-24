@@ -238,6 +238,8 @@ def get_available_orders():
             # Location extraction failed, skip distance calculation
             pass
         
+        order_data.append(order_dict)
+        
     active_deliveries_count = Order.query.filter_by(
         rider_id=rider.id,
         status='on_delivery'

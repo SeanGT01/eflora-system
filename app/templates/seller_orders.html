@@ -1555,16 +1555,30 @@
     }
 
     function showSellerAlert(type, message) {
-        const alert = document.createElement('div');
-        alert.className = `alert alert-${type} alert-dismissible fade show`;
-        alert.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-        const mainContent = document.querySelector('.main-content') || document.querySelector('.main-area') || document.body;
-        if (mainContent.firstChild) {
-            mainContent.insertBefore(alert, mainContent.firstChild);
-        } else {
-            mainContent.appendChild(alert);
+        const toastType = (type === 'danger' || type === 'error') ? 'error' : (type === 'success' ? 'success' : (type || ''));
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, toastType);
+            return;
         }
-        setTimeout(() => alert.remove(), 5000);
+        if (typeof showToast === 'function') {
+            showToast(message, toastType);
+            return;
+        }
+        let stack = document.getElementById('toastStack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.className = 'toast-stack';
+            stack.id = 'toastStack';
+            document.body.appendChild(stack);
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast ${toastType ? 'toast-' + toastType : ''} show`;
+        toast.textContent = message;
+        stack.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 350);
+        }, 3200);
     }
 
     function titleCaseStatus(value) {
