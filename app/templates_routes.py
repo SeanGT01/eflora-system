@@ -6901,16 +6901,18 @@ def reject_subscription_payment(payment_id):
 def _get_store_subscription_lock_meta(store):
     """
     Evaluate seller store subscription lifecycle:
-    - Active: now <= valid_until
+    - Active: now <= valid_until and store.subscription_status == 'active'
     - Overdue Grace Period: valid_until < now <= valid_until + 7 days (7-day chance to pay)
     - Hard Lockout: now > valid_until + 7 days (stuck on Monthly Payments page, store deactivated)
+    - Old/uninitialized stores without subscription date get 7-day grace period from now.
     """
-    if not store or not store.subscription_valid_until:
+    if not store:
         return {
             'is_tracked': False,
             'is_overdue': False,
             'is_in_grace': False,
             'grace_days_left': 7,
+            'grace_until': None,
             'is_locked': False,
             'has_pending': False,
             'valid_until': None,
@@ -6919,6 +6921,16 @@ def _get_store_subscription_lock_meta(store):
 
     now = datetime.utcnow()
     valid_until = store.subscription_valid_until
+
+    # If an old store has never had a subscription date set, start their 7-day grace period from now
+    if not valid_until:
+        valid_until = now
+        store.subscription_valid_until = valid_until
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
     grace_until = valid_until + timedelta(days=7)
 
     from app.models import SellerSubscriptionPayment
@@ -6975,8 +6987,8 @@ def _get_store_subscription_lock_meta(store):
 
 def _calculate_seller_subscription_billing_meta(store, setting):
     now = datetime.utcnow()
-    valid_until = store.subscription_valid_until if store else None
     lock_meta = _get_store_subscription_lock_meta(store)
+    valid_until = store.subscription_valid_until if store else None
     is_active = bool(valid_until and valid_until > now and store.subscription_status == 'active')
     days_left = (valid_until - now).days if is_active else 0
 
