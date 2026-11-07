@@ -366,6 +366,62 @@ def create_app(config_class='default'):
         except Exception:
             db.session.rollback()
 
+    def _ensure_subscription_payment_tables():
+        try:
+            from sqlalchemy import inspect, text
+            from app.models import AdminPaymentSetting, SellerSubscriptionPayment
+            inspector = inspect(db.engine)
+            existing_tables = set(inspector.get_table_names())
+
+            # 1. Ensure seller_applications columns
+            if 'seller_applications' in existing_tables:
+                sa_cols = {c['name'] for c in inspector.get_columns('seller_applications')}
+                sa_stmts = []
+                if 'payment_receipt_url' not in sa_cols:
+                    sa_stmts.append("ALTER TABLE seller_applications ADD COLUMN payment_receipt_url VARCHAR(500)")
+                if 'payment_receipt_public_id' not in sa_cols:
+                    sa_stmts.append("ALTER TABLE seller_applications ADD COLUMN payment_receipt_public_id VARCHAR(255)")
+                if 'payment_receipt_path' not in sa_cols:
+                    sa_stmts.append("ALTER TABLE seller_applications ADD COLUMN payment_receipt_path VARCHAR(500)")
+                for stmt in sa_stmts:
+                    db.session.execute(text(stmt))
+                if sa_stmts:
+                    db.session.commit()
+
+            # 2. Ensure stores subscription columns
+            if 'stores' in existing_tables:
+                store_cols = {c['name'] for c in inspector.get_columns('stores')}
+                store_stmts = []
+                if 'subscription_valid_until' not in store_cols:
+                    store_stmts.append("ALTER TABLE stores ADD COLUMN subscription_valid_until TIMESTAMP")
+                if 'subscription_status' not in store_cols:
+                    store_stmts.append("ALTER TABLE stores ADD COLUMN subscription_status VARCHAR(20) DEFAULT 'active'")
+                for stmt in store_stmts:
+                    db.session.execute(text(stmt))
+                if store_stmts:
+                    db.session.commit()
+
+            # 3. Create tables if missing
+            db.create_all()
+
+            # Ensure months_covered in seller_subscription_payments
+            if 'seller_subscription_payments' in set(inspect(db.engine).get_table_names()):
+                ssp_cols = {c['name'] for c in inspect(db.engine).get_columns('seller_subscription_payments')}
+                if 'months_covered' not in ssp_cols:
+                    db.session.execute(text("ALTER TABLE seller_subscription_payments ADD COLUMN months_covered INTEGER NOT NULL DEFAULT 1"))
+                    db.session.commit()
+
+            # 4. Ensure default AdminPaymentSetting row exists
+            default_setting = AdminPaymentSetting.query.first()
+            if not default_setting:
+                default_setting = AdminPaymentSetting(monthly_fee=300.0)
+                db.session.add(default_setting)
+                db.session.commit()
+                app.logger.info("Created default AdminPaymentSetting (monthly_fee=300.0)")
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning(f"Could not ensure subscription payment tables: {e}")
+
     mail_user = app.config.get('MAIL_USERNAME', '')
     mail_sender = app.config.get('MAIL_DEFAULT_SENDER', '')
     mail_server = app.config.get('MAIL_SERVER', '')
@@ -401,6 +457,7 @@ def create_app(config_class='default'):
         _ensure_keep_ymal_addons_column()
         _ensure_store_admin_tables()
         _ensure_main_categories()
+        _ensure_subscription_payment_tables()
         try:
             from app.utils.feature_controls import ensure_system_controls_table
             ensure_system_controls_table()
@@ -674,6 +731,17 @@ def create_app(config_class='default'):
     @app.context_processor
     def inject_mapbox_token():
         return dict(mapbox_public_token=app.config.get('MAPBOX_PUBLIC_TOKEN', ''))
+
+    @app.context_processor
+    def inject_admin_payment_status():
+        try:
+            from app.models import AdminPaymentSetting
+            setting = AdminPaymentSetting.query.first()
+            is_conf = bool(setting and setting.is_configured)
+            fee = setting.monthly_fee if setting else 300.0
+            return dict(admin_qr_available=is_conf, admin_monthly_fee=fee)
+        except Exception:
+            return dict(admin_qr_available=False, admin_monthly_fee=300.0)
 
     @app.context_processor
     def inject_seo():

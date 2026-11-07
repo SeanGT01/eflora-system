@@ -585,6 +585,14 @@
                         <input type="text" class="form-control reject-reason" data-field="government_id" placeholder="Reason for rejecting ID..." style="display: none; margin-left: 1.5rem; margin-bottom: 0.75rem;">
                     </div>
                     
+                    <div class="rejection-field-group" style="margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem;">
+                            <input type="checkbox" class="reject-field-cb" data-field="payment_receipt">
+                            <span style="font-weight: 500; color: var(--charcoal);">Payment Receipt</span>
+                        </label>
+                        <input type="text" class="form-control reject-reason" data-field="payment_receipt" placeholder="Reason for rejecting payment receipt..." style="display: none; margin-left: 1.5rem; margin-bottom: 0.75rem;">
+                    </div>
+                    
                     <hr style="margin: 1rem 0; border-color: var(--border);">
                     <label class="form-label">Overall Notes (optional)</label>
                     <textarea class="form-control" name="admin_notes" rows="2" placeholder="Additional notes for the applicant..."></textarea>
@@ -618,6 +626,9 @@
                 <button class="doc-tab-btn" id="id-tab" onclick="switchDocumentTab('id')" style="background: none; border: none; padding: 0.5rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;">
                     <i class="ri-id-card-line" style="margin-right: 0.5rem;"></i>Government ID
                 </button>
+                <button class="doc-tab-btn" id="receipt-tab" onclick="switchDocumentTab('receipt')" style="background: none; border: none; padding: 0.5rem 1rem; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;">
+                    <i class="ri-bill-line" style="margin-right: 0.5rem;"></i>Payment Receipt
+                </button>
             </div>
             
             <div id="logo-document" class="document-section" style="display: block; text-align: center;">
@@ -629,6 +640,12 @@
             <div id="id-document" class="document-section" style="display: none; text-align: center;">
                 <div style="background: var(--cream); border-radius: var(--radius-lg); padding: 2rem; min-height: 300px; display: flex; align-items: center; justify-content: center;">
                     <img src="#" alt="Government ID" style="max-width: 100%; max-height: 400px; object-fit: contain;">
+                </div>
+            </div>
+
+            <div id="receipt-document" class="document-section" style="display: none; text-align: center;">
+                <div style="background: var(--cream); border-radius: var(--radius-lg); padding: 2rem; min-height: 300px; display: flex; align-items: center; justify-content: center;">
+                    <img src="#" alt="Payment Receipt" style="max-width: 100%; max-height: 400px; object-fit: contain;">
                 </div>
             </div>
         </div>
@@ -1665,13 +1682,14 @@
             .catch(() => showAlert('danger', 'Network error while deleting user'));
     }
     
-    function viewDocuments(applicationId) {
+    function viewDocuments(applicationId, defaultTab = 'logo') {
         const app = currentApplications.find(a => a.id === applicationId);
         if (!app) return;
         
         // Set document images
         const logoContainer = document.querySelector('#logo-document div');
         const idContainer = document.querySelector('#id-document div');
+        const receiptContainer = document.querySelector('#receipt-document div');
         
         if (app.store_logo_url) {
             logoContainer.innerHTML = `<img src="${app.store_logo_url}" alt="Store Logo" style="max-width: 100%; max-height: 400px; object-fit: contain;">`;
@@ -1684,9 +1702,17 @@
         } else {
             idContainer.innerHTML = '<p class="text-muted" style="color: var(--muted);">No ID uploaded</p>';
         }
+
+        if (receiptContainer) {
+            if (app.payment_receipt_url) {
+                receiptContainer.innerHTML = `<img src="${app.payment_receipt_url}" alt="Payment Receipt" style="max-width: 100%; max-height: 400px; object-fit: contain;">`;
+            } else {
+                receiptContainer.innerHTML = '<p class="text-muted" style="color: var(--muted);">No payment receipt uploaded</p>';
+            }
+        }
         
-        // Reset to logo tab
-        switchDocumentTab('logo');
+        // Reset to tab
+        switchDocumentTab(defaultTab);
         openModal('documentsModal');
     }
     
@@ -1764,6 +1790,20 @@
                     <p style="margin-bottom: 0.5rem;"><strong style="color: var(--muted);">Description:</strong> ${app.store_description || 'N/A'}</p>
                 </div>
             </div>
+            ${app.payment_receipt_url ? `
+                <div style="margin-top: 1rem; padding: 0.85rem 1.1rem; background: var(--cream); border-radius: var(--radius-md); border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 0.85rem;">
+                        <img src="${app.payment_receipt_url}" alt="Receipt" style="width: 48px; height: 48px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border);">
+                        <div>
+                            <div style="font-weight: 600; font-size: 13px; color: var(--charcoal);">GCash Payment Receipt Submitted</div>
+                            <div style="font-size: 11.5px; color: var(--muted);">Initial platform registration fee</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="viewDocuments(${app.id}, 'receipt')" style="font-size: 12px; padding: 4px 10px;">
+                        <i class="ri-zoom-in-line"></i> View Receipt
+                    </button>
+                </div>
+            ` : ''}
             <div style="margin-top: 1rem;">
                 <button class="btn btn-outline btn-sm" onclick="viewDocuments(${app.id})" style="padding: 0.5rem 1rem;">
                     <i class="ri-file-list-line"></i> View Submitted Documents

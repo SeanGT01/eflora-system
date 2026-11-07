@@ -2088,6 +2088,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="{{ url_for('templates.admin_payments') }}" class="nav-link {% if request.endpoint == 'templates.admin_payments' %}active{% endif %}">
+                        <i class="ri-bank-card-line nav-icon"></i> Payments &amp; Fees
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="{{ url_for('templates.analytics') }}" class="nav-link {% if request.endpoint == 'templates.analytics' %}active{% endif %}">
                         <i class="ri-bar-chart-grouped-line nav-icon"></i> Overview
                     </a>
@@ -2163,6 +2168,13 @@
                         <span class="nav-badge" id="posOrderCount" {% if pos_orders_badge_count <= 0 %}hidden{% endif %}>{{ pos_orders_badge_count }}</span>
                     </a>
                 </li>
+                {% if session.role == 'seller' %}
+                <li class="nav-item">
+                    <a href="{{ url_for('templates.seller_payments') }}" class="nav-link {% if request.endpoint == 'templates.seller_payments' %}active{% endif %}">
+                        <i class="ri-calendar-check-line nav-icon"></i> Monthly Payments
+                    </a>
+                </li>
+                {% endif %}
                 {% endif %}
             </ul>
         </nav>
@@ -2598,6 +2610,9 @@
             if (n.type === 'seller_app_pending' || n.type === 'seller_app_resubmitted') {
                 return adminUsersUrl;
             }
+            if (n.type === 'subscription_payment_pending') {
+                return "{{ url_for('templates.admin_payments') }}";
+            }
             if (n.type === 'new_chat') {
                 return n.reference_id
                     ? `${adminDashboardUrl}?open_chat=${encodeURIComponent(n.reference_id)}`
@@ -2607,6 +2622,10 @@
                 return adminTestimonialsUrl;
             }
             return '';
+        }
+
+        if (n.type === 'payment_approved' || n.type === 'payment_rejected') {
+            return "{{ url_for('templates.seller_payments') }}";
         }
 
         if (

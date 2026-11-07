@@ -38,6 +38,8 @@ if __name__ == '__main__':
     # Only run in debug mode when executing directly (not via Gunicorn)
     debug_mode = os.getenv('FLASK_ENV') == 'development'
     port = int(os.getenv('PORT', 8000))  # Changed from 5000 to 8000
+    # On Windows with Socket.IO threading, the Werkzeug stat reloader causes socket deadlocks.
+    use_reloader = os.getenv('FLASK_USE_RELOADER', 'false').lower() == 'true'
     
-    print(f"🎯 Starting Flask+SocketIO on 0.0.0.0:{port} (debug={debug_mode})", file=sys.stderr)
-    socketio.run(app, debug=debug_mode, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+    print(f"🎯 Starting Flask+SocketIO on 0.0.0.0:{port} (debug={debug_mode}, reloader={use_reloader})", file=sys.stderr)
+    socketio.run(app, debug=debug_mode, use_reloader=use_reloader, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)

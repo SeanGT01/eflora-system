@@ -1044,8 +1044,44 @@
         identifierInput.setCustomValidity('');
     });
 
+    /* ── Blockade check for admin payment QR ── */
+    const adminQrAvailable = {{ 'true' if admin_qr_available else 'false' }};
+    const unavailableModal = document.getElementById('unavailableModal');
+
+    function showUnavailableBlockade() {
+        if (unavailableModal) {
+            unavailableModal.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
+    if (!adminQrAvailable) {
+        showUnavailableBlockade();
+        document.getElementById('sellerSubmit')?.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            showUnavailableBlockade();
+            return false;
+        });
+    }
+
+    // Modal cannot be closed: ignore Escape and backdrop clicks
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && unavailableModal?.classList.contains('open')) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    });
+
     /* ── Form submission ── */
     document.getElementById('sellerSignupForm').addEventListener('submit', function(e) {
+        if (!adminQrAvailable) {
+            e.preventDefault();
+            e.stopPropagation();
+            showUnavailableBlockade();
+            return false;
+        }
+
         const pw  = passwordInput.value;
         const cpw = confirmInput.value;
         const cleanedName = sanitizeName(fullNameInput.value).trim();
@@ -1142,5 +1178,26 @@
     </div>
 </div>
 {% endif %}
+<div class="email-fail-overlay{% if not admin_qr_available %} open{% endif %}" id="unavailableModal" role="dialog" aria-modal="true" aria-labelledby="unavailableTitle" style="z-index: 100000; background: rgba(44, 37, 32, 0.78); backdrop-filter: blur(5px);">
+    <div class="email-fail-modal" style="border: 2px solid var(--deep-rose); max-width: 440px; text-align: center; padding: 32px 28px 26px;">
+        <div class="icon-wrap" style="background: rgba(181, 68, 90, 0.12); color: var(--deep-rose); width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; font-size: 30px;">
+            <i class="ri-error-warning-line"></i>
+        </div>
+        <h3 id="unavailableTitle" style="font-family: var(--font-display); font-size: 24px; color: var(--charcoal); margin-bottom: 0.75rem;">Seller application temporarily unavailable</h3>
+        <p style="font-size: 13.5px; color: var(--muted); line-height: 1.6; margin-bottom: 1.75rem;">
+            Seller registration is temporarily paused while the administration updates platform payment requirements. We apologize for the inconvenience. Please return to the homepage and check back later.
+        </p>
+        <a href="/" class="btn-submit" id="btnGoBackHome" style="text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.85rem 1.5rem; font-weight: 600; font-size: 14px; background: var(--deep-rose); color: white; border-radius: var(--radius-pill); box-shadow: 0 4px 15px rgba(181, 68, 90, 0.3);">
+            <i class="ri-arrow-left-line"></i> Go back to E-FLORA
+        </a>
+    </div>
+</div>
+
+{% if not admin_qr_available %}
+<style>
+    body { overflow: hidden !important; }
+</style>
+{% endif %}
+
 </body>
 </html>

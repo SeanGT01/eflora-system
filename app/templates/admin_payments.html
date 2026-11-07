@@ -1,0 +1,1624 @@
+{% extends "layout.html" %}
+
+{% block title %}Payments & Platform Fees — Admin{% endblock %}
+{% block page_title %}Payments & Platform Fees{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+  --cream:        #faf6f0;
+  --warm-white:   #fffdf9;
+  --blush:        #f2c4ce;
+  --deep-rose:    #b5445a;
+  --dusty-rose:   #d4788a;
+  --sage:         #7a9e7e;
+  --deep-sage:    #4a6b4e;
+  --terracotta:   #c4714b;
+  --bark:         #6b4c3b;
+  --charcoal:     #2c2520;
+  --muted:        #9a8d85;
+  --border:       rgba(107,76,59,.12);
+  --border-md:    rgba(107,76,59,.22);
+  --font-display: 'Cormorant Garamond', serif;
+  --font-sans:    'DM Sans', sans-serif;
+  --radius-sm:    8px;
+  --radius-md:    14px;
+  --radius-lg:    22px;
+  --shadow-card:  0 2px 16px rgba(42,35,30,.07);
+  --transition:   all .32s cubic-bezier(.4,0,.2,1);
+}
+
+.adm {
+  background: transparent;
+  min-height: 0;
+  font-family: var(--font-sans);
+  color: var(--charcoal);
+  padding: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ─── Header ─── */
+.adm-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+.adm-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--dusty-rose);
+  margin-bottom: .35rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.adm-eyebrow::before {
+  content: '';
+  width: 20px; height: 1.5px;
+  background: var(--dusty-rose);
+  display: inline-block;
+}
+.adm-title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.2vw, 2.6rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  color: var(--charcoal);
+}
+.adm-title em { font-style: italic; color: var(--deep-rose); font-weight: 400; }
+.adm-lede {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  color: var(--muted);
+  line-height: 1.55;
+  max-width: 42rem;
+}
+
+/* ─── Stats Grid ─── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.15rem;
+  margin-bottom: 2rem;
+}
+.stat-card {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.4rem;
+  box-shadow: 0 4px 18px rgba(42,35,30,.05);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.stat-icon.pending { background: rgba(196, 113, 75, 0.12); color: var(--terracotta); }
+.stat-icon.approved { background: rgba(74, 107, 78, 0.12); color: var(--deep-sage); }
+.stat-icon.rejected { background: rgba(181, 68, 90, 0.12); color: var(--deep-rose); }
+.stat-val { font-size: 1.75rem; font-weight: 700; color: var(--charcoal); line-height: 1.1; }
+.stat-lbl { font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* ─── Section Card ─── */
+.adm-card {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(107, 76, 59, 0.12);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(12px);
+  margin-bottom: 2rem;
+}
+.adm-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.adm-card-title {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 600;
+  color: var(--charcoal);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.adm-card-sub { font-size: 13px; color: var(--muted); margin-top: 0.2rem; }
+
+/* ─── Config Form ─── */
+.config-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .config-grid { grid-template-columns: 1fr; }
+}
+
+.qr-preview-box {
+  background: var(--cream);
+  border: 2px dashed var(--border-md);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  position: relative;
+  transition: var(--transition);
+}
+.qr-preview-box.has-qr {
+  border-style: solid;
+  border-color: var(--sage);
+  background: var(--warm-white);
+}
+.qr-img {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(42,35,30,0.1);
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+}
+.btn-upload-qr {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  background: var(--charcoal);
+  color: white;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: var(--transition);
+  margin-top: 0.5rem;
+}
+.btn-upload-qr:hover {
+  background: var(--deep-rose);
+  transform: translateY(-1px);
+}
+
+.blockade-alert {
+  padding: 0.85rem 1.15rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+.blockade-alert.warning {
+  background: rgba(196, 113, 75, 0.12);
+  border: 1px solid rgba(196, 113, 75, 0.3);
+  color: #9c431d;
+}
+.blockade-alert.active {
+  background: rgba(74, 107, 78, 0.12);
+  border: 1px solid rgba(74, 107, 78, 0.3);
+  color: var(--deep-sage);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.15rem;
+  margin-bottom: 1.15rem;
+}
+@media (max-width: 600px) {
+  .form-row { grid-template-columns: 1fr; }
+}
+
+.form-group { margin-bottom: 1.15rem; }
+.form-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.45rem;
+}
+.form-control {
+  width: 100%;
+  padding: 0.75rem 0.95rem;
+  background: var(--warm-white);
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--charcoal);
+  box-sizing: border-box;
+  outline: none;
+  transition: var(--transition);
+}
+.form-control:focus {
+  border-color: var(--deep-rose);
+  box-shadow: 0 0 0 3px rgba(181, 68, 90, 0.1);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.6rem;
+  background: var(--deep-rose);
+  color: white;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 4px 14px rgba(181, 68, 90, 0.25);
+}
+.btn-primary:hover {
+  background: var(--charcoal);
+  transform: translateY(-1px);
+}
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* ─── Ledger Table ─── */
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.filter-tabs {
+  display: flex;
+  gap: 0.5rem;
+  background: var(--cream);
+  padding: 0.3rem;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+}
+.filter-tab {
+  padding: 0.45rem 1rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  border: none;
+  background: transparent;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.filter-tab.active {
+  background: white;
+  color: var(--charcoal);
+  box-shadow: 0 2px 8px rgba(42,35,30,0.08);
+}
+.search-input {
+  max-width: 280px;
+  padding: 0.6rem 0.9rem;
+  font-size: 13px;
+  border-radius: 100px;
+  background: white;
+  border: 1.5px solid var(--border-md);
+  outline: none;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+.adm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: left;
+  background: white;
+}
+.adm-table th {
+  background: var(--cream);
+  padding: 0.85rem 1rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.adm-table td {
+  padding: 0.95rem 1rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--charcoal);
+}
+.adm-table tr:last-child td { border-bottom: none; }
+.adm-table tr:hover td { background: rgba(250, 246, 240, 0.5); }
+
+/* ─── Badges ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge.pending { background: rgba(196, 113, 75, 0.12); color: var(--terracotta); }
+.badge.approved { background: rgba(74, 107, 78, 0.12); color: var(--deep-sage); }
+.badge.rejected { background: rgba(181, 68, 90, 0.12); color: var(--deep-rose); }
+.badge.type-reg { background: rgba(181, 68, 90, 0.08); color: var(--deep-rose); }
+.badge.type-monthly { background: rgba(122, 158, 126, 0.12); color: var(--deep-sage); }
+
+/* Action buttons */
+.btn-action-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: white;
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 15px;
+  color: var(--charcoal);
+}
+.btn-action-icon.approve:hover { background: var(--deep-sage); color: white; border-color: var(--deep-sage); }
+.btn-action-icon.reject:hover { background: var(--deep-rose); color: white; border-color: var(--deep-rose); }
+.btn-action-icon.zoom:hover { background: var(--charcoal); color: white; border-color: var(--charcoal); }
+
+/* Modal overlay */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 37, 32, 0.6);
+  z-index: 10050;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.open { display: flex; }
+#zoomModal {
+  z-index: 10200;
+}
+.modal-box {
+  width: min(540px, 100%);
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 2rem;
+  box-shadow: 0 16px 48px rgba(42,35,30,0.2);
+  animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+.modal-title { font-family: var(--font-display); font-size: 1.4rem; font-weight: 600; }
+.modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--muted);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: var(--transition);
+}
+.modal-close-btn:hover {
+  background: var(--cream);
+  color: var(--charcoal);
+}
+
+.btn-approve-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #4a6b4e 0%, #3d5940 100%);
+  color: white;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 4px 14px rgba(74, 107, 78, 0.28);
+}
+.btn-approve-confirm:hover {
+  background: linear-gradient(135deg, #3d5940 0%, #2f4532 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(74, 107, 78, 0.35);
+}
+.btn-approve-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-modal-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.35rem;
+  background: white;
+  color: var(--charcoal);
+  border-radius: 100px;
+  border: 1px solid var(--border-md);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn-modal-cancel:hover {
+  background: var(--cream);
+  border-color: var(--charcoal);
+}
+
+/* Toast Notification */
+.adm-toast {
+  position: fixed;
+  top: 84px;
+  right: 24px;
+  background: var(--charcoal);
+  color: var(--warm-white);
+  padding: 0.85rem 1.35rem;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(42,35,30,.3);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  opacity: 0;
+  transform: translateY(-12px);
+  transition: opacity .25s ease, transform .25s ease;
+  z-index: 100000;
+  pointer-events: none;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.adm-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.adm-toast.success {
+  border-left: 4px solid var(--deep-sage);
+}
+.adm-toast.success i {
+  color: #72b078;
+  font-size: 18px;
+}
+.adm-toast.error {
+  border-left: 4px solid #b33939;
+}
+.adm-toast.error i {
+  color: #e57373;
+  font-size: 18px;
+}
+@media (max-width: 600px) {
+  .adm-toast {
+    top: 74px;
+    left: 16px;
+    right: 16px;
+    justify-content: center;
+  }
+}
+
+/* Save Settings Button - Dynamic lighting & change detection */
+#saveSettingsBtn {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#saveSettingsBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  background: var(--muted);
+  filter: grayscale(0.6);
+  pointer-events: none;
+}
+#saveSettingsBtn.btn-lit {
+  opacity: 1;
+  cursor: pointer;
+  background: var(--deep-rose);
+  box-shadow: 0 4px 16px rgba(181, 68, 90, 0.45);
+  filter: none;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+#saveSettingsBtn.btn-lit:hover {
+  background: var(--charcoal);
+  box-shadow: 0 6px 20px rgba(42, 35, 30, 0.3);
+  transform: translateY(-2px);
+}
+
+.form-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+.char-counter {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.char-counter.limit {
+  color: var(--deep-rose);
+  font-weight: 600;
+}
+.field-error-msg {
+  font-size: 11.5px;
+  color: #b33939;
+  margin-top: 0.35rem;
+  display: none;
+  font-weight: 500;
+}
+.form-control.is-invalid {
+  border-color: #b33939 !important;
+  box-shadow: 0 0 0 3px rgba(179, 57, 57, 0.12) !important;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="adm">
+  <div class="adm-header">
+    <div>
+      <div class="adm-eyebrow">Finance &amp; Subscription Administration</div>
+      <h1 class="adm-title">Platform Fees &amp; <em>Payments</em></h1>
+      <p class="adm-lede">
+        Configure the platform monthly subscription fee, upload your receiving GCash QR code, and verify seller registration and monthly renewal receipts.
+      </p>
+    </div>
+  </div>
+
+  <!-- Stats Grid -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon pending"><i class="ri-time-line"></i></div>
+      <div>
+        <div class="stat-val" id="statPending">{{ total_pending }}</div>
+        <div class="stat-lbl">Pending Review</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon approved"><i class="ri-checkbox-circle-line"></i></div>
+      <div>
+        <div class="stat-val" id="statApproved">{{ total_approved }}</div>
+        <div class="stat-lbl">Approved Payments</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon rejected"><i class="ri-close-circle-line"></i></div>
+      <div>
+        <div class="stat-val" id="statRejected">{{ total_rejected }}</div>
+        <div class="stat-lbl">Rejected / Incomplete</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR & Configuration Card -->
+  <div class="adm-card">
+    <div class="adm-card-head">
+      <div>
+        <h2 class="adm-card-title"><i class="ri-qr-code-line" style="color:var(--deep-rose);"></i> GCash QR &amp; Platform Fee Settings</h2>
+        <div class="adm-card-sub">This QR code and fee amount appear in Term #1 of the Seller Terms &amp; Conditions and the Seller Monthly Payments page.</div>
+      </div>
+    </div>
+
+    <!-- Blockade Status Alert -->
+    <div id="blockadeAlert" class="blockade-alert {% if setting.is_configured %}active{% else %}warning{% endif %}">
+      <i class="ri-{% if setting.is_configured %}shield-check-line{% else %}alert-line{% endif %}" style="font-size:20px;margin-top:1px;"></i>
+      <div>
+        {% if setting.is_configured %}
+          <strong>Payment Verification Active:</strong> QR code is set. Applicant seller registrations and monthly renewals are open.
+        {% else %}
+          <strong>Seller Registration Blockade Active:</strong> No QR code is currently configured. Seller registration buttons on the landing page will show a temporary blockade modal until a QR image is uploaded here.
+        {% endif %}
+      </div>
+    </div>
+
+    <form id="settingsForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="config-grid">
+        <!-- QR Upload & Preview -->
+        <div>
+          <label class="form-label">Receiving GCash QR Code *</label>
+          <div class="qr-preview-box {% if setting.qr_image_url %}has-qr{% endif %}" id="qrBox">
+            <input type="file" id="qrFileInput" accept="image/*" style="display:none;">
+            {% if setting.qr_image_url %}
+              <img src="{{ setting.qr_image_url }}" alt="Admin GCash QR" class="qr-img" id="qrImgPreview" onclick="openZoomModal('{{ setting.qr_image_url }}')">
+              <span style="font-size:12px;color:var(--deep-sage);font-weight:600;"><i class="ri-checkbox-circle-fill"></i> QR Active</span>
+            {% else %}
+              <div id="qrPlaceholder" style="color:var(--muted);margin-bottom:0.75rem;">
+                <i class="ri-qr-code-line" style="font-size:54px;opacity:0.4;"></i>
+                <div style="font-size:13px;margin-top:0.5rem;">No QR image uploaded</div>
+              </div>
+            {% endif %}
+            <button type="button" class="btn-upload-qr" onclick="document.getElementById('qrFileInput').click()">
+              <i class="ri-upload-2-line"></i> {% if setting.qr_image_url %}Replace QR Image{% else %}Upload QR Image{% endif %}
+            </button>
+            <div id="qrUploadStatus" style="font-size:12px;margin-top:0.4rem;display:none;"></div>
+          </div>
+        </div>
+
+        <!-- Details -->
+        <div>
+          <div class="form-row">
+            <div class="form-group">
+              <div class="form-label-row">
+                <label class="form-label" style="margin-bottom:0;">Monthly Platform Fee (₱) *</label>
+              </div>
+              <input type="text" inputmode="decimal" class="form-control" name="monthly_fee" id="monthlyFee" placeholder="300.00" value="{{ '%.2f'|format(setting.monthly_fee) if setting.monthly_fee is not none else '300.00' }}" required autocomplete="off">
+              <div class="field-error-msg" id="monthlyFeeError"></div>
+            </div>
+            <div class="form-group">
+              <div class="form-label-row">
+                <label class="form-label" style="margin-bottom:0;">GCash Account Name</label>
+                <span class="char-counter" id="accountNameCounter">{{ (setting.account_name or '')|length }}/50</span>
+              </div>
+              <input type="text" maxlength="50" class="form-control" name="account_name" id="accountName" placeholder="e.g. E-FLORA ADMIN" value="{{ setting.account_name or '' }}" autocomplete="off">
+              <div class="field-error-msg" id="accountNameError"></div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <div class="form-label-row">
+                <label class="form-label" style="margin-bottom:0;">GCash Mobile Number</label>
+                <span class="char-counter" id="accountNumberCounter">{{ (setting.account_number or '')|length }}/11</span>
+              </div>
+              <input type="text" inputmode="numeric" maxlength="11" class="form-control" name="account_number" id="accountNumber" placeholder="09171234567" value="{{ setting.account_number or '' }}" autocomplete="off">
+              <div class="field-error-msg" id="accountNumberError"></div>
+            </div>
+            <div class="form-group">
+              <div class="form-label-row">
+                <label class="form-label" style="margin-bottom:0;">Short Instructions (Optional)</label>
+                <span class="char-counter" id="instructionsCounter">{{ (setting.instructions or '')|length }}/300</span>
+              </div>
+              <textarea class="form-control" maxlength="300" name="instructions" id="instructions" rows="2" placeholder="e.g. Include Store Name in message note" style="resize:vertical;min-height:48px;" autocomplete="off">{{ setting.instructions or '' }}</textarea>
+              <div class="field-error-msg" id="instructionsError"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:1.5rem;display:flex;align-items:center;gap:1rem;">
+            <button type="submit" class="btn-primary" id="saveSettingsBtn" disabled>
+              <i class="ri-save-line"></i> Save Payment Configuration
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Subscription Payments Ledger -->
+  <div class="adm-card">
+    <div class="adm-card-head">
+      <div>
+        <h2 class="adm-card-title"><i class="ri-file-list-3-line" style="color:var(--deep-rose);"></i> Subscription Payments Ledger</h2>
+        <div class="adm-card-sub">All applicant initial registration payments and seller monthly subscription renewals.</div>
+      </div>
+    </div>
+
+    <div class="table-toolbar">
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="setFilter('all', this)">All</button>
+        <button class="filter-tab" onclick="setFilter('pending', this)">Pending</button>
+        <button class="filter-tab" onclick="setFilter('approved', this)">Approved</button>
+        <button class="filter-tab" onclick="setFilter('rejected', this)">Rejected</button>
+      </div>
+      <input type="text" class="search-input" id="searchPayments" placeholder="Search store or seller…" oninput="filterTable()">
+    </div>
+
+    <div class="table-responsive">
+      <table class="adm-table" id="paymentsTable">
+        <thead>
+          <tr>
+            <th>Store / Applicant</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Receipt</th>
+            <th>Submitted</th>
+            <th>Status</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="paymentsTbody">
+          <tr>
+            <td colspan="7" style="text-align:center;padding:2rem;color:var(--muted);">
+              <i class="ri-loader-4-line ri-spin" style="font-size:20px;"></i> Loading payments…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Approve Subscription Payment Modal -->
+<div class="modal-overlay" id="approveModal" role="dialog" aria-modal="true" aria-labelledby="approveModalTitle">
+  <div class="modal-box" style="max-width: 520px;">
+    <div class="modal-head">
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <div style="width:40px;height:40px;border-radius:50%;background:rgba(122,158,126,0.18);color:var(--deep-sage);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+          <i class="ri-checkbox-circle-line"></i>
+        </div>
+        <div>
+          <h3 class="modal-title" id="approveModalTitle" style="color:var(--charcoal);font-size:1.35rem;margin:0;line-height:1.2;">Approve Subscription Payment</h3>
+          <p style="margin:0.2rem 0 0;font-size:12px;color:var(--muted);">Verify details and extend store subscription</p>
+        </div>
+      </div>
+      <button class="modal-close-btn" onclick="closeApproveModal()" aria-label="Close modal"><i class="ri-close-line"></i></button>
+    </div>
+
+    <!-- Summary Box -->
+    <div style="background:var(--cream);border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem 1.15rem;margin-bottom:1.15rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+      <div style="min-width:0;flex:1;">
+        <div id="approveStoreName" style="font-weight:700;font-size:14.5px;color:var(--charcoal);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</div>
+        <div id="approveSellerName" style="font-size:12.5px;color:var(--muted);margin-bottom:0.45rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</div>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <span id="approveTypeBadge"></span>
+          <span id="approveDurationBadge"></span>
+          <span id="approveAmount" style="font-weight:700;font-size:13.5px;color:var(--deep-rose);"></span>
+        </div>
+      </div>
+      <div id="approveReceiptWrap" style="flex-shrink:0;text-align:center;">
+        <img id="approveReceiptThumb" src="" alt="Proof" style="width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--border-md);cursor:pointer;display:block;box-shadow:0 2px 8px rgba(42,35,30,0.08);transition:transform 0.15s ease;" onclick="openZoomFromApproveModal()" title="Click to view full receipt">
+        <span style="font-size:10.5px;color:var(--muted);display:block;margin-top:0.25rem;"><i class="ri-zoom-in-line"></i> View</span>
+      </div>
+    </div>
+
+    <!-- Action Details Callout -->
+    <div style="background:rgba(122,158,126,0.08);border:1px solid rgba(122,158,126,0.22);border-radius:var(--radius-md);padding:0.9rem 1rem;margin-bottom:1.35rem;display:flex;gap:0.75rem;align-items:flex-start;">
+      <i class="ri-information-line" style="color:var(--deep-sage);font-size:19px;flex-shrink:0;margin-top:1px;"></i>
+      <div style="font-size:12.5px;color:var(--charcoal);line-height:1.5;">
+        Approving this payment extends the seller's active store subscription by <strong id="approveDaysCount">30 days</strong> and automatically sends a confirmation notice to the seller.
+      </div>
+    </div>
+
+    <input type="hidden" id="approvePaymentId">
+
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:0.75rem;">
+      <button type="button" class="btn-modal-cancel" onclick="closeApproveModal()">Cancel</button>
+      <button type="button" class="btn-approve-confirm" id="confirmApproveBtn" onclick="submitPaymentApproval()">
+        <i class="ri-check-line"></i> Approve Payment
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Rejection Reason Modal -->
+<div class="modal-overlay" id="rejectModal" role="dialog" aria-modal="true" aria-labelledby="rejectModalTitle">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <div style="width:40px;height:40px;border-radius:50%;background:rgba(181,68,90,0.12);color:var(--deep-rose);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+          <i class="ri-close-circle-line"></i>
+        </div>
+        <div>
+          <h3 class="modal-title" id="rejectModalTitle" style="color:var(--deep-rose);font-size:1.35rem;margin:0;line-height:1.2;">Reject Subscription Payment</h3>
+          <p style="margin:0.2rem 0 0;font-size:12px;color:var(--muted);" id="rejectStoreInfo">Notify seller of required correction</p>
+        </div>
+      </div>
+      <button class="modal-close-btn" onclick="closeRejectModal()" aria-label="Close modal"><i class="ri-close-line"></i></button>
+    </div>
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:1rem;line-height:1.5;">
+      Please provide a reason for rejecting this payment receipt. The seller will be notified so they can re-upload their proof of payment.
+    </p>
+    <input type="hidden" id="rejectPaymentId">
+    <div class="form-group">
+      <label class="form-label">Rejection Reason *</label>
+      <textarea class="form-control" id="rejectReasonInput" rows="3" placeholder="e.g. Image unreadable, incorrect amount, or transaction reference missing." required></textarea>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:0.75rem;margin-top:1.25rem;">
+      <button type="button" class="btn-modal-cancel" onclick="closeRejectModal()">Cancel</button>
+      <button type="button" class="btn-primary" id="confirmRejectBtn" onclick="submitPaymentRejection()">
+        <i class="ri-close-circle-line"></i> Confirm Rejection
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt Zoom Modal (Topmost lightbox) -->
+<div class="modal-overlay" id="zoomModal">
+  <div class="modal-box" style="max-width: 600px; text-align: center;">
+    <div class="modal-head">
+      <h3 class="modal-title">Payment Receipt Screenshot</h3>
+      <button class="modal-close-btn" onclick="closeZoomModal()"><i class="ri-close-line"></i></button>
+    </div>
+    <div style="background:var(--cream);border-radius:var(--radius-md);padding:1rem;margin-bottom:1rem;">
+      <img src="#" alt="Receipt Full" id="zoomImg" style="max-width:100%;max-height:540px;border-radius:var(--radius-sm);object-fit:contain;">
+    </div>
+    <a href="#" id="zoomDownloadLink" target="_blank" download class="btn-primary" style="padding:0.6rem 1.2rem;font-size:12.5px;">
+      <i class="ri-external-link-line"></i> Open Full Image
+    </a>
+  </div>
+</div>
+
+<!-- Toast Notification -->
+<div class="adm-toast" id="admToast">
+  <i class="ri-checkbox-circle-fill"></i>
+  <span id="admToastText"></span>
+</div>
+
+<script>
+let currentPayments = [];
+let activeFilter = 'all';
+let currentQrUrl = {{ (setting.qr_image_url|tojson) if setting and setting.qr_image_url else 'null' }};
+let currentQrPublicId = {{ (setting.qr_image_public_id|tojson) if setting and setting.qr_image_public_id else 'null' }};
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.showToast = showToast;
+    loadPayments();
+    setupQrUpload();
+    setupSettingsForm();
+});
+
+async function loadPayments() {
+    try {
+        const res = await fetch('/api/admin/subscription-payments');
+        const data = await res.json();
+        if (data.success) {
+            currentPayments = data.payments || [];
+            updateStats();
+            renderPayments();
+        }
+    } catch (e) {
+        console.error('Failed to load payments:', e);
+        document.getElementById('paymentsTbody').innerHTML = `
+            <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--deep-rose);">Failed to load payments.</td></tr>
+        `;
+    }
+}
+
+function updateStats() {
+    const pending = currentPayments.filter(p => p.status === 'pending').length;
+    const approved = currentPayments.filter(p => p.status === 'approved').length;
+    const rejected = currentPayments.filter(p => p.status === 'rejected').length;
+
+    document.getElementById('statPending').textContent = pending;
+    document.getElementById('statApproved').textContent = approved;
+    document.getElementById('statRejected').textContent = rejected;
+}
+
+function setFilter(filter, btn) {
+    activeFilter = filter;
+    document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderPayments();
+}
+
+function filterTable() {
+    renderPayments();
+}
+
+function renderPayments() {
+    const tbody = document.getElementById('paymentsTbody');
+    const search = (document.getElementById('searchPayments').value || '').toLowerCase().trim();
+
+    let list = currentPayments;
+    if (activeFilter !== 'all') {
+        list = list.filter(p => p.status === activeFilter);
+    }
+    if (search) {
+        list = list.filter(p => {
+            const store = (p.store_name || '').toLowerCase();
+            const seller = (p.seller_name || '').toLowerCase();
+            return store.includes(search) || seller.includes(search);
+        });
+    }
+
+    if (list.length === 0) {
+        tbody.innerHTML = `
+            <tr><td colspan="7" style="text-align:center;padding:2.5rem;color:var(--muted);">No payment records found.</td></tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = list.map(p => {
+        const isReg = p.payment_type === 'registration';
+        const months = p.months_covered || 1;
+        const durationText = isReg ? '1 Month' : (months > 1 ? `${months} Mos Advance` : '1 Month');
+        const durationBadge = `<span class="badge" style="background:rgba(107,76,59,0.08);color:var(--charcoal);margin-left:0.35rem;font-size:10.5px;"><i class="ri-time-line"></i> ${durationText}</span>`;
+        const typeBadge = isReg
+            ? `<span class="badge type-reg"><i class="ri-user-add-line"></i> Registration</span>`
+            : `<span class="badge type-monthly"><i class="ri-repeat-line"></i> Renewal</span>${durationBadge}`;
+
+        const statusBadge = `<span class="badge ${p.status}"><i class="ri-${p.status === 'approved' ? 'check' : (p.status === 'rejected' ? 'close' : 'time')}-line"></i> ${p.status}</span>`;
+
+        const submittedDate = p.submitted_at ? new Date(p.submitted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+        let actions = '';
+        if (p.status === 'pending') {
+            actions = `
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:0.4rem;">
+                    <button class="btn-action-icon approve" onclick="openApproveModal(${p.id})" title="Approve Payment & Send Notice">
+                        <i class="ri-check-line"></i>
+                    </button>
+                    <button class="btn-action-icon reject" onclick="openRejectModal(${p.id})" title="Reject Payment">
+                        <i class="ri-close-line"></i>
+                    </button>
+                </div>
+            `;
+        } else if (p.status === 'approved') {
+            actions = `<span style="font-size:12px;color:var(--deep-sage);font-weight:600;"><i class="ri-check-double-line"></i> Approved</span>`;
+        } else {
+            actions = `<span style="font-size:12px;color:var(--deep-rose);cursor:pointer;" title="${p.admin_notes || 'Rejected'}"><i class="ri-error-warning-line"></i> View Reason</span>`;
+        }
+
+        return `
+            <tr>
+                <td>
+                    <div style="font-weight:600;color:var(--charcoal);">${escapeHtml(p.store_name || 'Store Application')}</div>
+                    <div style="font-size:12px;color:var(--muted);">${escapeHtml(p.seller_name || 'Seller')}</div>
+                </td>
+                <td>${typeBadge}</td>
+                <td><strong style="color:var(--deep-rose);">₱${parseFloat(p.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong></td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                        <img src="${p.receipt_url}" alt="Receipt" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="openZoomModal('${p.receipt_url}')">
+                        <button class="btn-action-icon zoom" onclick="openZoomModal('${p.receipt_url}')" title="Zoom Receipt">
+                            <i class="ri-zoom-in-line"></i>
+                        </button>
+                    </div>
+                </td>
+                <td>${submittedDate}</td>
+                <td>${statusBadge}</td>
+                <td style="text-align:right;">${actions}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, function(m) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m];
+    });
+}
+
+/* ─── Settings Setup ─── */
+let baselineSettings = {
+    monthlyFee: '',
+    accountName: '',
+    accountNumber: '',
+    instructions: '',
+    qrUrl: '',
+    qrPublicId: ''
+};
+
+function getFeeVal() {
+    const el = document.getElementById('monthlyFee');
+    if (!el) return '';
+    const v = el.value.trim();
+    const num = parseFloat(v);
+    return isNaN(num) ? v : num.toFixed(2);
+}
+
+function captureBaseline() {
+    baselineSettings = {
+        monthlyFee: getFeeVal(),
+        accountName: (document.getElementById('accountName')?.value || '').trim(),
+        accountNumber: (document.getElementById('accountNumber')?.value || '').trim(),
+        instructions: (document.getElementById('instructions')?.value || '').trim(),
+        qrUrl: currentQrUrl || '',
+        qrPublicId: currentQrPublicId || ''
+    };
+}
+
+function checkSettingsChanges() {
+    const btn = document.getElementById('saveSettingsBtn');
+    if (!btn) return;
+
+    const currentFee = getFeeVal();
+    const currentName = (document.getElementById('accountName')?.value || '').trim();
+    const currentNum = (document.getElementById('accountNumber')?.value || '').trim();
+    const currentInst = (document.getElementById('instructions')?.value || '').trim();
+    const curQrUrl = currentQrUrl || '';
+    const curQrPid = currentQrPublicId || '';
+
+    const hasChanged = (
+        currentFee !== baselineSettings.monthlyFee ||
+        currentName !== baselineSettings.accountName ||
+        currentNum !== baselineSettings.accountNumber ||
+        currentInst !== baselineSettings.instructions ||
+        curQrUrl !== baselineSettings.qrUrl ||
+        curQrPid !== baselineSettings.qrPublicId
+    );
+
+    if (hasChanged) {
+        btn.disabled = false;
+        btn.classList.add('btn-lit');
+    } else {
+        btn.disabled = true;
+        btn.classList.remove('btn-lit');
+    }
+}
+
+function showToast(msg, kind = 'success') {
+    const t = document.getElementById('admToast');
+    const tx = document.getElementById('admToastText');
+    if (!t || !tx) return;
+    tx.textContent = msg;
+    t.classList.remove('success', 'error');
+    if (kind) t.classList.add(kind);
+    const icon = t.querySelector('i');
+    if (icon) {
+        icon.className = kind === 'error' ? 'ri-error-warning-line' : 'ri-checkbox-circle-fill';
+    }
+    t.classList.add('show');
+    clearTimeout(t._tm);
+    t._tm = setTimeout(() => t.classList.remove('show'), 3500);
+}
+window.showToast = showToast;
+
+function setupQrUpload() {
+    const input = document.getElementById('qrFileInput');
+    input.addEventListener('change', async function() {
+        const file = this.files[0];
+        if (!file) return;
+
+        const status = document.getElementById('qrUploadStatus');
+        status.style.display = 'block';
+        status.style.color = 'var(--muted)';
+        status.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading QR to Cloudinary…';
+
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('folder', 'e-flowers/admin/payment_qr');
+            const csrf = document.querySelector('[name="csrf_token"]').value;
+
+            const res = await fetch('/api/v1/cloudinary/upload', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf },
+                body: fd,
+                credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Upload failed');
+
+            currentQrUrl = data.url;
+            currentQrPublicId = data.public_id;
+
+            // Update UI preview
+            const box = document.getElementById('qrBox');
+            box.classList.add('has-qr');
+            let preview = document.getElementById('qrImgPreview');
+            if (!preview) {
+                const placeholder = document.getElementById('qrPlaceholder');
+                if (placeholder) placeholder.remove();
+                preview = document.createElement('img');
+                preview.id = 'qrImgPreview';
+                preview.className = 'qr-img';
+                box.insertBefore(preview, box.querySelector('.btn-upload-qr'));
+            }
+            preview.src = currentQrUrl;
+            preview.onclick = () => openZoomModal(currentQrUrl);
+
+            status.style.color = 'var(--deep-sage)';
+            status.innerHTML = '<i class="ri-checkbox-circle-fill"></i> Uploaded! Click "Save Payment Configuration" to apply.';
+
+            // Light up Save button since QR changed
+            checkSettingsChanges();
+        } catch (e) {
+            status.style.color = 'var(--deep-rose)';
+            status.textContent = 'Upload failed: ' + e.message;
+        }
+    });
+}
+
+function setupSettingsForm() {
+    captureBaseline();
+    checkSettingsChanges();
+
+    // ─── 1. Monthly Fee Input Validation (Max 2 Decimals) ───
+    const feeEl = document.getElementById('monthlyFee');
+    const feeErr = document.getElementById('monthlyFeeError');
+    if (feeEl) {
+        feeEl.addEventListener('keydown', function(e) {
+            if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End', 'Enter'].includes(e.key)) return;
+            if (e.ctrlKey || e.metaKey) return;
+
+            // Block non-digits and non-dot
+            if (!/^\d$/.test(e.key) && e.key !== '.') {
+                e.preventDefault();
+                return;
+            }
+
+            // Only allow a single dot
+            if (e.key === '.' && this.value.includes('.')) {
+                e.preventDefault();
+                return;
+            }
+
+            // Block typing more than 2 digits after the decimal point
+            if (/^\d$/.test(e.key) && this.value.includes('.')) {
+                const dotIndex = this.value.indexOf('.');
+                if (this.selectionStart > dotIndex && this.selectionStart === this.selectionEnd) {
+                    const decimals = this.value.substring(dotIndex + 1);
+                    if (decimals.length >= 2) {
+                        e.preventDefault();
+                    }
+                }
+            }
+        });
+
+        feeEl.addEventListener('input', function() {
+            let val = this.value.replace(/[^0-9.]/g, '');
+            const parts = val.split('.');
+            if (parts.length > 2) {
+                val = parts[0] + '.' + parts.slice(1).join('');
+            }
+            if (val.includes('.')) {
+                const [intP, decP] = val.split('.');
+                val = intP + '.' + decP.slice(0, 2);
+            }
+            if (this.value !== val) {
+                this.value = val;
+            }
+            if (feeErr) feeErr.style.display = 'none';
+            this.classList.remove('is-invalid');
+            checkSettingsChanges();
+        });
+
+        feeEl.addEventListener('blur', function() {
+            if (this.value.trim() !== '') {
+                const n = parseFloat(this.value);
+                if (!isNaN(n) && n >= 0) {
+                    this.value = n.toFixed(2);
+                }
+            }
+            checkSettingsChanges();
+        });
+    }
+
+    // ─── 2. GCash Account Name Validation (Max 50 Chars) ───
+    const nameEl = document.getElementById('accountName');
+    const nameCounter = document.getElementById('accountNameCounter');
+    const nameErr = document.getElementById('accountNameError');
+    if (nameEl) {
+        nameEl.addEventListener('input', function() {
+            if (this.value.length > 50) {
+                this.value = this.value.slice(0, 50);
+            }
+            if (nameCounter) {
+                nameCounter.textContent = `${this.value.length}/50`;
+                nameCounter.classList.toggle('limit', this.value.length >= 50);
+            }
+            if (nameErr) nameErr.style.display = 'none';
+            this.classList.remove('is-invalid');
+            checkSettingsChanges();
+        });
+    }
+
+    // ─── 3. GCash Mobile Number Validation (Strictly 11 PH Digits) ───
+    const numEl = document.getElementById('accountNumber');
+    const numCounter = document.getElementById('accountNumberCounter');
+    const numErr = document.getElementById('accountNumberError');
+    if (numEl) {
+        numEl.addEventListener('keydown', function(e) {
+            if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End', 'Enter'].includes(e.key)) return;
+            if (e.ctrlKey || e.metaKey) return;
+
+            // Block any letter or special character
+            if (!/^\d$/.test(e.key)) {
+                e.preventDefault();
+                return;
+            }
+
+            // Prevent typing more than 11 digits
+            if (this.value.length >= 11 && this.selectionStart === this.selectionEnd) {
+                e.preventDefault();
+            }
+        });
+
+        numEl.addEventListener('input', function() {
+            // Remove any letters or special characters
+            let cleaned = this.value.replace(/\D/g, '');
+
+            // Convert international format 639... to 09...
+            if (cleaned.startsWith('639') && cleaned.length >= 12) {
+                cleaned = '0' + cleaned.slice(2);
+            }
+
+            // Enforce maximum 11 digits
+            if (cleaned.length > 11) {
+                cleaned = cleaned.slice(0, 11);
+            }
+
+            if (this.value !== cleaned) {
+                this.value = cleaned;
+            }
+
+            if (numCounter) {
+                numCounter.textContent = `${cleaned.length}/11`;
+                numCounter.classList.toggle('limit', cleaned.length >= 11);
+            }
+
+            // Real-time Philippine number validation
+            if (cleaned.length > 0) {
+                if (!cleaned.startsWith('09')) {
+                    if (numErr) {
+                        numErr.textContent = 'Philippine mobile numbers must start with 09.';
+                        numErr.style.display = 'block';
+                    }
+                    this.classList.add('is-invalid');
+                } else if (cleaned.length < 11) {
+                    if (numErr) {
+                        numErr.textContent = `11 digits required (${cleaned.length}/11 entered).`;
+                        numErr.style.display = 'block';
+                    }
+                    this.classList.add('is-invalid');
+                } else {
+                    if (numErr) numErr.style.display = 'none';
+                    this.classList.remove('is-invalid');
+                }
+            } else {
+                if (numErr) numErr.style.display = 'none';
+                this.classList.remove('is-invalid');
+            }
+
+            checkSettingsChanges();
+        });
+    }
+
+    // ─── 4. Short Instructions Validation (Max 300 Chars) ───
+    const instEl = document.getElementById('instructions');
+    const instCounter = document.getElementById('instructionsCounter');
+    const instErr = document.getElementById('instructionsError');
+    if (instEl) {
+        instEl.addEventListener('input', function() {
+            if (this.value.length > 300) {
+                this.value = this.value.slice(0, 300);
+            }
+            if (instCounter) {
+                instCounter.textContent = `${this.value.length}/300`;
+                instCounter.classList.toggle('limit', this.value.length >= 300);
+            }
+            if (instErr) instErr.style.display = 'none';
+            this.classList.remove('is-invalid');
+            checkSettingsChanges();
+        });
+    }
+
+    const form = document.getElementById('settingsForm');
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        // Validate monthly fee
+        const rawFee = document.getElementById('monthlyFee').value.trim();
+        const parsedFee = parseFloat(rawFee);
+        if (!rawFee || isNaN(parsedFee) || parsedFee < 0) {
+            showToast('Please enter a valid monthly platform fee (₱).', 'error');
+            const el = document.getElementById('monthlyFee');
+            el.classList.add('is-invalid');
+            const err = document.getElementById('monthlyFeeError');
+            if (err) {
+                err.textContent = 'Please enter a valid amount.';
+                err.style.display = 'block';
+            }
+            el.focus();
+            return;
+        }
+
+        // Validate GCash Account Name
+        const accName = document.getElementById('accountName').value.trim();
+        if (accName.length > 50) {
+            showToast('GCash Account Name cannot exceed 50 characters.', 'error');
+            const el = document.getElementById('accountName');
+            el.classList.add('is-invalid');
+            el.focus();
+            return;
+        }
+
+        // Validate GCash Mobile Number
+        const accNum = document.getElementById('accountNumber').value.trim();
+        if (accNum) {
+            if (!/^09\d{9}$/.test(accNum)) {
+                showToast('GCash mobile number must be an 11-digit Philippine number starting with 09 (e.g. 09171234567).', 'error');
+                const el = document.getElementById('accountNumber');
+                el.classList.add('is-invalid');
+                const err = document.getElementById('accountNumberError');
+                if (err) {
+                    err.textContent = 'Must be an 11-digit Philippine mobile number starting with 09 (e.g. 09171234567).';
+                    err.style.display = 'block';
+                }
+                el.focus();
+                return;
+            }
+        }
+
+        // Validate Instructions
+        const inst = document.getElementById('instructions').value.trim();
+        if (inst.length > 300) {
+            showToast('Short instructions cannot exceed 300 characters.', 'error');
+            const el = document.getElementById('instructions');
+            el.classList.add('is-invalid');
+            el.focus();
+            return;
+        }
+
+        const btn = document.getElementById('saveSettingsBtn');
+        btn.disabled = true;
+        btn.classList.remove('btn-lit');
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Saving…';
+
+        const payload = {
+            monthly_fee: parsedFee,
+            account_name: accName,
+            account_number: accNum,
+            instructions: inst,
+            qr_image_url: currentQrUrl,
+            qr_image_public_id: currentQrPublicId
+        };
+
+        try {
+            const csrf = document.querySelector('[name="csrf_token"]').value;
+            const res = await fetch('/api/admin/payment-settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf
+                },
+                body: JSON.stringify(payload),
+                credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'Failed to save settings');
+
+            // Update blockade alert
+            const alert = document.getElementById('blockadeAlert');
+            if (data.setting.is_configured) {
+                alert.className = 'blockade-alert active';
+                alert.innerHTML = `
+                    <i class="ri-shield-check-line" style="font-size:20px;margin-top:1px;"></i>
+                    <div><strong>Payment Verification Active:</strong> QR code is set. Applicant seller registrations and monthly renewals are open.</div>
+                `;
+            } else {
+                alert.className = 'blockade-alert warning';
+                alert.innerHTML = `
+                    <i class="ri-alert-line" style="font-size:20px;margin-top:1px;"></i>
+                    <div><strong>Seller Registration Blockade Active:</strong> No QR code is configured. Seller registrations will be blocked on landing page.</div>
+                `;
+            }
+
+            // Update baseline to newly saved values and re-check button state
+            captureBaseline();
+            checkSettingsChanges();
+
+            // Show proper toast message
+            showToast('Configuration saved successfully!', 'success');
+        } catch (e) {
+            showToast(e.message || 'Failed to save settings', 'error');
+            checkSettingsChanges();
+        } finally {
+            btn.innerHTML = '<i class="ri-save-line"></i> Save Payment Configuration';
+        }
+    });
+}
+
+/* ─── Actions ─── */
+function openApproveModal(id) {
+    const payment = currentPayments.find(p => p.id === id);
+    if (!payment) return;
+
+    document.getElementById('approvePaymentId').value = id;
+    document.getElementById('approveStoreName').textContent = payment.store_name || 'Store Application';
+    document.getElementById('approveSellerName').textContent = payment.seller_name || 'Seller';
+    
+    const isReg = payment.payment_type === 'registration';
+    const months = payment.months_covered || 1;
+    const typeBadge = isReg
+        ? `<span class="badge type-reg"><i class="ri-user-add-line"></i> Registration</span>`
+        : `<span class="badge type-monthly"><i class="ri-repeat-line"></i> Renewal</span>`;
+    document.getElementById('approveTypeBadge').innerHTML = typeBadge;
+
+    const durationBadgeEl = document.getElementById('approveDurationBadge');
+    if (durationBadgeEl) {
+        durationBadgeEl.innerHTML = `<span class="badge" style="background:rgba(107,76,59,0.08);color:var(--charcoal);font-weight:600;"><i class="ri-time-line"></i> ${months} Month${months > 1 ? 's (Advance)' : ''}</span>`;
+    }
+
+    const daysCountEl = document.getElementById('approveDaysCount');
+    if (daysCountEl) {
+        daysCountEl.textContent = `${months * 30} days (${months} Month${months > 1 ? 's' : ''})`;
+    }
+
+    const formattedAmount = '₱' + parseFloat(payment.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    document.getElementById('approveAmount').textContent = formattedAmount;
+
+    const thumb = document.getElementById('approveReceiptThumb');
+    const wrap = document.getElementById('approveReceiptWrap');
+    if (payment.receipt_url) {
+        thumb.src = payment.receipt_url;
+        wrap.style.display = 'block';
+    } else {
+        wrap.style.display = 'none';
+    }
+
+    const btn = document.getElementById('confirmApproveBtn');
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri-check-line"></i> Approve Payment';
+    }
+
+    document.getElementById('approveModal').classList.add('open');
+}
+
+function closeApproveModal() {
+    document.getElementById('approveModal').classList.remove('open');
+}
+
+function openZoomFromApproveModal() {
+    const thumb = document.getElementById('approveReceiptThumb');
+    if (thumb && thumb.src) {
+        openZoomModal(thumb.src);
+    }
+}
+
+function approvePayment(id) {
+    openApproveModal(id);
+}
+
+async function submitPaymentApproval() {
+    const id = document.getElementById('approvePaymentId').value;
+    if (!id) return;
+
+    const btn = document.getElementById('confirmApproveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Approving...';
+
+    try {
+        const csrf = document.querySelector('[name="csrf_token"]').value;
+        const res = await fetch(`/api/admin/subscription-payments/${id}/approve`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Approval failed');
+
+        closeApproveModal();
+        showToast('Subscription payment approved & confirmation email sent!', 'success');
+        loadPayments();
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri-check-line"></i> Approve Payment';
+        showToast('Error approving payment: ' + (e.message || 'Approval failed'), 'error');
+    }
+}
+
+function openRejectModal(id) {
+    const payment = currentPayments.find(p => p.id === id);
+    document.getElementById('rejectPaymentId').value = id;
+    document.getElementById('rejectReasonInput').value = '';
+    const storeInfo = document.getElementById('rejectStoreInfo');
+    if (storeInfo && payment) {
+        storeInfo.textContent = `${payment.store_name || 'Store'} (₱${parseFloat(payment.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })})`;
+    }
+    const btn = document.getElementById('confirmRejectBtn');
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri-close-circle-line"></i> Confirm Rejection';
+    }
+    document.getElementById('rejectModal').classList.add('open');
+    setTimeout(() => document.getElementById('rejectReasonInput')?.focus(), 60);
+}
+
+function closeRejectModal() {
+    document.getElementById('rejectModal').classList.remove('open');
+}
+
+async function submitPaymentRejection() {
+    const id = document.getElementById('rejectPaymentId').value;
+    const reason = document.getElementById('rejectReasonInput').value.trim();
+    if (!reason) {
+        showToast('Please enter a rejection reason.', 'error');
+        document.getElementById('rejectReasonInput')?.focus();
+        return;
+    }
+
+    const btn = document.getElementById('confirmRejectBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Rejecting...';
+
+    try {
+        const csrf = document.querySelector('[name="csrf_token"]').value;
+        const res = await fetch(`/api/admin/subscription-payments/${id}/reject`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf
+            },
+            body: JSON.stringify({ admin_notes: reason }),
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Rejection failed');
+
+        closeRejectModal();
+        showToast('Payment rejected successfully.', 'success');
+        loadPayments();
+    } catch (e) {
+        showToast('Error rejecting payment: ' + (e.message || 'Rejection failed'), 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri-close-circle-line"></i> Confirm Rejection';
+    }
+}
+
+/* ─── Modal Zoom ─── */
+function openZoomModal(url) {
+    document.getElementById('zoomImg').src = url;
+    document.getElementById('zoomDownloadLink').href = url;
+    document.getElementById('zoomModal').classList.add('open');
+}
+function closeZoomModal() {
+    document.getElementById('zoomModal').classList.remove('open');
+}
+
+/* ─── Modal Dismissal Helpers (Escape & Backdrop click) ─── */
+document.addEventListener('click', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+        e.target.classList.remove('open');
+    }
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const zoomModal = document.getElementById('zoomModal');
+        if (zoomModal && zoomModal.classList.contains('open')) {
+            closeZoomModal();
+            return;
+        }
+        document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+    }
+});
+</script>
+{% endblock %}
+

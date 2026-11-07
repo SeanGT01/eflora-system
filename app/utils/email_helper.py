@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import random
 import secrets
 import threading
@@ -840,6 +841,133 @@ def send_stock_alert_email(
 
     except Exception as e:
         current_app.logger.error(f"❌ Failed to queue stock alert email for {recipient_email}: {e}")
+        return False
+
+
+def send_seller_payment_approved_email(
+    recipient_email: str,
+    seller_name: str = None,
+    recipient_name: str = None,
+    store_name: str = None,
+    amount: float = 300.0,
+    payment_type: str = 'monthly',
+    billing_period_end = None,
+    billing_end = None,
+    approved_at: str = None,
+):
+    """
+    Send notification to seller via Gmail OAuth when their subscription / registration payment is approved.
+    Runs asynchronously via threading just like stock alert notifications.
+    """
+    try:
+        resolved_name = seller_name or recipient_name
+        end_val = billing_period_end or billing_end
+        if hasattr(end_val, 'strftime'):
+            end_val = end_val.strftime("%B %d, %Y")
+
+        subject = f"E-FLORA - Subscription Payment of PHP {amount:.2f} Approved!"
+        greeting = f"Hi {resolved_name}!" if resolved_name else "Hello Seller!"
+        store_display = store_name or "your store"
+        type_label = "Registration / Initial Payment" if payment_type == 'registration' else "Monthly Subscription Payment"
+        now_str = approved_at or datetime.now().strftime("%B %d, %Y at %I:%M %p")
+        validity_html = f"""
+            <div style="margin: 20px 0; padding: 15px; background: #eafaf1; border-left: 4px solid #2ecc71; border-radius: 4px;">
+                <p style="margin: 0; color: #27ae60; font-weight: bold; font-size: 15px;">Active Platform Subscription</p>
+                <p style="margin: 5px 0 0; color: #555; font-size: 13px;">Your store is now authorized to sell on E-FLORA until <strong>{end_val or '30 days from approval'}</strong>.</p>
+            </div>
+        """ if end_val else ""
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{subject}</title>
+        </head>
+        <body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #faf6f0; color: #2c2520;">
+            <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(44, 37, 32, 0.08); border: 1px solid rgba(181, 68, 90, 0.15);">
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #2c2520 0%, #b5445a 100%); padding: 26px 24px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px;">
+                        &#127800; E-FLORA SELLER PORTAL
+                    </h1>
+                    <p style="color: rgba(255, 255, 255, 0.9); margin: 6px 0 0; font-size: 13px;">
+                        Payment Confirmation &amp; Account Notice
+                    </p>
+                </div>
+
+                <!-- Body -->
+                <div style="padding: 28px 24px;">
+                    <h2 style="color: #2c2520; font-size: 18px; margin: 0 0 12px; font-weight: 600;">{greeting}</h2>
+
+                    <p style="margin: 0 0 16px; font-size: 14px; color: #554841; line-height: 1.6;">
+                        Great news! Your <strong>{type_label}</strong> for <strong>{store_display}</strong> has been verified and approved by the E-FLORA admin team.
+                    </p>
+
+                    <!-- Receipt Summary Box -->
+                    <div style="background-color: #fbf8f5; border: 1px solid #ebd9c8; border-radius: 10px; padding: 18px; margin-bottom: 20px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Store Name:</td>
+                                <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #2c2520;">{store_display}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Payment Type:</td>
+                                <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #2c2520;">{type_label}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Amount Confirmed:</td>
+                                <td style="padding: 6px 0; font-weight: 700; text-align: right; color: #15803d; font-size: 16px;">&#8369;{amount:.2f}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Approved On:</td>
+                                <td style="padding: 6px 0; font-weight: 500; text-align: right; color: #2c2520;">{now_str}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    {validity_html}
+
+                    <p style="margin: 0 0 20px; font-size: 14px; color: #554841; line-height: 1.6;">
+                        Your store remains active and in good standing on the E-FLORA marketplace. Customers can continue browsing, ordering, and booking delivery from your store.
+                    </p>
+
+                    <div style="text-align: center; margin: 26px 0 10px;">
+                        <a href="https://eflowers.up.railway.app/seller/dashboard" 
+                           style="display: inline-block; background: #b5445a; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 6px rgba(181, 68, 90, 0.25);">
+                            Open Seller Dashboard
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="background-color: #fbf8f5; border-top: 1px solid #f1ece5; padding: 16px 24px; text-align: center;">
+                    <p style="margin: 0 0 4px; font-size: 12px; font-weight: 600; color: #6b4c3b;">
+                        &#127800; E-Flora Online Flower Marketplace
+                    </p>
+                    <p style="margin: 0; font-size: 11px; color: #9a8d85;">
+                        This automated confirmation was delivered to <strong>{recipient_email}</strong> via E-Flora's Gmail alert service.
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
+        app = current_app._get_current_object()
+        thread = threading.Thread(
+            target=_send_email_async,
+            args=(app, recipient_email, subject, html_body, sender)
+        )
+        thread.daemon = True
+        thread.start()
+
+        current_app.logger.info(f"📧 Subscription payment approval email queued for {recipient_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"❌ Failed to queue payment approval email for {recipient_email}: {e}")
         return False
 
 

@@ -3289,9 +3289,12 @@
                                     <div style="display: flex; flex-direction: column; gap: 0.6rem;">
                                         <!-- Store Name -->
                                         <div class="form-group" style="margin-bottom: 0;">
-                                            <label class="form-label">Store Name <span
-                                                    class="required-star">*</span></label>
-                                            <input type="text" class="form-control" id="store-name"
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                                <label class="form-label" style="margin-bottom: 0;">Store Name <span
+                                                        class="required-star">*</span></label>
+                                                <span class="form-hint" id="store-name-count" style="margin: 0; font-size: 11px;">0 / 50 characters</span>
+                                            </div>
+                                            <input type="text" class="form-control" id="store-name" maxlength="50"
                                                 value="{{ store.name }}" placeholder="e.g., Blooming Petals Shop"
                                                 required>
                                         </div>
@@ -3369,9 +3372,9 @@
 
                                 <div class="form-group form-group-full">
                                     <label class="form-label">Store Description</label>
-                                    <textarea class="form-control" id="store-description" rows="3" maxlength="500"
+                                    <textarea class="form-control" id="store-description" rows="3" maxlength="300"
                                         placeholder="Tell customers about your store...">{{ store.description or '' }}</textarea>
-                                    <div class="form-hint" id="store-description-count">0 / 500 characters</div>
+                                    <div class="form-hint" id="store-description-count">0 / 300 characters</div>
                                 </div>
 
                                 <!-- STORE SCHEDULE / OPERATING HOURS -->
@@ -6964,8 +6967,24 @@
         clearStoreSettingsDirty('basic');
     });
 
-    // Store description character limit
-    const STORE_DESCRIPTION_MAX = 500;
+    // Store name & description character limits
+    const STORE_NAME_MAX = 50;
+    const storeNameInput = document.getElementById('store-name');
+    const storeNameCount = document.getElementById('store-name-count');
+
+    function updateStoreNameCount() {
+        if (!storeNameInput || !storeNameCount) return;
+        const length = storeNameInput.value.length;
+        storeNameCount.textContent = `${length} / ${STORE_NAME_MAX} characters`;
+        storeNameCount.style.color = length >= STORE_NAME_MAX ? '#c0392b' : '';
+    }
+
+    if (storeNameInput) {
+        updateStoreNameCount();
+        storeNameInput.addEventListener('input', updateStoreNameCount);
+    }
+
+    const STORE_DESCRIPTION_MAX = 300;
     const storeDescriptionInput = document.getElementById('store-description');
     const storeDescriptionCount = document.getElementById('store-description-count');
 

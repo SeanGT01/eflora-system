@@ -1,0 +1,889 @@
+{% extends "layout.html" %}
+
+{% block title %}Monthly Platform Subscription — E-FLORA Seller{% endblock %}
+{% block page_title %}Monthly Subscription{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+  --cream:        #faf6f0;
+  --warm-white:   #fffdf9;
+  --blush:        #f2c4ce;
+  --deep-rose:    #b5445a;
+  --dusty-rose:   #d4788a;
+  --sage:         #7a9e7e;
+  --deep-sage:    #4a6b4e;
+  --terracotta:   #c4714b;
+  --bark:         #6b4c3b;
+  --charcoal:     #2c2520;
+  --muted:        #9a8d85;
+  --border:       rgba(107,76,59,.12);
+  --border-md:    rgba(107,76,59,.22);
+  --font-display: 'Cormorant Garamond', serif;
+  --font-sans:    'DM Sans', sans-serif;
+  --radius-sm:    8px;
+  --radius-md:    14px;
+  --radius-lg:    22px;
+  --shadow-card:  0 2px 16px rgba(42,35,30,.07);
+  --transition:   all .32s cubic-bezier(.4,0,.2,1);
+}
+
+.seller-pay-wrap {
+  font-family: var(--font-sans);
+  color: var(--charcoal);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ─── Status Hero Banner ─── */
+.sub-hero {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(12px);
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+.sub-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+.sub-badge-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.sub-badge-icon.active { background: rgba(74, 107, 78, 0.12); color: var(--deep-sage); }
+.sub-badge-icon.expired { background: rgba(196, 113, 75, 0.12); color: var(--terracotta); }
+
+.sub-title {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--charcoal);
+  margin-bottom: 0.2rem;
+}
+.sub-desc { font-size: 13.5px; color: var(--muted); }
+
+.sub-pills {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.sub-pill {
+  padding: 0.5rem 1rem;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.sub-pill.active { background: rgba(74, 107, 78, 0.12); color: var(--deep-sage); border: 1px solid rgba(74, 107, 78, 0.25); }
+.sub-pill.expired { background: rgba(196, 113, 75, 0.12); color: var(--terracotta); border: 1px solid rgba(196, 113, 75, 0.25); }
+
+/* ─── Two-Column Pay Card ─── */
+.pay-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 1.75rem;
+  margin-bottom: 2rem;
+}
+@media (max-width: 900px) {
+  .pay-grid { grid-template-columns: 1fr; }
+}
+
+.seller-card {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 2rem;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(12px);
+}
+.seller-card-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--charcoal);
+  margin-bottom: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.seller-card-sub { font-size: 13px; color: var(--muted); margin-bottom: 1.5rem; }
+
+/* Quotation Selector */
+.quotation-box {
+  margin-bottom: 1.25rem;
+}
+.quotation-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.quotation-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+.quotation-option {
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  background: var(--cream);
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.quotation-option:hover {
+  border-color: var(--deep-rose);
+  background: var(--warm-white);
+}
+.quotation-option.selected {
+  border-color: var(--deep-rose);
+  background: var(--warm-white);
+  box-shadow: 0 4px 14px rgba(181, 68, 90, 0.12);
+}
+.quotation-option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+.quotation-duration {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--charcoal);
+}
+.quotation-price {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--deep-rose);
+}
+.quotation-dates {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.quotation-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 100px;
+  background: rgba(122, 158, 126, 0.15);
+  color: var(--deep-sage);
+  margin-top: 0.35rem;
+  align-self: flex-start;
+}
+.quotation-notice {
+  font-size: 11.5px;
+  color: var(--muted);
+  background: rgba(107, 76, 59, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Fully covered state */
+.covered-state-box {
+  background: rgba(122, 158, 126, 0.06);
+  border: 1.5px solid rgba(122, 158, 126, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem 2rem;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+/* QR Box */
+.qr-display-box {
+  background: var(--cream);
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  text-align: center;
+}
+.qr-fee-chip {
+  display: inline-block;
+  padding: 0.4rem 1rem;
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--deep-rose);
+  margin-bottom: 1rem;
+}
+.seller-qr-img {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(42,35,30,0.08);
+  margin: 0 auto 0.75rem;
+  display: block;
+  cursor: pointer;
+}
+
+/* Upload zone (Admin QR / Store App design) */
+.upload-zone {
+  background: var(--cream);
+  border: 2px dashed var(--border-md);
+  border-radius: var(--radius-md);
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  min-height: 240px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+}
+.upload-zone:hover {
+  border-color: var(--deep-rose);
+  background: rgba(242, 196, 206, 0.14);
+}
+.upload-zone.has-file {
+  border-style: solid;
+  border-color: var(--sage, #7a9e7e);
+  background: var(--warm-white, #faf7f2);
+  padding: 1.25rem 1.25rem;
+}
+
+.upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+.upload-placeholder i {
+  font-size: 42px;
+  color: var(--deep-rose);
+  opacity: 0.85;
+  transition: var(--transition);
+}
+.upload-zone:hover .upload-placeholder i {
+  transform: scale(1.06);
+  opacity: 1;
+}
+.upload-placeholder .uz-title {
+  margin-top: 0.5rem;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+.upload-placeholder .uz-sub {
+  margin-top: 0.25rem;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.upload-preview-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 0.5rem;
+}
+.upload-preview-img {
+  max-width: 220px;
+  width: 100%;
+  max-height: 180px;
+  height: auto;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 14px rgba(42,35,30,0.12);
+  object-fit: contain;
+  margin-bottom: 0.6rem;
+  display: block;
+  cursor: zoom-in;
+  transition: transform 0.18s ease;
+  background: white;
+  border: 1px solid var(--border);
+}
+.upload-preview-img:hover {
+  transform: scale(1.04);
+}
+.img-status-badge {
+  font-size: 12px;
+  color: var(--deep-sage, #276749);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 0.25rem;
+}
+
+.btn-upload-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1.15rem;
+  background: var(--charcoal);
+  color: white;
+  border-radius: 100px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: var(--transition);
+  margin-top: 0.4rem;
+  box-shadow: 0 2px 6px rgba(42,35,30,0.08);
+}
+.btn-upload-file:hover {
+  background: var(--deep-rose);
+  transform: translateY(-1px);
+}
+
+.btn-submit-pay {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.9rem;
+  background: var(--deep-rose);
+  color: white;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+  margin-top: 1.25rem;
+  box-shadow: 0 4px 14px rgba(181, 68, 90, 0.25);
+}
+.btn-submit-pay:hover:not(:disabled) {
+  background: var(--charcoal);
+  transform: translateY(-1px);
+}
+.btn-submit-pay:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Table */
+.table-responsive {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+.seller-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: left;
+  background: white;
+}
+.seller-table th {
+  background: var(--cream);
+  padding: 0.85rem 1rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.seller-table td {
+  padding: 0.95rem 1rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.seller-table tr:last-child td { border-bottom: none; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge.pending { background: rgba(196, 113, 75, 0.12); color: var(--terracotta); }
+.badge.approved { background: rgba(74, 107, 78, 0.12); color: var(--deep-sage); }
+.badge.rejected { background: rgba(181, 68, 90, 0.12); color: var(--deep-rose); }
+.badge.type-reg { background: rgba(181, 68, 90, 0.08); color: var(--deep-rose); }
+.badge.type-monthly { background: rgba(122, 158, 126, 0.12); color: var(--deep-sage); }
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 37, 32, 0.6);
+  z-index: 10050;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  width: min(540px, 100%);
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 2rem;
+  box-shadow: 0 16px 48px rgba(42,35,30,0.2);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.modal-title { font-family: var(--font-display); font-size: 1.4rem; font-weight: 600; }
+.modal-close-btn { background: none; border: none; font-size: 20px; color: var(--muted); cursor: pointer; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="seller-pay-wrap">
+  <!-- Status Hero -->
+  <div class="sub-hero">
+    <div class="sub-hero-left">
+      <div class="sub-badge-icon {% if is_active %}active{% else %}expired{% endif %}">
+        <i class="ri-{% if is_active %}shield-check-line{% else %}alarm-warning-line{% endif %}"></i>
+      </div>
+      <div>
+        <h1 class="sub-title">{{ store.name }}</h1>
+        <div class="sub-desc">
+          {% if is_active %}
+            Platform subscription is active. Covered until <strong>{{ valid_until.strftime('%B %d, %Y') if valid_until else 'N/A' }}</strong>.
+          {% else %}
+            Your platform subscription has expired or is due. Please scan the QR code to renew.
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="sub-pills">
+      {% if is_active %}
+        <span class="sub-pill active">
+          <i class="ri-checkbox-circle-fill"></i> Active ({{ days_left }} days remaining)
+        </span>
+      {% else %}
+        <span class="sub-pill expired">
+          <i class="ri-error-warning-fill"></i> Renewal Due
+        </span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not can_renew and not has_pending %}
+    <!-- Fully Covered State Card -->
+    <div class="seller-card covered-state-box">
+      <div style="width:60px;height:60px;border-radius:50%;background:rgba(122,158,126,0.18);color:var(--deep-sage);display:inline-flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:1rem;">
+        <i class="ri-checkbox-circle-line"></i>
+      </div>
+      <h2 style="font-family:var(--font-display);font-size:1.75rem;font-weight:600;color:var(--charcoal);margin-bottom:0.4rem;">Subscription Fully Covered</h2>
+      <p style="font-size:13.5px;color:var(--muted);max-width:480px;margin:0 auto 1.25rem;line-height:1.6;">
+        Your store is in good standing and covered until <strong>{{ valid_until.strftime('%B %d, %Y') if valid_until else 'N/A' }}</strong> ({{ days_left }} days remaining). You have already paid in advance — no payment submission is required at this time.
+      </p>
+      <div style="display:inline-flex;align-items:center;gap:0.45rem;padding:0.5rem 1.15rem;background:rgba(122,158,126,0.12);border:1px solid rgba(122,158,126,0.28);border-radius:100px;font-size:12.5px;color:var(--deep-sage);font-weight:600;">
+        <i class="ri-calendar-event-line"></i> Next renewal bill opens on {{ next_bill_date.strftime('%B %d, %Y') if next_bill_date else 'N/A' }} (7 days before expiration)
+      </div>
+    </div>
+  {% else %}
+    <div class="pay-grid">
+      <!-- Left Column: Admin GCash QR -->
+      <div class="seller-card">
+        <h2 class="seller-card-title"><i class="ri-qr-code-line" style="color:var(--deep-rose);"></i> GCash Payment QR</h2>
+        <div class="seller-card-sub">Scan the official E-FLORA administrator QR code using your GCash app.</div>
+
+        <div class="qr-display-box">
+          <div class="qr-fee-chip" id="qrFeeChip">
+            ₱{{ "%.2f"|format(setting.monthly_fee) if setting else "300.00" }} / 1 Month
+          </div>
+
+          {% if setting and setting.qr_image_url %}
+            <img src="{{ setting.qr_image_url }}" alt="Admin GCash QR" class="seller-qr-img" onclick="openZoomModal('{{ setting.qr_image_url }}')">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:0.75rem;"><i class="ri-zoom-in-line"></i> Click QR to enlarge</div>
+          {% else %}
+            <div style="padding:2rem;color:var(--muted);">
+              <i class="ri-qr-code-line" style="font-size:48px;opacity:0.4;"></i>
+              <p style="margin-top:0.5rem;font-size:13px;">QR code currently updating by administrator.</p>
+            </div>
+          {% endif %}
+
+          {% if setting and (setting.account_name or setting.account_number) %}
+            <div style="font-size:12.5px;padding-top:0.75rem;border-top:1px solid var(--border);">
+              {% if setting.account_name %}<strong>{{ setting.account_name }}</strong><br>{% endif %}
+              {% if setting.account_number %}<span style="color:var(--muted);font-family:monospace;font-size:13px;">{{ setting.account_number }}</span>{% endif %}
+            </div>
+          {% endif %}
+
+          {% if setting and setting.instructions %}
+            <div style="font-size:12px;color:var(--muted);margin-top:0.5rem;font-style:italic;">
+              Note: {{ setting.instructions }}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Right Column: Quotation Selection & Upload Receipt -->
+      <div class="seller-card">
+        <h2 class="seller-card-title"><i class="ri-upload-cloud-2-line" style="color:var(--deep-rose);"></i> Submit Subscription Payment</h2>
+        <div class="seller-card-sub">Select duration quotation, transfer the exact amount, and upload your receipt screenshot.</div>
+
+        <!-- Quotation Selector -->
+        <div class="quotation-box">
+          <div class="quotation-label">
+            <span>Select Billing Duration</span>
+            <span style="font-weight:600;color:var(--deep-rose);">Max 2 Months Advance</span>
+          </div>
+          <div class="quotation-options">
+            <div class="quotation-option selected" id="optMonth1" onclick="selectQuotation(1, {{ quotations['1'].amount }})">
+              <div class="quotation-option-head">
+                <span class="quotation-duration">1 Month</span>
+                <span class="quotation-price">{{ quotations['1'].formatted_amount }}</span>
+              </div>
+              <div class="quotation-dates">Coverage: {{ quotations['1'].coverage_start }} – {{ quotations['1'].coverage_end }}</div>
+              <span class="quotation-badge"><i class="ri-check-line"></i> Standard Cycle</span>
+            </div>
+
+            {% if max_advance_months_allowed >= 2 %}
+            <div class="quotation-option" id="optMonth2" onclick="selectQuotation(2, {{ quotations['2'].amount }})">
+              <div class="quotation-option-head">
+                <span class="quotation-duration">2 Months</span>
+                <span class="quotation-price">{{ quotations['2'].formatted_amount }}</span>
+              </div>
+              <div class="quotation-dates">Coverage: {{ quotations['2'].coverage_start }} – {{ quotations['2'].coverage_end }}</div>
+              <span class="quotation-badge" style="background:rgba(181,68,90,0.12);color:var(--deep-rose);"><i class="ri-sparkling-fill"></i> Advance</span>
+            </div>
+            {% endif %}
+          </div>
+          <div class="quotation-notice">
+            <i class="ri-information-line"></i> Advance payments are capped at 2 months maximum to align with future platform rate adjustments.
+          </div>
+        </div>
+
+        {% if has_pending and pending_payment %}
+        <div id="pendingAlert" style="padding:0.85rem 1.15rem;background:rgba(196,113,75,0.1);border:1px solid rgba(196,113,75,0.25);border-radius:var(--radius-md);color:#9c431d;font-size:13px;margin-bottom:1.25rem;">
+          <i class="ri-time-line"></i> <strong>Pending Verification:</strong> You have a {{ pending_payment.months_covered or 1 }}-month payment receipt (₱{{ "%.2f"|format(pending_payment.amount) }}) currently under review. Uploading a new screenshot will replace your pending submission.
+        </div>
+        {% endif %}
+
+        <div class="upload-zone" id="sellerReceiptZone">
+          <input type="file" id="sellerReceiptFile" accept="image/*" style="display:none;">
+          
+          <div class="upload-placeholder" id="sellerReceiptPlaceholder">
+            <i class="ri-bill-line"></i>
+            <div class="uz-title">Upload Payment Receipt</div>
+            <div class="uz-sub">Click or drag your GCash transfer receipt here</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:0.25rem;">Supported formats: PNG, JPG, JPEG</div>
+          </div>
+
+          <div class="upload-preview-wrap" id="sellerReceiptPreviewWrap" style="display:none;">
+            <img src="#" alt="Receipt Preview" class="upload-preview-img" id="previewImg" title="Click to zoom receipt" onclick="event.stopPropagation(); openZoomModal(this.src);">
+            <span class="img-status-badge"><i class="ri-checkbox-circle-fill"></i> Receipt selected (click image to zoom)</span>
+          </div>
+
+          <button type="button" class="btn-upload-file" id="receiptActionBtn" onclick="event.stopPropagation(); document.getElementById('sellerReceiptFile').click();">
+            <i class="ri-upload-2-line"></i> <span id="receiptActionText">Upload Image</span>
+          </button>
+        </div>
+
+        <div class="progress" id="uploadProgress" style="display:none;margin-top:1rem;height:4px;background:var(--border);border-radius:100px;overflow:hidden;">
+          <div class="progress-bar" id="uploadBar" style="width:0%;height:100%;background:var(--deep-rose);transition:width 0.2s;"></div>
+        </div>
+
+        <button type="button" class="btn-submit-pay" id="btnSubmitPayment" disabled>
+          <i class="ri-send-plane-line"></i> Submit Payment (₱{{ "%.2f"|format(quotations['1'].amount) }})
+        </button>
+
+        <div id="submitNotice" style="font-size:13px;text-align:center;margin-top:0.75rem;display:none;"></div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Bottom Card: Payment History -->
+  <div class="seller-card">
+    <h2 class="seller-card-title"><i class="ri-history-line" style="color:var(--deep-rose);"></i> Payment History</h2>
+    <div class="seller-card-sub">Record of your platform registration fee and monthly subscription renewals.</div>
+
+    <div class="table-responsive">
+      <table class="seller-table">
+        <thead>
+          <tr>
+            <th>Payment Type</th>
+            <th>Duration</th>
+            <th>Amount</th>
+            <th>Receipt</th>
+            <th>Date Submitted</th>
+            <th>Status</th>
+            <th>Coverage Period</th>
+            <th>Admin Notes</th>
+          </tr>
+        </thead>
+        <tbody id="sellerPaymentsTbody">
+          {% if payments and payments|length > 0 %}
+            {% for p in payments %}
+            <tr>
+              <td>
+                {% if p.payment_type == 'registration' %}
+                  <span class="badge type-reg"><i class="ri-user-add-line"></i> Registration</span>
+                {% else %}
+                  <span class="badge type-monthly"><i class="ri-repeat-line"></i> Monthly Renewal</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge" style="background:rgba(107,76,59,0.08);color:var(--charcoal);">
+                  <i class="ri-time-line"></i> {{ p.months_covered or 1 }} Month{{ 's' if (p.months_covered or 1) > 1 else '' }}
+                </span>
+              </td>
+              <td><strong style="color:var(--deep-rose);">₱{{ "%.2f"|format(p.amount) }}</strong></td>
+              <td>
+                <img src="{{ p.receipt_url }}" alt="Receipt" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="openZoomModal('{{ p.receipt_url }}')">
+              </td>
+              <td>{{ p.submitted_at.strftime('%b %d, %Y') if p.submitted_at else '—' }}</td>
+              <td>
+                <span class="badge {{ p.status }}">
+                  <i class="ri-{% if p.status == 'approved' %}check{% elif p.status == 'rejected' %}close{% else %}time{% endif %}-line"></i>
+                  {{ p.status }}
+                </span>
+              </td>
+              <td style="font-size:12.5px;color:var(--muted);">
+                {% if p.billing_period_start and p.billing_period_end %}
+                  {{ p.billing_period_start.strftime('%b %d, %Y') }} – {{ p.billing_period_end.strftime('%b %d, %Y') }}
+                {% elif p.status == 'approved' %}
+                  {{ (p.months_covered or 1) * 30 }} Days Extension
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td style="font-size:12.5px;color:var(--muted);">
+                {{ p.admin_notes or '—' }}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="8" style="text-align:center;padding:2.5rem;color:var(--muted);">
+                No subscription payment records found.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt Zoom Modal -->
+<div class="modal-overlay" id="zoomModal">
+  <div class="modal-box" style="max-width: 560px; text-align: center;">
+    <div class="modal-head">
+      <h3 class="modal-title">Payment Receipt Screenshot</h3>
+      <button class="modal-close-btn" onclick="closeZoomModal()"><i class="ri-close-line"></i></button>
+    </div>
+    <div style="background:var(--cream);border-radius:var(--radius-md);padding:1rem;margin-bottom:1rem;">
+      <img src="#" alt="Full Receipt" id="zoomImg" style="max-width:100%;max-height:500px;border-radius:var(--radius-sm);object-fit:contain;">
+    </div>
+    <a href="#" id="zoomLink" target="_blank" download class="btn-submit-pay" style="width:auto;display:inline-flex;padding:0.6rem 1.25rem;font-size:13px;margin:0;">
+      <i class="ri-external-link-line"></i> Open in New Tab
+    </a>
+  </div>
+</div>
+
+<script>
+let selectedReceiptFile = null;
+let selectedMonths = 1;
+let selectedAmount = {{ quotations['1'].amount if quotations and '1' in quotations else 300.0 }};
+
+function selectQuotation(months, amount) {
+    selectedMonths = months;
+    selectedAmount = amount;
+    document.querySelectorAll('.quotation-option').forEach(el => el.classList.remove('selected'));
+    const opt = document.getElementById('optMonth' + months);
+    if (opt) opt.classList.add('selected');
+
+    const feeChip = document.getElementById('qrFeeChip');
+    if (feeChip) {
+        feeChip.textContent = `₱${amount.toFixed(2)} / ${months} Month${months > 1 ? 's' : ''}`;
+    }
+
+    const btn = document.getElementById('btnSubmitPayment');
+    if (btn) {
+        const hasFile = !!selectedReceiptFile;
+        btn.innerHTML = `<i class="ri-send-plane-line"></i> Submit Payment (₱${amount.toFixed(2)})`;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    setupReceiptUpload();
+    checkPendingStatus();
+});
+
+function checkPendingStatus() {
+    {% if payments %}
+      {% for p in payments %}
+        {% if p.status == 'pending' %}
+          const alert = document.getElementById('pendingAlert');
+          if (alert) alert.style.display = 'block';
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+}
+
+function setupReceiptUpload() {
+    const zone = document.getElementById('sellerReceiptZone');
+    const input = document.getElementById('sellerReceiptFile');
+    const submitBtn = document.getElementById('btnSubmitPayment');
+
+    if (!zone || !input || !submitBtn) return;
+
+    zone.addEventListener('click', function(e) {
+        if (e.target && e.target.id === 'previewImg') return;
+        input.click();
+    });
+
+    input.addEventListener('change', function() {
+        const file = this.files[0];
+        if (!file) return;
+
+        selectedReceiptFile = file;
+        const placeholder = document.getElementById('sellerReceiptPlaceholder');
+        const prevWrap = document.getElementById('sellerReceiptPreviewWrap');
+        const img = document.getElementById('previewImg');
+        const actionText = document.getElementById('receiptActionText');
+
+        img.src = URL.createObjectURL(file);
+        if (placeholder) placeholder.style.display = 'none';
+        if (prevWrap) prevWrap.style.display = 'flex';
+        if (actionText) actionText.textContent = 'Replace Image';
+
+        zone.classList.add('has-file');
+        submitBtn.disabled = false;
+    });
+
+    submitBtn.addEventListener('click', submitMonthlyPayment);
+}
+
+async function uploadToCloudinary(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('folder', 'e-flowers/sellers/subscription_receipts');
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    const r = await fetch('/api/v1/cloudinary/upload', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+        body: fd,
+        credentials: 'same-origin'
+    });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.error || 'Upload failed');
+    return d;
+}
+
+async function submitMonthlyPayment() {
+    if (!selectedReceiptFile) return;
+
+    const btn = document.getElementById('btnSubmitPayment');
+    const notice = document.getElementById('submitNotice');
+    const progress = document.getElementById('uploadProgress');
+    const bar = document.getElementById('uploadBar');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Uploading receipt…';
+    progress.style.display = 'block';
+    bar.style.width = '25%';
+
+    try {
+        const uploadResult = await uploadToCloudinary(selectedReceiptFile);
+        bar.style.width = '70%';
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const res = await fetch('/api/seller/subscription-payments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf
+            },
+            body: JSON.stringify({
+                receipt_url: uploadResult.url,
+                receipt_public_id: uploadResult.public_id,
+                months_covered: selectedMonths
+            }),
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Submission failed');
+
+        bar.style.width = '100%';
+        notice.style.display = 'block';
+        notice.style.color = 'var(--deep-sage)';
+        notice.innerHTML = '<i class="ri-checkbox-circle-fill"></i> Payment submitted for admin review! Refreshing…';
+
+        setTimeout(() => { window.location.reload(); }, 1200);
+    } catch (e) {
+        notice.style.display = 'block';
+        notice.style.color = 'var(--deep-rose)';
+        notice.textContent = 'Error: ' + e.message;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ri-send-plane-line"></i> Submit Payment for Admin Verification';
+    }
+}
+
+function openZoomModal(url) {
+    if (!url) return;
+    document.getElementById('zoomImg').src = url;
+    document.getElementById('zoomLink').href = url;
+    document.getElementById('zoomModal').classList.add('open');
+}
+function closeZoomModal() {
+    document.getElementById('zoomModal').classList.remove('open');
+}
+
+/* Modal Dismissal Helpers (Escape & Backdrop click) */
+document.addEventListener('click', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+        e.target.classList.remove('open');
+    }
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const zoom = document.getElementById('zoomModal');
+        if (zoom) zoom.classList.remove('open');
+    }
+});
+</script>
+{% endblock %}
+

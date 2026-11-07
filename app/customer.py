@@ -1588,17 +1588,31 @@ def submit_seller_application():
     store_logo_public_id = data.get('store_logo_public_id', '').strip()
     government_id_url = data.get('government_id_url', '').strip()
     government_id_public_id = data.get('government_id_public_id', '').strip()
+    payment_receipt_url = data.get('payment_receipt_url', '').strip()
+    payment_receipt_public_id = data.get('payment_receipt_public_id', '').strip()
+
+    # Check if admin QR payment is configured
+    from app.models import AdminPaymentSetting, SellerSubscriptionPayment
+    setting = AdminPaymentSetting.query.first()
+    if not setting or not setting.is_configured:
+        return jsonify({'error': 'Seller application is temporarily unavailable.'}), 503
 
     # Validation
     errors = {}
     if not store_name:
         errors['store_name'] = 'Store name is required'
+    elif len(store_name) > 50:
+        errors['store_name'] = 'Store name must be 50 characters or less'
     if not store_description:
         errors['store_description'] = 'Store description is required'
+    elif len(store_description) > 300:
+        errors['store_description'] = 'Store description must be 300 characters or less'
     if not store_logo_url or not store_logo_public_id:
         errors['store_logo'] = 'Store logo is required'
     if not government_id_url or not government_id_public_id:
         errors['government_id'] = 'Government ID is required'
+    if not payment_receipt_url:
+        errors['payment_receipt'] = 'Payment receipt is required'
 
     if errors:
         return jsonify({'error': 'Validation failed', 'field_errors': errors}), 400
@@ -1623,10 +1637,25 @@ def submit_seller_application():
         store_logo_public_id=store_logo_public_id,
         government_id_url=government_id_url,
         government_id_public_id=government_id_public_id,
+        payment_receipt_url=payment_receipt_url,
+        payment_receipt_public_id=payment_receipt_public_id,
         status='pending',
     )
     db.session.add(application)
     db.session.flush()
+
+    # Create linked subscription payment record
+    sub_payment = SellerSubscriptionPayment(
+        seller_id=user_id,
+        application_id=application.id,
+        payment_type='registration',
+        amount=setting.monthly_fee if setting else 300.0,
+        receipt_url=payment_receipt_url,
+        receipt_public_id=payment_receipt_public_id,
+        status='pending',
+        submitted_at=datetime.utcnow()
+    )
+    db.session.add(sub_payment)
     from app.utils.admin_notifications import notify_admins
     notify_admins(
         title='New seller application',
@@ -1673,6 +1702,8 @@ def resubmit_seller_application():
         val = data['store_name'].strip()
         if not val:
             return jsonify({'error': 'Store name cannot be empty'}), 400
+        if len(val) > 50:
+            return jsonify({'error': 'Store name must be 50 characters or less'}), 400
         application.store_name = val
         updated_fields.append('store_name')
 
@@ -1680,6 +1711,8 @@ def resubmit_seller_application():
         val = data['store_description'].strip()
         if not val:
             return jsonify({'error': 'Store description cannot be empty'}), 400
+        if len(val) > 300:
+            return jsonify({'error': 'Store description must be 300 characters or less'}), 400
         application.store_description = val
         updated_fields.append('store_description')
 
@@ -1694,6 +1727,35 @@ def resubmit_seller_application():
             application.government_id_url = data['government_id_url']
             application.government_id_public_id = data['government_id_public_id']
             updated_fields.append('government_id')
+
+    if rejection_details.get('payment_receipt', {}).get('rejected'):
+        if 'payment_receipt_url' in data and 'payment_receipt_public_id' in data:
+            application.payment_receipt_url = data['payment_receipt_url']
+            application.payment_receipt_public_id = data['payment_receipt_public_id']
+            updated_fields.append('payment_receipt')
+            # Update or create pending SellerSubscriptionPayment
+            sub_payment = SellerSubscriptionPayment.query.filter_by(
+                application_id=application.id
+            ).order_by(SellerSubscriptionPayment.submitted_at.desc()).first()
+            if sub_payment:
+                sub_payment.receipt_url = data['payment_receipt_url']
+                sub_payment.receipt_public_id = data['payment_receipt_public_id']
+                sub_payment.status = 'pending'
+                sub_payment.submitted_at = datetime.utcnow()
+                sub_payment.admin_notes = None
+            else:
+                setting = AdminPaymentSetting.query.first()
+                new_sub = SellerSubscriptionPayment(
+                    seller_id=user_id,
+                    application_id=application.id,
+                    payment_type='registration',
+                    amount=setting.monthly_fee if setting else 300.0,
+                    receipt_url=data['payment_receipt_url'],
+                    receipt_public_id=data['payment_receipt_public_id'],
+                    status='pending',
+                    submitted_at=datetime.utcnow()
+                )
+                db.session.add(new_sub)
 
     if not updated_fields:
         return jsonify({'error': 'No rejected fields were updated'}), 400

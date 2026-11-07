@@ -375,7 +375,7 @@ def get_available_orders():
     if not rider:
         return jsonify({'error': 'Rider profile not found'}), 404
     
-    # Get orders from rider's store that are ready for pickup (accepted or done_preparing) and not assigned
+    # Get orders from rider's store that are ready for pickup (done_preparing / ready) and not assigned
     orders = (
         Order.query
         .options(
@@ -386,7 +386,7 @@ def get_available_orders():
         )
         .filter(
             Order.store_id == rider.store_id,
-            Order.status.in_(['accepted', 'preparing', 'done_preparing']),
+            Order.status.in_(['done_preparing', 'ready']),
             Order.rider_id.is_(None),
             db.or_(Order.fulfillment_type == 'delivery', Order.fulfillment_type.is_(None))
         )
@@ -496,8 +496,8 @@ def accept_order(order_id):
     if not order or order.store_id != rider.store_id:
         return jsonify({'error': 'Order not found'}), 404
     
-    if order.status not in ('accepted', 'preparing', 'done_preparing') or order.rider_id is not None:
-        return jsonify({'error': 'Order cannot be accepted'}), 400
+    if order.status not in ('done_preparing', 'ready') or order.rider_id is not None:
+        return jsonify({'error': 'Order cannot be accepted. Only ready orders can be accepted.'}), 400
 
     if getattr(order, 'fulfillment_type', '') == 'pickup':
         return jsonify({'error': 'Store pickup orders cannot be accepted by riders'}), 400

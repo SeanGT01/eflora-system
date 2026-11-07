@@ -214,8 +214,17 @@ def run_tests():
                 fulfillment_type='delivery',
                 requested_delivery_time='14:00 - 16:00'
             )
+            mock_preparing_order = Order(
+                customer_id=cust.id if cust else 1,
+                store_id=rider.store_id,
+                status='preparing',
+                total_amount=180.0,
+                fulfillment_type='delivery',
+                requested_delivery_time='10:00 - 12:00'
+            )
             db.session.add(mock_order)
             db.session.add(mock_order2)
+            db.session.add(mock_preparing_order)
             db.session.commit()
 
             fake_active1 = Order(
@@ -249,6 +258,8 @@ def run_tests():
                 avail_ids = [o['id'] for o in avail_orders]
                 assert mock_order.id in avail_ids, f"mock_order #{mock_order.id} must be in available orders, got {avail_ids}"
                 assert mock_order2.id in avail_ids, f"mock_order2 #{mock_order2.id} must be in available orders, got {avail_ids}"
+                assert mock_preparing_order.id not in avail_ids, f"mock_preparing_order #{mock_preparing_order.id} must NOT be in available orders, got {avail_ids}"
+                print(f" [PASS] Rider available orders correctly excluded preparing order #{mock_preparing_order.id}.")
                 
                 # Verify that 8:00-10:00 order comes before 14:00-16:00 order in itinerary
                 idx1 = next(i for i, o in enumerate(avail_orders) if o['id'] == mock_order.id)
@@ -270,6 +281,7 @@ def run_tests():
                 # Guaranteed Cleanup
                 db.session.delete(mock_order)
                 db.session.delete(mock_order2)
+                db.session.delete(mock_preparing_order)
                 db.session.delete(fake_active1)
                 db.session.commit()
             print(" [PASS] Rider 1-delivery safeguard & optimal itinerary verified.")

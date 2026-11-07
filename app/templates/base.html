@@ -3800,6 +3800,22 @@
         </div>
     </div>
 
+    <!-- Seller Registration Blockade Modal (When Admin QR is missing) -->
+    <div id="sellerUnavailableModal" role="dialog" aria-modal="true" aria-labelledby="sellerUnavailableTitle" style="display: none; position: fixed; inset: 0; z-index: 999999; background: rgba(44, 37, 32, 0.78); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); align-items: center; justify-content: center; padding: 1.5rem;">
+        <div style="background: var(--warm-white, #fffcf8); border: 2px solid var(--deep-rose, #b5445a); border-radius: 20px; max-width: 440px; width: 100%; text-align: center; padding: 32px 28px 26px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); animation: sellerModalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+            <div style="background: rgba(181, 68, 90, 0.12); color: var(--deep-rose, #b5445a); width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; font-size: 32px;">
+                <i class="ri-error-warning-line"></i>
+            </div>
+            <h3 id="sellerUnavailableTitle" style="font-family: var(--font-display, serif); font-size: 24px; color: var(--charcoal, #2c2520); margin-bottom: 0.75rem; font-weight: 600;">Seller application temporarily unavailable</h3>
+            <p style="font-size: 13.5px; color: var(--muted, #8c827a); line-height: 1.6; margin-bottom: 1.75rem;">
+                Seller registration is temporarily paused while the administration updates platform payment requirements. We apologize for the inconvenience. Please return to the homepage and check back later.
+            </p>
+            <button type="button" class="btn-submit" onclick="closeGlobalSellerUnavailableModal()" style="border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.85rem 1.5rem; font-weight: 600; font-size: 14px; background: var(--deep-rose, #b5445a); color: white; border-radius: 999px; box-shadow: 0 4px 15px rgba(181, 68, 90, 0.3); transition: all 0.2s ease;">
+                <i class="ri-check-line"></i> Understood
+            </button>
+        </div>
+    </div>
+
     <!-- Top Bar -->
     <div class="header-topbar">
         🌸 Online stores &nbsp;<span>|</span>&nbsp; Same-day delivery available &nbsp;<span>|</span>&nbsp; Fresh from local farms
@@ -6059,6 +6075,33 @@ function sellerNavDebug(step, data) {
     }
 }
 
+const adminQrAvailable = {{ 'true' if admin_qr_available else 'false' }};
+
+function showGlobalSellerUnavailableModal() {
+    const modal = document.getElementById('sellerUnavailableModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeGlobalSellerUnavailableModal() {
+    const modal = document.getElementById('sellerUnavailableModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('sellerUnavailableModal');
+        if (modal && modal.style.display === 'flex') {
+            closeGlobalSellerUnavailableModal();
+        }
+    }
+});
+
 function goToSellerSignup(event, href) {
     sellerNavDebug('goToSellerSignup invoked', {
         href,
@@ -6069,6 +6112,10 @@ function goToSellerSignup(event, href) {
     if (event) {
         event.preventDefault();
         event.stopPropagation();
+    }
+    if (!adminQrAvailable) {
+        showGlobalSellerUnavailableModal();
+        return false;
     }
     if (!href) {
         sellerNavDebug('missing href; abort');
@@ -6082,6 +6129,12 @@ function goToSellerSignup(event, href) {
 document.addEventListener('click', function(event) {
     const a = event.target && event.target.closest ? event.target.closest('a[href*="/seller/signup"]') : null;
     if (!a) return;
+    if (!adminQrAvailable) {
+        event.preventDefault();
+        event.stopPropagation();
+        showGlobalSellerUnavailableModal();
+        return false;
+    }
     sellerNavDebug('anchor click captured', {
         href: a.href,
         text: (a.textContent || '').trim(),

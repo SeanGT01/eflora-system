@@ -114,7 +114,12 @@ print("Test route added to checkout_bp")
 print("=" * 60)
 
 
+_STORE_PAYMENT_SETTINGS_ENSURED = False
+
 def _ensure_store_payment_settings_table():
+    global _STORE_PAYMENT_SETTINGS_ENSURED
+    if _STORE_PAYMENT_SETTINGS_ENSURED:
+        return True
     try:
         if inspect(db.engine).has_table("store_payment_settings"):
             cols = {c["name"] for c in inspect(db.engine).get_columns("store_payment_settings")}
@@ -131,8 +136,10 @@ def _ensure_store_payment_settings_table():
                     "ADD COLUMN allow_cop BOOLEAN NOT NULL DEFAULT FALSE"
                 ))
                 db.session.commit()
+            _STORE_PAYMENT_SETTINGS_ENSURED = True
             return True
         StorePaymentSetting.__table__.create(db.engine, checkfirst=True)
+        _STORE_PAYMENT_SETTINGS_ENSURED = True
         return True
     except Exception:
         try:

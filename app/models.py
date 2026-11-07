@@ -317,6 +317,11 @@ class Store(db.Model):
     # ===== GCASH INSTRUCTIONS =====
     gcash_instructions = db.Column(db.Text, nullable=True)
     # ==================================
+
+    # ===== SUBSCRIPTION / MONTHLY PAYMENT FIELDS =====
+    subscription_valid_until = db.Column(db.DateTime, nullable=True)
+    subscription_status = db.Column(db.String(20), default='active', nullable=False, server_default='active')
+    # ==================================================
     
     # ===== STORE SCHEDULE =====
     # JSON: schedules, slot_duration, delivery_start, delivery_cutoff, order_cutoff, lead_time_hours
@@ -615,15 +620,19 @@ class Store(db.Model):
         """
         if not bool(getattr(self, 'allow_pickup', True)):
             return False
+        if hasattr(self, '_cached_can_accept_pickup'):
+            return self._cached_can_accept_pickup
         try:
             from app.checkout_routes import _store_allows_pickup
-            return _store_allows_pickup(self)
+            res = _store_allows_pickup(self)
         except Exception:
             has_qr = bool(getattr(self, 'gcash_qr_images', None))
             ps = getattr(self, 'payment_setting', None)
             allow_gcash = has_qr and (ps is None or getattr(ps, 'allow_gcash', True))
             allow_cop = bool(ps and getattr(ps, 'allow_cop', False))
-            return bool(allow_gcash or allow_cop)
+            res = bool(allow_gcash or allow_cop)
+        self._cached_can_accept_pickup = res
+        return res
     
     def _get_current_delivery_geojson(self):
         """Get GeoJSON for the current active delivery area"""
@@ -668,6 +677,10 @@ class SellerApplication(db.Model):
     government_id_path = db.Column(db.String(500), nullable=True)  # Deprecated - keep for backward compatibility
     government_id_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
     government_id_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
+
+    payment_receipt_path = db.Column(db.String(500), nullable=True)  # Deprecated - keep for backward compatibility
+    payment_receipt_public_id = db.Column(db.String(255), nullable=True)  # Cloudinary public ID
+    payment_receipt_url = db.Column(db.String(500), nullable=True)  # Cloudinary URL
     # =================================================
     
     status = db.Column(db.String(20), default='pending')
@@ -689,6 +702,11 @@ class SellerApplication(db.Model):
     def government_id(self):
         """Get Cloudinary URL - no local fallback"""
         return self.government_id_url
+
+    @property
+    def payment_receipt(self):
+        """Get Cloudinary URL - no local fallback"""
+        return self.payment_receipt_url
     
     def to_dict(self):
         from app.utils.phone_utils import display_login_id
@@ -712,12 +730,99 @@ class SellerApplication(db.Model):
             'store_logo_public_id': self.store_logo_public_id,
             'government_id_url': self.government_id_url,  # Cloudinary only
             'government_id_public_id': self.government_id_public_id,
+            'payment_receipt_url': self.payment_receipt_url,  # Cloudinary only
+            'payment_receipt_public_id': self.payment_receipt_public_id,
             'status': self.status,
             'admin_notes': self.admin_notes,
             'rejection_details': self.rejection_details,
             'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
             'reviewer_name': self.reviewer.full_name if self.reviewer else None
+        }
+
+
+class AdminPaymentSetting(db.Model):
+    __tablename__ = 'admin_payment_settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    monthly_fee = db.Column(db.Float, default=300.0, nullable=False)
+    qr_image_url = db.Column(db.String(500), nullable=True)
+    qr_image_public_id = db.Column(db.String(255), nullable=True)
+    account_name = db.Column(db.String(100), nullable=True)
+    account_number = db.Column(db.String(50), nullable=True)
+    instructions = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def is_configured(self):
+        return bool(self.qr_image_url and str(self.qr_image_url).strip())
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'monthly_fee': self.monthly_fee,
+            'qr_image_url': self.qr_image_url,
+            'qr_image_public_id': self.qr_image_public_id,
+            'account_name': self.account_name,
+            'account_number': self.account_number,
+            'instructions': self.instructions,
+            'is_configured': self.is_configured,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class SellerSubscriptionPayment(db.Model):
+    __tablename__ = 'seller_subscription_payments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=True)
+    application_id = db.Column(db.Integer, db.ForeignKey('seller_applications.id'), nullable=True)
+
+    payment_type = db.Column(db.String(50), default='monthly', nullable=False)  # 'registration' or 'monthly'
+    months_covered = db.Column(db.Integer, default=1, nullable=False)  # 1 or 2 months
+    amount = db.Column(db.Float, nullable=False, default=300.0)
+    receipt_url = db.Column(db.String(500), nullable=False)
+    receipt_public_id = db.Column(db.String(255), nullable=True)
+    status = db.Column(db.String(20), default='pending', nullable=False)  # 'pending', 'approved', 'rejected'
+    admin_notes = db.Column(db.Text, nullable=True)
+
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    billing_period_start = db.Column(db.Date, nullable=True)
+    billing_period_end = db.Column(db.Date, nullable=True)
+
+    # Relationships
+    seller = db.relationship('User', foreign_keys=[seller_id], backref='subscription_payments', lazy=True)
+    store = db.relationship('Store', foreign_keys=[store_id], backref='subscription_payments', lazy=True)
+    application = db.relationship('SellerApplication', foreign_keys=[application_id], backref='subscription_payments', lazy=True)
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by], lazy=True)
+
+    def to_dict(self):
+        store_name = self.store.name if self.store else (self.application.store_name if self.application else None)
+        seller_name = self.seller.full_name if self.seller else None
+        return {
+            'id': self.id,
+            'seller_id': self.seller_id,
+            'store_id': self.store_id,
+            'application_id': self.application_id,
+            'store_name': store_name,
+            'seller_name': seller_name,
+            'payment_type': self.payment_type,
+            'months_covered': self.months_covered or 1,
+            'duration_label': f"{self.months_covered or 1} Month{'s' if (self.months_covered or 1) > 1 else ''} ({(self.months_covered or 1) * 30} Days)",
+            'amount': self.amount,
+            'receipt_url': self.receipt_url,
+            'receipt_public_id': self.receipt_public_id,
+            'status': self.status,
+            'admin_notes': self.admin_notes,
+            'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
+            'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
+            'reviewer_name': self.reviewer.full_name if self.reviewer else None,
+            'billing_period_start': self.billing_period_start.isoformat() if self.billing_period_start else None,
+            'billing_period_end': self.billing_period_end.isoformat() if self.billing_period_end else None,
         }
 
 
