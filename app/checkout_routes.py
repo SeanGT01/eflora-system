@@ -1098,6 +1098,8 @@ def validate_checkout():
             store = Store.query.get(store_id)
             if not store:
                 raise Exception(f"Store {store_id} not found")
+            if store.status != 'active' or getattr(store, 'subscription_status', 'active') == 'inactive':
+                raise Exception(f"Store '{store.name}' is temporarily unavailable and cannot accept orders right now.")
 
             subtotal = Decimal("0")
             order_items_data = []
@@ -1461,6 +1463,8 @@ def create_orders():
             if not store:
                 print(f"⚠️ Store not found: {order_data.get('store_id')}")
                 continue
+            if store.status != 'active' or getattr(store, 'subscription_status', 'active') == 'inactive':
+                return jsonify({"error": f"Store '{store.name}' is temporarily unavailable and cannot accept orders right now."}), 400
 
             order_fulfillment = str(
                 order_data.get("fulfillment_type") or data.get("fulfillment_type") or "delivery"
@@ -1975,6 +1979,8 @@ def process_checkout():
             store = Store.query.get(store_id)
             if not store:
                 raise Exception(f"Store {store_id} not found")
+            if store.status != 'active' or getattr(store, 'subscription_status', 'active') == 'inactive':
+                raise Exception(f"Store '{store.name}' is temporarily unavailable and cannot accept orders right now.")
 
             subtotal = Decimal("0")
             order_items_data = []
@@ -2352,6 +2358,11 @@ def buy_now_validate():
         store = Store.query.get(product.store_id)
         if not store:
             return jsonify({"error": "Store not found"}), 404
+        if store.status != 'active' or getattr(store, 'subscription_status', 'active') == 'inactive':
+            return jsonify({
+                "success": False,
+                "error": f"Store '{store.name}' is temporarily unavailable and cannot accept orders right now."
+            }), 400
 
         if fulfillment_type == "pickup" and not _store_allows_pickup(store):
             has_pickup_setting = bool(getattr(store, "allow_pickup", True))
@@ -2627,6 +2638,11 @@ def buy_now_create_order():
         store = Store.query.get(product.store_id)
         if not store:
             return jsonify({"error": "Store not found"}), 404
+        if store.status != 'active' or getattr(store, 'subscription_status', 'active') == 'inactive':
+            return jsonify({
+                "success": False,
+                "error": f"Store '{store.name}' is temporarily unavailable and cannot accept orders right now."
+            }), 400
 
         if fulfillment_type == "pickup" and not _store_allows_pickup(store):
             return jsonify({"error": "In-store pickup is not available for this shop"}), 400

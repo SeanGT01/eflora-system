@@ -1987,6 +1987,21 @@
     .ep-price { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
     .ep-price__regular { font-weight: 700; color: var(--deep-rose, #b5445a); }
     .ep-price__sale    { font-weight: 700; color: var(--deep-rose, #b5445a); }
+    .nav-link-locked {
+        opacity: 0.45 !important;
+        pointer-events: none !important;
+        cursor: not-allowed !important;
+    }
+    .pulse-border-danger {
+        box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.5) !important;
+        border-radius: 8px !important;
+        animation: pulseBorderLock 2s infinite !important;
+    }
+    @keyframes pulseBorderLock {
+        0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+        70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+    }
     .ep-price__original { font-weight: 500; color: #9e9e9e; text-decoration: line-through; font-size: 0.88em; }
     .ep-price__badge { background: #b5445a; color: #fff; font-size: 0.72em; font-weight: 700; border-radius: 20px; padding: 1px 7px; white-space: nowrap; }
     .sa-readonly-banner {
@@ -2053,10 +2068,11 @@
 
         <!-- Store status (seller only) -->
         {% if session.role in ['seller', 'store_admin'] %}
-        <div class="store-status-pill">
-            <span class="store-status-dot"></span>
+        {% set is_sub_locked = seller_sub_meta and seller_sub_meta.is_locked %}
+        <div class="store-status-pill {% if is_sub_locked %}border border-danger bg-danger-subtle{% endif %}">
+            <span class="store-status-dot {% if is_sub_locked %}bg-danger{% endif %}"></span>
             <span class="store-status-text">Store</span>
-            <span class="store-status-value">Online</span>
+            <span class="store-status-value">{% if is_sub_locked %}Inactive (Overdue){% else %}Online{% endif %}</span>
         </div>
         {% endif %}
 
@@ -2066,8 +2082,9 @@
             <ul class="nav-list">
                 <li class="nav-item">
                     {% if session.role in ['seller', 'store_admin'] %}
-                    <a href="{{ url_for('templates.seller_dashboard') }}" class="nav-link {% if request.endpoint == 'templates.seller_dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('templates.seller_dashboard') }}" class="nav-link {% if request.endpoint == 'templates.seller_dashboard' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-layout-grid-line nav-icon"></i> Dashboard
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                     {% else %}
                     <a href="{{ url_for('templates.dashboard') }}" class="nav-link {% if request.endpoint == 'templates.dashboard' %}active{% endif %}">
@@ -2124,54 +2141,73 @@
                 </li>
                 {% elif session.role in ['seller', 'store_admin'] %}
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.seller_products') }}" class="nav-link {% if request.endpoint == 'templates.seller_products' %}active{% endif %}">
+                    <a href="{{ url_for('templates.seller_products') }}" class="nav-link {% if request.endpoint == 'templates.seller_products' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-leaf-line nav-icon"></i> Products
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.seller_archive') }}" class="nav-link {% if request.endpoint == 'templates.seller_archive' %}active{% endif %}">
+                    <a href="{{ url_for('templates.seller_archive') }}" class="nav-link {% if request.endpoint == 'templates.seller_archive' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-archive-line nav-icon"></i> Archive
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.seller_inventory') }}" class="nav-link {% if request.endpoint == 'templates.seller_inventory' %}active{% endif %}">
+                    <a href="{{ url_for('templates.seller_inventory') }}" class="nav-link {% if request.endpoint == 'templates.seller_inventory' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-stack-line nav-icon"></i> Inventory
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
                 
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.seller_orders') }}" class="nav-link {% if request.endpoint == 'templates.seller_orders' %}active{% endif %}">
+                    <a href="{{ url_for('templates.seller_orders') }}" class="nav-link {% if request.endpoint == 'templates.seller_orders' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-shopping-bag-3-line nav-icon"></i> Orders
+                        {% if is_sub_locked %}
+                        <i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>
+                        {% else %}
                         <span class="nav-badge" id="sellerOrdersBadge" {% if seller_orders_badge_count <= 0 %}style="display:none;"{% endif %}>{{ seller_orders_badge_count }}</span>
+                        {% endif %}
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.seller_riders') }}" class="nav-link {% if request.endpoint == 'templates.seller_riders' %}active{% endif %}">
+                    <a href="{{ url_for('templates.seller_riders') }}" class="nav-link {% if request.endpoint == 'templates.seller_riders' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-motorbike-line nav-icon"></i> Riders
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
                 {% if session.role == 'seller' %}
                 <li class="nav-item">
-                    <a href="{{ url_for('store_admin.seller_admins_page') }}" class="nav-link {% if request.endpoint == 'store_admin.seller_admins_page' %}active{% endif %}">
+                    <a href="{{ url_for('store_admin.seller_admins_page') }}" class="nav-link {% if request.endpoint == 'store_admin.seller_admins_page' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-shield-user-line nav-icon"></i> Admins
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
                 {% endif %}
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.seller_pos') }}" class="nav-link {% if request.endpoint == 'templates.seller_pos' %}active{% endif %}">
+                    <a href="{{ url_for('templates.seller_pos') }}" class="nav-link {% if request.endpoint == 'templates.seller_pos' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-cash-line nav-icon"></i> POS System
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.seller_pos_orders') }}" class="nav-link {% if request.endpoint == 'templates.seller_pos_orders' %}active{% endif %}">
+                    <a href="{{ url_for('templates.seller_pos_orders') }}" class="nav-link {% if request.endpoint == 'templates.seller_pos_orders' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true" title="Account locked - Settle monthly payment"{% endif %}>
                         <i class="ri-history-line nav-icon"></i> POS Orders
+                        {% if is_sub_locked %}
+                        <i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>
+                        {% else %}
                         <span class="nav-badge" id="posOrderCount" {% if pos_orders_badge_count <= 0 %}hidden{% endif %}>{{ pos_orders_badge_count }}</span>
+                        {% endif %}
                     </a>
                 </li>
                 {% if session.role == 'seller' %}
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.seller_payments') }}" class="nav-link {% if request.endpoint == 'templates.seller_payments' %}active{% endif %}">
-                        <i class="ri-calendar-check-line nav-icon"></i> Monthly Payments
+                    <a href="{{ url_for('templates.seller_payments') }}" class="nav-link {% if request.endpoint == 'templates.seller_payments' %}active{% endif %} {% if is_sub_locked %}pulse-border-danger{% endif %}">
+                        <i class="ri-calendar-check-line nav-icon {% if is_sub_locked %}text-danger{% endif %}"></i> Monthly Payments
+                        {% if is_sub_locked %}
+                            <span class="nav-badge bg-danger text-white ms-auto" style="display:inline-block; font-size: 10px;">Action Required</span>
+                        {% elif seller_sub_meta and seller_sub_meta.is_in_grace %}
+                            <span class="nav-badge bg-warning text-dark ms-auto" style="display:inline-block; font-size: 10px;">Overdue</span>
+                        {% endif %}
                     </a>
                 </li>
                 {% endif %}
@@ -2186,13 +2222,15 @@
             <div class="nav-section-label">Analytics</div>
             <ul class="nav-list">
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.analytics') }}" class="nav-link {% if request.endpoint == 'templates.analytics' %}active{% endif %}">
+                    <a href="{{ url_for('templates.analytics') }}" class="nav-link {% if request.endpoint == 'templates.analytics' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true"{% endif %}>
                         <i class="ri-bar-chart-2-line nav-icon"></i> Overview
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.reports') }}" class="nav-link {% if request.endpoint == 'templates.reports' %}active{% endif %}">
+                    <a href="{{ url_for('templates.reports') }}" class="nav-link {% if request.endpoint == 'templates.reports' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true"{% endif %}>
                         <i class="ri-file-chart-line nav-icon"></i> Reports
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
             </ul>
@@ -2206,14 +2244,16 @@
             <div class="nav-section-label">System</div>
             <ul class="nav-list">
                 <li class="nav-item">
-                        <a href="{{ url_for('templates.store_settings') }}" class="nav-link ">
+                        <a href="{{ url_for('templates.store_settings') }}" class="nav-link {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true"{% endif %}>
                             <i class="ri-settings-4-line"></i>
                             <span>Store Settings</span>
+                            {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                         </a>
                 </li>
                 <li class="nav-item">
-                    <a href="{{ url_for('templates.my_account') }}?page=profile" class="nav-link {% if request.endpoint == 'templates.my_account' and request.args.get('page') == 'profile' %}active{% endif %}">
+                    <a href="{{ url_for('templates.my_account') }}?page=profile" class="nav-link {% if request.endpoint == 'templates.my_account' and request.args.get('page') == 'profile' %}active{% endif %} {% if is_sub_locked %}nav-link-locked{% endif %}" {% if is_sub_locked %}tabindex="-1" aria-disabled="true"{% endif %}>
                         <i class="ri-user-3-line nav-icon"></i> Profile
+                        {% if is_sub_locked %}<i class="ri-lock-line ms-auto" style="font-size: 13px; opacity: 0.6;"></i>{% endif %}
                     </a>
                 </li>
             </ul>
@@ -2306,6 +2346,52 @@
 
         <!-- Page Content -->
         <main class="page-content">
+            {% if session.role in ['seller', 'store_admin'] and seller_sub_meta %}
+                {% if seller_sub_meta.is_locked %}
+                <div class="alert shadow-sm mb-4" style="background: #fef2f2; border: 1px solid #fecaca; border-left: 5px solid #dc2626; border-radius: 8px; padding: 14px 18px; color: #991b1b;">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                        <i class="ri-lock-2-fill" style="font-size: 24px; color: #dc2626; line-height: 1.2;"></i>
+                        <div style="flex: 1;">
+                            <h6 style="margin: 0 0 4px; font-weight: 700; color: #991b1b;">Account Restricted — Grace Period Expired</h6>
+                            <p style="margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: #7f1d1d;">
+                                Your store's 7-day payment grace period has expired. Access to store management tools is temporarily locked and your storefront is inactive to prevent unfulfillable customer orders until renewal is verified.
+                            </p>
+                            {% if seller_sub_meta.has_pending %}
+                            <div style="display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 5px 12px; border-radius: 6px; border: 1px solid #fca5a5; font-size: 12.5px; font-weight: 600; color: #b91c1c;">
+                                <i class="ri-time-line"></i> Payment Receipt Submitted — Awaiting Admin Approval
+                            </div>
+                            {% else %}
+                            <a href="{{ url_for('templates.seller_payments') }}" style="display: inline-flex; align-items: center; gap: 6px; background: #dc2626; color: #fff; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+                                <i class="ri-wallet-3-line"></i> Settle Monthly Payment Now
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% elif seller_sub_meta.is_in_grace %}
+                <div class="alert shadow-sm mb-4" style="background: #fffbeb; border: 1px solid #fef3c7; border-left: 5px solid #f59e0b; border-radius: 8px; padding: 14px 18px; color: #92400e;">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                        <i class="ri-alert-fill" style="font-size: 24px; color: #f59e0b; line-height: 1.2;"></i>
+                        <div style="flex: 1;">
+                            <h6 style="margin: 0 0 4px; font-weight: 700; color: #92400e;">Monthly Subscription Payment Overdue</h6>
+                            <p style="margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: #78350f;">
+                                Your monthly subscription expired on <strong>{{ seller_sub_meta.valid_until.strftime('%B %d, %Y') }}</strong>. You are currently in the <strong>7-day grace period</strong> with <strong>{{ seller_sub_meta.grace_days_left }} day(s) remaining</strong>. Please renew promptly to prevent store operations from being restricted.
+                            </p>
+                            {% if seller_sub_meta.has_pending %}
+                            <div style="display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 5px 12px; border-radius: 6px; border: 1px solid #fcd34d; font-size: 12.5px; font-weight: 600; color: #b45309;">
+                                <i class="ri-time-line"></i> Renewal Submitted — Awaiting Admin Approval
+                            </div>
+                            {% else %}
+                            <a href="{{ url_for('templates.seller_payments') }}" style="display: inline-flex; align-items: center; gap: 6px; background: #f59e0b; color: #78350f; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; text-decoration: none;">
+                                <i class="ri-hand-coin-line"></i> Pay Monthly Subscription
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+
             {% block content %}{% endblock %}
         </main>
 

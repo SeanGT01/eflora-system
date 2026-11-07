@@ -67,6 +67,8 @@
 }
 .sub-badge-icon.active { background: rgba(74, 107, 78, 0.12); color: var(--deep-sage); }
 .sub-badge-icon.expired { background: rgba(196, 113, 75, 0.12); color: var(--terracotta); }
+.sub-badge-icon.grace { background: rgba(217, 119, 6, 0.14); color: #b45309; }
+.sub-badge-icon.locked { background: rgba(229, 62, 62, 0.15); color: #c53030; }
 
 .sub-title {
   font-family: var(--font-display);
@@ -93,6 +95,8 @@
 }
 .sub-pill.active { background: rgba(74, 107, 78, 0.12); color: var(--deep-sage); border: 1px solid rgba(74, 107, 78, 0.25); }
 .sub-pill.expired { background: rgba(196, 113, 75, 0.12); color: var(--terracotta); border: 1px solid rgba(196, 113, 75, 0.25); }
+.sub-pill.grace { background: rgba(217, 119, 6, 0.12); color: #b45309; border: 1px solid rgba(217, 119, 6, 0.3); }
+.sub-pill.locked { background: rgba(229, 62, 62, 0.12); color: #c53030; border: 1px solid rgba(229, 62, 62, 0.3); }
 
 /* ─── Two-Column Pay Card ─── */
 .pay-grid {
@@ -477,15 +481,19 @@
 {% block content %}
 <div class="seller-pay-wrap">
   <!-- Status Hero -->
-  <div class="sub-hero">
+  <div class="sub-hero" {% if billing_meta and billing_meta.is_locked %}style="border-color: rgba(229, 62, 62, 0.4); background: rgba(254, 242, 242, 0.85);"{% elif billing_meta and billing_meta.is_in_grace %}style="border-color: rgba(217, 119, 6, 0.4); background: rgba(255, 251, 235, 0.85);"{% endif %}>
     <div class="sub-hero-left">
-      <div class="sub-badge-icon {% if is_active %}active{% else %}expired{% endif %}">
-        <i class="ri-{% if is_active %}shield-check-line{% else %}alarm-warning-line{% endif %}"></i>
+      <div class="sub-badge-icon {% if billing_meta and billing_meta.is_locked %}locked{% elif billing_meta and billing_meta.is_in_grace %}grace{% elif is_active %}active{% else %}expired{% endif %}">
+        <i class="ri-{% if billing_meta and billing_meta.is_locked %}lock-2-line{% elif billing_meta and billing_meta.is_in_grace %}alarm-warning-line{% elif is_active %}shield-check-line{% else %}alarm-warning-line{% endif %}"></i>
       </div>
       <div>
         <h1 class="sub-title">{{ store.name }}</h1>
         <div class="sub-desc">
-          {% if is_active %}
+          {% if billing_meta and billing_meta.is_locked %}
+            <span style="color:#b91c1c;font-weight:600;"><i class="ri-error-warning-fill"></i> Store Locked & Inactive:</span> Subscription overdue by {{ billing_meta.overdue_days }} days (grace period ended on {{ billing_meta.grace_until.strftime('%B %d, %Y') if (billing_meta and billing_meta.grace_until) else 'N/A' }}). Public store ordering is disabled and sidebar pages are locked. Submit payment below to restore access upon admin approval.
+          {% elif billing_meta and billing_meta.is_in_grace %}
+            <span style="color:#b45309;font-weight:600;"><i class="ri-time-line"></i> Payment Overdue (Grace Period):</span> Subscription expired on <strong>{{ valid_until.strftime('%B %d, %Y') if valid_until else 'N/A' }}</strong>. You have <strong>{{ billing_meta.grace_days_left }} day{{ 's' if billing_meta.grace_days_left != 1 else '' }} remaining</strong> to pay before store ordering and sidebar features are locked.
+          {% elif is_active %}
             Platform subscription is active. Covered until <strong>{{ valid_until.strftime('%B %d, %Y') if valid_until else 'N/A' }}</strong>.
           {% else %}
             Your platform subscription has expired or is due. Please scan the QR code to renew.
@@ -494,13 +502,26 @@
       </div>
     </div>
     <div class="sub-pills">
-      {% if is_active %}
+      {% if billing_meta and billing_meta.is_locked %}
+        <span class="sub-pill locked">
+          <i class="ri-lock-line"></i> Restricted (>7d Overdue)
+        </span>
+      {% elif billing_meta and billing_meta.is_in_grace %}
+        <span class="sub-pill grace">
+          <i class="ri-time-line"></i> Grace Period ({{ billing_meta.grace_days_left }}d left)
+        </span>
+      {% elif is_active %}
         <span class="sub-pill active">
           <i class="ri-checkbox-circle-fill"></i> Active ({{ days_left }} days remaining)
         </span>
       {% else %}
         <span class="sub-pill expired">
           <i class="ri-error-warning-fill"></i> Renewal Due
+        </span>
+      {% endif %}
+      {% if has_pending %}
+        <span class="sub-pill" style="background:rgba(196,113,75,0.14);color:var(--terracotta);border:1px solid rgba(196,113,75,0.28);">
+          <i class="ri-loader-4-line"></i> Verification Pending
         </span>
       {% endif %}
     </div>

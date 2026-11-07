@@ -1794,6 +1794,71 @@ def seller_required(f):
     return decorated
 
 
+@templates_bp.before_app_request
+def enforce_seller_subscription_lockout():
+    """Redirect locked-out sellers to /seller/payments if overdue past 7-day grace period."""
+    if not session.get('user_id') or session.get('role') not in ('seller', 'store_admin'):
+        return None
+
+    # Static assets, files, and image uploads don't get blocked
+    if not request.endpoint or request.endpoint == 'static' or request.path.startswith('/static'):
+        return None
+
+    # Exclude non-seller routes early
+    is_seller_target = (
+        request.path.startswith('/seller') or
+        request.path.startswith('/api/seller') or
+        request.path.startswith('/analytics') or
+        request.path.startswith('/reports') or
+        request.path.startswith('/pos') or
+        request.endpoint.startswith('templates.seller_') or
+        request.endpoint.startswith('store_admin.') or
+        request.endpoint in {'templates.analytics', 'templates.reports'}
+    )
+    if not is_seller_target:
+        return None
+
+    # Allow payment-related endpoints and auth/logout
+    allowed_endpoints = {
+        'templates.seller_payments',
+        'templates.get_seller_subscription_payments',
+        'templates.submit_seller_subscription_payment',
+        'templates.logout',
+        'templates.my_account',
+        'templates.get_user_notifications',
+        'templates.read_notification',
+        'templates.read_all_notifications',
+        'templates.clear_all_notifications',
+    }
+    if request.endpoint in allowed_endpoints:
+        return None
+
+    # Cloudinary endpoints
+    if (
+        request.path.startswith('/api/upload-cloudinary') or
+        request.path.startswith('/api/v1/cloudinary') or
+        request.path.startswith('/api/delete-cloudinary')
+    ):
+        return None
+
+    # Check store lockout status
+    store = _seller_portal_manageable_store(session['user_id'])
+    if not store:
+        return None
+
+    lock_meta = _get_store_subscription_lock_meta(store)
+    if lock_meta.get('is_locked'):
+        if request.is_json or request.path.startswith('/api/'):
+            return jsonify({
+                'error': 'Subscription overdue: Store access is locked. Please settle your monthly payment.',
+                'subscription_locked': True
+            }), 403
+        flash('Your account has been restricted because your monthly subscription is overdue past the 7-day grace period. Please submit your payment below to restore access.', 'danger')
+        return redirect(url_for('templates.seller_payments'))
+
+    return None
+
+
 @templates_bp.route('/seller/products/<int:product_id>/archive-choice', methods=['POST'])
 @seller_required
 def product_archive_choice(product_id):
@@ -1951,6 +2016,7 @@ def inject_user():
     seller_orders_badge_count = 0
     pos_orders_badge_count = 0
     chat_unread_count = 0
+    seller_sub_meta = None
     if session.get('user_id'):
         user_obj = User.query.get(session['user_id'])
         if user_obj:
@@ -1961,6 +2027,7 @@ def inject_user():
                     seller_orders_badge_count, pos_orders_badge_count = (
                         _seller_sidebar_badge_counts(portal_store)
                     )
+                    seller_sub_meta = _get_store_subscription_lock_meta(portal_store)
 
             # Seed chat FAB badge on every page render (seller/admin/customer)
             try:
@@ -2005,6 +2072,7 @@ def inject_user():
         pos_orders_badge_count=pos_orders_badge_count,
         chat_unread_count=chat_unread_count,
         store_admin_perms=store_admin_perms,
+        seller_sub_meta=seller_sub_meta,
         current_year=datetime.utcnow().year,
         phone_registration_enabled=phone_registration_enabled(),
     )
@@ -6740,6 +6808,7 @@ def approve_subscription_payment(payment_id):
             else:
                 new_valid_until = now + timedelta(days=days_to_add)
             store.subscription_status = 'active'
+            store.status = 'active'
             store.subscription_valid_until = new_valid_until
             payment.store_id = store.id
             billing_start = now.date()
@@ -6829,9 +6898,85 @@ def reject_subscription_payment(payment_id):
         return jsonify({'error': str(e)}), 500
 
 
+def _get_store_subscription_lock_meta(store):
+    """
+    Evaluate seller store subscription lifecycle:
+    - Active: now <= valid_until
+    - Overdue Grace Period: valid_until < now <= valid_until + 7 days (7-day chance to pay)
+    - Hard Lockout: now > valid_until + 7 days (stuck on Monthly Payments page, store deactivated)
+    """
+    if not store or not store.subscription_valid_until:
+        return {
+            'is_tracked': False,
+            'is_overdue': False,
+            'is_in_grace': False,
+            'grace_days_left': 7,
+            'is_locked': False,
+            'has_pending': False,
+            'valid_until': None,
+            'overdue_days': 0,
+        }
+
+    now = datetime.utcnow()
+    valid_until = store.subscription_valid_until
+    grace_until = valid_until + timedelta(days=7)
+
+    from app.models import SellerSubscriptionPayment
+    has_pending = SellerSubscriptionPayment.query.filter(
+        (SellerSubscriptionPayment.store_id == store.id) | (SellerSubscriptionPayment.seller_id == store.seller_id),
+        SellerSubscriptionPayment.status == 'pending'
+    ).first() is not None
+
+    if now <= valid_until and store.subscription_status == 'active':
+        return {
+            'is_tracked': True,
+            'is_overdue': False,
+            'is_in_grace': False,
+            'grace_days_left': 7,
+            'is_locked': False,
+            'has_pending': has_pending,
+            'valid_until': valid_until,
+            'grace_until': grace_until,
+            'overdue_days': 0,
+        }
+
+    overdue_seconds = (now - valid_until).total_seconds()
+    overdue_days = int(overdue_seconds // 86400)
+
+    if overdue_days < 7:
+        is_in_grace = True
+        grace_days_left = max(1, 7 - overdue_days)
+        is_locked = False
+    else:
+        is_in_grace = False
+        grace_days_left = 0
+        is_locked = True
+        # If overdue past 7 days, automatically set store status and subscription_status to inactive
+        if store.status == 'active' or store.subscription_status == 'active':
+            try:
+                store.status = 'inactive'
+                store.subscription_status = 'inactive'
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+    return {
+        'is_tracked': True,
+        'is_overdue': True,
+        'is_in_grace': is_in_grace,
+        'grace_days_left': grace_days_left,
+        'is_locked': is_locked,
+        'has_pending': has_pending,
+        'valid_until': valid_until,
+        'grace_until': grace_until,
+        'overdue_days': overdue_days,
+    }
+
+
 def _calculate_seller_subscription_billing_meta(store, setting):
     now = datetime.utcnow()
     valid_until = store.subscription_valid_until if store else None
+    lock_meta = _get_store_subscription_lock_meta(store)
     is_active = bool(valid_until and valid_until > now and store.subscription_status == 'active')
     days_left = (valid_until - now).days if is_active else 0
 
@@ -6893,6 +7038,13 @@ def _calculate_seller_subscription_billing_meta(store, setting):
         'valid_until': valid_until,
         'quotations': quotations,
         'base_fee': base_fee,
+        'is_overdue': lock_meta.get('is_overdue', False),
+        'is_in_grace': lock_meta.get('is_in_grace', False),
+        'grace_days_left': lock_meta.get('grace_days_left', 7),
+        'grace_until': lock_meta.get('grace_until'),
+        'is_locked': lock_meta.get('is_locked', False),
+        'has_pending': lock_meta.get('has_pending', False),
+        'overdue_days': lock_meta.get('overdue_days', 0),
     }
 
 
@@ -6946,7 +7098,8 @@ def seller_payments():
         base_fee=billing_meta['base_fee'],
         has_pending=has_pending,
         pending_payment=pending_payment,
-        valid_until=store.subscription_valid_until
+        valid_until=store.subscription_valid_until,
+        billing_meta=billing_meta,
     )
 
 
