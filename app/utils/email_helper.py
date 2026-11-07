@@ -86,15 +86,20 @@ def _get_gmail_access_token():
         return None
 
 
-def _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email):
+def _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email, text_body=None):
     """
     Send email via Gmail API using OAuth2 refresh token.
     No domain-wide delegation needed - works with regular Gmail accounts.
+    Uses multipart/alternative with plain-text fallback for high deliverability.
     """
     try:
         from googleapiclient.discovery import build
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from email.utils import formataddr
+        import re
         
         # Get fresh access token using refresh token
         access_token = _get_gmail_access_token()
@@ -105,12 +110,32 @@ def _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email):
         credentials = Credentials(token=access_token)
         service = build('gmail', 'v1', credentials=credentials)
         
-        # Create MIME message
-        from email.mime.text import MIMEText
-        message = MIMEText(html_body, 'html')
+        # Ensure friendly sender display name (e.g., "E-Flora Marketplace" <email>)
+        if '<' not in str(sender_email):
+            formatted_from = formataddr(('E-Flora Marketplace', sender_email))
+        else:
+            formatted_from = sender_email
+
+        # Build multipart/alternative message (plain-text + html)
+        message = MIMEMultipart('alternative')
         message['to'] = recipient_email
-        message['from'] = sender_email
+        message['from'] = formatted_from
         message['subject'] = subject
+
+        # Generate a clean plain text fallback if none provided
+        if not text_body:
+            clean_text = re.sub(r'<style[^>]*>.*?</style>', '', html_body, flags=re.DOTALL)
+            clean_text = re.sub(r'<script[^>]*>.*?</script>', '', clean_text, flags=re.DOTALL)
+            clean_text = re.sub(r'<br\s*/?>', '\n', clean_text)
+            clean_text = re.sub(r'</p>', '\n\n', clean_text)
+            clean_text = re.sub(r'</tr>', '\n', clean_text)
+            clean_text = re.sub(r'<[^>]+>', ' ', clean_text)
+            text_body = re.sub(r'[ \t]+', ' ', clean_text).strip()
+
+        part_plain = MIMEText(text_body, 'plain', 'utf-8')
+        part_html = MIMEText(html_body, 'html', 'utf-8')
+        message.attach(part_plain)
+        message.attach(part_html)
         
         # Send via Gmail API
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
@@ -125,7 +150,7 @@ def _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email):
         return False
 
 
-def _send_email_async(app, recipient_email, subject, html_body, sender_email):
+def _send_email_async(app, recipient_email, subject, html_body, sender_email, text_body=None):
     """Send email in background thread via Gmail OAuth2 API."""
     with app.app_context():
         try:
@@ -137,7 +162,7 @@ def _send_email_async(app, recipient_email, subject, html_body, sender_email):
                 )
                 return
             
-            _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email)
+            _send_email_gmail_oauth(recipient_email, subject, html_body, sender_email, text_body=text_body)
         except Exception as e:
             current_app.logger.error(f"❌ Error in _send_email_async for {recipient_email}: {e}")
 
@@ -853,23 +878,42 @@ def send_seller_payment_approved_email(
     payment_type: str = 'monthly',
     billing_period_end = None,
     billing_end = None,
-    approved_at: str = None,
+    approved_at = None,
 ):
     """
     Send notification to seller via Gmail OAuth when their subscription / registration payment is approved.
     Runs asynchronously via threading just like stock alert notifications.
     """
     try:
+        import pytz
+        PHT = pytz.timezone('Asia/Manila')
+
         resolved_name = seller_name or recipient_name
         end_val = billing_period_end or billing_end
         if hasattr(end_val, 'strftime'):
             end_val = end_val.strftime("%B %d, %Y")
 
-        subject = f"E-FLORA - Subscription Payment of PHP {amount:.2f} Approved!"
         greeting = f"Hi {resolved_name}!" if resolved_name else "Hello Seller!"
         store_display = store_name or "your store"
         type_label = "Registration / Initial Payment" if payment_type == 'registration' else "Monthly Subscription Payment"
-        now_str = approved_at or datetime.now().strftime("%B %d, %Y at %I:%M %p")
+
+        # Correct Philippine Time formatting
+        if approved_at:
+            if isinstance(approved_at, datetime):
+                if approved_at.tzinfo is None:
+                    # Database UTC naive datetime -> convert to PHT
+                    dt_pht = pytz.utc.localize(approved_at).astimezone(PHT)
+                else:
+                    dt_pht = approved_at.astimezone(PHT)
+                now_str = dt_pht.strftime("%B %d, %Y at %I:%M %p")
+            else:
+                now_str = str(approved_at)
+        else:
+            now_str = datetime.now(PHT).strftime("%B %d, %Y at %I:%M %p")
+
+        # Clean subject line to avoid spam filtering penalties (no ALL CAPS, no currency, no exclamation marks)
+        subject = f"E-Flora: Store Subscription Payment Confirmed - {store_display}"
+
         validity_html = f"""
             <div style="margin: 20px 0; padding: 15px; background: #eafaf1; border-left: 4px solid #2ecc71; border-radius: 4px;">
                 <p style="margin: 0; color: #27ae60; font-weight: bold; font-size: 15px;">Active Platform Subscription</p>
@@ -922,7 +966,7 @@ def send_seller_payment_approved_email(
                             </tr>
                             <tr>
                                 <td style="padding: 6px 0; color: #9a8d85;">Approved On:</td>
-                                <td style="padding: 6px 0; font-weight: 500; text-align: right; color: #2c2520;">{now_str}</td>
+                                <td style="padding: 6px 0; font-weight: 500; text-align: right; color: #2c2520;">{now_str} (PHT)</td>
                             </tr>
                         </table>
                     </div>
@@ -955,11 +999,34 @@ def send_seller_payment_approved_email(
         </html>
         """
 
+        # Plain text counterpart for spam filters & plain text mail clients
+        text_body = f"""E-Flora Online Flower Marketplace
+Store Subscription Payment Confirmed
+
+{greeting}
+
+Great news! Your {type_label} for {store_display} has been verified and approved by the E-Flora admin team.
+
+--- Receipt Details ---
+Store Name: {store_display}
+Payment Type: {type_label}
+Amount Confirmed: PHP {amount:.2f}
+Approved On: {now_str} (PHT)
+{f'Authorized Until: {end_val}' if end_val else ''}
+
+Your store remains active and in good standing on the E-Flora marketplace.
+You can open your seller dashboard at: https://eflowers.up.railway.app/seller/dashboard
+
+Thank you for selling with E-Flora!
+Support: efloralaguna@gmail.com
+"""
+
         sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
         app = current_app._get_current_object()
         thread = threading.Thread(
             target=_send_email_async,
-            args=(app, recipient_email, subject, html_body, sender)
+            args=(app, recipient_email, subject, html_body, sender),
+            kwargs={'text_body': text_body}
         )
         thread.daemon = True
         thread.start()

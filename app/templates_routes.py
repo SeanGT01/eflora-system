@@ -6506,7 +6506,8 @@ def approve_seller_application(app_id):
             store_name=application.store_name,
             amount=payment_amount,
             billing_end=valid_until,
-            payment_type='registration'
+            payment_type='registration',
+            approved_at=datetime.utcnow()
         )
 
         # Create approval notification
@@ -6777,7 +6778,8 @@ def approve_subscription_payment(payment_id):
                 store_name=store_name,
                 amount=payment.amount,
                 billing_end=new_valid_until,
-                payment_type=payment.payment_type
+                payment_type=payment.payment_type,
+                approved_at=payment.reviewed_at
             )
 
         return jsonify({
