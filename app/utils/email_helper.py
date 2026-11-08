@@ -973,16 +973,9 @@ def send_seller_payment_approved_email(
 
                     {validity_html}
 
-                    <p style="margin: 0 0 20px; font-size: 14px; color: #554841; line-height: 1.6;">
+                    <p style="margin: 0; font-size: 14px; color: #554841; line-height: 1.6;">
                         Your store remains active and in good standing on the E-FLORA marketplace. Customers can continue browsing, ordering, and booking delivery from your store.
                     </p>
-
-                    <div style="text-align: center; margin: 26px 0 10px;">
-                        <a href="https://eflowers.up.railway.app/seller/dashboard" 
-                           style="display: inline-block; background: #b5445a; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 6px rgba(181, 68, 90, 0.25);">
-                            Open Seller Dashboard
-                        </a>
-                    </div>
                 </div>
 
                 <!-- Footer -->
@@ -1015,7 +1008,6 @@ Approved On: {now_str} (PHT)
 {f'Authorized Until: {end_val}' if end_val else ''}
 
 Your store remains active and in good standing on the E-Flora marketplace.
-You can open your seller dashboard at: https://eflowers.up.railway.app/seller/dashboard
 
 Thank you for selling with E-Flora!
 Support: efloralaguna@gmail.com
@@ -1140,16 +1132,9 @@ def send_seller_payment_rejected_email(
                         </table>
                     </div>
 
-                    <p style="margin: 0 0 20px; font-size: 14px; color: #554841; line-height: 1.6;">
+                    <p style="margin: 0; font-size: 14px; color: #554841; line-height: 1.6;">
                         Please review the feedback above, make sure your transfer details and GCash reference number are clearly legible, and resubmit a corrected receipt through your seller payments dashboard.
                     </p>
-
-                    <div style="text-align: center; margin: 26px 0 10px;">
-                        <a href="https://eflowers.up.railway.app/seller/payments" 
-                           style="display: inline-block; background: #b5445a; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 6px rgba(181, 68, 90, 0.25);">
-                            Resubmit Payment Receipt &rarr;
-                        </a>
-                    </div>
                 </div>
 
                 <!-- Footer -->
@@ -1183,8 +1168,7 @@ Amount: PHP {amount:,.2f}
 Reviewed On: {now_str} (PHT)
 Status: Rejected
 
-Please resubmit a valid GCash payment receipt with clear transaction reference numbers here:
-https://eflowers.up.railway.app/seller/payments
+Please resubmit a valid GCash payment receipt with clear transaction reference numbers in your seller payments portal.
 
 If you have questions, please contact our support at efloralaguna@gmail.com.
 """
@@ -1328,16 +1312,9 @@ def send_admin_payment_submitted_email(
                         </table>
                     </div>
 
-                    <p style="margin: 0 0 20px; font-size: 14px; color: #554841; line-height: 1.6;">
+                    <p style="margin: 0; font-size: 14px; color: #554841; line-height: 1.6;">
                         You can review all submitted proofs of payment, check transaction reference numbers, and approve or reject subscriptions directly in the Admin Payments dashboard.
                     </p>
-
-                    <div style="text-align: center; margin: 26px 0 10px;">
-                        <a href="https://eflowers.up.railway.app/admin/payments" 
-                           style="display: inline-block; background: #b5445a; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 6px rgba(181, 68, 90, 0.25);">
-                            Review in Admin Portal &rarr;
-                        </a>
-                    </div>
                 </div>
 
                 <!-- Footer -->
@@ -1372,8 +1349,7 @@ Submitted On: {now_str} (PHT)
 Status: Pending Review
 {f'Receipt URL: {receipt_url}' if receipt_url else ''}
 
-Review and verify this payment in the Admin Portal:
-https://eflowers.up.railway.app/admin/payments
+Review and verify this payment in the Admin Payments dashboard.
 """
 
         sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'efloralaguna@gmail.com')
