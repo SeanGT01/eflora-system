@@ -851,7 +851,7 @@ def send_stock_alert_email(
         </html>
         """
 
-        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'efloralaguna@gmail.com')
 
         app = current_app._get_current_object()
         thread = threading.Thread(
@@ -1021,7 +1021,7 @@ Thank you for selling with E-Flora!
 Support: efloralaguna@gmail.com
 """
 
-        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'efloralaguna@gmail.com')
         app = current_app._get_current_object()
         thread = threading.Thread(
             target=_send_email_async,
@@ -1208,7 +1208,7 @@ Review and verify this payment in the Admin Portal:
 https://eflowers.up.railway.app/admin/payments
 """
 
-        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'efloralaguna@gmail.com')
         app = current_app._get_current_object()
         thread = threading.Thread(
             target=_send_email_async,
@@ -1237,23 +1237,37 @@ def notify_admins_payment_submitted_email(
     is_update: bool = False,
 ):
     """
-    Find all admin users and dispatch subscription payment submission alert emails
-    asynchronously using Gmail OAuth.
+    Dispatch subscription payment submission alert emails asynchronously using Gmail OAuth
+    to the platform admin Gmail inbox (efloralaguna@gmail.com).
     """
     try:
+        # Platform admin Gmail is efloralaguna@gmail.com (same as sender account)
+        primary_admin_email = (
+            current_app.config.get('ADMIN_NOTIFICATION_EMAIL')
+            or current_app.config.get('GMAIL_SENDER_EMAIL')
+            or current_app.config.get('MAIL_DEFAULT_SENDER')
+            or 'efloralaguna@gmail.com'
+        )
+        if '<' in str(primary_admin_email) and '>' in str(primary_admin_email):
+            primary_admin_email = primary_admin_email.split('<')[1].split('>')[0].strip()
+
+        # Build recipient map: email -> name
+        recipients = {}
+        if primary_admin_email:
+            recipients[primary_admin_email.strip().lower()] = 'E-Flora Admin'
+        recipients['efloralaguna@gmail.com'] = 'E-Flora Admin'
+
+        # Also include any valid admin accounts registered in the database
         from app.models import User
         admins = User.query.filter(User.role == 'admin').all()
-        recipients = []
         for admin in admins:
             if admin.email and admin.email.strip():
-                recipients.append((admin.email.strip(), admin.full_name or 'Admin'))
+                clean_email = admin.email.strip().lower()
+                # Skip placeholder test/dummy addresses that cannot receive mail
+                if clean_email not in ('admin@gmail.com', 'admin@example.com', 'test@example.com'):
+                    recipients[clean_email] = admin.full_name or 'Admin'
 
-        if not recipients:
-            default_admin_email = current_app.config.get('ADMIN_NOTIFICATION_EMAIL')
-            if default_admin_email:
-                recipients.append((default_admin_email, 'Admin'))
-
-        for email, name in recipients:
+        for email, name in recipients.items():
             send_admin_payment_submitted_email(
                 admin_email=email,
                 admin_name=name,
@@ -1350,7 +1364,7 @@ def send_email_bind_otp_email(recipient_email, otp_code, full_name=None, store_n
         </html>
         """
 
-        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'efloralaguna@gmail.com')
         ok = _send_email_gmail_oauth(recipient_email, subject, html_body, sender)
         if ok:
             current_app.logger.info(f"📧 Email bind OTP sent to {recipient_email}")

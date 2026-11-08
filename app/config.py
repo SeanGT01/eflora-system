@@ -242,14 +242,15 @@ class Config:
     GMAIL_REFRESH_TOKEN = os.getenv('GMAIL_REFRESH_TOKEN', '')
     GMAIL_CLIENT_ID = os.getenv('GMAIL_CLIENT_ID', '')
     GMAIL_CLIENT_SECRET = os.getenv('GMAIL_CLIENT_SECRET', '')
-    GMAIL_SENDER_EMAIL = os.getenv('GMAIL_SENDER_EMAIL', 'eflowers.verification@gmail.com')
+    GMAIL_SENDER_EMAIL = os.getenv('GMAIL_SENDER_EMAIL', 'efloralaguna@gmail.com')
+    ADMIN_NOTIFICATION_EMAIL = os.getenv('ADMIN_NOTIFICATION_EMAIL', 'efloralaguna@gmail.com')
     
     # Email identity for sending via Gmail OAuth2
     _mail_default = os.getenv('MAIL_DEFAULT_SENDER')
     if _mail_default:
         MAIL_DEFAULT_SENDER = _mail_default
     else:
-        MAIL_DEFAULT_SENDER = GMAIL_SENDER_EMAIL if GMAIL_SENDER_EMAIL else 'noreply@eflowers.com'
+        MAIL_DEFAULT_SENDER = GMAIL_SENDER_EMAIL if GMAIL_SENDER_EMAIL else 'efloralaguna@gmail.com'
 
     # =============================
     # SMS: sms8.io primary, iProg backup
