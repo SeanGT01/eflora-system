@@ -1665,6 +1665,19 @@ def submit_seller_application():
     )
     db.session.commit()
 
+    from app.utils.email_helper import notify_admins_payment_submitted_email
+    notify_admins_payment_submitted_email(
+        store_name=application.store_name,
+        seller_name=user.full_name or application.applicant_full_name,
+        seller_email=user.email or application.applicant_email,
+        amount=sub_payment.amount,
+        payment_type='registration',
+        months_covered=1,
+        submitted_at=sub_payment.submitted_at,
+        receipt_url=sub_payment.receipt_url,
+        is_update=False
+    )
+
     return jsonify({'success': True, 'message': 'Application submitted successfully', 'application': application.to_dict()}), 201
 
 
@@ -1777,6 +1790,20 @@ def resubmit_seller_application():
     )
 
     db.session.commit()
+
+    if 'payment_receipt' in updated_fields:
+        from app.utils.email_helper import notify_admins_payment_submitted_email
+        notify_admins_payment_submitted_email(
+            store_name=application.store_name,
+            seller_name=user.full_name or application.applicant_full_name,
+            seller_email=user.email or application.applicant_email,
+            amount=300.0,
+            payment_type='registration',
+            months_covered=1,
+            submitted_at=datetime.utcnow(),
+            receipt_url=data.get('payment_receipt_url'),
+            is_update=True
+        )
 
     return jsonify({'success': True, 'message': 'Application resubmitted', 'application': application.to_dict()}), 200
 

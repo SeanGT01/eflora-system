@@ -2256,6 +2256,20 @@ def seller_apply():
             )
             db.session.commit()
 
+            if 'payment_receipt' in updated_fields:
+                from app.utils.email_helper import notify_admins_payment_submitted_email
+                notify_admins_payment_submitted_email(
+                    store_name=latest_rejected.store_name,
+                    seller_name=user.full_name or latest_rejected.applicant_full_name,
+                    seller_email=user.email or latest_rejected.applicant_email,
+                    amount=reg_payment.amount if reg_payment else (setting.monthly_fee if setting else 300.0),
+                    payment_type='registration',
+                    months_covered=1,
+                    submitted_at=datetime.utcnow(),
+                    receipt_url=payment_receipt_url,
+                    is_update=True
+                )
+
             return jsonify({
                 'success': True,
                 'message': 'Application updated and resubmitted successfully.',
@@ -2313,6 +2327,19 @@ def seller_apply():
             reference_id=application.id,
         )
         db.session.commit()
+
+        from app.utils.email_helper import notify_admins_payment_submitted_email
+        notify_admins_payment_submitted_email(
+            store_name=application.store_name,
+            seller_name=user.full_name or application.applicant_full_name,
+            seller_email=user.email or application.applicant_email,
+            amount=initial_sub_payment.amount,
+            payment_type='registration',
+            months_covered=1,
+            submitted_at=initial_sub_payment.submitted_at,
+            receipt_url=initial_sub_payment.receipt_url,
+            is_update=False
+        )
         
         return jsonify({
             'success': True,
@@ -7228,7 +7255,31 @@ def submit_seller_subscription_payment():
         pending.amount = expected_amount
         pending.submitted_at = datetime.utcnow()
         pending.admin_notes = None
+
+        from app.utils.admin_notifications import notify_admins
+        duration_label = "1 month" if months_covered == 1 else "2 months advance"
+        notify_admins(
+            title='Subscription payment receipt updated',
+            message=f'Store "{store.name}" updated their pending subscription payment receipt (₱{expected_amount:,.2f} for {duration_label}).',
+            type='subscription_payment_pending',
+            reference_id=pending.id
+        )
         db.session.commit()
+
+        # Notify admins via email in background
+        from app.utils.email_helper import notify_admins_payment_submitted_email
+        notify_admins_payment_submitted_email(
+            store_name=store.name,
+            seller_name=user.full_name,
+            seller_email=user.email,
+            amount=expected_amount,
+            payment_type='monthly',
+            months_covered=months_covered,
+            submitted_at=pending.submitted_at,
+            receipt_url=receipt_url,
+            is_update=True
+        )
+
         return jsonify({
             'success': True,
             'message': f'Your pending subscription payment was updated with the new receipt ({months_covered} month(s) - ₱{expected_amount:,.2f}).',
@@ -7258,6 +7309,20 @@ def submit_seller_subscription_payment():
         reference_id=payment.id
     )
     db.session.commit()
+
+    # Notify admins via email in background
+    from app.utils.email_helper import notify_admins_payment_submitted_email
+    notify_admins_payment_submitted_email(
+        store_name=store.name,
+        seller_name=user.full_name,
+        seller_email=user.email,
+        amount=expected_amount,
+        payment_type='monthly',
+        months_covered=months_covered,
+        submitted_at=payment.submitted_at,
+        receipt_url=receipt_url,
+        is_update=False
+    )
 
     return jsonify({
         'success': True,

@@ -1038,6 +1038,241 @@ Support: efloralaguna@gmail.com
         return False
 
 
+def send_admin_payment_submitted_email(
+    admin_email: str,
+    admin_name: str = None,
+    store_name: str = None,
+    seller_name: str = None,
+    seller_email: str = None,
+    amount: float = 300.0,
+    payment_type: str = 'monthly',
+    months_covered: int = 1,
+    submitted_at = None,
+    receipt_url: str = None,
+    is_update: bool = False,
+):
+    """
+    Send notification to admin via Gmail OAuth when a store submits or updates
+    a subscription payment receipt.
+    Runs asynchronously via threading matching send_seller_payment_approved_email.
+    """
+    try:
+        import pytz
+        PHT = pytz.timezone('Asia/Manila')
+
+        greeting = f"Hi {admin_name}!" if admin_name else "Hello Admin!"
+        store_display = store_name or "Store"
+        type_label = "Registration / Initial Payment" if payment_type == 'registration' else "Monthly Subscription Payment"
+        duration_desc = f"{months_covered} Month{'s' if months_covered > 1 else ''}" + (" (Advance)" if months_covered > 1 else "")
+        action_title = "Updated Subscription Receipt" if is_update else "New Subscription Payment"
+
+        if submitted_at:
+            if isinstance(submitted_at, datetime):
+                if submitted_at.tzinfo is None:
+                    dt_pht = pytz.utc.localize(submitted_at).astimezone(PHT)
+                else:
+                    dt_pht = submitted_at.astimezone(PHT)
+                now_str = dt_pht.strftime("%B %d, %Y at %I:%M %p")
+            else:
+                now_str = str(submitted_at)
+        else:
+            now_str = datetime.now(PHT).strftime("%B %d, %Y at %I:%M %p")
+
+        subject = f"E-Flora Admin: {action_title} - {store_display}"
+
+        receipt_html = f"""
+            <tr>
+                <td style="padding: 6px 0; color: #9a8d85;">Receipt Image:</td>
+                <td style="padding: 6px 0; text-align: right;">
+                    <a href="{receipt_url}" target="_blank" style="color: #b5445a; font-weight: 600; text-decoration: underline;">
+                        View Uploaded Receipt &nearr;
+                    </a>
+                </td>
+            </tr>
+        """ if receipt_url else ""
+
+        seller_info_html = f"""
+            <tr>
+                <td style="padding: 6px 0; color: #9a8d85;">Seller:</td>
+                <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #2c2520;">{seller_name}{f" ({seller_email})" if seller_email else ""}</td>
+            </tr>
+        """ if seller_name else ""
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{subject}</title>
+        </head>
+        <body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #faf6f0; color: #2c2520;">
+            <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(44, 37, 32, 0.08); border: 1px solid rgba(181, 68, 90, 0.15);">
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #2c2520 0%, #b5445a 100%); padding: 26px 24px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px;">
+                        &#127800; E-FLORA ADMIN PORTAL
+                    </h1>
+                    <p style="color: rgba(255, 255, 255, 0.9); margin: 6px 0 0; font-size: 13px;">
+                        Subscription Payment Notice &bull; Review Required
+                    </p>
+                </div>
+
+                <!-- Body -->
+                <div style="padding: 28px 24px;">
+                    <h2 style="color: #2c2520; font-size: 18px; margin: 0 0 12px; font-weight: 600;">{greeting}</h2>
+
+                    <p style="margin: 0 0 16px; font-size: 14px; color: #554841; line-height: 1.6;">
+                        A store has {'submitted an updated' if is_update else 'submitted a new'} <strong>{type_label}</strong> receipt for admin review and verification.
+                    </p>
+
+                    <!-- Alert Badge -->
+                    <div style="margin: 16px 0 20px; padding: 14px 16px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px;">
+                        <p style="margin: 0; color: #b45309; font-weight: 700; font-size: 14px;">Action Required: Pending Verification</p>
+                        <p style="margin: 4px 0 0; color: #78350f; font-size: 13px;">Please verify the GCash reference number and receipt amount before approving this subscription.</p>
+                    </div>
+
+                    <!-- Receipt Summary Box -->
+                    <div style="background-color: #fbf8f5; border: 1px solid #ebd9c8; border-radius: 10px; padding: 18px; margin-bottom: 20px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Store Name:</td>
+                                <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #2c2520;">{store_display}</td>
+                            </tr>
+                            {seller_info_html}
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Payment Type:</td>
+                                <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #2c2520;">{type_label}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Duration Covered:</td>
+                                <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #2c2520;">{duration_desc}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Amount Submitted:</td>
+                                <td style="padding: 6px 0; font-weight: 700; text-align: right; color: #b5445a; font-size: 16px;">&#8369;{amount:,.2f}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Submitted On:</td>
+                                <td style="padding: 6px 0; font-weight: 500; text-align: right; color: #2c2520;">{now_str} (PHT)</td>
+                            </tr>
+                            {receipt_html}
+                        </table>
+                    </div>
+
+                    <p style="margin: 0 0 20px; font-size: 14px; color: #554841; line-height: 1.6;">
+                        You can review all submitted proofs of payment, check transaction reference numbers, and approve or reject subscriptions directly in the Admin Payments dashboard.
+                    </p>
+
+                    <div style="text-align: center; margin: 26px 0 10px;">
+                        <a href="https://eflowers.up.railway.app/admin/payments" 
+                           style="display: inline-block; background: #b5445a; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 6px rgba(181, 68, 90, 0.25);">
+                            Review in Admin Portal &rarr;
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="background-color: #fbf8f5; border-top: 1px solid #f1ece5; padding: 16px 24px; text-align: center;">
+                    <p style="margin: 0 0 4px; font-size: 12px; font-weight: 600; color: #6b4c3b;">
+                        &#127800; E-Flora Online Flower Marketplace
+                    </p>
+                    <p style="margin: 0; font-size: 11px; color: #9a8d85;">
+                        This notification was delivered to <strong>{admin_email}</strong> via E-Flora's Gmail alert service.
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_body = f"""E-Flora Online Flower Marketplace - Admin Notice
+Subscription Payment Receipt Submitted
+
+{greeting}
+
+A store has {'submitted an updated' if is_update else 'submitted a new'} {type_label} receipt for admin verification.
+
+--- Payment Details ---
+Store Name: {store_display}
+{f'Seller: {seller_name}' if seller_name else ''}
+{f'Seller Email: {seller_email}' if seller_email else ''}
+Payment Type: {type_label}
+Duration Covered: {duration_desc}
+Amount: PHP {amount:.2f}
+Submitted On: {now_str} (PHT)
+Status: Pending Review
+{f'Receipt URL: {receipt_url}' if receipt_url else ''}
+
+Review and verify this payment in the Admin Portal:
+https://eflowers.up.railway.app/admin/payments
+"""
+
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'eflowers.verification@gmail.com')
+        app = current_app._get_current_object()
+        thread = threading.Thread(
+            target=_send_email_async,
+            args=(app, admin_email, subject, html_body, sender),
+            kwargs={'text_body': text_body}
+        )
+        thread.daemon = True
+        thread.start()
+
+        current_app.logger.info(f"📧 Admin payment submitted notification email queued for {admin_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"❌ Failed to queue admin payment submitted email for {admin_email}: {e}")
+        return False
+
+
+def notify_admins_payment_submitted_email(
+    store_name: str,
+    seller_name: str = None,
+    seller_email: str = None,
+    amount: float = 300.0,
+    payment_type: str = 'monthly',
+    months_covered: int = 1,
+    submitted_at = None,
+    receipt_url: str = None,
+    is_update: bool = False,
+):
+    """
+    Find all admin users and dispatch subscription payment submission alert emails
+    asynchronously using Gmail OAuth.
+    """
+    try:
+        from app.models import User
+        admins = User.query.filter(User.role == 'admin').all()
+        recipients = []
+        for admin in admins:
+            if admin.email and admin.email.strip():
+                recipients.append((admin.email.strip(), admin.full_name or 'Admin'))
+
+        if not recipients:
+            default_admin_email = current_app.config.get('ADMIN_NOTIFICATION_EMAIL')
+            if default_admin_email:
+                recipients.append((default_admin_email, 'Admin'))
+
+        for email, name in recipients:
+            send_admin_payment_submitted_email(
+                admin_email=email,
+                admin_name=name,
+                store_name=store_name,
+                seller_name=seller_name,
+                seller_email=seller_email,
+                amount=amount,
+                payment_type=payment_type,
+                months_covered=months_covered,
+                submitted_at=submitted_at,
+                receipt_url=receipt_url,
+                is_update=is_update,
+            )
+        return True
+    except Exception as exc:
+        current_app.logger.error(f"❌ Failed to notify admins of payment submission via email: {exc}")
+        return False
+
+
 
 def send_email_bind_otp_email(recipient_email, otp_code, full_name=None, store_name=None, expiry_minutes=10):
     """
