@@ -1038,6 +1038,174 @@ Support: efloralaguna@gmail.com
         return False
 
 
+def send_seller_payment_rejected_email(
+    recipient_email: str,
+    seller_name: str = None,
+    recipient_name: str = None,
+    store_name: str = None,
+    amount: float = 300.0,
+    payment_type: str = 'monthly',
+    reason: str = None,
+    rejected_at = None,
+):
+    """
+    Send notification to seller via Gmail OAuth when their subscription / registration payment is rejected.
+    Includes the specific reason provided by the admin and instructions to resubmit.
+    Runs asynchronously via background thread matching send_seller_payment_approved_email.
+    """
+    try:
+        import pytz
+        PHT = pytz.timezone('Asia/Manila')
+
+        resolved_name = seller_name or recipient_name
+        greeting = f"Hi {resolved_name}!" if resolved_name else "Hello Seller!"
+        store_display = store_name or "your store"
+        type_label = "Registration / Initial Payment" if payment_type == 'registration' else "Monthly Subscription Payment"
+        rejection_reason = (reason or "").strip() or "The receipt image was unclear, missing a valid GCash reference number, or the transferred amount did not match."
+
+        # Correct Philippine Time formatting
+        if rejected_at:
+            if isinstance(rejected_at, datetime):
+                if rejected_at.tzinfo is None:
+                    dt_pht = pytz.utc.localize(rejected_at).astimezone(PHT)
+                else:
+                    dt_pht = rejected_at.astimezone(PHT)
+                now_str = dt_pht.strftime("%B %d, %Y at %I:%M %p")
+            else:
+                now_str = str(rejected_at)
+        else:
+            now_str = datetime.now(PHT).strftime("%B %d, %Y at %I:%M %p")
+
+        subject = f"E-Flora: Subscription Payment Update - {store_display}"
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{subject}</title>
+        </head>
+        <body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #faf6f0; color: #2c2520;">
+            <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(44, 37, 32, 0.08); border: 1px solid rgba(181, 68, 90, 0.15);">
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #2c2520 0%, #b5445a 100%); padding: 26px 24px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px;">
+                        &#127800; E-FLORA SELLER PORTAL
+                    </h1>
+                    <p style="color: rgba(255, 255, 255, 0.9); margin: 6px 0 0; font-size: 13px;">
+                        Payment Verification Notice &bull; Action Required
+                    </p>
+                </div>
+
+                <!-- Body -->
+                <div style="padding: 28px 24px;">
+                    <h2 style="color: #2c2520; font-size: 18px; margin: 0 0 12px; font-weight: 600;">{greeting}</h2>
+
+                    <p style="margin: 0 0 16px; font-size: 14px; color: #554841; line-height: 1.6;">
+                        We reviewed your <strong>{type_label}</strong> submission for <strong>{store_display}</strong>, but unfortunately our administrator could not approve this payment at this time.
+                    </p>
+
+                    <!-- Rejection Reason Highlight Box -->
+                    <div style="margin: 20px 0; padding: 16px 18px; background: #fef2f2; border-left: 4px solid #dc2626; border-radius: 6px;">
+                        <p style="margin: 0; color: #991b1b; font-weight: 700; font-size: 14px;">Reason for Rejection:</p>
+                        <p style="margin: 6px 0 0; color: #7f1d1d; font-size: 13.5px; line-height: 1.55;">
+                            {rejection_reason}
+                        </p>
+                    </div>
+
+                    <!-- Payment Summary Box -->
+                    <div style="background-color: #fbf8f5; border: 1px solid #ebd9c8; border-radius: 10px; padding: 18px; margin-bottom: 20px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Store Name:</td>
+                                <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #2c2520;">{store_display}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Payment Type:</td>
+                                <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #2c2520;">{type_label}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Amount Submitted:</td>
+                                <td style="padding: 6px 0; font-weight: 700; text-align: right; color: #b5445a; font-size: 15px;">&#8369;{amount:,.2f}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Reviewed On:</td>
+                                <td style="padding: 6px 0; font-weight: 500; text-align: right; color: #2c2520;">{now_str} (PHT)</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #9a8d85;">Status:</td>
+                                <td style="padding: 6px 0; font-weight: 700; text-align: right; color: #dc2626;">Rejected</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <p style="margin: 0 0 20px; font-size: 14px; color: #554841; line-height: 1.6;">
+                        Please review the feedback above, make sure your transfer details and GCash reference number are clearly legible, and resubmit a corrected receipt through your seller payments dashboard.
+                    </p>
+
+                    <div style="text-align: center; margin: 26px 0 10px;">
+                        <a href="https://eflowers.up.railway.app/seller/payments" 
+                           style="display: inline-block; background: #b5445a; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 6px rgba(181, 68, 90, 0.25);">
+                            Resubmit Payment Receipt &rarr;
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="background-color: #fbf8f5; border-top: 1px solid #f1ece5; padding: 16px 24px; text-align: center;">
+                    <p style="margin: 0 0 4px; font-size: 12px; font-weight: 600; color: #6b4c3b;">
+                        &#127800; E-Flora Online Flower Marketplace
+                    </p>
+                    <p style="margin: 0; font-size: 11px; color: #9a8d85;">
+                        Delivered to <strong>{recipient_email}</strong> via E-Flora's Gmail alert service. Need help? Contact efloralaguna@gmail.com.
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_body = f"""E-Flora Online Flower Marketplace
+Store Subscription Payment Notice - Action Required
+
+{greeting}
+
+We reviewed your {type_label} submission for {store_display}, but unfortunately it could not be approved at this time.
+
+--- Reason for Rejection ---
+{rejection_reason}
+
+--- Submission Summary ---
+Store Name: {store_display}
+Payment Type: {type_label}
+Amount: PHP {amount:,.2f}
+Reviewed On: {now_str} (PHT)
+Status: Rejected
+
+Please resubmit a valid GCash payment receipt with clear transaction reference numbers here:
+https://eflowers.up.railway.app/seller/payments
+
+If you have questions, please contact our support at efloralaguna@gmail.com.
+"""
+
+        sender = current_app.config.get('GMAIL_SENDER_EMAIL') or current_app.config.get('MAIL_DEFAULT_SENDER', 'efloralaguna@gmail.com')
+        app = current_app._get_current_object()
+        thread = threading.Thread(
+            target=_send_email_async,
+            args=(app, recipient_email, subject, html_body, sender),
+            kwargs={'text_body': text_body}
+        )
+        thread.daemon = True
+        thread.start()
+
+        current_app.logger.info(f"📧 Subscription payment rejection email queued for {recipient_email}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"❌ Failed to queue payment rejection email for {recipient_email}: {e}")
+        return False
+
+
 def send_admin_payment_submitted_email(
     admin_email: str,
     admin_name: str = None,

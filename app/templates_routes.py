@@ -6698,6 +6698,19 @@ def reject_seller_application(app_id):
 
         db.session.commit()
 
+        # Send rejection email via Gmail OAuth in background
+        if sub_payment and user and user.email:
+            from app.utils.email_helper import send_seller_payment_rejected_email
+            send_seller_payment_rejected_email(
+                recipient_email=user.email,
+                recipient_name=user.full_name or application.store_name,
+                store_name=application.store_name,
+                amount=sub_payment.amount,
+                payment_type='registration',
+                reason=application.admin_notes or (f"Issues with: {', '.join(rejected_items)}" if rejected_items else None),
+                rejected_at=sub_payment.reviewed_at
+            )
+
         return jsonify({'success': True, 'message': 'Application rejected'})
 
     except Exception as e:
@@ -6924,6 +6937,22 @@ def reject_subscription_payment(payment_id):
         )
         db.session.add(notif)
         db.session.commit()
+
+        # Send rejection email to seller via Gmail OAuth in background
+        seller_user = User.query.get(payment.seller_id)
+        if seller_user and seller_user.email:
+            store = Store.query.get(payment.store_id) if payment.store_id else None
+            store_name = store.name if store else (payment.application.store_name if payment.application else 'Your Store')
+            from app.utils.email_helper import send_seller_payment_rejected_email
+            send_seller_payment_rejected_email(
+                recipient_email=seller_user.email,
+                recipient_name=seller_user.full_name or store_name,
+                store_name=store_name,
+                amount=payment.amount,
+                payment_type=payment.payment_type,
+                reason=admin_notes,
+                rejected_at=payment.reviewed_at
+            )
 
         return jsonify({
             'success': True,
