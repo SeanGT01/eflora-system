@@ -2348,20 +2348,24 @@
         <main class="page-content">
             {% if session.role in ['seller', 'store_admin'] and seller_sub_meta %}
                 {% if seller_sub_meta.is_locked %}
-                <div class="alert shadow-sm mb-4" style="background: #fef2f2; border: 1px solid #fecaca; border-left: 5px solid #dc2626; border-radius: 8px; padding: 14px 18px; color: #991b1b;">
-                    <div style="display: flex; align-items: flex-start; gap: 12px;">
-                        <i class="ri-lock-2-fill" style="font-size: 24px; color: #dc2626; line-height: 1.2;"></i>
+                <div class="alert shadow-sm" style="background: #fef2f2; border: 1px solid #fecaca; border-left: 5px solid #dc2626; border-radius: 12px; padding: 16px 20px; color: #991b1b; margin-bottom: 2rem;">
+                    <div style="display: flex; align-items: flex-start; gap: 14px;">
+                        <i class="ri-lock-2-fill" style="font-size: 26px; color: #dc2626; line-height: 1.2; flex-shrink: 0;"></i>
                         <div style="flex: 1;">
-                            <h6 style="margin: 0 0 4px; font-weight: 700; color: #991b1b;">Account Restricted — Grace Period Expired</h6>
-                            <p style="margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: #7f1d1d;">
+                            <h6 style="margin: 0 0 4px; font-weight: 700; color: #991b1b; font-size: 15px;">Account Restricted — Grace Period Expired</h6>
+                            <p style="margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; color: #7f1d1d;">
                                 Your store's 7-day payment grace period has expired. Access to store management tools is temporarily locked and your storefront is inactive to prevent unfulfillable customer orders until renewal is verified.
                             </p>
                             {% if seller_sub_meta.has_pending %}
-                            <div style="display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 5px 12px; border-radius: 6px; border: 1px solid #fca5a5; font-size: 12.5px; font-weight: 600; color: #b91c1c;">
+                            <div style="display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 6px 14px; border-radius: 6px; border: 1px solid #fca5a5; font-size: 12.5px; font-weight: 600; color: #b91c1c;">
                                 <i class="ri-time-line"></i> Payment Receipt Submitted — Awaiting Admin Approval
                             </div>
+                            {% elif request.endpoint == 'templates.seller_payments' %}
+                            <a href="#sellerReceiptZone" style="display: inline-flex; align-items: center; gap: 6px; background: #dc2626; color: #fff; padding: 7px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+                                <i class="ri-arrow-down-line"></i> Settle Monthly Payment Below
+                            </a>
                             {% else %}
-                            <a href="{{ url_for('templates.seller_payments') }}" style="display: inline-flex; align-items: center; gap: 6px; background: #dc2626; color: #fff; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
+                            <a href="{{ url_for('templates.seller_payments') }}" style="display: inline-flex; align-items: center; gap: 6px; background: #dc2626; color: #fff; padding: 7px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; text-decoration: none;">
                                 <i class="ri-wallet-3-line"></i> Settle Monthly Payment Now
                             </a>
                             {% endif %}
@@ -2369,20 +2373,24 @@
                     </div>
                 </div>
                 {% elif seller_sub_meta.is_in_grace %}
-                <div class="alert shadow-sm mb-4" style="background: #fffbeb; border: 1px solid #fef3c7; border-left: 5px solid #f59e0b; border-radius: 8px; padding: 14px 18px; color: #92400e;">
-                    <div style="display: flex; align-items: flex-start; gap: 12px;">
-                        <i class="ri-alert-fill" style="font-size: 24px; color: #f59e0b; line-height: 1.2;"></i>
+                <div class="alert shadow-sm" style="background: #fffbeb; border: 1px solid #fef3c7; border-left: 5px solid #f59e0b; border-radius: 12px; padding: 16px 20px; color: #92400e; margin-bottom: 2rem;">
+                    <div style="display: flex; align-items: flex-start; gap: 14px;">
+                        <i class="ri-alert-fill" style="font-size: 26px; color: #f59e0b; line-height: 1.2; flex-shrink: 0;"></i>
                         <div style="flex: 1;">
-                            <h6 style="margin: 0 0 4px; font-weight: 700; color: #92400e;">Monthly Subscription Payment Overdue</h6>
-                            <p style="margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; color: #78350f;">
-                                Your monthly subscription expired on <strong>{{ seller_sub_meta.valid_until.strftime('%B %d, %Y') }}</strong>. You are currently in the <strong>7-day grace period</strong> with <strong>{{ seller_sub_meta.grace_days_left }} day(s) remaining</strong>. Please renew promptly to prevent store operations from being restricted.
+                            <h6 style="margin: 0 0 4px; font-weight: 700; color: #92400e; font-size: 15px;">Monthly Subscription Payment Overdue</h6>
+                            <p style="margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; color: #78350f;">
+                                Your monthly subscription expired on <strong>{{ seller_sub_meta.valid_until.strftime('%B %d, %Y') if seller_sub_meta.valid_until else 'N/A' }}</strong>. You are currently in the <strong>7-day grace period</strong> with <strong>{{ seller_sub_meta.grace_days_left }} day(s) remaining</strong>. Please renew promptly to prevent store operations from being restricted.
                             </p>
                             {% if seller_sub_meta.has_pending %}
-                            <div style="display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 5px 12px; border-radius: 6px; border: 1px solid #fcd34d; font-size: 12.5px; font-weight: 600; color: #b45309;">
+                            <div style="display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 6px 14px; border-radius: 6px; border: 1px solid #fcd34d; font-size: 12.5px; font-weight: 600; color: #b45309;">
                                 <i class="ri-time-line"></i> Renewal Submitted — Awaiting Admin Approval
                             </div>
+                            {% elif request.endpoint == 'templates.seller_payments' %}
+                            <a href="#sellerReceiptZone" style="display: inline-flex; align-items: center; gap: 6px; background: #f59e0b; color: #78350f; padding: 7px 18px; border-radius: 6px; font-size: 13px; font-weight: 700; text-decoration: none;">
+                                <i class="ri-arrow-down-line"></i> Pay Monthly Subscription Below
+                            </a>
                             {% else %}
-                            <a href="{{ url_for('templates.seller_payments') }}" style="display: inline-flex; align-items: center; gap: 6px; background: #f59e0b; color: #78350f; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; text-decoration: none;">
+                            <a href="{{ url_for('templates.seller_payments') }}" style="display: inline-flex; align-items: center; gap: 6px; background: #f59e0b; color: #78350f; padding: 7px 18px; border-radius: 6px; font-size: 13px; font-weight: 700; text-decoration: none;">
                                 <i class="ri-hand-coin-line"></i> Pay Monthly Subscription
                             </a>
                             {% endif %}
