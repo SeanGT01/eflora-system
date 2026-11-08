@@ -2017,6 +2017,7 @@ def inject_user():
     pos_orders_badge_count = 0
     chat_unread_count = 0
     seller_sub_meta = None
+    admin_pending_payments_count = 0
     if session.get('user_id'):
         user_obj = User.query.get(session['user_id'])
         if user_obj:
@@ -2028,6 +2029,14 @@ def inject_user():
                         _seller_sidebar_badge_counts(portal_store)
                     )
                     seller_sub_meta = _get_store_subscription_lock_meta(portal_store)
+            elif session.get('role') == 'admin':
+                try:
+                    from app.models import SellerSubscriptionPayment
+                    admin_pending_payments_count = (
+                        SellerSubscriptionPayment.query.filter_by(status='pending').count()
+                    )
+                except Exception:
+                    admin_pending_payments_count = 0
 
             # Seed chat FAB badge on every page render (seller/admin/customer)
             try:
@@ -2073,6 +2082,7 @@ def inject_user():
         chat_unread_count=chat_unread_count,
         store_admin_perms=store_admin_perms,
         seller_sub_meta=seller_sub_meta,
+        admin_pending_payments_count=admin_pending_payments_count,
         current_year=datetime.utcnow().year,
         phone_registration_enabled=phone_registration_enabled(),
     )
